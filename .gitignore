@@ -1,0 +1,13 @@
+# Node
+node_modules/
+tools/node-*/
+
+# Build / binaries
+*.exe
+*.bin
+
+# Large assets
+*.pdf
+
+# OS
+.DS_Store
