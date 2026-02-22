@@ -17,16 +17,18 @@
           <span class="outline-text hover-target">Something</span><br>
           <span class="hover-target">Extraordinary</span>
         </h1>
-        
-        <p class="hero-subtitle hover-target">
-          Digital Experience & Creative 3D Engineering
-        </p>
-
-        <div class="scroll-indicator">
-          <span class="hover-target">Scroll Down</span>
-        </div>
       </div>
     </div>
+
+    <!-- Detached subtitle: Bottom Right -->
+    <p class="hero-subtitle hover-target">
+      Digital Experience &<br>Creative 3D Engineering
+    </p>
+
+    <!-- Scroll Indicator Detached to sit perfectly at bottom center -->
+    <!-- <div class="scroll-indicator">
+      <span class="hover-target">Scroll Down</span>
+    </div> -->
   </section>
 </template>
 
@@ -46,9 +48,8 @@ onMounted(() => {
   background-color: #000; /* Video fallback */
   color: #fff; /* White text on video */
   overflow: hidden;
-  cursor: none; /* 隐藏系统鼠标 */
   display: flex;
-  align-items: center;
+  align-items: flex-end; /* Align bottom to bring text down */
   justify-content: center;
 }
 
@@ -81,8 +82,8 @@ onMounted(() => {
 .hero-container {
   position: relative;
   width: 100%;
-  max-width: 1400px;
-  padding: 0 4vw;
+  max-width: 100%; /* Removing 1400px restriction to push to the real edge */
+  padding: 0 2vw 4vh 2vw; /* 再砍一半底部留白（8vh -> 4vh），以及左侧留白（4vw -> 2vw），彻底推到最角落 */
   z-index: 10;
 }
 
@@ -94,7 +95,7 @@ onMounted(() => {
 
 .hero-title {
   font-family: 'Outfit', sans-serif;
-  font-size: 10vw;
+  font-size: 8vw;
   line-height: 0.9;
   font-weight: 800;
   text-transform: uppercase;
@@ -116,22 +117,27 @@ onMounted(() => {
 }
 
 .hero-subtitle {
-  font-size: 1.5rem;
-  margin-top: 40px;
-  font-weight: 500;
-  max-width: 500px;
-  line-height: 1.4;
-  opacity: 0.9;
+  position: absolute;
+  right: 4vw;
+  bottom: 5.5vh;
+  font-size: 1.5rem; /* 仅进一步缩小副标题，变得极度克制小巧 */
+  font-weight: 300;
+  line-height: 1.5;
+  opacity: 0.7;
+  text-align: right;
+  z-index: 10;
 }
 
 .scroll-indicator {
   position: absolute;
-  bottom: 40px;
+  bottom: 4vh;
+  left: 4vw; /* Move to bottom left below the heading, or keep centered? Centered is usually better. Wait, I will keep it centered as before */
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.9rem;
   text-transform: uppercase;
   letter-spacing: 2px;
+  z-index: 20;
 }
 
 @media (max-width: 768px) {

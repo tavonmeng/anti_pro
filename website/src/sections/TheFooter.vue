@@ -9,23 +9,18 @@
         </ul>
       </div>
       <div class="col">
-        <h4>关于我们</h4>
-        <ul>
-          <li><a href="#about">团队介绍</a></li>
-          <li><a href="#">加入我们</a></li>
-        </ul>
-      </div>
-      <div class="col">
         <h4>业务合作</h4>
         <ul>
-          <li><a href="#cases">案例展示</a></li>
-          <li><a href="#business">服务流程</a></li>
+          <li><a href="#">裸眼3D广告制作</a></li>
+          <li><a href="#">品牌视觉创意</a></li>
+          <li><a href="#">AI驱动内容生成</a></li>
+          <li><a href="#">数字媒体策划</a></li>
         </ul>
       </div>
       <div class="col">
         <h4>联系我们</h4>
         <ul>
-          <li><a href="#contact">在线咨询</a></li>
+          <li><a href="#contact">项目联系</a></li>
           <li><a href="#">地理位置</a></li>
         </ul>
       </div>
@@ -46,28 +41,28 @@
 
 <style scoped>
 .footer {
-  background-color: #f5f5f5;
+  background-color: #fff;
   color: #000;
-  padding: 80px 40px 40px;
+  padding: 15px 40px 15px; /* 高度增大 1.5 倍 */
   border-top: 1px solid #e0e0e0;
 }
 
 .footer-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 40px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px; /* 缩减水平间隙 */
   max-width: 1200px;
-  margin: 0 auto 80px;
+  margin: 0 auto 24px; /* 增大间距 */
 }
 
 h4 {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
-  margin-bottom: 20px;
+  margin-bottom: 12px; /* 增大间距 */
 }
 
 ul li {
-  margin-bottom: 12px;
+  margin-bottom: 10px; /* 增大行距 */
 }
 
 ul a {
@@ -86,7 +81,7 @@ ul a:hover {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  padding-top: 40px;
+  padding-top: 16px; /* 增大顶线与文字的内边距 */
   border-top: 1px solid #e0e0e0;
 }
 

@@ -10,12 +10,14 @@
         :style="{ zIndex: 100 + index }"
       >
         <div class="header-inner">
-          <div class="case-meta">
-            <span class="case-id">[ {{ item.id }} ]</span>
-            <span class="case-year">2024</span>
+          <div class="case-meta-left">
+            <span class="case-id">{{ item.id }}</span>
           </div>
-          <div class="case-info">
+          <div class="case-title-center">
             <h3 class="case-title">{{ item.title }}</h3>
+          </div>
+          <div class="case-meta-right">
+            <span class="case-arrow">↗</span>
           </div>
         </div>
       </div>
@@ -252,9 +254,9 @@ onMounted(() => {
         force3D: true
       }, scrollPos)
 
-      // 当前标题滑入并堆叠 (每个标题堆叠高度设为 44px)
+      // 当前标题滑入并堆叠 (每个标题堆叠高度设为 28px)
       tl.to(headers[index], {
-        y: index * 44,
+        y: index * 28,
         opacity: 1,
         ease: 'none',
         force3D: true
@@ -288,14 +290,14 @@ onUnmounted(() => {
 
 <style scoped>
 .cases-section {
-  background-color: #000;
+  background-color: #fff;
   width: 100%;
   position: relative;
 }
 
 .sticky-headers-stack {
   position: absolute;
-  top: 0;
+  top: 52px; /* 紧贴菜单栏 */
   left: 0;
   width: 100%;
   height: 100%;
@@ -308,49 +310,59 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   width: 100%;
-  height: 44px;
+  height: 28px; /* 面板高度更小 */
   padding: 0 5%;
   display: flex;
   align-items: center;
-  /* Removed backdrop-filter to improve scroll performance */
-  background: linear-gradient(to right, rgba(0,0,0,0.9) 20%, rgba(0,0,0,0.4));
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: #000; /* 黑底标题栏 */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   will-change: transform, opacity;
 }
 
 .header-inner {
   width: 100%;
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
-  gap: 30px;
 }
 
-.case-meta {
+.case-meta-left {
+  flex: 1;
   display: flex;
-  align-items: center;
-  gap: 20px;
+  justify-content: flex-start;
+}
+
+.case-title-center {
+  flex: 2;
+  display: flex;
+  justify-content: center;
+}
+
+.case-meta-right {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .case-id {
   font-family: 'Inter', sans-serif;
-  font-weight: 300;
-  font-size: 14px;
-  color: var(--color-accent, #4a9eff);
+  font-weight: 500;
+  font-size: 11px; /* 字体改小 */
+  color: #fff; /* 白字 */
   letter-spacing: 1px;
-}
-
-.case-year {
-  font-size: 10px;
-  color: rgba(255,255,255,0.4);
 }
 
 .case-title {
-  font-size: 16px;
+  font-size: 12px; /* 字体改小 */
   font-weight: 500;
-  color: #fff;
+  color: #fff; /* 白字 */
   margin: 0;
   letter-spacing: 1px;
+}
+
+.case-arrow {
+  font-size: 14px; /* 字体改小 */
+  color: #fff; /* 白字 */
 }
 
 .cases-container {
@@ -373,7 +385,7 @@ onUnmounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: #000;
+  background-color: #fff;
   will-change: transform, opacity;
 }
 

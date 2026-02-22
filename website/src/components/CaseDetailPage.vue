@@ -186,7 +186,6 @@ onMounted(async () => {
   z-index: 1000;
   overflow-y: auto;
   overflow-x: hidden;
-  cursor: none; /* Hide default cursor to use custom one */
 }
 
 /* HERO SECTION */

@@ -14,61 +14,67 @@
             高效率、低成本、提升视觉质量<br>
             让全球数字媒体
           </p>
-          <p class="desc-highlight">
+          <p class="desc-highlight" style="margin-bottom: 40px;">
             更快获得优质内容。
           </p>
         </div>
+
       </div>
       
       <!-- 右侧滚动淡出内容 -->
       <div class="right-content" ref="contentRef">
-        <!-- 团队介绍 -->
-        <div class="content-block" ref="block1">
-          <p class="team-lead">
-            国内最早的裸眼3D项目核心团队，具有完善的AI数字艺术全流程项目环节，成员多毕业于海外TOP级艺术学院，专业覆盖创意广告学、公共艺术设计、雕塑、影视导演、动画、三维特效设计、视觉传达等领域
-          </p>
-          <p class="team-desc">
-            对户外媒体的艺术表现与内容营销具有丰富的经验，项目涉及三维CG、AIGC、实拍、数字艺术、艺术家联名、创意IP开发、室内互动屏项目、各地异形屏、AI视觉系统运用等......................
-          </p>
+        <!-- 团队介绍：固定在右侧顶部 -->
+        <div class="team-block-wrapper">
+          <div class="team-block" ref="teamBlockRef">
+            <p class="team-lead">
+              国内最早的裸眼3D项目核心团队，具有完善的AI数字艺术全流程项目环节，成员多毕业于海外TOP级艺术学院，专业覆盖创意广告学、公共艺术设计、雕塑、影视导演、动画、三维特效设计、视觉传达等领域
+            </p>
+            <p class="team-desc">
+              对户外媒体的艺术表现与内容营销具有丰富的经验，项目涉及三维CG、AIGC、实拍、数字艺术、艺术家联名、创意IP开发、室内互动屏项目、各地异形屏、AI视觉系统运用等......................
+            </p>
+          </div>
         </div>
 
-        <!-- 服务介绍1 -->
-        <div class="content-block service-block" ref="block2">
-          <div class="service-header">
-            <span class="service-index">01</span>
-            <h3 class="service-title">裸眼3D成片配订</h3>
+        <!-- 服务介绍：通过 margin-top 置于下方，随着滚动往上滑进视野 -->
+        <div class="services-wrapper">
+          <!-- 服务介绍1 -->
+          <div class="content-block service-block" ref="block1">
+            <div class="service-header">
+              <h3 class="service-title">裸眼3D成片配订</h3>
+              <span class="service-arrow">←</span>
+            </div>
+            <p class="service-desc">
+              为每一块屏幕，适配引爆媒体的裸眼3D内容<br/>
+              快速、高效、低成本获取高质量成片。
+            </p>
+            <div class="hover-glow"></div>
           </div>
-          <p class="service-desc">
-            为每一块屏幕，适配引爆媒体的裸眼3D内容<br/>
-            快速、高效、低成本获取高质量成片。
-          </p>
-          <div class="hover-glow"></div>
-        </div>
 
-        <!-- 服务介绍2 -->
-        <div class="content-block service-block" ref="block3">
-          <div class="service-header">
-            <span class="service-index">02</span>
-            <h3 class="service-title">AI裸眼3D自主化定制</h3>
+          <!-- 服务介绍2 -->
+          <div class="content-block service-block" ref="block2">
+            <div class="service-header">
+              <h3 class="service-title">AI裸眼3D自主化定制</h3>
+              <span class="service-arrow">←</span>
+            </div>
+            <p class="service-desc">
+              从创意到上屏，一站式AI制片<br/>
+              自研AI专业内容打造模型，大幅缩短制作周期。
+            </p>
+            <div class="hover-glow"></div>
           </div>
-          <p class="service-desc">
-            从创意到上屏，一站式AI制片<br/>
-            自研AI专业内容打造模型，大幅缩短制作周期。
-          </p>
-          <div class="hover-glow"></div>
-        </div>
 
-        <!-- 服务介绍3 -->
-        <div class="content-block service-block" ref="block4">
-          <div class="service-header">
-            <span class="service-index">03</span>
-            <h3 class="service-title">泛商业数字艺术打造</h3>
+          <!-- 服务介绍3 -->
+          <div class="content-block service-block" ref="block3">
+            <div class="service-header">
+              <h3 class="service-title">泛商业数字艺术打造</h3>
+              <span class="service-arrow">←</span>
+            </div>
+            <p class="service-desc">
+              你的屏幕，需要新的艺术<br/>
+              为商业空间打造独一无二的沉浸式视觉体验。
+            </p>
+            <div class="hover-glow"></div>
           </div>
-          <p class="service-desc">
-            你的屏幕，需要新的艺术<br/>
-            为商业空间打造独一无二的沉浸式视觉体验。
-          </p>
-          <div class="hover-glow"></div>
         </div>
       </div>
     </div>
@@ -87,54 +93,50 @@ const leftContentRef = ref(null)
 const block1 = ref(null)
 const block2 = ref(null)
 const block3 = ref(null)
-const block4 = ref(null)
+const teamBlockRef = ref(null)
 
 let ctx
 
 onMounted(() => {
   ctx = gsap.context(() => {
-    // 1. PIN THE LEFT CONTENT
+    // 1. PIN THE LEFT CONTENT AND TEAM BLOCK
     ScrollTrigger.create({
       trigger: sectionRef.value,
       pin: leftContentRef.value,
-      start: 'top top',
+      start: 'top 80px',
       end: 'bottom bottom',
-      pinSpacing: false, // Don't add padding to the pinned element
-      // onRefresh: self => {
-      //   // Optional: Handle refresh logic
-      // }
+      pinSpacing: false,
     })
 
-    // 2. RIGHT BLOCKS ANIMATIONS
-    const blocks = [block1.value, block2.value, block3.value, block4.value]
+    ScrollTrigger.create({
+      trigger: sectionRef.value,
+      pin: teamBlockRef.value,
+      start: 'top 80px',
+      end: 'bottom bottom',
+      pinSpacing: false,
+    })
+
+    // 2. RIGHT BLOCKS ANIMATIONS (Only the 3 service blocks)
+    const blocks = [block1.value, block2.value, block3.value]
     blocks.forEach((block) => {
       if (block) {
-        gsap.fromTo(block, 
-          { opacity: 0.3, y: 50 },
-          {
-            opacity: 1,
-            y: 0,
-            scrollTrigger: {
-              trigger: block,
-              start: 'top 80%',
-              end: 'top 40%',
-              scrub: true,
-              toggleActions: 'play reverse play reverse'
-            }
-          }
-        )
-        
-        // Also add a fade out when leaving
-        gsap.to(block, {
-          opacity: 0,
-          y: -50,
+        const tl = gsap.timeline({
           scrollTrigger: {
             trigger: block,
-            start: 'top 10%',
-            end: 'top -10%',
+            start: 'top 85%',
+            end: 'top 45%', // Finish fade well before reaching the top area
             scrub: true
           }
         })
+        
+        tl.fromTo(block, 
+          { autoAlpha: 0, y: 50 },
+          { autoAlpha: 1, y: 0, duration: 0.4 } // Fade in and move into place
+        )
+        // hold
+        .to(block, { autoAlpha: 1, duration: 0.3 })
+        // fade out and translate up completely before the timeline ends
+        .to(block, { autoAlpha: 0, y: -20, duration: 0.3 })
       }
     })
   }, sectionRef.value)
@@ -164,8 +166,7 @@ onUnmounted(() => {
 }
 
 .left-content {
-  padding-top: 40px; /* Offset for top-of-page feel */
-  /* Remove position: sticky, GSAP handles pinning */
+  padding-top: 20px;
   will-change: transform;
 }
 
@@ -174,7 +175,7 @@ onUnmounted(() => {
   line-height: 1.2;
   font-weight: 700;
   color: #fff;
-  margin-bottom: 40px;
+  margin-bottom: 20px;
 }
 
 .highlight {
@@ -183,14 +184,14 @@ onUnmounted(() => {
 }
 
 .description-block {
-  margin-top: 40px;
+  margin-top: 30px;
 }
 
 .desc-text {
   font-size: 20px;
   color: var(--color-text-secondary);
   line-height: 1.6;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   font-weight: 300;
 }
 
@@ -202,12 +203,42 @@ onUnmounted(() => {
 }
 
 .right-content {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  margin-left: auto;
+  width: 100%;
+}
+
+.team-block-wrapper, .services-wrapper {
+  grid-column: 1 / 2;
+  grid-row: 1 / 2;
+}
+
+.team-block-wrapper {
+  z-index: 20;
+  margin-top: -30px; /* 位置再往上调整 */
+  position: relative; /* 建立层叠上下文 */
+}
+
+.team-block {
+  /* No position: sticky needed anymore, GSAP pins it perfectly */
+  background: var(--color-bg-primary);
+  padding-bottom: 40px;
+  margin-bottom: 0;
+  /* 确保自身堆叠也在最前面 */
+  position: relative;
+  z-index: 20;
+}
+
+.services-wrapper {
   display: flex;
   flex-direction: column;
   gap: 30vh; /* Scalable gap for scrolling experience */
-  padding-bottom: 100px;
-  margin-left: auto;
-  width: 100%;
+  margin-top: 50vh; /* Start far below the team text */
+  padding-bottom: 300px;
+  position: relative;
+  z-index: 5; /* 确保它永远在 team-block-wrapper 的下方 */
 }
 
 .content-block {
@@ -215,43 +246,36 @@ onUnmounted(() => {
 }
 
 .team-lead {
-  font-size: 22px;
+  font-size: 16px;
   color: #fff;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   line-height: 1.8;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .team-desc {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 16px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
   line-height: 1.8;
 }
 
+/* Removed duplicate .right-content and .content-block */
+
 .service-block {
-  padding: 60px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: transparent;
-  transition: transform 0.3s ease;
+  padding: 40px 0;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
 }
 
 .service-block:hover {
-  transform: translateX(10px);
+  transform: translateX(-10px);
 }
 
 .service-header {
   display: flex;
-  align-items: baseline;
-  gap: 24px;
-  margin-bottom: 16px;
-}
-
-.service-index {
-  font-family: 'Inter', monospace;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-accent);
-  opacity: 0.7;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
 }
 
 .service-title {
@@ -263,13 +287,22 @@ onUnmounted(() => {
   letter-spacing: -0.02em;
 }
 
+.service-arrow {
+  font-size: 28px;
+  color: rgba(255, 255, 255, 0.3);
+  font-weight: 300;
+  transition: color 0.3s ease, transform 0.3s ease;
+}
+
+.service-block:hover .service-arrow {
+  color: #fff;
+  transform: translateX(-5px);
+}
+
 .service-desc {
-  margin-left: 0;
-  padding-left: 40px; 
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.6);
   font-size: 16px;
-  line-height: 1.6;
-  max-width: 90%;
+  line-height: 1.8;
 }
 
 .hover-glow {
@@ -296,6 +329,7 @@ onUnmounted(() => {
 
   .right-content {
     gap: 80px;
+    padding-top: 0;
   }
 }
 </style>

@@ -12,22 +12,17 @@ onMounted(() => {
   gsap.set(cursor.value, { xPercent: -50, yPercent: -50, opacity: 0 })
 
   const onMouseMove = (e) => {
-    // Check if mouse is over Hero or Case Detail Page
-    const hero = document.getElementById('hero')
-    const detail = document.querySelector('.case-detail-page')
+    // Check if mouse is over Header
+    const isOverHeader = !!e.target.closest('.header-bar')
     
     let isVisible = false
     
-    if (detail) {
-      isVisible = true // Always visible in detail page
-    } else if (hero) {
-      const rect = hero.getBoundingClientRect()
-      isVisible = (
-        e.clientX >= rect.left &&
-        e.clientX <= rect.right &&
-        e.clientY >= rect.top &&
-        e.clientY <= rect.bottom
-      )
+    if (isOverHeader) {
+      isVisible = false // Do not show cursor effect on header
+      document.body.classList.remove('no-cursor')
+    } else {
+      isVisible = true // Always visible globally now
+      document.body.classList.add('no-cursor')
     }
 
     gsap.to(cursor.value, {
@@ -61,13 +56,15 @@ onMounted(() => {
   const onMouseOver = (e) => {
     const isInteractive = e.target.closest('.hover-target') || e.target.closest('button') || e.target.closest('a');
     
-    // Check if on sub-page and target is a text element
+    // Check if on specific sections where text should trigger hover effect
     const isSubPage = !!document.querySelector('.case-detail-page');
+    const isIntroPage = !!e.target.closest('.intro-section');
     const isTextElement = e.target.closest('p') || e.target.closest('span') || 
                          e.target.closest('h1') || e.target.closest('h2') || 
                          e.target.closest('h3') || e.target.closest('li');
 
-    if (isInteractive || (isSubPage && isTextElement)) {
+    // Trigger hover if element is explicitly interactive, OR if it's text within the sub page / intro page
+    if (isInteractive || ((isSubPage || isIntroPage) && isTextElement)) {
       onHover()
     } else {
       onLeave()
@@ -98,5 +95,11 @@ onUnmounted(() => {
   mix-blend-mode: difference;
   transform-origin: center center;
   box-sizing: border-box;
+}
+
+/* 全局应用 cursor: none 当鼠标未处于 header 区域时生效 */
+:global(body.no-cursor),
+:global(body.no-cursor *) {
+  cursor: none !important;
 }
 </style>

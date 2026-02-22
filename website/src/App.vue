@@ -1,8 +1,6 @@
 <template>
   <div id="app-container">
-    <TheHeader @show-menu="menuVisible = true" />
-    <ProgressBar :progress="scrollProgress" />
-    <FullscreenMenu v-model:visible="menuVisible" />
+    <TheHeader />
     <CustomCursor />
     
     <div class="main-page" ref="mainPageRef">
@@ -11,8 +9,6 @@
         <IntroSection />
         <BrandsSection />
         <CasesSection @open-detail="handleCaseClick" />
-        <AboutSection />
-        <BusinessSection />
         <ContactSection />
       </main>
       
@@ -30,8 +26,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import TheHeader from './components/TheHeader.vue'
-import ProgressBar from './components/ProgressBar.vue'
-import FullscreenMenu from './components/FullscreenMenu.vue'
 import CaseDetailPage from './components/CaseDetailPage.vue'
 import CustomCursor from './components/CustomCursor.vue'
 import gsap from 'gsap'
@@ -43,14 +37,10 @@ import HeroSection from './sections/HeroSection.vue'
 import IntroSection from './sections/IntroSection.vue'
 import BrandsSection from './sections/BrandsSection.vue'
 import CasesSection from './sections/CasesSection.vue'
-import AboutSection from './sections/AboutSection.vue'
-import BusinessSection from './sections/BusinessSection.vue'
 import ContactSection from './sections/ContactSection.vue'
 import TheFooter from './sections/TheFooter.vue'
 
 // 状态
-const scrollProgress = ref(0)
-const menuVisible = ref(false)
 const activeCase = ref(null)
 const mainPageRef = ref(null)
 
@@ -122,21 +112,12 @@ const handleCloseDetail = () => {
   }
 }
 
-// 滚动监听
-const handleScroll = () => {
-  const scrollY = window.scrollY
-  const docHeight = document.documentElement.scrollHeight - window.innerHeight
-  if (docHeight > 0) {
-    scrollProgress.value = (scrollY / docHeight) * 100
-  }
-}
-
 onMounted(() => {
-  window.addEventListener('scroll', handleScroll)
+  // mount logic if needed
 })
 
 onUnmounted(() => {
-  window.removeEventListener('scroll', handleScroll)
+  // cleanup if needed
 })
 </script>
 
