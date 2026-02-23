@@ -91,7 +91,7 @@ onUnmounted(() => {
   border: 2px solid #fff;
   border-radius: 50%;
   pointer-events: none;
-  z-index: 1500; /* Below menu (2000) but above most content */
+  z-index: 6000;
   mix-blend-mode: difference;
   transform-origin: center center;
   box-sizing: border-box;

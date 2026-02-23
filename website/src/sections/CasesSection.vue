@@ -92,11 +92,11 @@ const cases = [
       },
       narrative: '致敬快速迭代的新媒体时代，本项目以“融媒体”为叙事场景，构建一条穿梭于二维与三维之间的数字巨蛇。巨蛇在信息、图像、数据、影像的交融中不断演变形态，展示出媒介裂变中的动态生命力。',
       gallery: [
-        '/cases/case01/frame1.jpg',
-        '/cases/case01/frame2.jpg',
-        '/cases/case01/frame3.jpg',
-        '/cases/case01/frame4.jpg',
-        '/cases/case01/frame5.jpg'
+        '/cases/case01/f1.png',
+        '/cases/case01/f2.png',
+        '/cases/case01/f3.png',
+        '/cases/case01/f4.png',
+        '/cases/case01/f5.png'
       ]
     }
   },
@@ -106,21 +106,21 @@ const cases = [
     video: '/video2.mp4', 
     desc: '探索三维空间与光影的无限可能。',
     detail: {
-      type: 'Digital Art',
-      client: 'Museum of Future',
+      type: '数字艺术',
+      client: '未来博物馆',
       year: '2024',
       metrics: {
-        duration: 'Permanent',
-        traffic: '500K+',
-        rankings: ['Award of Excellence', 'Best Visual Effects']
+        duration: '15日内',
+        traffic: '10亿+',
+        rankings: ['抖音同城榜 Top 1', '成都本地热搜 Top 1', '全国热点榜 No.4']
       },
-      narrative: 'An exploration of light, shadow, and form in the digital realm. This piece challenges the viewer\'s perception of space and dimensionality.',
+      narrative: '致敬快速迭代的新媒体时代，本项目以“融媒体”为叙事场景，构建一条穿梭于二维与三维之间的数字巨蛇。巨蛇在信息、图像、数据、影像的交融中不断演变形态，展示出媒介裂变中的动态生命力。',
       gallery: [
-        '/cases/case02/frame1.jpg',
-        '/cases/case02/frame2.jpg',
-        '/cases/case02/frame3.jpg',
-        '/cases/case02/frame4.jpg',
-        '/cases/case02/frame5.jpg'
+        '/cases/case02/f1.png',
+        '/cases/case02/f2.png',
+        '/cases/case02/f3.png',
+        '/cases/case02/f4.png',
+        '/cases/case02/f5.png'
       ]
     }
   },
@@ -130,21 +130,21 @@ const cases = [
     video: '/video3.mp4', 
     desc: '为现代商业空间注入艺术灵魂。',
     detail: {
-      type: 'Commercial Visuals',
-      client: 'Sino-Ocean Taikoo Li',
+      type: '商业视觉',
+      client: '远洋太古里',
       year: '2024',
       metrics: {
-        duration: 'Season 1',
-        traffic: '2 Million/Day',
-        rankings: ['Best Commercial Space Design']
+        duration: '15日内',
+        traffic: '10亿+',
+        rankings: ['抖音同城榜 Top 1', '成都本地热搜 Top 1', '全国热点榜 No.4']
       },
-      narrative: 'Transforming a commercial complex into a dynamic art gallery. The visuals pulse with the rhythm of the city, creating an immersive shopping experience.',
+      narrative: '致敬快速迭代的新媒体时代，本项目以“融媒体”为叙事场景，构建一条穿梭于二维与三维之间的数字巨蛇。巨蛇在信息、图像、数据、影像的交融中不断演变形态，展示出媒介裂变中的动态生命力。',
       gallery: [
-        '/cases/case03/frame1.jpg',
-        '/cases/case03/frame2.jpg',
-        '/cases/case03/frame3.jpg',
-        '/cases/case03/frame4.jpg',
-        '/cases/case03/frame5.jpg'
+        '/cases/case03/f1.png',
+        '/cases/case03/f2.png',
+        '/cases/case03/f3.png',
+        '/cases/case03/f4.png',
+        '/cases/case03/f5.png'
       ]
     }
   },
@@ -154,21 +154,21 @@ const cases = [
     video: '/video4.mp4', 
     desc: '打破虚实边界，重构感知体验。',
     detail: {
-      type: 'Immersive Experience',
-      client: 'Tech Art Week',
+      type: '沉浸式体验',
+      client: '科技艺术周',
       year: '2024',
       metrics: {
-        duration: '7 Days',
-        traffic: '100K+',
-        rankings: ['Most Visited Exhibition']
+        duration: '15日内',
+        traffic: '10亿+',
+        rankings: ['抖音同城榜 Top 1', '成都本地热搜 Top 1', '全国热点榜 No.4']
       },
-      narrative: 'Stepping into the void. A fully immersive environment that dissolves the boundaries between the physical and the digital worlds.',
+      narrative: '致敬快速迭代的新媒体时代，本项目以“融媒体”为叙事场景，构建一条穿梭于二维与三维之间的数字巨蛇。巨蛇在信息、图像、数据、影像的交融中不断演变形态，展示出媒介裂变中的动态生命力。',
       gallery: [
-        '/cases/case04/frame1.jpg',
-        '/cases/case04/frame2.jpg',
-        '/cases/case04/frame3.jpg',
-        '/cases/case04/frame4.jpg',
-        '/cases/case04/frame5.jpg'
+        '/cases/case04/f1.png',
+        '/cases/case04/f2.png',
+        '/cases/case04/f3.png',
+        '/cases/case04/f4.png',
+        '/cases/case04/f5.png'
       ]
     }
   },

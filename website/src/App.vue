@@ -1,6 +1,6 @@
 <template>
   <div id="app-container">
-    <TheHeader />
+    <TheHeader :force-light="!!activeCase" @logoClick="handleGlobalLogoClick" @menuClick="handleGlobalMenuClick" />
     <CustomCursor />
     
     <div class="main-page" ref="mainPageRef">
@@ -43,6 +43,14 @@ import TheFooter from './sections/TheFooter.vue'
 // 状态
 const activeCase = ref(null)
 const mainPageRef = ref(null)
+
+const handleGlobalLogoClick = () => {
+  if (activeCase.value) handleCloseDetail()
+}
+
+const handleGlobalMenuClick = (item) => {
+  if (activeCase.value) handleCloseDetail()
+}
 
 // 处理案例点击
 const handleCaseClick = (caseData) => {

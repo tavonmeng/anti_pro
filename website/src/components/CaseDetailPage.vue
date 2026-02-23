@@ -1,127 +1,136 @@
 <template>
   <div class="case-detail-page" ref="pageRef">
-    <!-- Removed Back Button as requested -->
+    <!-- Removed Back Button, using custom footer/header if needed -->
 
     <div class="scroll-container">
-      <!-- Section 1: Video Hero (Dark) -->
-      <section class="hero-section">
+      
+      <!-- Section 1: Header -->
+      <section class="case-header">
+        <div class="header-left">
+          <h1 class="project-title">{{ mainTitle }}</h1>
+        </div>
+        <div class="header-right">
+          <div class="meta-line"></div>
+          <div class="meta-info">
+            <span class="meta-item">项目类型：{{ typeStr }}</span>
+            <span class="meta-item">客户：{{ clientStr }}</span>
+            <span class="meta-item">上线时间：{{ yearStr }}</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 2: Video -->
+      <section class="video-section" 
+        @mousemove="onMouseMove" 
+        @mouseenter="showCursor = true" 
+        @mouseleave="showCursor = false"
+        @click="toggleVideo"
+      >
         <video 
+          ref="videoRef"
           class="hero-video"
           :src="caseData.video" 
-          autoplay 
           muted 
           loop 
           playsinline
         ></video>
-        <div class="hero-overlay"></div>
-      </section>
-
-      <!-- Section 2: Detailed Content (Light) -->
-      <section class="content-section light-theme">
-        <div class="content-wrapper">
-          
-          <!-- Editorial Header -->
-          <div class="editorial-header reveal-item">
-            <h1 class="project-title hover-target">{{ caseData.title }}</h1>
-            <!-- Removed Creative Badge -->
-          </div>
-
-          <!-- Staggered Layout Grid (Compacted) -->
-          <div class="editorial-grid">
-            
-            <!-- Block A: Intro Text -->
-            <div class="layout-block align-right reveal-item text-block-main">
-              <p class="intro-text">
-                {{ caseData.detail?.narrative || '此项目通过数字艺术重构意象，通过流畅的动态轨迹、冷色调与金属质感的结合，剥离其传统恐怖色彩，赋予神秘与神圣并存的视觉表达。' }}
-              </p>
-            </div>
-
-            <!-- Block B: Hero Image -->
-            <div class="layout-block align-left reveal-item large-image-block" v-if="caseData.detail?.gallery?.[0]">
-              <div class="image-wrapper hover-target shadow-hover">
-                <img :src="caseData.detail.gallery[0]" alt="Featured" />
-              </div>
-            </div>
-
-            <!-- Block C: Metrics (Tighter spacing) -->
-            <div class="layout-block align-center reveal-item metrics-floating">
-               <div class="metrics-content">
-                 <div class="metric-row">
-                   <div class="metric-group">
-                     <span class="m-label">上线仅在</span>
-                     <span class="m-value">{{ caseData.detail?.metrics?.duration?.replace(/[^0-9]/g, '') || '15' }}</span>
-                     <span class="m-unit">日内</span>
-                   </div>
-                   <div class="metric-divider">/</div>
-                   <div class="metric-group">
-                     <span class="m-label">累计流量</span>
-                     <span class="m-value">{{ caseData.detail?.metrics?.traffic?.replace(/[^0-9]/g, '') || '10' }}</span>
-                     <span class="m-unit">亿+</span>
-                   </div>
-                 </div>
-                 <div class="rankings-row">
-                   <span v-for="(rank, idx) in caseData.detail?.metrics?.rankings" :key="idx" class="rank-item hover-target">
-                     {{ rank }}
-                   </span>
-                 </div>
-               </div>
-            </div>
-
-            <!-- Block D: Secondary Image -->
-            <div class="layout-block align-right reveal-item portrait-image-block" v-if="caseData.detail?.gallery?.[1]">
-               <div class="image-wrapper portrait-ratio hover-target shadow-hover">
-                 <img :src="caseData.detail.gallery[1]" alt="Detail 1" />
-                 <span class="img-caption">Visual Detail 01</span>
-               </div>
-            </div>
-
-            <!-- Block E: Narrative Extension -->
-            <div class="layout-block align-left reveal-item text-block-secondary">
-               <p>
-                致敬快速迭代的新媒体时代，本项目以“融媒体”为叙事场景，构建一条穿梭于二维与三维之间的数字巨蛇。
-                <br><br>
-                巨蛇在信息、图像、数据、影像的交融中不断演变形态，展示出媒介裂变中的动态生命力。融媒体时代，我们不再只是观众，而是沉浸其中的体验者。
-              </p>
-            </div>
-
-            <!-- Block F: Asymmetrical Grid -->
-            <div class="layout-block full-width reveal-item mixed-grid">
-               <div class="grid-item item-low hover-target shadow-hover" v-if="caseData.detail?.gallery?.[2]">
-                 <img :src="caseData.detail.gallery[2]" alt="Detail 2" />
-               </div>
-               <div class="grid-item item-high hover-target shadow-hover" v-if="caseData.detail?.gallery?.[3]">
-                 <img :src="caseData.detail.gallery[3]" alt="Detail 3" />
-               </div>
-            </div>
-
-            <!-- Block G: Footer Image -->
-             <div class="layout-block full-width reveal-item footer-image-block" v-if="caseData.detail?.gallery?.[4]">
-               <div class="image-wrapper hover-target">
-                 <img :src="caseData.detail.gallery[4]" alt="Footer Image" />
-               </div>
-             </div>
-
-          </div>
-
-          <!-- Footer Navigation -->
-          <div class="footer-nav reveal-item hover-target" @click="handleBack">
-            <span class="nav-arrow">←</span>
-            <div class="nav-text">
-              <span>返回主页</span>
-              <span class="sub">BACK TO HOME</span>
-            </div>
-          </div>
-
+        <!-- Custom Play Cursor -->
+        <div class="custom-play-cursor" 
+          v-if="showCursor"
+          :class="{ 'playing': isPlaying }"
+          :style="{ transform: `translate(${mouseX}px, ${mouseY}px)` }"
+        >
+          {{ isPlaying ? '暂停' : '播放' }}
         </div>
       </section>
+
+      <!-- Section 3: Details Content -->
+      <section class="content-section">
+        
+        <!-- Top part: Text & Image 1 on left, Image 2 on right -->
+        <div class="detail-top-grid">
+          <div class="top-left-col">
+            <h2 class="section-title">{{ mainTitle }}</h2>
+            <p class="section-desc">
+              {{ caseData.detail?.narrative || '蛇在东方文化中象征智慧与重生，本项目以数字艺术重构蛇的意象，通过流畅的动态轨迹、冷色调与金属质感的结合，剥离其传统恐怖色彩，赋予神秘与神圣并存的视觉表达。传递出数字艺术的共情性与叙事深度。' }}
+            </p>
+            <div class="img-wrapper img-left" v-if="gallery[0]">
+              <img :src="gallery[0]" alt="Image 1" />
+            </div>
+          </div>
+          
+          <div class="top-right-col">
+            <div class="img-wrapper img-right" v-if="gallery[1]">
+              <img :src="gallery[1]" alt="Image 2" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats Section -->
+        <div class="stats-container">
+          <div class="stats-header-line">
+            <span class="stats-label">传播效应 <span class="arrow-left">←</span></span>
+          </div>
+          <div class="stats-line-divider"></div>
+          
+          <div class="stats-content">
+            <div class="stats-row-main">
+              <div class="stat-block">
+                <span class="small-txt">上线仅在</span>
+                <span class="big-txt">{{ durationNum }}</span>
+                <span class="small-txt">日内</span>
+              </div>
+              <div class="stat-block">
+                <span class="small-txt">累计流量</span>
+                <span class="big-txt">{{ trafficNum }}</span>
+                <span class="small-txt">亿+</span>
+              </div>
+            </div>
+            
+            <div class="stats-row-sub">
+              <span class="rank-item" v-for="(rank, idx) in rankings" :key="idx">
+                {{ rank }}
+              </span>
+            </div>
+            
+            <div class="stats-paragraph hover-target">
+              致敬快速迭代的新媒体时代，本项目以“融媒体”为叙事场景，构建一条穿梭于二维与三维之间的数字巨蛇。
+              <br><br>
+              巨蛇在信息、图像、数据、影像的交融中不断演变形态，展示出媒介裂变中的动态生命力。融媒体时代，我们不再只是观众，而是沉浸其中的体验者。在信息交错与重塑的过程中，感受数字化叙事带来的商业吸引力与品牌价值升维。
+            </div>
+          </div>
+        </div>
+
+        <!-- Two Images Row -->
+        <div class="twin-images-row" v-if="gallery[2] || gallery[3]">
+          <div class="img-wrapper twin-img">
+            <img :src="gallery[2]" v-if="gallery[2]" alt="Image 3" />
+          </div>
+          <div class="img-wrapper twin-img right-twin">
+            <img :src="gallery[3]" v-if="gallery[3]" alt="Image 4" />
+          </div>
+        </div>
+
+        <!-- Bottom Image -->
+        <div class="single-image-row" v-if="gallery[4]">
+          <img :src="gallery[4]" alt="Image 5" />
+        </div>
+      </section>
+
+      <!-- Section 4: Contact Us -->
+      <ContactSection />
+      
+      <TheFooter />
+
     </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, nextTick } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import gsap from 'gsap'
-import ScrollTrigger from 'gsap/ScrollTrigger'
+import ContactSection from '../sections/ContactSection.vue'
+import TheFooter from '../sections/TheFooter.vue'
 
 const props = defineProps({
   caseData: {
@@ -133,46 +142,67 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 const pageRef = ref(null)
 
+// Video states
+const videoRef = ref(null)
+const showCursor = ref(false)
+const isPlaying = ref(false)
+const mouseX = ref(0)
+const mouseY = ref(0)
+
+const onMouseMove = (e) => {
+  const rect = e.currentTarget.getBoundingClientRect()
+  mouseX.value = e.clientX - rect.left
+  mouseY.value = e.clientY - rect.top
+}
+
+const toggleVideo = () => {
+  if (videoRef.value) {
+    if (videoRef.value.paused) {
+      videoRef.value.play()
+      isPlaying.value = true
+    } else {
+      videoRef.value.pause()
+      isPlaying.value = false
+    }
+  }
+}
+
 const handleBack = () => {
   emit('close')
 }
 
-onMounted(async () => {
-  // Page Entry Animation
+// Data Parsing
+const mainTitle = computed(() => {
+  if (!props.caseData.title) return ''
+  return props.caseData.title.split(' / ')[0].replace('·', '').trim()
+})
+
+const typeStr = computed(() => props.caseData.detail?.type || '裸眼3D')
+const clientStr = computed(() => props.caseData.detail?.client || '未知客户')
+const yearStr = computed(() => props.caseData.detail?.year || '2025')
+
+const gallery = computed(() => props.caseData.detail?.gallery || [])
+
+const durationNum = computed(() => {
+  return props.caseData.detail?.metrics?.duration?.replace(/[^0-9]/g, '') || '15'
+})
+
+const trafficNum = computed(() => {
+  return props.caseData.detail?.metrics?.traffic?.replace(/[^0-9]/g, '') || '10'
+})
+
+const rankings = computed(() => {
+  let list = props.caseData.detail?.metrics?.rankings || []
+  if (list.length === 0) list = ['抖音同城热搜', '成都本地榜', '全国热度榜']
+  return list.map((r, i) => `NO.${i+1}-${r}`)
+})
+
+onMounted(() => {
   gsap.fromTo(pageRef.value, 
     { x: '100%' },
     { x: '0%', duration: 0.8, ease: 'power3.out' }
   )
-
-  await nextTick()
-
-  // Staggered Reveal Animation for Content
-  setTimeout(() => {
-    const items = pageRef.value.querySelectorAll('.reveal-item')
-    items.forEach((item, index) => {
-      // Shorter delay for tighter feel
-      const delay = index * 0.05
-      
-      gsap.fromTo(item, 
-        { y: 60, opacity: 0 },
-        {
-          y: 0, 
-          opacity: 1,
-          duration: 0.8,
-          ease: 'power2.out',
-          scrollTrigger: {
-            trigger: item,
-            scroller: pageRef.value,
-            start: 'top 95%',
-            toggleActions: 'play none none reverse'
-          },
-          delay: delay
-        }
-      )
-    })
-  }, 200)
 })
-
 </script>
 
 <style scoped>
@@ -180,322 +210,236 @@ onMounted(async () => {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
+  width: 100%;
   height: 100vh;
   background: #fff;
-  z-index: 1000;
+  z-index: 5000;
   overflow-y: auto;
   overflow-x: hidden;
 }
 
-/* HERO SECTION */
-.hero-section {
-  height: 100vh;
-  width: 100%;
-  position: relative;
+
+/* HEADER */
+.case-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 80px 5% 40px;
+  background: #fff;
+}
+.header-left {
+  flex: 1;
+}
+.project-title {
+  font-size: 5rem;
+  font-weight: 300;
+  color: #000;
+  margin: 0;
+  line-height: 1;
+}
+.header-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 5px;
+}
+.meta-line {
+  height: 1px;
   background: #000;
-  overflow: hidden;
+  width: 100%;
+  margin-bottom: 15px;
+}
+.meta-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: #666;
 }
 
+/* VIDEO */
+.video-section {
+  position: relative;
+  width: 100%;
+  height: 80vh;
+  background: #000;
+  cursor: none; /* hide native cursor */
+  overflow: hidden;
+}
 .hero-video {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-
-.hero-overlay {
+.custom-play-cursor {
   position: absolute;
-  inset: 0;
-  background: linear-gradient(to bottom, transparent 60%, rgba(255,255,255,0.05) 100%);
+  top: 0; left: 0;
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  pointer-events: none;
+  border: 1px solid rgba(255,255,255,0.3);
+  backdrop-filter: blur(4px);
+  margin-top: -40px;
+  margin-left: -40px;
+  z-index: 10;
+  transition: opacity 0.3s ease;
+}
+.custom-play-cursor.playing {
+  opacity: 0.5;
 }
 
-/* CONTENT SECTION */
+/* DETAILS CONTENT */
 .content-section {
   background: #fff;
+  padding: 40px 5% calc(80px + 15vh);
   color: #000;
-  padding: 60px 5%; /* Even less top padding */
-  min-height: 100vh;
 }
-
-.content-wrapper {
-  max-width: 1200px; /* More compact container */
-  margin: 0 auto;
-  position: relative;
-}
-
-/* Editorial Header */
-.editorial-header {
-  position: relative;
-  margin-bottom: 5vh; /* Reduced more */
-  padding-left: 0; /* Align left */
-}
-
-.project-title {
-  font-size: 7vw; /* Slightly smaller */
-  font-weight: 300;
-  letter-spacing: -0.01em;
-  margin: 0;
-  line-height: 1;
-  position: relative;
-  z-index: 2;
-}
-
-/* GRID SYSTEM - Compacted */
-.editorial-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 4vh; /* Reduced more */
-}
-
-.layout-block {
-  width: 100%;
-  position: relative;
-}
-
-.align-left {
-  display: flex;
-  justify-content: flex-start;
-}
-
-.align-right {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.align-center {
-  display: flex;
-  justify-content: center;
-}
-
-.full-width {
-  width: 100%;
-}
-
-/* TEXT BLOCKS */
-.text-block-main {
-  width: 50%; /* Wider */
-  margin-left: auto;
-  margin-right: 0;
-  margin-top: -2vh;
-}
-
-.text-block-secondary {
-  width: 45%;
-  margin-left: 0;
-}
-
-.intro-text, .text-block-secondary p {
-  font-size: 16px;
-  line-height: 1.6; /* Tighter line height */
-  color: #444;
-  text-align: left;
-}
-
-/* IMAGES */
-.large-image-block {
-  width: 100%; /* Full within container */
-}
-
-.image-wrapper {
-  width: 100%;
-  overflow: hidden;
-  position: relative;
-}
-
-.shadow-hover {
-  box-shadow: 0 0 0 rgba(0,0,0,0);
-  transition: box-shadow 0.6s ease;
-}
-
-.shadow-hover:hover {
-  box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-}
-
-.image-wrapper img {
-  width: 100%;
-  height: auto;
-  display: block;
-  transition: transform 1.2s cubic-bezier(0.165, 0.84, 0.44, 1);
-}
-
-.layout-block:hover .image-wrapper img {
-  transform: scale(1.02);
-}
-
-.portrait-image-block {
-  width: 30%;
-  margin-right: 5%;
-  margin-top: -6vh; /* Reduced pull up */
-}
-
-.portrait-ratio {
-  aspect-ratio: 4/5;
-}
-
-.portrait-ratio img {
-  height: 100%;
-  object-fit: cover;
-}
-
-.img-caption {
-  display: block;
-  font-size: 11px;
-  color: #aaa;
-  margin-top: 6px;
-  text-align: right;
-  letter-spacing: 1px;
-}
-
-.footer-image-block {
-  margin-top: 2vh;
-}
-
-/* METRICS - Compacted */
-.metrics-floating {
-  margin: 4vh 0; /* Reduced from 10vh */
-}
-
-.metrics-content {
-  text-align: center;
-}
-
-.metric-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 20px;
-  margin-bottom: 15px;
-}
-
-.metric-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.m-value {
-  font-size: 60px; /* Slightly smaller for compactness */
-  font-weight: 200;
-  line-height: 1;
-}
-
-.m-unit {
-  font-size: 13px;
-  color: #888;
-  margin-top: 5px;
-}
-
-.m-label {
-  font-size: 10px;
-  color: #bbb;
-  letter-spacing: 2px;
-  margin-bottom: 5px;
-  text-transform: uppercase;
-}
-
-.metric-divider {
-  font-size: 40px;
-  font-weight: 100;
-  color: #eee;
-}
-
-.rankings-row {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  font-size: 11px;
-  color: #888;
-  flex-wrap: wrap;
-}
-
-.rank-item {
-  padding: 3px 10px;
-  border: 1px solid #f0f0f0;
-  border-radius: 20px;
-  transition: all 0.3s ease;
-}
-
-.rank-item:hover {
-  background: #000;
-  color: #fff;
-  border-color: #000;
-}
-
-/* MIXED GRID - Compacted */
-.mixed-grid {
+.detail-top-grid {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
-  gap: 15px;
-  padding: 0;
+  margin-bottom: 40px;
+}
+.top-left-col {
+  flex: 5.5;
+  padding-right: 40px;
+}
+.section-title {
+  font-size: 3rem;
+  font-weight: 300;
+  margin-bottom: 20px;
+}
+.section-desc {
+  font-size: 14px;
+  color: #333;
+  line-height: 1.8;
+  margin-bottom: 40px;
+  max-width: 600px;
+}
+.img-left {
+  width: 100%;
+}
+.top-right-col {
+  flex: 4.5;
+}
+.img-right {
+  width: 100%;
 }
 
-.grid-item {
-  flex: 1;
+.img-wrapper {
+  position: relative;
   overflow: hidden;
+  cursor: pointer;
 }
-
-.item-low {
-  margin-bottom: 0;
-}
-
-.item-high {
-  margin-bottom: 6vh; /* Reduced offset */
-}
-
-.grid-item img {
+.img-wrapper img {
   width: 100%;
   display: block;
-  transition: transform 1s ease;
+  transition: transform 0.8s ease;
 }
-
-.grid-item:hover img {
+.img-wrapper:hover img {
   transform: scale(1.03);
 }
 
-/* FOOTER */
-.footer-nav {
-  margin-top: 8vh; /* Reduced */
-  padding-top: 25px;
-  border-top: 1px solid #eee;
+/* STATS */
+.stats-container {
+  margin-top: 60px;
+  margin-bottom: 60px;
+}
+.stats-header-line {
+  text-align: right;
+  margin-bottom: 10px;
+  margin-left: 15%;
+  margin-right: 15%;
+}
+.stats-label {
+  font-size: 16px;
+  color: #000;
+}
+.stats-line-divider {
+  height: 1px;
+  background: #000;
+  width: 100%;
+  margin-bottom: 30px;
+}
+
+.stats-row-main {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  transition: transform 0.3s ease;
+  gap: 60px;
+  margin-bottom: 20px;
+  margin-left: 15%;
+  margin-right: 15%;
+}
+.stat-block {
+  display: flex;
+  align-items: baseline;
+}
+.stat-block .small-txt { 
+  font-size: 14px; 
+  color: #000; 
+}
+.stat-block .big-txt { 
+  font-size: 2.5rem; 
+  font-weight: 300; 
+  margin: 0 5px; 
 }
 
-.footer-nav:hover {
-  transform: translateX(-5px);
+.stats-row-sub {
+  display: flex;
+  gap: 30px;
+  margin-bottom: 30px;
+  margin-left: 15%;
+  margin-right: 15%;
+}
+.rank-item {
+  font-size: 13px;
+  color: #000;
+  text-transform: uppercase;
 }
 
-.nav-arrow {
-  font-size: 24px;
-  font-weight: 100;
+.stats-paragraph {
+  font-size: 13px;
+  color: #444;
+  line-height: 1.8;
+  margin-left: 15%;
+  margin-right: 15%;
 }
 
-.nav-text span {
-  font-size: 18px;
-  font-weight: 400;
+/* TWIN IMAGES */
+.twin-images-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 40px;
+}
+.twin-img {
+  flex: 1;
 }
 
-.nav-text .sub {
-  font-size: 10px;
-  color: #bbb;
-  letter-spacing: 1px;
+/* BOTTOM SINGLE IMAGE */
+.single-image-row img {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  display: block;
 }
-
+/* RESPONSIVE */
 @media (max-width: 768px) {
-  .project-title { font-size: 12vw; }
-  .text-block-main, .text-block-secondary, .large-image-block, .portrait-image-block {
-    width: 100%;
-    margin: 0;
+  .case-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
-  .editorial-grid { gap: 30px; }
-  .mixed-grid { flex-direction: column; gap: 20px; }
-  .item-high { margin-bottom: 0; }
-  .metric-row { flex-direction: column; gap: 20px; }
-  .metric-divider { display: none; }
-  .intro-text { text-align: left; }
+  .header-right {
+    margin-top: 20px;
+    width: 100%;
+  }
+  .project-title { font-size: 3rem; }
+  .detail-top-grid { flex-direction: column; }
+  .top-left-col { padding-right: 0; margin-bottom: 20px; }
+  .twin-images-row { flex-direction: column; }
+  .stats-row-main { flex-direction: column; gap: 10px; }
+  .stats-row-sub { flex-direction: column; gap: 10px; }
 }
 </style>

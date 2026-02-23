@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =================================================================
-# 阿里云 ECS (Ubuntu/Debian) 项目自动部署脚本 v2.0
+# 阿里云 ECS 项目自动部署脚本 v2.1 (支持 CentOS/Alibaba Cloud Linux/Ubuntu/Debian)
 # 适用项目: Vite + Vue 3
 # 功能: 基础环境安装、多端口支持、自定义域名、自动构建与部署
 # =================================================================
@@ -17,7 +17,6 @@ LISTEN_PORT=${2:-$DEFAULT_PORT}
 DOMAIN_NAME=${3:-$DEFAULT_DOMAIN}
 
 DEPLOY_DIR="/var/www/$PROJECT_NAME"
-NGINX_CONF="/etc/nginx/sites-available/$PROJECT_NAME"
 
 echo "----------------------------------------------------"
 echo "🚀 启动部署流程"
@@ -27,29 +26,62 @@ echo "域名配置: $DOMAIN_NAME"
 echo "部署目录: $DEPLOY_DIR"
 echo "----------------------------------------------------"
 
-# 1. 更新系统软件包
-echo "📦 正在更新系统软件包..."
-sudo apt update && sudo apt upgrade -y
+# 1. 检测系统和包管理器
+if command -v apt &> /dev/null; then
+    PKG_MGR="apt"
+    OS_TYPE="debian"
+    NGINX_CONF="/etc/nginx/sites-available/$PROJECT_NAME"
+    NGINX_ENABLED_DIR="/etc/nginx/sites-enabled/"
+elif command -v yum &> /dev/null; then
+    PKG_MGR="yum"
+    OS_TYPE="centos"
+    NGINX_CONF="/etc/nginx/conf.d/$PROJECT_NAME.conf"
+    NGINX_ENABLED_DIR=""
+else
+    echo "❌ 无法识别包管理器 (apt 或 yum 均未找到)，退出安装。"
+    exit 1
+fi
+
+# 1. 更新系统软件包缓存
+echo "📦 检测到系统类型: $OS_TYPE, 正在刷新软件源..."
+if [ "$PKG_MGR" = "apt" ]; then
+    sudo apt update -y
+else
+    sudo yum makecache
+fi
 
 # 2. 环境检查与安装 (Node.js & Nginx)
 if ! command -v node &> /dev/null; then
     echo "🟢 正在安装 Node.js (v20)..."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-    sudo apt install -y nodejs
+    if [ "$PKG_MGR" = "apt" ]; then
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+        sudo apt install -y nodejs
+    else
+        curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+        sudo yum install -y nodejs
+    fi
 else
     echo "✅ Node.js 已安装: $(node -v)"
 fi
 
 if ! command -v nginx &> /dev/null; then
     echo "🟢 正在安装 Nginx..."
-    sudo apt install -y nginx
+    sudo $PKG_MGR install -y nginx
 else
     echo "✅ Nginx 已安装"
 fi
 
 # 3. 端口占用检查
-if sudo lsof -Pi :$LISTEN_PORT -sTCP:LISTEN -t >/dev/null ; then
-    echo "⚠️  警告: 端口 $LISTEN_PORT 已被占用。Nginx 配置后可能无法正常启动。"
+if command -v ss &> /dev/null; then
+    if sudo ss -tlnp | grep -q ":$LISTEN_PORT "; then
+        echo "⚠️  警告: 端口 $LISTEN_PORT 已被占用。Nginx 配置后可能无法正常启动。"
+    fi
+elif command -v lsof &> /dev/null; then
+    if sudo lsof -Pi :$LISTEN_PORT -sTCP:LISTEN -t >/dev/null 2>&1 ; then
+        echo "⚠️  警告: 端口 $LISTEN_PORT 已被占用。Nginx 配置后可能无法正常启动。"
+    fi
+else
+    echo "⚠️  提示: 缺少端口检查工具 (ss 或 lsof)，跳过占用检测..."
 fi
 
 # 4. 创建部署目录
@@ -116,11 +148,15 @@ EOF
 
 # 8. 启用配置并重启服务
 echo "🔄 验证并应用 Nginx 配置..."
-sudo ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
-
-# 如果监听非 80 端口，建议保留默认配置以防冲突，但这里为了纯净默认移除 default
-if [ "$LISTEN_PORT" == "80" ]; then
-    sudo rm -f /etc/nginx/sites-enabled/default
+if [ -n "$NGINX_ENABLED_DIR" ]; then
+    sudo ln -sf $NGINX_CONF $NGINX_ENABLED_DIR
+    if [ "$LISTEN_PORT" == "80" ]; then
+        sudo rm -f /etc/nginx/sites-enabled/default
+    fi
+else
+    if [ "$LISTEN_PORT" == "80" ] && [ -f "/etc/nginx/conf.d/default.conf" ]; then
+        sudo mv /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.bak 2>/dev/null
+    fi
 fi
 
 # 检查配置合法性
@@ -129,7 +165,7 @@ if sudo nginx -t; then
     echo "----------------------------------------------------"
     echo "✨ 部署成功!"
     echo "访问地址: http://您的服务器IP:$LISTEN_PORT"
-    echo "⚠️  重要提示: 请确保阿里云安全组已放行端口: $LISTEN_PORT"
+    echo "⚠️  重要提示: 请确保阿里云安全组/防火墙已放行端口: $LISTEN_PORT"
     echo "----------------------------------------------------"
 else
     echo "❌ Nginx 配置错误，请检查日志。"

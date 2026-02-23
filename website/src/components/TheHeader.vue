@@ -72,7 +72,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+
+const props = defineProps({
+  forceLight: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const emit = defineEmits(['logoClick', 'menuClick'])
 
 // ─── 菜单项 ──────────────────────────────────────────────────
 const menuItems = [
@@ -86,7 +95,9 @@ const isExpanded = ref(false)
 const hoveredItem = ref(null)
 const activeSectionLabel = ref('')
 const scrollProgress = ref(0)
-const isLightMode = ref(false)
+const isLightModeInternal = ref(false)
+
+const isLightMode = computed(() => props.forceLight || isLightModeInternal.value)
 
 // ─── hover 展开/收起 ─────────────────────────────────────────
 let collapseTimer = null
@@ -105,11 +116,13 @@ const onHeaderLeave = () => {
 
 // ─── 点击 logo 回首页 ────────────────────────────────────────
 const scrollToTop = () => {
+  emit('logoClick')
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 // ─── 点击菜单项 ──────────────────────────────────────────────
 const handleClick = (item) => {
+  emit('menuClick', item)
   const el = document.getElementById(item.id)
   if (el) {
     el.scrollIntoView({ behavior: 'smooth' })
@@ -122,9 +135,15 @@ const handleClick = (item) => {
 // ─── 滚动检测 ────────────────────────────────────────────────
 let sectionEls = []
 
-const onScroll = () => {
-  const scrollY = window.scrollY
-  const docHeight = document.documentElement.scrollHeight - window.innerHeight
+const onScroll = (e) => {
+  let scrollY = window.scrollY
+  let docHeight = document.documentElement.scrollHeight - window.innerHeight
+  const target = e?.target
+
+  if (target && target.classList && target.classList.contains('case-detail-page')) {
+    scrollY = target.scrollTop
+    docHeight = target.scrollHeight - target.clientHeight
+  }
 
   // 进度条
   if (docHeight > 0) {
@@ -134,7 +153,7 @@ const onScroll = () => {
   // Section 检测
   if (scrollY < 100) {
     activeSectionLabel.value = ''
-    isLightMode.value = false
+    isLightModeInternal.value = false
     return
   }
 
@@ -144,9 +163,9 @@ const onScroll = () => {
     const rect = casesEl.getBoundingClientRect()
     // 菜单栏高52px，当cases容器到达或越过菜单栏下沿时切换反色
     if (rect.top <= 52) {
-      isLightMode.value = true
+      isLightModeInternal.value = true
     } else {
-      isLightMode.value = false
+      isLightModeInternal.value = false
     }
   }
 
@@ -176,11 +195,11 @@ onMounted(() => {
     ...item,
     el: document.getElementById(item.id)
   }))
-  window.addEventListener('scroll', onScroll, { passive: true })
+  window.addEventListener('scroll', onScroll, true)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('scroll', onScroll)
+  window.removeEventListener('scroll', onScroll, true)
   clearTimeout(collapseTimer)
 })
 </script>
