@@ -297,7 +297,7 @@ onUnmounted(() => {
 
 .sticky-headers-stack {
   position: absolute;
-  top: 52px; /* 紧贴菜单栏 */
+  top: 68px; /* 紧贴菜单栏 */
   left: 0;
   width: 100%;
   height: 100%;

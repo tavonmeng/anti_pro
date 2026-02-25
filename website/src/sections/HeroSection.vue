@@ -21,9 +21,17 @@
     </div>
 
     <!-- Detached subtitle: Bottom Right -->
-    <p class="hero-subtitle hover-target">
-      Digital Experience &<br>Creative 3D Engineering
-    </p>
+    <div class="subtitle-group">
+      <p class="hero-subtitle hover-target">
+        DIGITAL EXPERIENCE & CREATIVE 3D<br>ENGINEERING
+      </p>
+      
+      <!-- Arrow line indicator -->
+      <div class="scroll-line-container">
+        <div class="scroll-line"></div>
+        <div class="scroll-arrow">↓</div>
+      </div>
+    </div>
 
     <!-- Scroll Indicator Detached to sit perfectly at bottom center -->
     <!-- <div class="scroll-indicator">
@@ -94,10 +102,10 @@ onMounted(() => {
 }
 
 .hero-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 8vw;
+  font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif;
+  font-size: 7.5vw; /* Smaller by one size */
   line-height: 0.9;
-  font-weight: 800;
+  font-weight: 1000; /* Extra bold */
   text-transform: uppercase;
   margin: 0;
   letter-spacing: -0.02em;
@@ -116,16 +124,59 @@ onMounted(() => {
   color: #fff; /* Fill white on hover */
 }
 
-.hero-subtitle {
+.subtitle-group {
   position: absolute;
-  right: 4vw;
-  bottom: 5.5vh;
-  font-size: 1.5rem; /* 仅进一步缩小副标题，变得极度克制小巧 */
-  font-weight: 300;
+  right: 6vw; /* Moved right slightly from 8vw */
+  bottom: 6vh; /* Explicitly set to 6vh */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  z-index: 10;
+}
+
+.hero-subtitle {
+  font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif;
+  font-size: 1.0rem;
+  font-weight: 600;
   line-height: 1.5;
   opacity: 0.7;
-  text-align: right;
-  z-index: 10;
+  text-align: left; /* Left align text */
+  margin: 0 0 20px 0;
+}
+
+.scroll-line-container {
+  display: flex;
+  align-items: center;
+  position: relative;
+  opacity: 0.6;
+  width: 100%; /* Matches exactly the width of the text */
+}
+
+.scroll-line {
+  width: 100%; /* Exact line length matching the text width */
+  height: 2px;
+  background-color: #fff;
+}
+
+.scroll-arrow {
+  position: absolute;
+  left: calc(100% + 15px); /* Placed completely outside the text alignment */
+  font-size: 1.6rem; /* Make arrow taller/larger */
+  line-height: 1;
+  color: #fff;
+  animation: bounceDown 2s infinite;
+}
+
+@keyframes bounceDown {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-5px);
+  }
+  60% {
+    transform: translateY(-3px);
+  }
 }
 
 .scroll-indicator {
@@ -142,7 +193,7 @@ onMounted(() => {
 
 @media (max-width: 768px) {
   .hero-title {
-    font-size: 15vw;
+    font-size: 12vw;
   }
 }
 </style>

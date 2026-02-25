@@ -5,9 +5,6 @@
     @mouseenter="onHeaderEnter"
     @mouseleave="onHeaderLeave"
   >
-    <!-- 最左侧竖线 -->
-    <div class="divider edge-divider"></div>
-
     <!-- 左：Logo 区域 -->
     <div class="header-logo" @click="scrollToTop">
       <span class="logo-icon">🛡️</span>
@@ -51,6 +48,7 @@
       </div>
 
       <!-- 菜单图标 -->
+      <div class="divider menu-divider"></div>
       <button
         class="menu-icon-btn"
         :class="{ rotated: isExpanded }"
@@ -161,8 +159,8 @@ const onScroll = (e) => {
   const casesEl = document.getElementById('cases')
   if (casesEl) {
     const rect = casesEl.getBoundingClientRect()
-    // 菜单栏高52px，当cases容器到达或越过菜单栏下沿时切换反色
-    if (rect.top <= 52) {
+    // 菜单栏高68px，当cases容器到达或越过菜单栏下沿时切换反色
+    if (rect.top <= 68) {
       isLightModeInternal.value = true
     } else {
       isLightModeInternal.value = false
@@ -211,7 +209,7 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   right: 0;
-  height: 52px;
+  height: 68px; /* Increased by ~30% from 52px */
   display: flex;
   align-items: center;
   z-index: 5001;
@@ -245,17 +243,17 @@ onUnmounted(() => {
   letter-spacing: 0.5px;
 }
 
-/* ─── 竖线分割（细线，底部留空隙） ──────────────────────────── */
+/* ─── 竖线分割 ──────────────────────────── */
 .divider {
-  width: 1px;
-  height: 16px; 
-  background: rgba(255, 255, 255, 0.25);
+  width: 2px;
+  height: 40px; /* Lengthened but not touching 68px header edges */
+  background: rgba(255, 255, 255, 0.35);
   flex-shrink: 0;
 }
 
-/* 边缘线稍微靠里一点 */
-.edge-divider {
-  margin-left: 32px;
+/* 靠近菜单按钮的分割线 */
+.menu-divider {
+  margin-left: 12px;
 }
 
 /* 导航内的分割线 */
@@ -362,14 +360,19 @@ onUnmounted(() => {
   width: 36px;
   height: 36px;
   min-width: 36px;
-  border: none;
+  border: 1.6px solid currentColor;
+  border-radius: 50%;
   background: transparent;
   color: #fff;
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
-  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
-  margin-left: 12px;
+  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+  margin-left: 16px;
+}
+
+.menu-icon-btn:hover {
+  opacity: 0.8;
 }
 
 .menu-icon-btn.rotated {
@@ -382,8 +385,8 @@ onUnmounted(() => {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.2);
+  height: 2px;
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .progress-fill {
@@ -400,13 +403,16 @@ onUnmounted(() => {
 /* ─── Light Mode Theme (Triggered below Cases) ─────────────── */
 .header-bar.is-light {
   background: #fff;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08); /* 增加一点边界感 */
+  border-bottom: 2px solid rgba(0, 0, 0, 0.12); /* Thicker border */
   transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .header-bar.is-light .logo-text,
 .header-bar.is-light .current-section-label,
-.header-bar.is-light .menu-link,
+.header-bar.is-light .menu-link {
+  color: #000;
+}
+
 .header-bar.is-light .menu-icon-btn {
   color: #000;
 }
@@ -428,7 +434,7 @@ onUnmounted(() => {
 /* ─── 响应式 ───────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .header-bar {
-    height: 44px;
+    height: 57px;
   }
   .header-logo {
     padding: 0 16px;
