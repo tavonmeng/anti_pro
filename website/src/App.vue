@@ -1,11 +1,12 @@
 <template>
   <div id="app-container">
+    <PageLoader v-if="!loaderDestroyed" @complete="handleLoadComplete" />
     <TheHeader :force-light="!!activeCase" @logoClick="handleGlobalLogoClick" @menuClick="handleGlobalMenuClick" />
     <CustomCursor />
     
     <div class="main-page" ref="mainPageRef">
       <main>
-        <HeroSection />
+        <HeroSection :is-loaded="isLoaded" />
         <IntroSection />
         <BrandsSection />
         <CasesSection @open-detail="handleCaseClick" />
@@ -29,6 +30,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import TheHeader from './components/TheHeader.vue'
 import CaseDetailPage from './components/CaseDetailPage.vue'
 import CustomCursor from './components/CustomCursor.vue'
+import PageLoader from './components/PageLoader.vue'
 import gsap from 'gsap'
 import ScrollTrigger from 'gsap/ScrollTrigger'
 
@@ -44,6 +46,16 @@ import TheFooter from './sections/TheFooter.vue'
 // 状态
 const activeCase = ref(null)
 const mainPageRef = ref(null)
+
+// 页面加载状态
+const isLoaded = ref(false)
+const loaderDestroyed = ref(false)
+
+const handleLoadComplete = () => {
+  isLoaded.value = true
+  // 等动画安全完成并渐隐后再彻底销毁loader，给GSAP一些预留时间（0.5s fade out）
+  setTimeout(() => loaderDestroyed.value = true, 800)
+}
 
 const handleGlobalLogoClick = () => {
   if (activeCase.value) handleCloseDetail()

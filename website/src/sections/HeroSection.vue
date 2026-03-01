@@ -2,7 +2,7 @@
   <section id="hero" class="hero-section">
     
     <!-- 视频背景 -->
-    <div class="video-container">
+    <div class="video-container" ref="bgRef">
       <video class="hero-video" autoplay muted loop playsinline>
         <source src="/video1.mp4" type="video/mp4">
         Your browser does not support the video tag.
@@ -13,23 +13,27 @@
     <div class="hero-container">
       <div class="hero-content">
         <h1 class="hero-title hover-target">
-          Let's Create<br>
-          <span class="outline-text hover-target">Something</span><br>
-          <span class="hover-target">Extraordinary</span>
+          <span class="line-wrap"><span class="line-text" ref="textLine1">Let's Create</span></span>
+          <span class="line-wrap"><span class="outline-text hover-target line-text" ref="textLine2">Something</span></span>
+          <span class="line-wrap"><span class="hover-target line-text" ref="textLine3">Extraordinary</span></span>
         </h1>
       </div>
     </div>
 
     <!-- Detached subtitle: Bottom Right -->
     <div class="subtitle-group">
-      <p class="hero-subtitle hover-target">
-        DIGITAL EXPERIENCE & CREATIVE 3D<br>ENGINEERING
-      </p>
+      <div class="line-wrap" style="margin-bottom: 20px;">
+        <p class="hero-subtitle hover-target line-text" ref="textLine4" style="margin: 0;">
+          DIGITAL EXPERIENCE & CREATIVE 3D<br>ENGINEERING
+        </p>
+      </div>
       
       <!-- Arrow line indicator -->
-      <div class="scroll-line-container">
-        <div class="scroll-line"></div>
-        <div class="scroll-arrow">↓</div>
+      <div class="line-wrap" style="width: 100%;">
+        <div class="scroll-line-container line-text" ref="textLine5">
+          <div class="scroll-line"></div>
+          <div class="scroll-arrow">↓</div>
+        </div>
       </div>
     </div>
 
@@ -41,10 +45,56 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import gsap from 'gsap'
+
+const props = defineProps({
+  isLoaded: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const bgRef = ref(null)
+const textLine1 = ref(null)
+const textLine2 = ref(null)
+const textLine3 = ref(null)
+const textLine4 = ref(null)
+const textLine5 = ref(null)
+
+const playHeroAnimation = () => {
+  const lines = [textLine1.value, textLine2.value, textLine3.value, textLine4.value, textLine5.value]
+  
+  const tl = gsap.timeline()
+  
+  // 视频背景在进度条展开的瞬间从小拉伸出场
+  tl.fromTo(bgRef.value,
+    { scale: 1.15, opacity: 0 },
+    { scale: 1, opacity: 1, duration: 1.5, ease: 'power3.out' }
+  )
+
+  // 文字错落拉起遮罩显现
+  tl.fromTo(lines,
+    { y: '120%', opacity: 0 }, // 或者纯y位移不使用opacity以完全贴合硬件clip感觉，这里结合使用更柔和
+    { y: '0%', opacity: 1, duration: 1.2, ease: 'power4.out', stagger: 0.15 },
+    '-=1.0' // 在背景动画执行了一部分之后插入文字动画
+  )
+}
+
+watch(() => props.isLoaded, (newVal) => {
+  if (newVal) {
+    playHeroAnimation()
+  }
+})
 
 onMounted(() => {
-  // Hero Section mounted
+  if (props.isLoaded) {
+    playHeroAnimation()
+  } else {
+    // Hide initially until loader completes
+    gsap.set([textLine1.value, textLine2.value, textLine3.value, textLine4.value, textLine5.value], { y: '120%', opacity: 0 })
+    gsap.set(bgRef.value, { scale: 1.15, opacity: 0 })
+  }
 })
 </script>
 
@@ -59,6 +109,18 @@ onMounted(() => {
   display: flex;
   align-items: flex-end; /* Align bottom to bring text down */
   justify-content: center;
+}
+
+.line-wrap {
+  display: block;
+  overflow: hidden;
+  position: relative;
+}
+
+.line-text {
+  display: block;
+  transform: translateY(120%); /* Fallback default before JS kicks in */
+  opacity: 0;
 }
 
 .video-container {
