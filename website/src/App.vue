@@ -19,6 +19,7 @@
       v-if="activeCase" 
       :case-data="activeCase"
       @close="handleCloseDetail"
+      @navigate-case="handleNavigateCase"
     />
   </div>
 </template>
@@ -74,6 +75,10 @@ const handleCaseClick = (caseData) => {
         mainPageRef.value.style.top = `-${currentScrollY}px`
     }
   })
+}
+
+const handleNavigateCase = (nextCase) => {
+  activeCase.value = nextCase
 }
 
 // 处理关闭详情页

@@ -117,6 +117,21 @@
         </div>
       </section>
 
+      <!-- Section: Next Case Navigation -->
+      <section class="next-case-nav">
+        <!-- 如果是最后一个案例，只有 Back; 如果不是，左右分栏 -->
+        <div class="nav-back hover-target" @click="emit('close')">
+          <span class="back-arrow">↖</span>
+          <span class="back-text">返回主页</span>
+        </div>
+        
+        <div class="nav-next hover-target" v-if="nextCase" @click="navigateNext">
+          <div class="next-label">下一案例 NEXT</div>
+          <h2 class="next-title">{{ nextCase.title }}</h2>
+          <div class="next-category">{{ nextCase.detail?.type || nextCase.category }}</div>
+        </div>
+      </section>
+
       <!-- Section 4: Contact Us -->
       <ContactSection />
       
@@ -127,10 +142,11 @@
 </template>
 
 <script setup>
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, ref, computed, watch } from 'vue'
 import gsap from 'gsap'
 import ContactSection from '../sections/ContactSection.vue'
 import TheFooter from '../sections/TheFooter.vue'
+import { cases } from '../data/cases'
 
 const props = defineProps({
   caseData: {
@@ -139,8 +155,29 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'navigate-case'])
 const pageRef = ref(null)
+
+const currentIndex = computed(() => cases.findIndex(c => c.id === props.caseData.id))
+const nextCase = computed(() => {
+  if (currentIndex.value >= 0 && currentIndex.value < cases.length - 1) {
+    return cases[currentIndex.value + 1]
+  }
+  return null
+})
+
+const navigateNext = () => {
+  if (nextCase.value) {
+    emit('navigate-case', nextCase.value)
+  }
+}
+
+watch(() => props.caseData, () => {
+  // 当案例切换时，滚动条置顶（因为本页面 .case-detail-page 是滚动容器）
+  if (pageRef.value) {
+    pageRef.value.scrollTo({ top: 0, behavior: 'auto' })
+  }
+})
 
 // Video states
 const videoRef = ref(null)
@@ -441,5 +478,76 @@ onMounted(() => {
   .twin-images-row { flex-direction: column; }
   .stats-row-main { flex-direction: column; gap: 10px; }
   .stats-row-sub { flex-direction: column; gap: 10px; }
+  .next-case-nav {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 60px 20px;
+    gap: 40px;
+  }
+  .nav-next {
+    text-align: left;
+  }
+}
+
+/* 底部导航区域 */
+.next-case-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 60px 5%; /* 调小高度 */
+  background: #fff;
+  border-top: 1px solid #eee;
+}
+
+.nav-back {
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: opacity 0.3s;
+}
+.nav-back:hover {
+  opacity: 0.6;
+}
+.back-arrow {
+  font-size: 24px; /* 调小箭头 */
+  line-height: 1;
+  color: #ccc;
+  margin-bottom: 5px;
+  transition: transform 0.3s;
+}
+.nav-back:hover .back-arrow {
+  transform: translate(-3px, -3px);
+  color: #000;
+}
+.back-text {
+  font-size: 11px; /* 调小字体 */
+  letter-spacing: 1px;
+  color: #000;
+  font-weight: 500;
+}
+
+.nav-next {
+  text-align: right;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+.nav-next:hover {
+  transform: translateX(10px);
+}
+.next-label {
+  font-size: 11px; /* 调小副标题 */
+  letter-spacing: 1px;
+  color: #999;
+  margin-bottom: 8px;
+}
+.next-title {
+  font-size: 20px; /* 调小主标题 */
+  font-weight: 400;
+  color: #000;
+  margin: 0 0 5px 0;
+}
+.next-category {
+  font-size: 13px; /* 调小类别 */
+  color: #666;
 }
 </style>

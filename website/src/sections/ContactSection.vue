@@ -1,7 +1,7 @@
 <template>
-  <section id="contact" class="contact-section">
+  <section id="contact" class="contact-section" ref="sectionRef">
     <!-- 顶部朦胧渐变遮罩 -->
-    <div class="fade-overlay"></div>
+    <div class="fade-overlay" ref="overlayRef"></div>
     <!-- 确保下方背景为白色的底图 -->
     <div class="solid-white-bg"></div>
 
@@ -30,19 +30,48 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import gsap from 'gsap'
+import ScrollTrigger from 'gsap/ScrollTrigger'
+
+gsap.registerPlugin(ScrollTrigger)
+
 const isHover = ref(false)
+const sectionRef = ref(null)
+const overlayRef = ref(null)
+let ctx
+
+onMounted(() => {
+  ctx = gsap.context(() => {
+    // 动态在页面滑上去（进入contact section）时，渐显遮罩层，避免遮挡最后一个案例被 pinned 时的视觉
+    gsap.fromTo(overlayRef.value, 
+      { opacity: 0 },
+      { 
+        opacity: 1,
+        scrollTrigger: {
+          trigger: sectionRef.value,
+          start: 'top bottom', // 当contact top刚接触视口底部，也就是cases刚刚结束pin开始往上滑时
+          end: 'top 85%', // 滑动到15vh高度左右时完全显现白边渐变
+          scrub: true
+        }
+      }
+    )
+  }, sectionRef.value)
+})
+
+onUnmounted(() => {
+  if (ctx) ctx.revert()
+})
 </script>
 
 <style scoped>
 .contact-section {
   position: relative;
-  /* 负边距，压缩为覆盖 15% */
-  margin-top: -15vh;
-  padding: 14vh 0 50px; /* 增加底部留白，拉开与下方 Footer 边框的距离 */
+  margin-top: -15vh; /* 重新启用负边距，15vh 覆盖在上一区块的尾部 */
+  padding: 14vh 0 50px;
   background-color: transparent; 
   color: #000;
-  z-index: 1000; /* Increased layer priority so it perfectly overlaps the lingering cases progress bar */
+  z-index: 1000;
 }
 
 .fade-overlay {
@@ -50,10 +79,11 @@ const isHover = ref(false)
   top: 0;
   left: 0;
   width: 100%;
-  height: 15vh; /* 压榨渐变高度 */
+  height: 15vh;
   background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 50%, rgba(255,255,255,1) 100%);
   z-index: -1;
   pointer-events: none;
+  opacity: 0; /* 默认隐藏，通过 GSAP 动画渐渐浮现 */
 }
 
 .solid-white-bg {
