@@ -62,11 +62,33 @@
         </article>
       </div>
     </div>
+
+    <!-- 底部进度条 -->
+    <div class="cases-progress-container">
+      <div class="progress-info">
+        <span class="progress-type">{{ currentCaseType }}</span>
+        <div class="progress-divider"></div>
+        <span class="progress-name">{{ currentCaseTitle }}</span>
+      </div>
+      <div class="progress-track-wrapper">
+        <div class="progress-track">
+          <div class="progress-fill" :style="{ width: 'calc(25% + ' + (progressPercent * 0.7) + '%)' }"></div>
+          <div 
+            class="progress-dot cursor-pointer" 
+            v-for="(item, i) in cases" 
+            :key="'dot-' + i"
+            :class="{ active: progressPercent >= (i / (cases.length - 1)) * 100 - 1 }"
+            :style="{ left: 'calc(25% + ' + ((i / (cases.length - 1)) * 70) + '%)' }"
+            @click.stop="scrollToCase(i)"
+          ></div>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, computed } from 'vue'
 import gsap from 'gsap'
 import ScrollTrigger from 'gsap/ScrollTrigger'
 
@@ -82,7 +104,7 @@ const cases = [
     category: 'Public Art', 
     video: '/video1.mp4',
     detail: {
-      type: 'Naked-eye 3D',
+      type: '裸眼3D',
       client: 'Taikoo Li',
       year: '2025',
       metrics: {
@@ -130,7 +152,7 @@ const cases = [
     video: '/video3.mp4', 
     desc: '为现代商业空间注入艺术灵魂。',
     detail: {
-      type: '商业视觉',
+      type: 'AI-3D',
       client: '远洋太古里',
       year: '2024',
       metrics: {
@@ -154,7 +176,7 @@ const cases = [
     video: '/video4.mp4', 
     desc: '打破虚实边界，重构感知体验。',
     detail: {
-      type: '沉浸式体验',
+      type: '数字光影',
       client: '科技艺术周',
       year: '2024',
       metrics: {
@@ -181,7 +203,23 @@ const videoRefs = ref([])
 const headerRefs = ref([])
 const timers = ref({})
 
+const progressPercent = ref(0)
+const currentCaseIndex = ref(0)
+const currentCaseTitle = computed(() => cases[currentCaseIndex.value]?.title || '')
+const currentCaseType = computed(() => cases[currentCaseIndex.value]?.detail?.type || cases[currentCaseIndex.value]?.category || '')
+
 let ctx
+
+const scrollToCase = (index) => {
+  const st = ScrollTrigger.getById('casesTrigger')
+  if (st) {
+    const start = st.start
+    const end = st.end
+    const progressSpan = end - start
+    const targetScroll = start + (index / (cases.length - 1)) * progressSpan
+    window.scrollTo({ top: targetScroll, behavior: 'smooth' })
+  }
+}
 
 const handleMouseEnter = (index) => {
   // 清除旧定时器
@@ -234,13 +272,43 @@ onMounted(() => {
 
     const tl = gsap.timeline({
       scrollTrigger: {
+        id: 'casesTrigger',
         trigger: sectionRef.value,
         start: 'top top',
-        end: `+=${cards.length * 100}%`,
+        end: `+=${cards.length * 250}%`, // 极度放大每一个案例需要的物理滚动距离（从 100% 增加到 250%），以稀释触控板的惯性
         pin: true,
-        scrub: 1,
+        scrub: 1, // 降低滞留感，让反馈更直接
+        snap: {
+          snapTo: 1 / (cards.length - 1),
+          duration: { min: 0.3, max: 0.6 },
+          delay: 0.15, // 吸附延迟微微加大，吸收掉触控板滚动结束后的末端惯性
+          ease: 'power2.out'
+        },
+        onUpdate: (self) => {
+          progressPercent.value = self.progress * 100
+          currentCaseIndex.value = Math.min(
+            Math.round(self.progress * (cards.length - 1)),
+            cards.length - 1
+          )
+        }
       }
     })
+
+    // 跨组件检测：当下方Contact页面（关于我们）进入时，将进度条无缝淡出
+    setTimeout(() => {
+      const contactEl = document.querySelector('.contact-section')
+      if (contactEl && ctx) {
+        ctx.add(() => {
+          ScrollTrigger.create({
+            trigger: contactEl,
+            start: 'top 95%', // 当关于我们要出现在底边上方时开始隐藏
+            end: 'top 65%',   // 滚动此距离后完全隐藏
+            scrub: true,
+            animation: gsap.to('.cases-progress-container', { opacity: 0, ease: 'none' })
+          })
+        })
+      }
+    }, 100)
 
     cards.forEach((card, index) => {
       if (index === 0) return
@@ -254,9 +322,9 @@ onMounted(() => {
         force3D: true
       }, scrollPos)
 
-      // 当前标题滑入并堆叠 (每个标题堆叠高度设为 28px)
+      // 当前标题滑入并堆叠 (每个标题堆叠高度修减为 20px)
       tl.to(headers[index], {
-        y: index * 28,
+        y: index * 20,
         opacity: 1,
         ease: 'none',
         force3D: true
@@ -310,7 +378,7 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   width: 100%;
-  height: 28px; /* 面板高度更小 */
+  height: 20px; /* 标题栏高度更小 */
   padding: 0 5%;
   display: flex;
   align-items: center;
@@ -347,13 +415,13 @@ onUnmounted(() => {
 .case-id {
   font-family: 'Inter', sans-serif;
   font-weight: 500;
-  font-size: 11px; /* 字体改小 */
+  font-size: 10px; /* 更小字体 */
   color: #fff; /* 白字 */
   letter-spacing: 1px;
 }
 
 .case-title {
-  font-size: 12px; /* 字体改小 */
+  font-size: 10px; /* 更小字体 */
   font-weight: 500;
   color: #fff; /* 白字 */
   margin: 0;
@@ -361,7 +429,7 @@ onUnmounted(() => {
 }
 
 .case-arrow {
-  font-size: 14px; /* 字体改小 */
+  font-size: 12px;
   color: #fff; /* 白字 */
 }
 
@@ -391,7 +459,7 @@ onUnmounted(() => {
 
 .case-details {
   position: absolute;
-  bottom: 15%;
+  bottom: 22%; /* Moved up slightly to make room for progress bar */
   right: 5%;
   max-width: 400px;
   text-align: right;
@@ -465,6 +533,91 @@ onUnmounted(() => {
 
 .case-item {
   cursor: pointer; /* Add pointer cursor to indicate clickability */
+}
+
+/* Bottom Progress Bar */
+.cases-progress-container {
+  position: absolute;
+  bottom: 30px; /* 距离底边一定间距 */
+  left: 0;
+  right: 0;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none; /* Make click-through to underlying cards */
+}
+
+.progress-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 24px; /* 放在进度条上方 */
+  padding-left: 5%; /* 向右缩进到第一段上方 */
+  color: #fff;
+  font-size: 11px; /* Decreased font size */
+  letter-spacing: 1px;
+}
+
+.progress-type {
+  opacity: 0.6;
+  text-transform: uppercase;
+}
+
+.progress-divider {
+  width: 20px; /* Reduced to match smaller font */
+  height: 1px;
+  background-color: #fff;
+  opacity: 0.7;
+  margin: 6px 0;
+}
+
+.progress-name {
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.progress-track-wrapper {
+  width: 100%;
+}
+
+.progress-track {
+  position: relative;
+  width: 100%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: #fff;
+  transition: width 0.1s linear;
+}
+
+.progress-dot {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  transition: background 0.3s ease, transform 0.3s ease;
+  pointer-events: auto; /* Allow dots to be clicked */
+  cursor: pointer;
+}
+
+.progress-dot::after {
+  content: '';
+  position: absolute;
+  top: -10px; left: -10px; right: -10px; bottom: -10px; /* Expand click area */
+}
+
+.progress-dot.active {
+  background: #fff;
+  transform: translate(-50%, -50%) scale(1.4);
 }
 
 @media (max-width: 768px) {

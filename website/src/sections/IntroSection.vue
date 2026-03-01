@@ -35,14 +35,18 @@
           </div>
         </div>
 
-        <!-- 服务介绍：通过 margin-top 置于下方，随着滚动往上滑进视野 -->
-        <div class="services-wrapper">
-          <!-- 服务介绍1 -->
-          <div class="content-block service-block" ref="block1">
-            <div class="service-header">
-              <h3 class="service-title">裸眼3D成片配订</h3>
-              <span class="service-arrow">←</span>
-            </div>
+        <!-- 服务介绍模块及其固定箭头框 -->
+        <div class="services-container">
+          <div class="fixed-arrow-wrapper" ref="arrowWrapperRef">
+            <span class="service-arrow shared-arrow" :class="{ 'arrow-hovered': isServiceHovered }">←</span>
+          </div>
+
+          <div class="services-wrapper">
+            <!-- 服务介绍1 -->
+            <div class="content-block service-block" ref="block1" @mouseenter="isServiceHovered = true" @mouseleave="isServiceHovered = false">
+              <div class="service-header">
+                <h3 class="service-title">裸眼3D成片配订</h3>
+              </div>
             <p class="service-desc">
               为每一块屏幕，适配引爆媒体的裸眼3D内容<br/>
               快速、高效、低成本获取高质量成片。
@@ -51,10 +55,9 @@
           </div>
 
           <!-- 服务介绍2 -->
-          <div class="content-block service-block" ref="block2">
+          <div class="content-block service-block" ref="block2" @mouseenter="isServiceHovered = true" @mouseleave="isServiceHovered = false">
             <div class="service-header">
               <h3 class="service-title">AI裸眼3D自主化定制</h3>
-              <span class="service-arrow">←</span>
             </div>
             <p class="service-desc">
               从创意到上屏，一站式AI制片<br/>
@@ -64,21 +67,20 @@
           </div>
 
           <!-- 服务介绍3 -->
-          <div class="content-block service-block" ref="block3">
+          <div class="content-block service-block" ref="block3" @mouseenter="isServiceHovered = true" @mouseleave="isServiceHovered = false">
             <div class="service-header">
               <h3 class="service-title">泛商业数字艺术打造</h3>
-              <span class="service-arrow">←</span>
             </div>
             <p class="service-desc">
               你的屏幕，需要新的艺术<br/>
               为商业空间打造独一无二的沉浸式视觉体验。
             </p>
-            <div class="hover-glow"></div>
           </div>
         </div>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 </template>
 
 <script setup>
@@ -94,6 +96,9 @@ const block1 = ref(null)
 const block2 = ref(null)
 const block3 = ref(null)
 const teamBlockRef = ref(null)
+const arrowWrapperRef = ref(null)
+
+const isServiceHovered = ref(false)
 
 let ctx
 
@@ -116,6 +121,14 @@ onMounted(() => {
       pinSpacing: false,
     })
 
+    ScrollTrigger.create({
+      trigger: sectionRef.value,
+      pin: arrowWrapperRef.value,
+      start: 'top top', // 让箭头随整体内容滚动到底边
+      end: 'bottom bottom',
+      pinSpacing: false,
+    })
+
     // 2. RIGHT BLOCKS ANIMATIONS (Only the 3 service blocks)
     const blocks = [block1.value, block2.value, block3.value]
     blocks.forEach((block) => {
@@ -123,8 +136,8 @@ onMounted(() => {
         const tl = gsap.timeline({
           scrollTrigger: {
             trigger: block,
-            start: 'top 85%',
-            end: 'top 45%', // Finish fade well before reaching the top area
+            start: 'top 95%', // 使模块从更低的位置开始进入
+            end: 'top 60%',   // 使模块停留在画布下方红框对应的高度
             scrub: true
           }
         })
@@ -231,6 +244,24 @@ onUnmounted(() => {
   z-index: 20;
 }
 
+.services-container {
+  position: relative;
+  width: 100%;
+}
+
+.fixed-arrow-wrapper {
+  position: absolute;
+  top: 20vh; /* 下调到与下方大红框相匹配的水平线中心位置 */
+  right: 0;
+  width: 100%;
+  height: 0; 
+  display: flex;
+  justify-content: flex-end;
+  align-items: center; /* 确保自身容器能够包含箭头 */
+  z-index: 30;
+  pointer-events: none; /* 让它悬浮在层之上但不阻挡事件 */
+}
+
 .services-wrapper {
   display: flex;
   flex-direction: column;
@@ -263,11 +294,15 @@ onUnmounted(() => {
 
 .service-block {
   padding: 40px 0;
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   cursor: pointer;
 }
 
-.service-block:hover {
+.service-header, .service-desc {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.service-block:hover .service-header,
+.service-block:hover .service-desc {
   transform: translateX(-10px);
 }
 
@@ -291,12 +326,14 @@ onUnmounted(() => {
   font-size: 28px;
   color: rgba(255, 255, 255, 0.3);
   font-weight: 300;
+  display: inline-block;
   transition: color 0.3s ease, transform 0.3s ease;
+  transform: translateX(0);
 }
 
-.service-block:hover .service-arrow {
+.service-arrow.arrow-hovered {
   color: #fff;
-  transform: translateX(-5px);
+  transform: translateX(-10px);
 }
 
 .service-desc {

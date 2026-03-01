@@ -42,7 +42,7 @@ const isHover = ref(false)
   padding: 14vh 0 50px; /* 增加底部留白，拉开与下方 Footer 边框的距离 */
   background-color: transparent; 
   color: #000;
-  z-index: 100;
+  z-index: 1000; /* Increased layer priority so it perfectly overlaps the lingering cases progress bar */
 }
 
 .fade-overlay {
@@ -51,7 +51,7 @@ const isHover = ref(false)
   left: 0;
   width: 100%;
   height: 15vh; /* 压榨渐变高度 */
-  background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%);
+  background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 50%, rgba(255,255,255,1) 100%);
   z-index: -1;
   pointer-events: none;
 }
@@ -123,8 +123,8 @@ const isHover = ref(false)
 
 .contact-card {
   background: #000;
-  padding: 12px 32px; /* 按钮压窄，紧凑布局 */
-  border-radius: 40px;
+  padding: 16px 48px; /* 加大胶囊体积 */
+  border-radius: 60px; /* 大号圆角，保持胶囊形状 */
   transition: transform 0.3s ease;
   z-index: 10;
 }
@@ -135,9 +135,10 @@ const isHover = ref(false)
 
 .email-link {
   color: #fff;
-  font-size: 18px;
+  font-size: 24px; /* 加大邮箱字号 */
   font-family: monospace;
   text-decoration: none;
+  letter-spacing: 1px;
 }
 
 /* --- 响应式 --- */
