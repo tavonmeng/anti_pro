@@ -19,10 +19,8 @@ onMounted(() => {
     
     if (isOverHeader) {
       isVisible = false // Do not show cursor effect on header
-      document.body.classList.remove('no-cursor')
     } else {
       isVisible = true // Always visible globally now
-      document.body.classList.add('no-cursor')
     }
 
     gsap.to(cursor.value, {
@@ -35,6 +33,7 @@ onMounted(() => {
   }
 
   const onHover = () => {
+    document.body.classList.add('no-cursor') // Hide native cursor when hovering interactive items
     gsap.to(cursor.value, {
       scale: 3,
       backgroundColor: '#fff', 
@@ -44,6 +43,7 @@ onMounted(() => {
   }
 
   const onLeave = () => {
+    document.body.classList.remove('no-cursor') // Show native cursor when not hovering interactive items
     gsap.to(cursor.value, {
       scale: 1,
       backgroundColor: 'transparent',
