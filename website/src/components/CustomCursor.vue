@@ -34,23 +34,10 @@ onMounted(() => {
 
   const onHover = () => {
     document.body.classList.add('no-cursor') // Hide native cursor when hovering interactive items
-    gsap.to(cursor.value, {
-      scale: 3,
-      backgroundColor: '#fff', 
-      borderWidth: 0,
-      duration: 0.3
-    })
   }
 
   const onLeave = () => {
     document.body.classList.remove('no-cursor') // Show native cursor when not hovering interactive items
-    gsap.to(cursor.value, {
-      scale: 1,
-      backgroundColor: 'transparent',
-      borderColor: '#fff',
-      borderWidth: '2px',
-      duration: 0.3
-    })
   }
 
   const onMouseOver = (e) => {
