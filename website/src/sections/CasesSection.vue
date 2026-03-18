@@ -62,33 +62,11 @@
         </article>
       </div>
     </div>
-
-    <!-- 底部进度条 -->
-    <div class="cases-progress-container">
-      <div class="progress-info">
-        <span class="progress-type">{{ currentCaseType }}</span>
-        <div class="progress-divider"></div>
-        <span class="progress-name">{{ currentCaseTitle }}</span>
-      </div>
-      <div class="progress-track-wrapper">
-        <div class="progress-track">
-          <div class="progress-fill" :style="{ width: 'calc(25% + ' + (progressPercent * 0.7) + '%)' }"></div>
-          <div 
-            class="progress-dot cursor-pointer" 
-            v-for="(item, i) in cases" 
-            :key="'dot-' + i"
-            :class="{ active: progressPercent >= (i / (cases.length - 1)) * 100 - 1 }"
-            :style="{ left: 'calc(25% + ' + ((i / (cases.length - 1)) * 70) + '%)' }"
-            @click.stop="scrollToCase(i)"
-          ></div>
-        </div>
-      </div>
-    </div>
   </section>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import gsap from 'gsap'
 import ScrollTrigger from 'gsap/ScrollTrigger'
 
@@ -105,23 +83,7 @@ const videoRefs = ref([])
 const headerRefs = ref([])
 const timers = ref({})
 
-const progressPercent = ref(0)
-const currentCaseIndex = ref(0)
-const currentCaseTitle = computed(() => cases[currentCaseIndex.value]?.title || '')
-const currentCaseType = computed(() => cases[currentCaseIndex.value]?.detail?.type || cases[currentCaseIndex.value]?.category || '')
-
 let ctx
-
-const scrollToCase = (index) => {
-  const st = ScrollTrigger.getById('casesTrigger')
-  if (st) {
-    const start = st.start
-    const end = st.end
-    const progressSpan = end - start
-    const targetScroll = start + (index / (cases.length - 1)) * progressSpan
-    window.scrollTo({ top: targetScroll, behavior: 'smooth' })
-  }
-}
 
 const handleMouseEnter = (index) => {
   // 清除旧定时器
@@ -150,8 +112,11 @@ const handleMouseLeave = (index) => {
 
 onMounted(() => {
   ctx = gsap.context(() => {
-    const cards = itemRefs.value
-    const headers = headerRefs.value
+    // 放弃直接使用 Vue 的 itemRefs.value（在 Vite HMR 热重载时极易引发索引混乱、数组翻倍和乱序问题）
+    // 采用原生查 DOM 然后转数组的方法，确保任何时候 GSAP 拿到的是准确的当前节点
+    const cards = gsap.utils.toArray(sectionRef.value.querySelectorAll('.case-item'))
+    const headers = gsap.utils.toArray(sectionRef.value.querySelectorAll('.sticky-header'))
+    
     if (cards.length <= 1) return
 
     // 设置初始状态 - 使用 force3D
@@ -172,45 +137,22 @@ onMounted(() => {
       }
     })
 
-    const tl = gsap.timeline({
+      const tl = gsap.timeline({
       scrollTrigger: {
         id: 'casesTrigger',
         trigger: sectionRef.value,
-        start: 'top top',
-        end: `+=${cards.length * 250}%`, // 极度放大每一个案例需要的物理滚动距离（从 100% 增加到 250%），以稀释触控板的惯性
+        start: 'top 68px', // 当 section 到达导航栏底部时进行锁定，消除白块间隙
+        end: `+=${cards.length * 100}%`,
         pin: true,
-        scrub: 1, // 降低滞留感，让反馈更直接
+        scrub: 0.5, // 缩短平滑延迟到 0.5秒，保持顺滑的同时极大提升手势的绝对跟手性
         snap: {
           snapTo: 1 / (cards.length - 1),
-          duration: { min: 0.3, max: 0.6 },
-          delay: 0.15, // 吸附延迟微微加大，吸收掉触控板滚动结束后的末端惯性
-          ease: 'power2.out'
-        },
-        onUpdate: (self) => {
-          progressPercent.value = self.progress * 100
-          currentCaseIndex.value = Math.min(
-            Math.round(self.progress * (cards.length - 1)),
-            cards.length - 1
-          )
+          duration: { min: 0.2, max: 0.5 }, // 加快吸附动作本身的速度
+          delay: 0.05, // 停手后极短时间就介入吸附，防止滑动中有卡顿感
+          ease: 'power3.inOut' // 使用平滑的 S 型缓动，避免突然的加减速顿挫
         }
       }
     })
-
-    // 跨组件检测：当下方Contact页面（关于我们）进入时，将进度条无缝淡出
-    setTimeout(() => {
-      const contactEl = document.querySelector('.contact-section')
-      if (contactEl && ctx) {
-        ctx.add(() => {
-          ScrollTrigger.create({
-            trigger: contactEl,
-            start: 'top 95%', // 当关于我们要出现在底边上方时开始隐藏
-            end: 'top 65%',   // 滚动此距离后完全隐藏
-            scrub: true,
-            animation: gsap.to('.cases-progress-container', { opacity: 0, ease: 'none' })
-          })
-        })
-      }
-    }, 100)
 
     cards.forEach((card, index) => {
       if (index === 0) return
@@ -262,12 +204,15 @@ onUnmounted(() => {
 .cases-section {
   background-color: #fff;
   width: 100%;
+  height: calc(100vh - 68px); /* 减去导航栏高度，精准填满剩余全屏 */
   position: relative;
+  /* 移除丑陋的 padding hack */
+  box-sizing: border-box;
 }
 
 .sticky-headers-stack {
   position: absolute;
-  top: 68px; /* 紧贴菜单栏 */
+  top: 0; /* 紧贴容器顶部（已经在导航栏下方） */
   left: 0;
   width: 100%;
   height: 100%;
@@ -336,9 +281,10 @@ onUnmounted(() => {
 }
 
 .cases-container {
-  height: 100vh;
+  height: 100%; /* 从 padding内部开始填充，自然高度正好是 100vh-68px */
   position: relative;
   overflow: hidden;
+  top: 0; /* 撤销之前的强行偏移 */
 }
 
 .cases-stack {
@@ -435,91 +381,6 @@ onUnmounted(() => {
 
 .case-item {
   cursor: pointer; /* Add pointer cursor to indicate clickability */
-}
-
-/* Bottom Progress Bar */
-.cases-progress-container {
-  position: absolute;
-  bottom: 30px; /* 距离底边一定间距 */
-  left: 0;
-  right: 0;
-  z-index: 500;
-  display: flex;
-  flex-direction: column;
-  pointer-events: none; /* Make click-through to underlying cards */
-}
-
-.progress-info {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  margin-bottom: 24px; /* 放在进度条上方 */
-  padding-left: 5%; /* 向右缩进到第一段上方 */
-  color: #fff;
-  font-size: 11px; /* Decreased font size */
-  letter-spacing: 1px;
-}
-
-.progress-type {
-  opacity: 0.6;
-  text-transform: uppercase;
-}
-
-.progress-divider {
-  width: 20px; /* Reduced to match smaller font */
-  height: 1px;
-  background-color: #fff;
-  opacity: 0.7;
-  margin: 6px 0;
-}
-
-.progress-name {
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
-.progress-track-wrapper {
-  width: 100%;
-}
-
-.progress-track {
-  position: relative;
-  width: 100%;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.progress-fill {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  background: #fff;
-  transition: width 0.1s linear;
-}
-
-.progress-dot {
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.4);
-  transition: background 0.3s ease, transform 0.3s ease;
-  pointer-events: auto; /* Allow dots to be clicked */
-  cursor: pointer;
-}
-
-.progress-dot::after {
-  content: '';
-  position: absolute;
-  top: -10px; left: -10px; right: -10px; bottom: -10px; /* Expand click area */
-}
-
-.progress-dot.active {
-  background: #fff;
-  transform: translate(-50%, -50%) scale(1.4);
 }
 
 @media (max-width: 768px) {

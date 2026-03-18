@@ -1,90 +1,82 @@
 <template>
   <section id="intro" class="intro-section" ref="sectionRef">
-    <div class="container">
-      <!-- 左侧固定内容 -->
-      <div class="left-content" ref="leftContentRef">
-        <h2 class="main-heading">
-          这是一个<br>
-          <span class="desc-highlight">idea+AI驱动的</span><br>
-          3D OOH内容平台
-        </h2>
-        
-        <div class="description-block">
-          <p class="desc-text">
-            高效率、低成本、提升视觉质量<br>
-            让全球数字媒体
-          </p>
-          <p class="desc-highlight" style="margin-bottom: 40px;">
-            更快获得优质内容。
-          </p>
-        </div>
-
-      </div>
+    <!-- 包裹层用于入场淡入动画 -->
+    <div class="intro-contents-wrapper" ref="wrapperRef">
       
-      <!-- 右侧动画滑块内容 -->
-      <div class="right-content">
-        <!-- 团队介绍：固定位置 -->
-        <div class="team-block-top">
-          <p class="team-lead section-heading">
-            国内最早的裸眼3D项目核心团队，具有完善的AI数字艺术全流程项目环节，成员多毕业于海外TOP级艺术学院，专业覆盖创意广告学、公共艺术设计、雕塑、影视导演、动画、三维特效设计、视觉传达等领域
-          </p>
-          <p class="team-desc section-heading">
-            对户外媒体的艺术表现与内容营销具有丰富的经验，项目涉及三维CG、AIGC、实拍、数字艺术、艺术家联名、创意IP开发、室内互动屏项目、各地异形屏、AI视觉系统运用等......................
-          </p>
+      <!-- 1. 全屏动态背景和改变的服务介绍 -->
+      <div class="full-screen-slides">
+        <!-- Slide 0 -->
+        <div class="slide first" ref="slide0">
+          <div class="outer">
+            <div class="inner">
+              <div class="bg slide-bg-1">
+                <!-- 内部对齐网格，与静态层完全吻合 -->
+                <div class="slide-grid">
+                  <div class="container">
+                    <div class="left-empty"></div>
+                    <div class="right-content relative-box">
+                      <div class="service-block">
+                        <div class="service-header">
+                          <h3 class="service-title section-heading">裸眼3D成片配订</h3>
+                        </div>
+                        <p class="service-desc section-heading">
+                          为每一块屏幕，适配引爆媒体的裸眼3D内容<br/>
+                          快速、高效、低成本获取高质量成片。
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="slides-wrapper">
-          <!-- Slide 0: 服务1 -->
-          <div class="slide first" ref="slide0">
-            <div class="outer">
-              <div class="inner">
-                <div class="bg">
-                  <div class="content-block service-block">
-                    <div class="service-header">
-                      <h3 class="service-title section-heading">裸眼3D成片配订</h3>
+        <!-- Slide 1 -->
+        <div class="slide second" ref="slide1">
+          <div class="outer">
+            <div class="inner">
+              <div class="bg slide-bg-2">
+                <div class="slide-grid">
+                  <div class="container">
+                    <div class="left-empty"></div>
+                    <div class="right-content relative-box">
+                      <div class="service-block">
+                        <div class="service-header">
+                          <h3 class="service-title section-heading">AI裸眼3D自主化定制</h3>
+                        </div>
+                        <p class="service-desc section-heading">
+                          从创意到上屏，一站式AI制片<br/>
+                          自研AI专业内容打造模型，大幅缩短制作周期。
+                        </p>
+                      </div>
                     </div>
-                    <p class="service-desc section-heading">
-                      为每一块屏幕，适配引爆媒体的裸眼3D内容<br/>
-                      快速、高效、低成本获取高质量成片。
-                    </p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Slide 1: 服务2 -->
-          <div class="slide second" ref="slide1">
-            <div class="outer">
-              <div class="inner">
-                <div class="bg">
-                  <div class="content-block service-block">
-                    <div class="service-header">
-                      <h3 class="service-title section-heading">AI裸眼3D自主化定制</h3>
+        <!-- Slide 2 -->
+        <div class="slide third" ref="slide2">
+          <div class="outer">
+            <div class="inner">
+              <div class="bg slide-bg-3">
+                <div class="slide-grid">
+                  <div class="container">
+                    <div class="left-empty"></div>
+                    <div class="right-content relative-box">
+                      <div class="service-block">
+                        <div class="service-header">
+                          <h3 class="service-title section-heading">泛商业数字艺术打造</h3>
+                        </div>
+                        <p class="service-desc section-heading">
+                          你的屏幕，需要新的艺术<br/>
+                          为商业空间打造独一无二的沉浸式视觉体验。
+                        </p>
+                      </div>
                     </div>
-                    <p class="service-desc section-heading">
-                      从创意到上屏，一站式AI制片<br/>
-                      自研AI专业内容打造模型，大幅缩短制作周期。
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Slide 2: 服务3 -->
-          <div class="slide third" ref="slide2">
-            <div class="outer">
-              <div class="inner">
-                <div class="bg">
-                  <div class="content-block service-block">
-                    <div class="service-header">
-                      <h3 class="service-title section-heading">泛商业数字艺术打造</h3>
-                    </div>
-                    <p class="service-desc section-heading">
-                      你的屏幕，需要新的艺术<br/>
-                      为商业空间打造独一无二的沉浸式视觉体验。
-                    </p>
                   </div>
                 </div>
               </div>
@@ -92,6 +84,40 @@
           </div>
         </div>
       </div>
+
+      <!-- 2. 全局静态覆盖层（左侧文本 + 右侧团队说明） -->
+      <div class="static-overlay-layer">
+        <div class="container">
+          <div class="left-content static-left" ref="leftContentRef">
+            <h2 class="main-heading">
+              这是一个<br>
+              <span class="desc-highlight">idea+AI驱动的</span><br>
+              3D OOH内容平台
+            </h2>
+            <div class="description-block">
+              <p class="desc-text">
+                高效率、低成本、提升视觉质量<br>
+                让全球数字媒体
+              </p>
+              <p class="desc-highlight" style="margin-bottom: 40px;">
+                更快获得优质内容。
+              </p>
+            </div>
+          </div>
+          
+          <div class="right-content relative-box">
+            <div class="team-block-top">
+              <p class="team-lead static-heading">
+                国内最早的裸眼3D项目核心团队，具有完善的AI数字艺术全流程项目环节，成员多毕业于海外TOP级艺术学院，专业覆盖创意广告学、公共艺术设计、雕塑、影视导演、动画、三维特效设计、视觉传达等领域
+              </p>
+              <p class="team-desc static-heading">
+                对户外媒体的艺术表现与内容营销具有丰富的经验，项目涉及三维CG、AIGC、实拍、数字艺术、艺术家联名、创意IP开发、室内互动屏项目、各地异形屏、AI视觉系统运用等......................
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </section>
 </template>
@@ -105,6 +131,7 @@ import SplitType from 'split-type'
 gsap.registerPlugin(ScrollTrigger)
 
 const sectionRef = ref(null)
+const wrapperRef = ref(null)
 const slide0 = ref(null)
 const slide1 = ref(null)
 const slide2 = ref(null)
@@ -114,32 +141,71 @@ let splitContext = []
 
 onMounted(() => {
   ctx = gsap.context(() => {
+    // 提取静态呈现的文本并进行切割
+    const staticHeadings = gsap.utils.toArray(sectionRef.value.querySelectorAll('.main-heading, .desc-text, .static-heading, .desc-highlight'))
+    staticHeadings.forEach(heading => {
+      splitContext.push(new SplitType(heading, { types: 'lines', lineClass: 'clip-text' }))
+    })
+
+    // 为所有的切割行初始设定为向下偏移且隐藏
+    const staticLines = sectionRef.value.querySelectorAll('.static-overlay-layer .line')
+    gsap.set(staticLines, { yPercent: 120, autoAlpha: 0 })
+
+    // 第一张背景幻灯片放大并变暗作为入场初态
+    gsap.set(slide0.value, { scale: 1.1, autoAlpha: 0 })
+    gsap.set(wrapperRef.value, { autoAlpha: 1 }) // 不再隐藏整个外壳，而是隐藏内部元素
+
+    // ---- 1. 入场淡入遮罩动效：当从 Hero 滑动到 Intro 时触发 ----
+    const entranceTl = gsap.timeline({
+      scrollTrigger: {
+        trigger: sectionRef.value,
+        start: 'top 85%',
+        toggleActions: 'play none none reverse'
+      }
+    })
+
+    // 第一张背景柔和浮现收缩
+    entranceTl.to(slide0.value, {
+      scale: 1,
+      autoAlpha: 1,
+      duration: 1.8,
+      ease: 'power3.out'
+    }, 0)
+
+    // 文字应用 Text-Masking 特效：每一行从自身底部的遮罩区向上拨开
+    entranceTl.to(staticLines, {
+      yPercent: 0,
+      autoAlpha: 1,
+      duration: 1.2,
+      stagger: 0.08,
+      ease: 'power4.out'
+    }, 0.2) // 在背景开始出现后立刻跟进文字拨开
+    
+    // ---- 2. 幻灯片 GSAP Observer 切换逻辑 ----
     const slides = [slide0.value, slide1.value, slide2.value]
     
-    // 初始化 SplitType，将文本分割为行、单词和字符
-    const headings = gsap.utils.toArray('.section-heading')
+    // 修复 HMR 热重载下全局选取导致幽灵 DOM 冲突的严重 Bug
+    const headings = gsap.utils.toArray(sectionRef.value.querySelectorAll('.section-heading'))
     headings.forEach(heading => {
       splitContext.push(new SplitType(heading, { types: 'lines,words,chars', lineClass: 'clip-text' }))
     })
 
-    // 创建单向Timeline，通过scrub驱动幻灯片切换
     const tl = gsap.timeline({
       scrollTrigger: {
         trigger: sectionRef.value,
         start: 'top top',
-        end: '+=300%', // 预留滚动空间用于体验幻灯片
+        end: '+=150%',
         pin: true,
-        scrub: 1, // 增加平滑缓冲
+        scrub: 0.5,
         snap: {
           snapTo: 1 / (slides.length - 1),
-          duration: { min: 0.2, max: 0.8 },
-          delay: 0.1,
-          ease: 'power1.inOut'
+          duration: { min: 0.1, max: 0.4 },
+          delay: 0.05,
+          ease: 'power3.inOut'
         }
       }
     })
 
-    // 设置初始状态
     slides.forEach((slide, i) => {
       const outer = slide.querySelector('.outer')
       const inner = slide.querySelector('.inner')
@@ -149,13 +215,11 @@ onMounted(() => {
         gsap.set(outer, { yPercent: 100 })
         gsap.set(inner, { yPercent: -100 })
         gsap.set(bg, { yPercent: 15 })
-        // 除了第一张，其余内容的字一开始是隐藏的，因为第一页进入时不带字符飞入动画
         const chars = slide.querySelectorAll('.char')
         gsap.set(chars, { autoAlpha: 0, yPercent: 150 })
       }
     })
     
-    // 构建幻灯片洗牌时间轴
     slides.forEach((slide, i) => {
       if (i === 0) return
       
@@ -165,36 +229,28 @@ onMounted(() => {
       const outer = slide.querySelector('.outer')
       const inner = slide.querySelector('.inner')
       const bg = slide.querySelector('.bg')
-      
-      // 注意：必须通过 slide 定位它内部的 chars，来让字有逐个飞入特效
       const chars = slide.querySelectorAll('.char')
 
       const transLabel = `trans${i}`
       tl.addLabel(transLabel)
       
-      // 旧幻灯片离开
-      tl.to(prevBg, { yPercent: -15, duration: 1, ease: 'none' }, transLabel)
-        .to(prevSlide, { autoAlpha: 0, duration: 1, ease: 'none' }, transLabel)
+      tl.to(prevBg, { yPercent: -15, duration: 0.8, ease: 'none' }, transLabel)
+        .to(prevSlide, { autoAlpha: 0, duration: 0.8, ease: 'none' }, transLabel)
         
-      // 新幻灯片进入（模拟GSAP Observer CodePen里的 parallax 面板运动）
       tl.set(slide, { autoAlpha: 1, zIndex: 1 }, transLabel)
         .fromTo([outer, inner], 
-          // gsap里 index 函数有三个参数 (i, target, targets)，
-          // target 是当前处理的DOM元素。
-          // 当 i=0 是 outer，所以 -100；当 i=1 是 inner，所以 100
           { yPercent: index => index ? -100 : 100 }, 
-          { yPercent: 0, duration: 1, ease: 'power1.inOut' }, transLabel)
-        .fromTo(bg, { yPercent: 15 }, { yPercent: 0, duration: 1, ease: 'power1.inOut' }, transLabel)
+          { yPercent: 0, duration: 0.8, ease: 'power2.inOut' }, transLabel)
+        .fromTo(bg, { yPercent: 15 }, { yPercent: 0, duration: 0.8, ease: 'power2.inOut' }, transLabel)
         
-      // 文本字符动画
       if (chars.length > 0) {
         tl.to(chars, { 
           autoAlpha: 1, 
           yPercent: 0, 
-          duration: 0.8, 
-          ease: 'power2.out', 
-          stagger: 0.02 
-        }, `${transLabel}+=0.2`)
+          duration: 0.5,
+          ease: 'power3.out', 
+          stagger: 0.01 
+        }, `${transLabel}+=0.15`)
       }
     })
     
@@ -209,13 +265,102 @@ onUnmounted(() => {
 
 <style scoped>
 .intro-section {
-  padding: 120px 40px;
-  background-color: var(--color-bg-primary);
+  background-color: var(--color-bg-primary); /* 原为黑色兜底 */
   color: #fff;
-  min-height: 100vh;
+  width: 100%;
+  height: 100vh;
   position: relative;
-  /* Ensure parent allows z-index context */
   z-index: 10;
+  overflow: hidden;
+}
+
+.intro-contents-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  will-change: transform, opacity;
+}
+
+/* 1. 幻灯片占据全屏 */
+.full-screen-slides {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.slide {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  visibility: hidden;
+  z-index: 0;
+}
+
+.slide.first {
+  visibility: visible;
+  z-index: 1;
+}
+
+.outer, .inner {
+  width: 100%;
+  height: 100%;
+  overflow-y: hidden;
+}
+
+/* 背景扩展至全屏，并设置极致的高级渐变遮罩保护左侧文本阅读 */
+.bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  /* padding 移除，外层通过 grid-container 精密挂载内容 */
+}
+
+/* 加深纯黑渐变：左侧95%纯黑以彻底保护静态白字，中部拉平，右侧微露 20% 原图光芒 */
+.slide-bg-1 {
+  background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.2) 100%), 
+                    url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop');
+}
+
+.slide-bg-2 {
+  background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.3) 100%), 
+                    url('https://images.unsplash.com/photo-1634152962476-4b8a00e1915c?q=80&w=2121&auto=format&fit=crop');
+}
+
+.slide-bg-3 {
+  background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.4) 100%), 
+                    url('https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2100&auto=format&fit=crop');
+}
+
+/* 幻灯片内的网格布局区域计算（和静态层完美重合） */
+.slide-grid {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  padding: 120px 40px;
+  box-sizing: border-box;
+}
+
+/* 2. 静态覆盖层（位于背景最上方） */
+.static-overlay-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  padding: 120px 40px;
+  box-sizing: border-box;
+  z-index: 10;
+  pointer-events: none; /* 防止挡住鼠标的正常滚轮甚至 Hover 事件 */
 }
 
 .container {
@@ -224,12 +369,20 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: 1fr 1.2fr;
   gap: 80px;
-  align-items: center; /* keep everything centered horizontally to avoid stretching bug */
-  height: calc(100vh - 240px); /* Fill the viewport minus padding */
+  align-items: flex-start; /* 改为从上排版，不要用 center 以防文字由于左右子项高度不一样产生错位 */
+  height: calc(100vh - 240px); /* 100vh 减去上下 padding */
 }
 
 .left-content {
   will-change: transform;
+  pointer-events: auto; /* 收回交互控制权 */
+}
+
+.relative-box {
+  position: relative;
+  width: 100%;
+  height: 100%; /* 高度充满右侧栏网格 */
+  pointer-events: auto;
 }
 
 .main-heading {
@@ -259,68 +412,13 @@ onUnmounted(() => {
   letter-spacing: 1px;
 }
 
-/* ==================
-   Right Slider Area 
-   ================== */
-   
-.right-content {
-  position: relative;
-  width: 100%;
-  height: calc(100vh - 240px);
-  display: flex;
-  flex-direction: column;
-}
-
+/* 团队静止介绍放在右侧顶部 */
 .team-block-top {
-  position: relative;
-  z-index: 20;
-  margin-bottom: 50px;
-}
-
-.slides-wrapper {
-  position: relative;
-  width: 100%;
-  flex: 1; /* Take remaining space */
-  border-radius: 20px;
-}
-
-.slide {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
-  height: 100%;
-  visibility: hidden;
-  z-index: 0;
 }
-
-.slide.first {
-  visibility: visible;
-  z-index: 1;
-}
-
-.outer, .inner {
-  width: 100%;
-  height: 100%;
-  overflow-y: hidden; /* Critical for the GSAP Demo wipe effect */
-}
-
-.bg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  padding: 0;
-  box-sizing: border-box;
-  background-color: var(--color-bg-primary);
-  /* The CodePen effect relies on the background overlaying properly */
-}
-
-/* --- Slide Content Styling --- */
 
 .team-lead {
   font-size: 16px;
@@ -336,8 +434,13 @@ onUnmounted(() => {
   line-height: 1.8;
 }
 
+/* 动态服务块放在右侧底部 */
 .service-block {
-  padding: 0;
+  position: absolute;
+  bottom: 0; /* 对齐到底部，给上方团队介绍留下巨大的安全空间 */
+  left: 0;
+  width: 100%;
+  max-width: 80%; /* 不超过右沿以免贴着右边亮图 */
 }
 
 .service-header {
@@ -348,7 +451,7 @@ onUnmounted(() => {
 }
 
 .service-title {
-  font-size: 24px;
+  font-size: 26px; /* 字体略放大加重冲击力 */
   font-weight: 700;
   color: #fff;
   margin: 0;
@@ -357,15 +460,15 @@ onUnmounted(() => {
 }
 
 .service-desc {
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 15px; /* 字体略放大 */
   line-height: 1.8;
 }
 
 /* GSAP SplitType Masking Class */
 :deep(.clip-text) {
   overflow: hidden;
-  padding: 2px 0; /* Add slight padding so character descenders don't get cut off */
+  padding: 2px 0; 
 }
 
 @media (max-width: 900px) {
@@ -373,10 +476,6 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
     gap: 40px;
     height: auto;
-  }
-  
-  .right-content {
-    height: 60vh;
   }
 }
 </style>
