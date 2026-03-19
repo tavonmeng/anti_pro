@@ -1,28 +1,5 @@
 <template>
   <section id="cases" class="cases-section" ref="sectionRef">
-    <!-- 堆叠状态栏: 处于页面最上方，且随滑动堆叠 -->
-    <div class="sticky-headers-stack">
-      <div 
-        v-for="(item, index) in cases" 
-        :key="'sticky-' + item.id"
-        class="sticky-header"
-        :ref="el => { if (el) headerRefs[index] = el }"
-        :style="{ zIndex: 100 + index }"
-      >
-        <div class="header-inner">
-          <div class="case-meta-left">
-            <span class="case-id">{{ item.id }}</span>
-          </div>
-          <div class="case-title-center">
-            <h3 class="case-title">{{ item.title }}</h3>
-          </div>
-          <div class="case-meta-right">
-            <span class="case-arrow">↗</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <div class="cases-container">
       <div class="cases-stack" ref="stackRef">
         <article 
@@ -34,6 +11,21 @@
           @click="emit('open-showcase', item)"
         >
           <div class="media-wrapper">
+            <!-- 标题栏现在放在这里，附属于自身的卡片，实现真正背景透视 -->
+            <div class="sticky-header">
+              <div class="header-inner">
+                <div class="case-meta-left">
+                  <span class="case-id">{{ item.id }}</span>
+                </div>
+                <div class="case-title-center">
+                  <h3 class="case-title">{{ item.title }}</h3>
+                </div>
+                <div class="case-meta-right">
+                  <span class="case-arrow">↗</span>
+                </div>
+              </div>
+            </div>
+
             <img 
               v-if="item.detail?.gallery?.[0]" 
               :src="item.detail.gallery[0]" 
@@ -44,7 +36,6 @@
               <span>Case {{ item.id }} Image</span>
             </div>
             
-            <!-- 案例描述：随着卡片移动 -->
             <div class="case-details">
               <p class="case-desc">{{ item.desc }}</p>
             </div>
@@ -74,50 +65,40 @@ import { cases } from '../data/cases'
 const sectionRef = ref(null)
 const stackRef = ref(null)
 const itemRefs = ref([])
-const headerRefs = ref([])
 
 let ctx
 
 onMounted(() => {
   ctx = gsap.context(() => {
-    // 放弃直接使用 Vue 的 itemRefs.value（在 Vite HMR 热重载时极易引发索引混乱、数组翻倍和乱序问题）
-    // 采用原生查 DOM 然后转数组的方法，确保任何时候 GSAP 拿到的是准确的当前节点
     const cards = gsap.utils.toArray(sectionRef.value.querySelectorAll('.case-item'))
-    const headers = gsap.utils.toArray(sectionRef.value.querySelectorAll('.sticky-header'))
     
     if (cards.length <= 1) return
 
-    // 设置初始状态 - 使用 force3D
+    const headerHeight = 20; // 恢复堆叠高度为原来小巧的20px
+
+    // 初始化状态，设定顶部中心缩放以便精准叠放
     cards.forEach((card, index) => {
+      gsap.set(card, { transformOrigin: "top center" })
       if (index !== 0) {
         gsap.set(card, { yPercent: 100, force3D: true })
       } else {
-        gsap.set(card, { force3D: true })
+        gsap.set(card, { y: 0, force3D: true })
       }
     })
 
-    headers.forEach((header, index) => {
-      if (index === 0) {
-        gsap.set(header, { y: 0, opacity: 1, force3D: true })
-      } else {
-        // 其他标题初始位置在下方
-        gsap.set(header, { y: 100, opacity: 0, force3D: true })
-      }
-    })
-
-      const tl = gsap.timeline({
+    const tl = gsap.timeline({
       scrollTrigger: {
         id: 'casesTrigger',
         trigger: sectionRef.value,
-        start: 'top 68px', // 当 section 到达导航栏底部时进行锁定，消除白块间隙
+        start: 'top 68px',
         end: `+=${cards.length * 100}%`,
         pin: true,
-        scrub: 0.5, // 缩短平滑延迟到 0.5秒，保持顺滑的同时极大提升手势的绝对跟手性
+        scrub: 0.5,
         snap: {
           snapTo: 1 / (cards.length - 1),
-          duration: { min: 0.2, max: 0.5 }, // 加快吸附动作本身的速度
-          delay: 0.05, // 停手后极短时间就介入吸附，防止滑动中有卡顿感
-          ease: 'power3.inOut' // 使用平滑的 S 型缓动，避免突然的加减速顿挫
+          duration: { min: 0.2, max: 0.5 },
+          delay: 0.05,
+          ease: 'power3.inOut'
         }
       }
     })
@@ -127,32 +108,18 @@ onMounted(() => {
 
       const scrollPos = index - 1
 
-      // 当前卡片滑入
+      // 卡片往上滑，正好压住前一张卡片，并在顶部留出它的标题条
       tl.to(card, {
         yPercent: 0,
+        y: index * headerHeight,
         ease: 'none',
         force3D: true
       }, scrollPos)
 
-      // 当前标题滑入并堆叠 (每个标题堆叠高度修减为 20px)
-      tl.to(headers[index], {
-        y: index * 20,
-        opacity: 1,
-        ease: 'none',
-        force3D: true
-      }, scrollPos)
-
-      // 前一个卡片稍微缩小并变暗
+      // 前一张卡片微缩变暗
       tl.to(cards[index - 1], {
         scale: 0.95,
         opacity: 0.5,
-        ease: 'none',
-        force3D: true
-      }, scrollPos)
-      
-      // 前一个标题稍微变淡（可选，保持堆叠感）
-      tl.to(headers[index - 1], {
-        opacity: 0.6,
         ease: 'none',
         force3D: true
       }, scrollPos)
@@ -168,36 +135,61 @@ onUnmounted(() => {
 
 <style scoped>
 .cases-section {
-  background-color: #fff;
+  background-color: #000;
   width: 100%;
-  height: calc(100vh - 68px); /* 减去导航栏高度，精准填满剩余全屏 */
+  height: calc(100vh - 68px);
   position: relative;
-  /* 移除丑陋的 padding hack */
   box-sizing: border-box;
 }
 
-.sticky-headers-stack {
+.cases-container {
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.cases-stack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.case-item {
   position: absolute;
-  top: 0; /* 紧贴容器顶部（已经在导航栏下方） */
+  top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none;
-  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background-color: #000;
+  will-change: transform, opacity;
 }
 
+.media-wrapper {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 核心：现在的标题栏位于每张卡片的体系内，只模糊自身的图 */
 .sticky-header {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
-  height: 20px; /* 标题栏高度更小 */
+  height: 20px; 
   padding: 0 5%;
   display: flex;
   align-items: center;
-  background: #000; /* 黑底标题栏 */
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  will-change: transform, opacity;
+  background: rgba(0, 0, 0, 0.4); 
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 200;
+  box-sizing: border-box;
 }
 
 .header-inner {
@@ -228,52 +220,36 @@ onUnmounted(() => {
 .case-id {
   font-family: 'Inter', sans-serif;
   font-weight: 500;
-  font-size: 10px; /* 更小字体 */
-  color: #fff; /* 白字 */
+  font-size: 10px;
+  color: #fff;
   letter-spacing: 1px;
 }
 
 .case-title {
-  font-size: 10px; /* 更小字体 */
+  font-size: 10px;
   font-weight: 500;
-  color: #fff; /* 白字 */
+  color: #fff;
   margin: 0;
   letter-spacing: 1px;
 }
 
 .case-arrow {
   font-size: 12px;
-  color: #fff; /* 白字 */
+  color: #fff;
 }
 
-.cases-container {
-  height: 100%; /* 从 padding内部开始填充，自然高度正好是 100vh-68px */
-  position: relative;
-  overflow: hidden;
-  top: 0; /* 撤销之前的强行偏移 */
-}
-
-.cases-stack {
-  position: relative;
+.media-wrapper img,
+.media-wrapper .placeholder-image {
   width: 100%;
   height: 100%;
-}
-
-.case-item {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background-color: #fff;
-  will-change: transform, opacity;
+  object-fit: cover;
+  transition: transform 1.2s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: transform;
 }
 
 .case-details {
   position: absolute;
-  bottom: 22%; /* Moved up slightly to make room for progress bar */
+  bottom: 22%;
   right: 5%;
   max-width: 400px;
   text-align: right;
@@ -287,23 +263,6 @@ onUnmounted(() => {
   line-height: 1.8;
   font-weight: 300;
   text-shadow: 0 2px 10px rgba(0,0,0,0.5);
-}
-
-.media-wrapper {
-  flex: 1;
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
-.media-wrapper img,
-.media-wrapper .placeholder-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 1.2s cubic-bezier(0.2, 0, 0.2, 1);
-  will-change: transform;
 }
 
 .case-overlay {
@@ -322,6 +281,7 @@ onUnmounted(() => {
   opacity: 0;
   transition: opacity 0.4s ease;
   pointer-events: none;
+  z-index: 50;
 }
 
 .view-btn {
@@ -333,6 +293,7 @@ onUnmounted(() => {
   letter-spacing: 2px;
   text-transform: uppercase;
   backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   background: rgba(255,255,255,0.05);
 }
 
@@ -346,19 +307,13 @@ onUnmounted(() => {
 }
 
 .case-item {
-  cursor: pointer; /* Add pointer cursor to indicate clickability */
+  cursor: pointer;
 }
 
 @media (max-width: 768px) {
-  .sticky-header {
-    height: 40px;
-    padding: 0 20px;
-  }
-  
   .case-title {
-    font-size: 14px;
+    font-size: 12px;
   }
-  
   .case-details {
     bottom: 10%;
     right: 20px;

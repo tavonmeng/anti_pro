@@ -169,17 +169,17 @@ const onScroll = (e) => {
     return
   }
 
-  // Check light mode threshold (cases section)
-  const casesEl = document.getElementById('cases')
-  if (casesEl) {
-    const rect = casesEl.getBoundingClientRect()
-    // 菜单栏高68px，当cases容器到达或越过菜单栏下沿时切换反色
-    if (rect.top <= 68) {
-      isLightModeInternal.value = true
-    } else {
-      isLightModeInternal.value = false
-    }
-  }
+  // Check light mode threshold (cases section) - Disabled per user request
+  // const casesEl = document.getElementById('cases')
+  // if (casesEl) {
+  //   const rect = casesEl.getBoundingClientRect()
+  //   // 菜单栏高68px，当cases容器到达或越过菜单栏下沿时切换反色
+  //   if (rect.top <= 68) {
+  //     isLightModeInternal.value = true
+  //   } else {
+  //     isLightModeInternal.value = false
+  //   }
+  // }
 
   const winH = window.innerHeight
   let best = null
