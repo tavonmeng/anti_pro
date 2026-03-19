@@ -41,6 +41,13 @@ onMounted(() => {
   }
 
   const onMouseOver = (e) => {
+    // If the mouse is over the header, ensure we show the native cursor
+    const isOverHeader = !!e.target.closest('.header-bar')
+    if (isOverHeader) {
+      onLeave()
+      return
+    }
+
     const isInteractive = e.target.closest('.hover-target') || e.target.closest('button') || e.target.closest('a');
     
     // Check if on specific sections where text should trigger hover effect

@@ -130,7 +130,14 @@ const handleClick = (item) => {
   emit('menuClick', item)
   const el = document.getElementById(item.id)
   if (el) {
-    el.scrollIntoView({ behavior: 'smooth' })
+    const headerOffset = 68;
+    const elementPosition = el.getBoundingClientRect().top;
+    const offsetPosition = elementPosition + window.scrollY - headerOffset;
+    
+    window.scrollTo({
+      top: offsetPosition,
+      behavior: 'smooth'
+    })
   }
   isExpanded.value = false
   hoveredItem.value = null
