@@ -40,11 +40,11 @@ export const cases = [
             },
             narrative: '致敬快速迭代的新媒体时代，本项目以“融媒体”为叙事场景，构建一条穿梭于二维与三维之间的数字巨蛇。巨蛇在信息、图像、数据、影像的交融中不断演变形态，展示出媒介裂变中的动态生命力。',
             gallery: [
-                '/cases/case02/f1.png',
-                '/cases/case02/f2.png',
-                '/cases/case02/f3.png',
-                '/cases/case02/f4.png',
-                '/cases/case02/f5.png'
+                '/cases/case02/frame1.jpg',
+                '/cases/case02/frame2.jpg',
+                '/cases/case02/frame3.jpg',
+                '/cases/case02/frame4.jpg',
+                '/cases/case02/frame5.jpg'
             ]
         }
     },
@@ -64,11 +64,11 @@ export const cases = [
             },
             narrative: '致敬快速迭代的新媒体时代，本项目以“融媒体”为叙事场景，构建一条穿梭于二维与三维之间的数字巨蛇。巨蛇在信息、图像、数据、影像的交融中不断演变形态，展示出媒介裂变中的动态生命力。',
             gallery: [
-                '/cases/case03/f1.png',
-                '/cases/case03/f2.png',
-                '/cases/case03/f3.png',
-                '/cases/case03/f4.png',
-                '/cases/case03/f5.png'
+                '/cases/case03/frame1.jpg',
+                '/cases/case03/frame2.jpg',
+                '/cases/case03/frame3.jpg',
+                '/cases/case03/frame4.jpg',
+                '/cases/case03/frame5.jpg'
             ]
         }
     },
@@ -88,11 +88,11 @@ export const cases = [
             },
             narrative: '致敬快速迭代的新媒体时代，本项目以“融媒体”为叙事场景，构建一条穿梭于二维与三维之间的数字巨蛇。巨蛇在信息、图像、数据、影像的交融中不断演变形态，展示出媒介裂变中的动态生命力。',
             gallery: [
-                '/cases/case04/f1.png',
-                '/cases/case04/f2.png',
-                '/cases/case04/f3.png',
-                '/cases/case04/f4.png',
-                '/cases/case04/f5.png'
+                '/cases/case04/frame1.jpg',
+                '/cases/case04/frame2.jpg',
+                '/cases/case04/frame3.jpg',
+                '/cases/case04/frame4.jpg',
+                '/cases/case04/frame5.jpg'
             ]
         }
     }

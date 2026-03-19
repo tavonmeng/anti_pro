@@ -76,6 +76,10 @@ const props = defineProps({
   forceLight: {
     type: Boolean,
     default: false
+  },
+  forceTransparent: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -95,7 +99,10 @@ const activeSectionLabel = ref('')
 const scrollProgress = ref(0)
 const isLightModeInternal = ref(false)
 
-const isLightMode = computed(() => props.forceLight || isLightModeInternal.value)
+const isLightMode = computed(() => {
+  if (props.forceTransparent) return false
+  return props.forceLight || isLightModeInternal.value
+})
 
 // ─── hover 展开/收起 ─────────────────────────────────────────
 let collapseTimer = null

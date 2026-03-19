@@ -31,20 +31,15 @@
           class="case-item"
           :ref="el => { if (el) itemRefs[index] = el }"
           :style="{ zIndex: index + 1 }"
-          @mouseenter="handleMouseEnter(index)"
-          @mouseleave="handleMouseLeave(index)"
-          @click="emit('open-detail', item)"
+          @click="emit('open-showcase', item)"
         >
           <div class="media-wrapper">
-            <video 
-              v-if="item.video" 
-              muted 
-              loop 
-              playsinline 
-              :src="item.video"
-              :poster="item.detail?.gallery?.[0]"
-              :ref="el => { if (el) videoRefs[index] = el }"
-            ></video>
+            <img 
+              v-if="item.detail?.gallery?.[0]" 
+              :src="item.detail.gallery[0]" 
+              :alt="item.title"
+              class="case-image"
+            />
             <div v-else class="placeholder-image">
               <span>Case {{ item.id }} Image</span>
             </div>
@@ -70,7 +65,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import gsap from 'gsap'
 import ScrollTrigger from 'gsap/ScrollTrigger'
 
-const emit = defineEmits(['open-detail'])
+const emit = defineEmits(['open-showcase'])
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -79,36 +74,9 @@ import { cases } from '../data/cases'
 const sectionRef = ref(null)
 const stackRef = ref(null)
 const itemRefs = ref([])
-const videoRefs = ref([])
 const headerRefs = ref([])
-const timers = ref({})
 
 let ctx
-
-const handleMouseEnter = (index) => {
-  // 清除旧定时器
-  if (timers.value[index]) clearTimeout(timers.value[index])
-  
-  // 设置10秒延迟播放
-  timers.value[index] = setTimeout(() => {
-    const video = videoRefs.value[index]
-    if (video) {
-      video.play().catch(e => console.log('Video play failed:', e))
-    }
-  }, 10000)
-}
-
-const handleMouseLeave = (index) => {
-  // 鼠标移开立即清除定时器并暂停
-  if (timers.value[index]) {
-    clearTimeout(timers.value[index])
-    delete timers.value[index]
-  }
-  const video = videoRefs.value[index]
-  if (video) {
-    video.pause()
-  }
-}
 
 onMounted(() => {
   ctx = gsap.context(() => {
@@ -195,8 +163,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (ctx) ctx.revert()
-  // 清除所有定时器
-  Object.values(timers.value).forEach(clearTimeout)
 })
 </script>
 
@@ -331,7 +297,7 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.media-wrapper video,
+.media-wrapper img,
 .media-wrapper .placeholder-image {
   width: 100%;
   height: 100%;
@@ -370,7 +336,7 @@ onUnmounted(() => {
   background: rgba(255,255,255,0.05);
 }
 
-.case-item:hover .media-wrapper video,
+.case-item:hover .media-wrapper img,
 .case-item:hover .media-wrapper .placeholder-image {
   transform: scale(1.05);
 }
