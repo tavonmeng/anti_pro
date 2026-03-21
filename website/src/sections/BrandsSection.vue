@@ -1,14 +1,14 @@
 <template>
   <section id="brands" class="brands-section" ref="sectionRef">
-    <div class="brands-wrapper">
+    <div class="brands-wrapper" ref="wrapperRef">
       <!-- 第一行品牌 -->
       <div class="brands-container" ref="track1Ref">
         <div class="brands-track" ref="track1Inner">
           <div v-for="brand in brandsRow1" :key="brand" class="brand-item">
-            <span class="brand-name">{{ brand }}</span>
+            <img :src="brand" class="brand-logo" alt="Partner Logo" />
           </div>
           <div v-for="brand in brandsRow1" :key="brand + '_dup'" class="brand-item">
-            <span class="brand-name">{{ brand }}</span>
+            <img :src="brand" class="brand-logo" alt="Partner Logo" />
           </div>
         </div>
       </div>
@@ -17,10 +17,10 @@
       <div class="brands-container" ref="track2Ref">
         <div class="brands-track" ref="track2Inner">
           <div v-for="brand in brandsRow2" :key="brand" class="brand-item">
-            <span class="brand-name">{{ brand }}</span>
+            <img :src="brand" class="brand-logo" alt="Partner Logo" />
           </div>
           <div v-for="brand in brandsRow2" :key="brand + '_dup'" class="brand-item">
-            <span class="brand-name">{{ brand }}</span>
+            <img :src="brand" class="brand-logo" alt="Partner Logo" />
           </div>
         </div>
       </div>
@@ -29,97 +29,41 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import { gsap } from 'gsap'
-import { ScrollTrigger } from 'gsap/ScrollTrigger'
-
-gsap.registerPlugin(ScrollTrigger)
+import { ref, onMounted } from 'vue'
 
 const sectionRef = ref(null)
+const wrapperRef = ref(null)
 const track1Ref = ref(null)
 const track2Ref = ref(null)
 const track1Inner = ref(null)
 const track2Inner = ref(null)
 
-let ctx
-
-const brandsRow1 = [
-  'DISNEY', 'LANCÔME', 'MARVIS', 'SULWHASOO', 
-  'LANEIGE', 'SHU UEMURA', 'MERCEDES-BENZ', 
-  'ARCFOX', 'L\'ORÉAL'
-]
-
-const brandsRow2 = [...brandsRow1].reverse()
+const allBrands = Array.from({ length: 14 }, (_, i) => `/logo/black/brand${i + 15}.png`)
+const brandsRow1 = allBrands.slice(0, 7)
+const brandsRow2 = allBrands.slice(7)
 
 onMounted(() => {
-  ctx = gsap.context(() => {
-    const t1Inner = track1Inner.value
-    const t2Inner = track2Inner.value
+  // Start infinite scroll immediately
+  if (track1Inner.value) track1Inner.value.classList.add('scrolling-left')
+  if (track2Inner.value) track2Inner.value.classList.add('scrolling-right')
 
-    // 选中两行内部独立的所有品牌元素
-    const items1 = t1Inner.querySelectorAll('.brand-item')
-    const items2 = t2Inner.querySelectorAll('.brand-item')
-
-    // ─── 阶段1: 品牌名字由下向上淡入 ─────────────────────
-    // 初始状态：每一个名字单独隐藏 + 下移（距离大幅拉长，增强视觉冲击力）
-    gsap.set([items1, items2], { 
-      opacity: 0, 
-      y: 150 
-    })
-
-    // 第一行品牌以波浪形式（逐个交错）淡入
-    gsap.to(items1, {
-      opacity: 1,
-      y: 0,
-      duration: 1.8, // 动画变长，使得减速过程更细腻漫长
-      stagger: 0.05, // 每个品牌依次出现
-      ease: 'power4.out', // 从 power3 升级为 power4，极其柔和的高级长尾减速曲线
-      scrollTrigger: {
-        trigger: sectionRef.value,
-        start: 'top 75%', // 提前一点触发，体验更丝滑
-        toggleActions: 'play none none reverse'
-      },
-      onComplete: () => {
-        // 阶段2: 淡入完成后，启动水平无限滚动
-        t1Inner.classList.add('scrolling-left')
-      },
-      onReverseComplete: () => {
-        t1Inner.classList.remove('scrolling-left')
+  // Smooth fade-in observer avoiding GSAP pinning bugs
+  if (wrapperRef.value) {
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        wrapperRef.value.classList.add('is-visible')
+        observer.disconnect()
       }
-    })
-
-    // 第二行品牌以波浪形式淡入（整行动画比第一行晚一点触发）
-    gsap.to(items2, {
-      opacity: 1,
-      y: 0,
-      duration: 1.8,
-      stagger: 0.05,
-      delay: 0.2, // 第二行整体晚0.2秒启动
-      ease: 'power4.out',
-      scrollTrigger: {
-        trigger: sectionRef.value,
-        start: 'top 75%',
-        toggleActions: 'play none none reverse'
-      },
-      onComplete: () => {
-        t2Inner.classList.add('scrolling-right')
-      },
-      onReverseComplete: () => {
-        t2Inner.classList.remove('scrolling-right')
-      }
-    })
-
-  }, sectionRef.value)
+    }, { threshold: 0.1, rootMargin: '0px 0px -100px 0px' })
+    observer.observe(wrapperRef.value)
+  }
 })
 
-onUnmounted(() => {
-  if (ctx) ctx.revert()
-})
 </script>
 
 <style scoped>
 .brands-section {
-  background-color: #fff;
+  background-color: #fff; /* Reverted to white background */
   position: relative;
   border-bottom: 1px solid #f0f0f0;
   padding: 120px 0;
@@ -130,6 +74,15 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 50px;
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 1.2s cubic-bezier(0.2, 0, 0.2, 1), transform 1.2s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: opacity, transform;
+}
+
+.brands-wrapper.is-visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .brands-container {
@@ -160,38 +113,25 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   cursor: default;
-}
-
-.brand-name {
-  font-size: 28px;
-  font-weight: 800;
-  color: #000;
-  font-family: 'Outfit', sans-serif;
-  letter-spacing: 4px;
-  opacity: 0.7;
-  transition: all 0.4s cubic-bezier(0.2, 0, 0.2, 1);
+  min-width: 150px;
   position: relative;
-  white-space: nowrap;
 }
 
-.brand-name::after {
-  content: '';
-  position: absolute;
-  bottom: -4px;
-  left: 0;
-  width: 0;
-  height: 2px;
-  background-color: #000;
-  transition: width 0.4s ease;
+.brand-logo {
+  height: 45px;
+  width: auto;
+  min-width: 45px;
+  object-fit: contain;
+  opacity: 0.8;
+  filter: brightness(0); /* Make any white pixels black to render safely on white bg */
+  transition: all 0.4s cubic-bezier(0.2, 0, 0.2, 1);
+  will-change: transform, opacity;
 }
 
-.brand-item:hover .brand-name {
+.brand-item:hover .brand-logo {
   opacity: 1;
-  transform: translateY(-2px);
-}
-
-.brand-item:hover .brand-name::after {
-  width: 100%;
+  filter: brightness(0) drop-shadow(0 4px 6px rgba(0,0,0,0.2));
+  transform: translateY(-3px) scale(1.05);
 }
 
 @keyframes scrollLeft {
@@ -205,9 +145,8 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .brand-name {
-    font-size: 18px;
-    letter-spacing: 2px;
+  .brand-logo {
+    height: 30px;
   }
   .brands-wrapper {
     gap: 30px;
