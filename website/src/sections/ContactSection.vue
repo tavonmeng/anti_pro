@@ -20,10 +20,17 @@
         </div>
       </div>
 
-      <div class="contact-card">
-        <a href="mailto:mlm3344521@163.com" class="email-link">
-          mlm3344521@163.com
-        </a>
+      <div class="action-container">
+        <div class="contact-card">
+          <a href="mailto:mlm3344521@163.com" class="email-link">
+            mlm3344521@163.com
+          </a>
+        </div>
+        <div class="contact-card login-card">
+          <a href="http://localhost:3000/login" class="email-link">
+            注册 / 登录
+          </a>
+        </div>
       </div>
     </div>
   </section>
@@ -151,12 +158,32 @@ onUnmounted(() => {
   100% { transform: translateX(-50%); }
 }
 
+.action-container {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  z-index: 10;
+}
+
 .contact-card {
   background: #000;
   padding: 16px 48px; /* 加大胶囊体积 */
   border-radius: 60px; /* 大号圆角，保持胶囊形状 */
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, background 0.3s ease;
   z-index: 10;
+}
+
+.login-card {
+  background: #2b2b2b; /* Slightly different dark or brand color, but let's stick to black theme */
+}
+
+/* Custom styling for login text if needed, otherwise it's white */
+.login-card .email-link {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .contact-card:hover {
