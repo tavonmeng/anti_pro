@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  # 后端 API 服务
+  backend:
+    build: .
+    container_name: ai-design-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./app.db:/app/app.db
+    environment:
+      - DEBUG=False
+      - DATABASE_URL=sqlite+aiosqlite:///./app.db
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # PostgreSQL 数据库（生产环境可选）
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: ai-design-postgres
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: your_password
+  #     POSTGRES_DB: ai_design
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+# volumes:
+#   postgres_data:
+

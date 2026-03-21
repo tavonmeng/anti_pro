@@ -1,0 +1,8 @@
+# Swagger UI files
+swagger-ui/
+node_modules/
+
+# Generated documentation
+api-docs.html
+*.log
+

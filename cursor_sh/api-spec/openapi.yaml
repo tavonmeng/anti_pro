@@ -1,0 +1,1452 @@
+openapi: 3.0.3
+info:
+  title: AI设计任务管理系统 API
+  description: |
+    VR+AI 裸眼3D内容定制管理系统的后端 API 接口规范
+    
+    ## 功能模块
+    - **认证模块**: 用户登录、注册、登出
+    - **订单模块**: 订单创建、查询、状态管理、反馈
+    - **负责人模块**: 负责人管理、订单分配
+    
+    ## 订单类型
+    1. **video_purchase** - 裸眼3D成片购买适配
+    2. **ai_3d_custom** - AI裸眼3D内容定制
+    3. **digital_art** - 数字艺术内容定制
+    
+    ## 订单状态流转
+    ```
+    pending_assign (待分配)
+      ↓
+    in_production (制作中)
+      ↓
+    preview_ready (初稿预览)
+      ↓ (客户反馈)
+    ├─ revision_needed (需要修改) → in_production
+    └─ in_production → final_preview (终稿预览) → completed (已完成)
+    ```
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000/api
+    description: 本地开发环境
+  - url: https://api.example.com/api
+    description: 生产环境
+
+tags:
+  - name: 认证
+    description: 用户认证相关接口
+  - name: 订单
+    description: 订单管理相关接口
+  - name: 负责人
+    description: 负责人管理相关接口
+
+security:
+  - BearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags:
+        - 认证
+      summary: 用户登录
+      description: 使用用户名、密码和角色进行登录，返回 JWT token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              user:
+                summary: 普通用户登录
+                value:
+                  username: user
+                  password: "123456"
+                  role: user
+                  captcha: "1234"
+              admin:
+                summary: 管理员登录
+                value:
+                  username: admin
+                  password: "123456"
+                  role: admin
+                  captcha: "5678"
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/LoginResponse'
+              examples:
+                success:
+                  summary: 登录成功示例
+                  value:
+                    code: 200
+                    message: "登录成功"
+                    data:
+                      token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                      user:
+                        id: "user-001"
+                        username: "user"
+                        role: "user"
+                        email: "user@example.com"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/register:
+    post:
+      tags:
+        - 认证
+      summary: 用户注册
+      description: 创建新用户账户
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              username: "newuser"
+              email: "newuser@example.com"
+              password: "password123"
+              role: "user"
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          success:
+                            type: boolean
+              example:
+                code: 200
+                message: "注册成功"
+                data:
+                  success: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: 用户名已存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 409
+                message: "用户名已存在"
+                data: null
+
+  /auth/logout:
+    post:
+      tags:
+        - 认证
+      summary: 用户登出
+      description: 退出登录，使当前 token 失效
+      responses:
+        '200':
+          description: 登出成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 200
+                message: "登出成功"
+                data: null
+
+  /orders:
+    get:
+      tags:
+        - 订单
+      summary: 获取订单列表
+      description: |
+        获取订单列表，支持多条件筛选
+        - 普通用户只能查看自己的订单
+        - 管理员和负责人可以查看所有订单
+      parameters:
+        - name: userId
+          in: query
+          description: 用户ID（管理员可用，普通用户自动过滤）
+          schema:
+            type: string
+        - name: orderType
+          in: query
+          description: 订单类型
+          schema:
+            $ref: '#/components/schemas/OrderType'
+        - name: status
+          in: query
+          description: 订单状态
+          schema:
+            $ref: '#/components/schemas/OrderStatus'
+        - name: assigneeId
+          in: query
+          description: 负责人ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功获取订单列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - 订单
+      summary: 创建订单
+      description: 创建新订单，支持三种订单类型
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/CreateVideoPurchaseOrderRequest'
+                - $ref: '#/components/schemas/CreateAI3DCustomOrderRequest'
+                - $ref: '#/components/schemas/CreateDigitalArtOrderRequest'
+              discriminator:
+                propertyName: orderType
+                mapping:
+                  video_purchase: '#/components/schemas/CreateVideoPurchaseOrderRequest'
+                  ai_3d_custom: '#/components/schemas/CreateAI3DCustomOrderRequest'
+                  digital_art: '#/components/schemas/CreateDigitalArtOrderRequest'
+            examples:
+              video_purchase:
+                summary: 裸眼3D成片购买订单
+                value:
+                  orderType: "video_purchase"
+                  industryType: "movie"
+                  visualStyle: "scifi"
+                  duration: 120
+                  priceRange:
+                    min: 5000
+                    max: 10000
+                  resolution: "3840x2160"
+                  size: "55英寸"
+                  curvature: "1800R"
+              ai_3d_custom:
+                summary: AI裸眼3D定制订单
+                value:
+                  orderType: "ai_3d_custom"
+                  configuration: "裸眼3D显示屏，分辨率4K，尺寸100英寸"
+                  creativeIdea: "科幻主题的太空场景，需要展示星球和飞船"
+                  scenePhotos:
+                    - id: "file-001"
+                      name: "scene1.jpg"
+                      size: 2048000
+                      type: "image/jpeg"
+                      uploadTime: "2025-11-05T10:30:00Z"
+              digital_art:
+                summary: 数字艺术定制订单
+                value:
+                  orderType: "digital_art"
+                  artDirection: "abstract"
+                  description: "抽象风格的数字艺术作品，色彩鲜艳，充满科技感"
+                  materials:
+                    - id: "file-002"
+                      name: "reference.zip"
+                      size: 5120000
+                      type: "application/zip"
+                      uploadTime: "2025-11-05T10:35:00Z"
+      responses:
+        '201':
+          description: 订单创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /orders/{orderId}:
+    get:
+      tags:
+        - 订单
+      summary: 获取订单详情
+      description: 根据订单ID获取订单完整信息
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: 订单ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功获取订单详情
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Order'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /orders/{orderId}/status:
+    put:
+      tags:
+        - 订单
+      summary: 更新订单状态
+      description: 更新订单状态（仅管理员和负责人可操作）
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  $ref: '#/components/schemas/OrderStatus'
+            example:
+              status: "in_production"
+      responses:
+        '200':
+          description: 状态更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Order'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /orders/{orderId}/assign:
+    put:
+      tags:
+        - 订单
+      summary: 分配负责人
+      description: 为订单分配或更改负责人（仅管理员可操作）
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - assigneeId
+                - assigneeName
+              properties:
+                assigneeId:
+                  type: string
+                  description: 负责人用户ID
+                assigneeName:
+                  type: string
+                  description: 负责人姓名
+            example:
+              assigneeId: "staff-001"
+              assigneeName: "张设计"
+      responses:
+        '200':
+          description: 分配成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Order'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /orders/{orderId}/preview:
+    post:
+      tags:
+        - 订单
+      summary: 上传预览文件
+      description: 上传初稿或终稿预览文件（仅管理员和负责人可操作）
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - files
+              properties:
+                files:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/UploadedFile'
+                  description: 预览文件列表
+            example:
+              files:
+                - id: "preview-001"
+                  name: "preview_v1.mp4"
+                  size: 10240000
+                  type: "video/mp4"
+                  uploadTime: "2025-11-05T15:00:00Z"
+                  url: "https://cdn.example.com/previews/preview_v1.mp4"
+      responses:
+        '200':
+          description: 预览文件上传成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Order'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /orders/{orderId}/feedback:
+    post:
+      tags:
+        - 订单
+      summary: 提交反馈
+      description: 客户提交订单反馈（确认或修改意见）
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+                - content
+              properties:
+                type:
+                  type: string
+                  enum: [approval, revision]
+                  description: 反馈类型（approval-确认通过，revision-需要修改）
+                content:
+                  type: string
+                  description: 反馈内容
+            examples:
+              approval:
+                summary: 确认通过
+                value:
+                  type: "approval"
+                  content: "初稿效果很好，请继续制作终稿"
+              revision:
+                summary: 需要修改
+                value:
+                  type: "revision"
+                  content: "背景颜色需要调整为蓝色调，太空飞船的细节需要更精致"
+      responses:
+        '200':
+          description: 反馈提交成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/OrderFeedback'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /staff:
+    get:
+      tags:
+        - 负责人
+      summary: 获取负责人列表
+      description: 获取所有负责人（staff和admin角色）用户列表，支持分页和筛选
+      parameters:
+        - name: page
+          in: query
+          description: 页码
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: 每页数量
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: keyword
+          in: query
+          description: 搜索关键词（搜索用户名、姓名、邮箱）
+          schema:
+            type: string
+        - name: role
+          in: query
+          description: 角色筛选
+          schema:
+            type: string
+            enum: [admin, staff]
+        - name: isActive
+          in: query
+          description: 状态筛选
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: 成功获取负责人列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          data:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/StaffUser'
+                          total:
+                            type: integer
+                            description: 总记录数
+              example:
+                code: 200
+                message: "获取成功"
+                data:
+                  data:
+                    - id: "staff-001"
+                      username: "staff1"
+                      role: "staff"
+                      email: "staff1@example.com"
+                      realName: "张设计"
+                      isActive: true
+                      orderCount: 5
+                      createdAt: "2024-10-01T08:00:00Z"
+                    - id: "staff-002"
+                      username: "staff2"
+                      role: "staff"
+                      email: "staff2@example.com"
+                      realName: "李艺术"
+                      isActive: true
+                      orderCount: 3
+                      createdAt: "2024-10-15T09:30:00Z"
+                  total: 2
+
+    post:
+      tags:
+        - 负责人
+      summary: 添加负责人
+      description: 创建新的负责人账户（仅管理员可操作）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffCreate'
+            example:
+              username: "staff3"
+              password: "123456"
+              email: "staff3@example.com"
+              realName: "王制作"
+              role: "staff"
+              isActive: true
+      responses:
+        '201':
+          description: 负责人创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/StaffUser'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: 用户名已存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 409
+                message: "用户名已存在"
+                data: null
+
+  /staff/{staffId}:
+    put:
+      tags:
+        - 负责人
+      summary: 更新负责人信息
+      description: 更新负责人的信息（仅管理员可操作）
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 负责人ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffUpdate'
+            example:
+              email: "staff1_new@example.com"
+              realName: "张设计师"
+              role: "staff"
+              isActive: true
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/StaffUser'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: 负责人不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 404
+                message: "负责人不存在"
+                data: null
+
+    delete:
+      tags:
+        - 负责人
+      summary: 删除负责人
+      description: 删除负责人账户（仅管理员可操作，且负责人不能有进行中的订单）
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 负责人ID
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 200
+                message: "删除成功"
+                data: null
+        '400':
+          description: 无法删除（有进行中的订单）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 400
+                message: "该负责人还有 5 个进行中的订单，无法删除"
+                data: null
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: 负责人不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 404
+                message: "负责人不存在"
+                data: null
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Token 认证，格式：Bearer {token}
+
+  schemas:
+    # ========== 认证相关 ==========
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+        - role
+      properties:
+        username:
+          type: string
+          description: 用户名
+          minLength: 3
+          example: "user"
+        password:
+          type: string
+          description: 密码
+          minLength: 6
+          format: password
+          example: "123456"
+        role:
+          $ref: '#/components/schemas/UserRole'
+        captcha:
+          type: string
+          description: 验证码（可选）
+          example: "1234"
+
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - email
+        - password
+        - role
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 20
+          pattern: '^[a-zA-Z0-9_]+$'
+          description: 用户名（只能包含字母、数字和下划线）
+        email:
+          type: string
+          format: email
+          description: 邮箱地址
+        password:
+          type: string
+          minLength: 6
+          format: password
+          description: 密码
+        role:
+          $ref: '#/components/schemas/UserRole'
+
+    LoginResponse:
+      type: object
+      required:
+        - token
+        - user
+      properties:
+        token:
+          type: string
+          description: JWT Token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        user:
+          $ref: '#/components/schemas/User'
+
+    # ========== 用户相关 ==========
+    User:
+      type: object
+      required:
+        - id
+        - username
+        - role
+      properties:
+        id:
+          type: string
+          description: 用户ID
+          example: "user-001"
+        username:
+          type: string
+          description: 用户名
+          example: "user"
+        role:
+          $ref: '#/components/schemas/UserRole'
+        email:
+          type: string
+          format: email
+          description: 邮箱
+          example: "user@example.com"
+        avatar:
+          type: string
+          description: 头像URL
+        realName:
+          type: string
+          description: 真实姓名
+          example: "张三"
+
+    UserRole:
+      type: string
+      enum: [admin, user, staff]
+      description: |
+        用户角色
+        - admin: 管理员
+        - user: 普通用户
+        - staff: 负责人
+      example: "user"
+
+    # ========== 负责人相关 ==========
+    StaffUser:
+      type: object
+      required:
+        - id
+        - username
+        - role
+        - isActive
+      properties:
+        id:
+          type: string
+          description: 负责人ID
+          example: "staff-001"
+        username:
+          type: string
+          description: 用户名
+          example: "staff1"
+        email:
+          type: string
+          format: email
+          description: 邮箱
+          example: "staff1@example.com"
+        realName:
+          type: string
+          description: 真实姓名
+          example: "张设计"
+        role:
+          type: string
+          enum: [admin, staff]
+          description: 角色（管理员或负责人）
+          example: "staff"
+        isActive:
+          type: boolean
+          description: 是否启用
+          example: true
+        orderCount:
+          type: integer
+          description: 负责的订单数量（进行中的订单）
+          example: 5
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间
+          example: "2024-10-01T08:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新时间
+          example: "2024-11-01T10:30:00Z"
+
+    StaffCreate:
+      type: object
+      required:
+        - username
+        - password
+        - email
+        - realName
+        - role
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          pattern: '^[a-zA-Z0-9_]+$'
+          description: 用户名（只能包含字母、数字和下划线）
+          example: "staff3"
+        password:
+          type: string
+          minLength: 6
+          format: password
+          description: 密码
+          example: "123456"
+        email:
+          type: string
+          format: email
+          description: 邮箱
+          example: "staff3@example.com"
+        realName:
+          type: string
+          description: 真实姓名
+          example: "王制作"
+        role:
+          type: string
+          enum: [admin, staff]
+          description: 角色
+          default: "staff"
+          example: "staff"
+        isActive:
+          type: boolean
+          description: 是否启用
+          default: true
+          example: true
+
+    StaffUpdate:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: 邮箱
+          example: "staff1_new@example.com"
+        realName:
+          type: string
+          description: 真实姓名
+          example: "张设计师"
+        role:
+          type: string
+          enum: [admin, staff]
+          description: 角色
+          example: "staff"
+        isActive:
+          type: boolean
+          description: 是否启用
+          example: true
+
+    # ========== 订单相关 ==========
+    Order:
+      oneOf:
+        - $ref: '#/components/schemas/VideoPurchaseOrder'
+        - $ref: '#/components/schemas/AI3DCustomOrder'
+        - $ref: '#/components/schemas/DigitalArtOrder'
+      discriminator:
+        propertyName: orderType
+        mapping:
+          video_purchase: '#/components/schemas/VideoPurchaseOrder'
+          ai_3d_custom: '#/components/schemas/AI3DCustomOrder'
+          digital_art: '#/components/schemas/DigitalArtOrder'
+
+    BaseOrder:
+      type: object
+      required:
+        - id
+        - orderNumber
+        - orderType
+        - status
+        - userId
+        - createdAt
+        - updatedAt
+        - feedbacks
+        - revisionCount
+      properties:
+        id:
+          type: string
+          description: 订单ID
+          example: "order-1730880000000"
+        orderNumber:
+          type: string
+          description: 订单编号
+          example: "ORD-20251105-A1B2"
+        orderType:
+          $ref: '#/components/schemas/OrderType'
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        userId:
+          type: string
+          description: 用户ID
+          example: "user-001"
+        userName:
+          type: string
+          description: 用户名
+          example: "user"
+        assignee:
+          type: string
+          description: 负责人姓名
+          example: "张设计"
+        assigneeId:
+          type: string
+          description: 负责人ID
+          example: "staff-001"
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间
+          example: "2025-11-05T10:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新时间
+          example: "2025-11-05T15:30:00Z"
+        feedbacks:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderFeedback'
+          description: 客户反馈记录
+        revisionCount:
+          type: integer
+          description: 修改次数
+          example: 2
+
+    VideoPurchaseOrder:
+      allOf:
+        - $ref: '#/components/schemas/BaseOrder'
+        - type: object
+          required:
+            - industryType
+            - visualStyle
+            - duration
+            - priceRange
+            - resolution
+            - size
+          properties:
+            orderType:
+              type: string
+              enum: [video_purchase]
+            industryType:
+              $ref: '#/components/schemas/IndustryType'
+            customIndustry:
+              type: string
+              description: 自定义行业类型（当industryType为custom时必填）
+            visualStyle:
+              $ref: '#/components/schemas/VisualStyle'
+            customStyle:
+              type: string
+              description: 自定义视觉风格（当visualStyle为custom时必填）
+            duration:
+              type: integer
+              description: 视频时长（秒）
+              minimum: 1
+              example: 120
+            priceRange:
+              type: object
+              required:
+                - min
+                - max
+              properties:
+                min:
+                  type: number
+                  description: 最低价格
+                  example: 5000
+                max:
+                  type: number
+                  description: 最高价格
+                  example: 10000
+            resolution:
+              type: string
+              description: 分辨率
+              example: "3840x2160"
+            size:
+              type: string
+              description: 屏幕尺寸
+              example: "55英寸"
+            curvature:
+              type: string
+              description: 曲率
+              example: "1800R"
+
+    AI3DCustomOrder:
+      allOf:
+        - $ref: '#/components/schemas/BaseOrder'
+        - type: object
+          required:
+            - configuration
+            - creativeIdea
+            - scenePhotos
+          properties:
+            orderType:
+              type: string
+              enum: [ai_3d_custom]
+            configuration:
+              type: string
+              description: 配置信息
+              example: "裸眼3D显示屏，分辨率4K"
+            creativeIdea:
+              type: string
+              description: 创意说明
+              example: "科幻主题的太空场景"
+            scenePhotos:
+              type: array
+              items:
+                $ref: '#/components/schemas/UploadedFile'
+              description: 现场实拍图
+            previewFiles:
+              type: array
+              items:
+                $ref: '#/components/schemas/UploadedFile'
+              description: 预览文件
+
+    DigitalArtOrder:
+      allOf:
+        - $ref: '#/components/schemas/BaseOrder'
+        - type: object
+          required:
+            - artDirection
+            - description
+            - materials
+          properties:
+            orderType:
+              type: string
+              enum: [digital_art]
+            artDirection:
+              $ref: '#/components/schemas/ArtDirection'
+            customDirection:
+              type: string
+              description: 自定义艺术方向（当artDirection为custom时必填）
+            description:
+              type: string
+              description: 说明文字
+              example: "抽象风格的数字艺术作品"
+            materials:
+              type: array
+              items:
+                $ref: '#/components/schemas/UploadedFile'
+              description: 相关材料
+            previewFiles:
+              type: array
+              items:
+                $ref: '#/components/schemas/UploadedFile'
+              description: 预览文件
+
+    # ========== 创建订单请求 ==========
+    CreateVideoPurchaseOrderRequest:
+      type: object
+      required:
+        - orderType
+        - industryType
+        - visualStyle
+        - duration
+        - priceRange
+        - resolution
+        - size
+      properties:
+        orderType:
+          type: string
+          enum: [video_purchase]
+        industryType:
+          $ref: '#/components/schemas/IndustryType'
+        customIndustry:
+          type: string
+        visualStyle:
+          $ref: '#/components/schemas/VisualStyle'
+        customStyle:
+          type: string
+        duration:
+          type: integer
+          minimum: 1
+        priceRange:
+          type: object
+          required:
+            - min
+            - max
+          properties:
+            min:
+              type: number
+            max:
+              type: number
+        resolution:
+          type: string
+        size:
+          type: string
+        curvature:
+          type: string
+
+    CreateAI3DCustomOrderRequest:
+      type: object
+      required:
+        - orderType
+        - configuration
+        - creativeIdea
+        - scenePhotos
+      properties:
+        orderType:
+          type: string
+          enum: [ai_3d_custom]
+        configuration:
+          type: string
+        creativeIdea:
+          type: string
+        scenePhotos:
+          type: array
+          items:
+            $ref: '#/components/schemas/UploadedFile'
+
+    CreateDigitalArtOrderRequest:
+      type: object
+      required:
+        - orderType
+        - artDirection
+        - description
+        - materials
+      properties:
+        orderType:
+          type: string
+          enum: [digital_art]
+        artDirection:
+          $ref: '#/components/schemas/ArtDirection'
+        customDirection:
+          type: string
+        description:
+          type: string
+        materials:
+          type: array
+          items:
+            $ref: '#/components/schemas/UploadedFile'
+
+    OrderType:
+      type: string
+      enum: [video_purchase, ai_3d_custom, digital_art]
+      description: |
+        订单类型
+        - video_purchase: 裸眼3D成片购买适配
+        - ai_3d_custom: AI裸眼3D内容定制
+        - digital_art: 数字艺术内容定制
+
+    OrderStatus:
+      type: string
+      enum:
+        - pending_assign
+        - in_production
+        - preview_ready
+        - revision_needed
+        - final_preview
+        - completed
+        - cancelled
+      description: |
+        订单状态
+        - pending_assign: 待分配
+        - in_production: 制作中
+        - preview_ready: 初稿预览
+        - revision_needed: 需要修改
+        - final_preview: 终稿预览
+        - completed: 已完成
+        - cancelled: 已取消
+
+    IndustryType:
+      type: string
+      enum: [movie, outdoor, custom]
+      description: |
+        行业类型
+        - movie: 电影
+        - outdoor: 户外
+        - custom: 自定义
+
+    VisualStyle:
+      type: string
+      enum: [scifi, realistic, custom]
+      description: |
+        视觉风格
+        - scifi: 科幻
+        - realistic: 写真
+        - custom: 自定义
+
+    ArtDirection:
+      type: string
+      enum: [abstract, realistic, installation, dynamic, custom]
+      description: |
+        艺术方向
+        - abstract: 抽象
+        - realistic: 写实
+        - installation: 装置
+        - dynamic: 动态艺术
+        - custom: 自定义
+
+    OrderFeedback:
+      type: object
+      required:
+        - id
+        - orderId
+        - content
+        - type
+        - createdAt
+        - createdBy
+      properties:
+        id:
+          type: string
+          description: 反馈ID
+          example: "feedback-1730880001000"
+        orderId:
+          type: string
+          description: 订单ID
+          example: "order-1730880000000"
+        content:
+          type: string
+          description: 反馈内容
+          example: "初稿效果很好"
+        type:
+          type: string
+          enum: [approval, revision]
+          description: |
+            反馈类型
+            - approval: 确认通过
+            - revision: 需要修改
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间
+          example: "2025-11-05T16:00:00Z"
+        createdBy:
+          type: string
+          description: 创建者ID
+          example: "user-001"
+        createdByName:
+          type: string
+          description: 创建者姓名
+          example: "user"
+
+    UploadedFile:
+      type: object
+      required:
+        - id
+        - name
+        - size
+        - type
+        - uploadTime
+      properties:
+        id:
+          type: string
+          description: 文件ID
+          example: "file-001"
+        name:
+          type: string
+          description: 文件名
+          example: "scene1.jpg"
+        size:
+          type: integer
+          description: 文件大小（字节）
+          example: 2048000
+        type:
+          type: string
+          description: 文件MIME类型
+          example: "image/jpeg"
+        uploadTime:
+          type: string
+          format: date-time
+          description: 上传时间
+          example: "2025-11-05T10:30:00Z"
+        url:
+          type: string
+          description: 文件访问URL
+          example: "https://cdn.example.com/files/scene1.jpg"
+
+    # ========== 通用响应 ==========
+    ApiResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          description: 状态码
+          example: 200
+        message:
+          type: string
+          description: 响应消息
+          example: "操作成功"
+        data:
+          description: 响应数据
+          nullable: true
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            code: 400
+            message: "请求参数错误"
+            data: null
+
+    Unauthorized:
+      description: 未授权，需要登录
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            code: 401
+            message: "未授权，请先登录"
+            data: null
+
+    Forbidden:
+      description: 禁止访问，权限不足
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            code: 403
+            message: "权限不足"
+            data: null
+
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            code: 404
+            message: "资源不存在"
+            data: null
+

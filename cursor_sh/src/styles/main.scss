@@ -1,0 +1,142 @@
+// 全局样式变量
+$primary-color: #007AFF;
+$success-color: #34C759;
+$warning-color: #FF9500;
+$danger-color: #FF3B30;
+$info-color: #5AC8FA;
+
+$text-primary: #1D1D1F;
+$text-secondary: #86868B;
+$text-tertiary: #A1A1A6;
+
+$bg-primary: #FFFFFF;
+$bg-secondary: #F5F5F7;
+$bg-tertiary: #FAFAFA;
+
+$border-color: #D2D2D7;
+$border-radius: 8px;
+$border-radius-lg: 12px;
+
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 16px;
+$spacing-lg: 24px;
+$spacing-xl: 32px;
+$spacing-xxl: 48px;
+
+$shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+$shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+$shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+// 全局样式重置
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji', 'Segoe UI Symbol';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: $text-primary;
+  background-color: $bg-secondary;
+}
+
+// 滚动条样式
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: $bg-secondary;
+}
+
+::-webkit-scrollbar-thumb {
+  background: $border-color;
+  border-radius: 4px;
+  
+  &:hover {
+    background: $text-secondary;
+  }
+}
+
+// 通用工具类
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 $spacing-md;
+}
+
+.flex {
+  display: flex;
+}
+
+.flex-column {
+  flex-direction: column;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-secondary {
+  color: $text-secondary;
+}
+
+.text-tertiary {
+  color: $text-tertiary;
+}
+
+// 卡片样式
+.card {
+  background: $bg-primary;
+  border-radius: $border-radius-lg;
+  box-shadow: $shadow-sm;
+  padding: $spacing-lg;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    box-shadow: $shadow-md;
+  }
+}
+
+// 按钮样式覆盖
+.el-button {
+  border-radius: $border-radius;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+// 输入框样式覆盖
+.el-input__wrapper {
+  border-radius: $border-radius;
+  box-shadow: 0 0 0 1px $border-color inset;
+  
+  &:hover {
+    box-shadow: 0 0 0 1px $text-secondary inset;
+  }
+}
+
+// 表格样式覆盖
+.el-table {
+  border-radius: $border-radius-lg;
+  overflow: hidden;
+}
+
+// 对话框样式覆盖
+.el-dialog {
+  border-radius: $border-radius-lg;
+}
+
