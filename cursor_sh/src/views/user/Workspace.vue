@@ -5,65 +5,8 @@
       <p class="page-subtitle">欢迎回来，{{ authStore.user?.username }}。选择您需要的服务类型开始创作</p>
     </div>
     
-    <!-- 服务入口卡片 -->
-    <div class="service-cards">
-      <el-card class="service-card" shadow="hover" @click="goToService('video_purchase')">
-        <div class="service-icon">📹</div>
-        <h3 class="service-title">裸眼3D成片购买适配</h3>
-        <p class="service-description">
-          专业的裸眼3D视频内容库，根据您的屏幕参数精准适配，快速交付高质量成片。
-          支持多种行业应用和视觉风格选择。
-        </p>
-        <div class="service-features">
-          <el-tag size="small">快速交付</el-tag>
-          <el-tag size="small" type="success">专业适配</el-tag>
-          <el-tag size="small" type="info">多种风格</el-tag>
-        </div>
-        <el-button type="primary" class="service-button">
-          开始选购
-          <el-icon><ArrowRight /></el-icon>
-        </el-button>
-      </el-card>
-      
-      <el-card class="service-card" shadow="hover" @click="goToService('ai_3d_custom')">
-        <div class="service-icon">🎨</div>
-        <h3 class="service-title">AI裸眼3D内容定制</h3>
-        <p class="service-description">
-          基于AI技术的定制化3D内容创作，从创意构思到成品落地的全流程服务。
-          上传现场照片，描述您的想法，我们将AI技术转化为震撼的裸眼3D效果。
-        </p>
-        <div class="service-features">
-          <el-tag size="small">AI驱动</el-tag>
-          <el-tag size="small" type="success">5-7天交付</el-tag>
-          <el-tag size="small" type="warning">可修改</el-tag>
-        </div>
-        <el-button type="primary" class="service-button">
-          定制内容
-          <el-icon><ArrowRight /></el-icon>
-        </el-button>
-      </el-card>
-      
-      <el-card class="service-card" shadow="hover" @click="goToService('digital_art')">
-        <div class="service-icon">🖼️</div>
-        <h3 class="service-title">数字艺术内容定制</h3>
-        <p class="service-description">
-          专业数字艺术创作服务，涵盖抽象、写实、装置、动态艺术等多种风格。
-          由资深艺术家团队倾力打造，3天内提供初稿预览。
-        </p>
-        <div class="service-features">
-          <el-tag size="small">专业艺术家</el-tag>
-          <el-tag size="small" type="success">3天初稿</el-tag>
-          <el-tag size="small" type="info">多种风格</el-tag>
-        </div>
-        <el-button type="primary" class="service-button">
-          艺术定制
-          <el-icon><ArrowRight /></el-icon>
-        </el-button>
-      </el-card>
-    </div>
-    
-    <!-- 我的订单概览 -->
-    <div class="my-orders-section">
+    <!-- 我的订单概览 (置于最上方) -->
+    <div class="my-orders-section" style="margin-top: 0; margin-bottom: 48px;">
       <div class="section-header">
         <h2 class="section-title">我的订单</h2>
         <el-button text type="primary" @click="goToOrders">
@@ -122,6 +65,63 @@
           </div>
         </el-card>
       </div>
+    </div>
+
+    <!-- 服务入口卡片 -->
+    <div class="service-cards">
+      <el-card class="service-card" shadow="hover" @click="goToService('video_purchase')">
+        <div class="service-icon">📹</div>
+        <h3 class="service-title">裸眼3D成片购买适配</h3>
+        <p class="service-description">
+          专业的裸眼3D视频内容库，根据您的屏幕参数精准适配，快速交付高质量成片。
+          支持多种行业应用和视觉风格选择。
+        </p>
+        <div class="service-features">
+          <el-tag size="small">快速交付</el-tag>
+          <el-tag size="small" type="success">专业适配</el-tag>
+          <el-tag size="small" type="info">多种风格</el-tag>
+        </div>
+        <el-button type="primary" class="service-button">
+          开始选购
+          <el-icon><ArrowRight /></el-icon>
+        </el-button>
+      </el-card>
+      
+      <el-card class="service-card" shadow="hover" @click="goToService('ai_3d_custom')">
+        <div class="service-icon">🎨</div>
+        <h3 class="service-title">AI裸眼3D内容定制</h3>
+        <p class="service-description">
+          基于AI技术的定制化3D内容创作，从创意构思到成品落地的全流程服务。
+          上传现场照片，描述您的想法，我们将AI技术转化为震撼的裸眼3D效果。
+        </p>
+        <div class="service-features">
+          <el-tag size="small">AI驱动</el-tag>
+          <el-tag size="small" type="success">5-7天交付</el-tag>
+          <el-tag size="small" type="warning">可修改</el-tag>
+        </div>
+        <el-button type="primary" class="service-button">
+          定制内容
+          <el-icon><ArrowRight /></el-icon>
+        </el-button>
+      </el-card>
+      
+      <el-card class="service-card" shadow="hover" @click="goToService('digital_art')">
+        <div class="service-icon">🖼️</div>
+        <h3 class="service-title">数字艺术内容定制</h3>
+        <p class="service-description">
+          专业数字艺术创作服务，涵盖抽象、写实、装置、动态艺术等多种风格。
+          由资深艺术家团队倾力打造，3天内提供初稿预览。
+        </p>
+        <div class="service-features">
+          <el-tag size="small">专业艺术家</el-tag>
+          <el-tag size="small" type="success">3天初稿</el-tag>
+          <el-tag size="small" type="info">多种风格</el-tag>
+        </div>
+        <el-button type="primary" class="service-button">
+          艺术定制
+          <el-icon><ArrowRight /></el-icon>
+        </el-button>
+      </el-card>
     </div>
   </div>
 </template>

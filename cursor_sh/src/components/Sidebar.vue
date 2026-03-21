@@ -138,6 +138,8 @@ const handleLogout = async () => {
   height: 100%;
   border-right: 1px solid #E5E7EB;
   background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-header {
@@ -163,8 +165,7 @@ const handleLogout = async () => {
 }
 
 .logout-item {
-  position: absolute;
-  bottom: 0;
+  margin-top: auto;
   width: 100%;
   color: #FF3B30;
   
