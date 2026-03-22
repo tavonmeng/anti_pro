@@ -27,12 +27,12 @@
           </a>
         </div>
         <div class="contact-card login-card">
-          <a href="http://localhost:3000/login" class="email-link">
+          <a :href="dashboardUrl + '/login'" class="email-link">
             注册 / 登录
           </a>
         </div>
         <div class="contact-card ai-card">
-          <a href="http://localhost:3000/user/workspace" class="email-link">
+          <a :href="dashboardUrl + '/user/workspace'" class="email-link">
             找AI向导
           </a>
         </div>
@@ -51,6 +51,10 @@ gsap.registerPlugin(ScrollTrigger)
 const isHover = ref(false)
 const sectionRef = ref(null)
 const overlayRef = ref(null)
+
+// 动态判断应用跳转地址，优先使用部署时注入的环境变量，如果没有则自动推导当前域名+8080端口(系统的实际部署端口)
+const dashboardUrl = import.meta.env.VITE_DASHBOARD_URL || `${window.location.protocol}//${window.location.hostname}:8080`
+
 let ctx
 
 onMounted(() => {

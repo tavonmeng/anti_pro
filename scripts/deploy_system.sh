@@ -45,6 +45,18 @@ mkdir -p $CURSOR_FE_DIR
 echo "🌐 开始构建官网..."
 cd "$PROJECT_ROOT/website"
 npm install
+
+# 自动获取当前服务器 IP 生成正确的 控制台跳转链接 (端口为8080)
+echo "🔍 自动探测服务器公网 IP 并配置跳转链接..."
+PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || curl -s ip.sb 2>/dev/null || echo "")
+if [ -n "$PUBLIC_IP" ]; then
+    DASHBOARD_URL="http://$PUBLIC_IP:8080"
+else
+    DASHBOARD_URL="http://localhost:8080"
+fi
+echo "VITE_DASHBOARD_URL=$DASHBOARD_URL" > .env.production
+echo "✅ 已生成前端跳转配置: VITE_DASHBOARD_URL=$DASHBOARD_URL"
+
 npm run build
 cp -r dist/* $WEBSITE_DIR/
 chown -R www-data:www-data $WEBSITE_DIR || chown -R root:root $WEBSITE_DIR
