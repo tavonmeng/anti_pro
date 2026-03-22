@@ -1,8 +1,19 @@
 """应用配置"""
 
-from pydantic_settings import BaseSettings
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    from pydantic import BaseSettings
 from typing import List, Union
-from pydantic import field_validator
+try:
+    from pydantic import field_validator
+    def compat_validator(field):
+        return field_validator(field, mode='before')
+except ImportError:
+    from pydantic import validator
+    def compat_validator(field):
+        return validator(field, pre=True)
+
 import json
 
 
@@ -30,7 +41,7 @@ class Settings(BaseSettings):
     # CORS 配置
     CORS_ORIGINS: Union[List[str], str] = ["http://localhost:5173", "http://localhost:3000"]
     
-    @field_validator('CORS_ORIGINS', mode='before')
+    @compat_validator('CORS_ORIGINS')
     @classmethod
     def parse_cors_origins(cls, v):
         """解析 CORS_ORIGINS，支持 JSON 格式和逗号分隔的字符串"""
