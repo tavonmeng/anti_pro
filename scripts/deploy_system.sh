@@ -25,18 +25,45 @@ SERVICE_NAME="order-api"
 
 # 1. 环境准备
 echo "📦 安装依赖库 (Node.js, Nginx, Python, pyenv相关)..."
-apt update -y || yum makecache || true
+
+if command -v apt &> /dev/null; then
+    PKG_MGR="apt"
+elif command -v yum &> /dev/null; then
+    PKG_MGR="yum"
+else
+    echo "❌ 无法识别包管理器 (apt 或 yum 均未找到)，退出安装。"
+    exit 1
+fi
+
+if [ "$PKG_MGR" = "apt" ]; then
+    apt update -y || true
+else
+    yum makecache || true
+fi
+
 if ! command -v node &> /dev/null; then
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    apt install -y nodejs || yum install -y nodejs || true
+    if [ "$PKG_MGR" = "apt" ]; then
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+        apt install -y nodejs || true
+    else
+        curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+        yum install -y nodejs || true
+    fi
 fi
+
 if ! command -v nginx &> /dev/null; then
-    apt install -y nginx || yum install -y nginx || true
+    $PKG_MGR install -y nginx || true
 fi
+
 if ! command -v python3 &> /dev/null; then
-    apt install -y python3 python3-pip python3-venv || yum install -y python3 python3-pip python3-venv || true
+    if [ "$PKG_MGR" = "apt" ]; then
+        apt install -y python3 python3-pip python3-venv || true
+    else
+        yum install -y python3 python3-pip || true
+    fi
 fi
-apt install -y gunicorn uvicorn || true
+
+$PKG_MGR install -y gunicorn uvicorn || true
 
 mkdir -p $WEBSITE_DIR
 mkdir -p $CURSOR_FE_DIR
@@ -98,7 +125,7 @@ Description=Order Management API
 After=network.target
 
 [Service]
-Type=notify
+Type=simple
 User=$USER_TO_RUN
 Group=$GROUP_TO_RUN
 WorkingDirectory=$PROJECT_ROOT/cursor_sh/backend
