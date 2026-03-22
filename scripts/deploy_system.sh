@@ -55,15 +55,27 @@ if ! command -v nginx &> /dev/null; then
     $PKG_MGR install -y nginx || true
 fi
 
-if ! command -v python3 &> /dev/null; then
-    if [ "$PKG_MGR" = "apt" ]; then
-        apt install -y python3 python3-pip python3-venv || true
+# ================= 新增：自动升级并选用 Python 3.9+ =================
+if [ "$PKG_MGR" = "yum" ]; then
+    echo "📦 针对 Alinux/CentOS，尝试优先安装 Python 3.9..."
+    yum install -y python39 python39-pip || yum install -y python3 python3-pip || true
+    
+    if command -v python3.9 &> /dev/null; then
+        PYTHON_CMD="python3.9"
+    elif command -v python3.8 &> /dev/null; then
+        PYTHON_CMD="python3.8"
     else
-        yum install -y python3 python3-pip || true
+        PYTHON_CMD="python3"
     fi
+else
+    # 对于 Ubuntu/Debian 体系
+    if ! command -v python3 &> /dev/null; then
+        apt install -y python3 python3-pip python3-venv || true
+    fi
+    PYTHON_CMD="python3"
 fi
-
-$PKG_MGR install -y gunicorn uvicorn || true
+echo "🐍 将使用 $PYTHON_CMD 构建后端环境"
+# =================================================================
 
 mkdir -p $WEBSITE_DIR
 mkdir -p $CURSOR_FE_DIR
@@ -102,7 +114,7 @@ chown -R www-data:www-data $CURSOR_FE_DIR || chown -R root:root $CURSOR_FE_DIR
 echo "⚙️ 开始部署业务后端..."
 cd "$PROJECT_ROOT/cursor_sh/backend"
 if [ ! -d "venv" ]; then
-    python3 -m venv venv
+    $PYTHON_CMD -m venv venv
 fi
 source venv/bin/activate
 pip install --upgrade pip

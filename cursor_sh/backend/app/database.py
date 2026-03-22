@@ -1,7 +1,16 @@
 """数据库配置"""
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base
+
+try:
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+except ImportError:
+    from sqlalchemy.orm import sessionmaker
+    def async_sessionmaker(*args, **kwargs):
+        kwargs.setdefault('class_', AsyncSession)
+        return sessionmaker(*args, **kwargs)
+
 from app.config import settings
 
 # 创建异步数据库引擎
