@@ -58,7 +58,8 @@ fi
 # ================= 新增：自动升级并选用 Python 3.9+ =================
 if [ "$PKG_MGR" = "yum" ]; then
     echo "📦 针对 Alinux/CentOS，尝试优先安装 Python 3.9..."
-    yum install -y python39 python39-pip || yum install -y python3 python3-pip || true
+    # AL8/RHEL8 支持模块化安装或包名 python3.9 / python38
+    yum install -y python3.9 python3.9-pip || yum module install -y python39 || yum install -y python39 python39-pip || yum install -y python3.8 || yum install -y python38 || yum install -y python3 python3-pip || true
     
     if command -v python3.9 &> /dev/null; then
         PYTHON_CMD="python3.9"
