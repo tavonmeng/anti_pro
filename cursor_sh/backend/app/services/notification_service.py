@@ -2,7 +2,7 @@
 消息通知服务
 """
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from fastapi import HTTPException, status
@@ -102,7 +102,7 @@ class NotificationService:
         skip: int = 0,
         limit: int = 20,
         unread_only: bool = False
-    ) -> tuple[List[Notification], int]:
+    ) -> Tuple[List[Notification], int]:
         """
         获取用户的消息列表
         
