@@ -129,9 +129,21 @@ export interface VideoPurchaseOrder extends BaseOrder {
 // AI裸眼3D内容定制订单
 export interface AI3DCustomOrder extends BaseOrder {
   orderType: 'ai_3d_custom'
-  configuration: string        // 配置信息
-  creativeIdea: string         // 创意说明
-  scenePhotos: UploadedFile[]  // 现场实拍图
+  brand?: string               // 品牌与产品关键词
+  background?: string          // 项目背景
+  target_group?: string        // 目标受众
+  brand_tone?: string          // 品牌调性
+  content?: string             // 内容需求
+  style?: string               // 风格偏好
+  prohibited_content?: string  // 品牌禁忌内容
+  city?: string                // 投放城市或站点
+  media_size?: string          // 投放媒体及尺寸
+  time_number?: string         // 投放时长与数量
+  technology?: string          // 技术需求
+  budget?: string              // 制作预算
+  online_time?: string         // 预计上刊时间
+  sales_contact?: string       // 销售对接人
+  scenePhotos?: UploadedFile[] // 现场实拍图
   previewFiles?: UploadedFile[] // 预览文件
   previewNote?: string         // 预览备注说明
 }

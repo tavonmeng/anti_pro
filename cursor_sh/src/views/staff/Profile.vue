@@ -86,7 +86,7 @@ import { useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { authApi } from '@/utils/api'
+import { authApi, userApi } from '@/utils/api'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -139,8 +139,11 @@ onMounted(() => {
 const handleSave = async () => {
   saving.value = true
   try {
-    // 这里应该调用API保存用户信息
-    // await userApi.updateProfile(profileForm)
+    // 调用API保存用户信息
+    const res = await userApi.updateProfile(profileForm)
+    if (res && authStore.user) {
+      authStore.user.email = profileForm.email
+    }
     ElMessage.success('保存成功')
   } catch (error: any) {
     ElMessage.error(error.message || '保存失败')

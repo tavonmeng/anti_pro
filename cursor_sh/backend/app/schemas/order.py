@@ -27,9 +27,21 @@ class VideoPurchaseOrderCreate(BaseModel):
 class AI3DCustomOrderCreate(BaseModel):
     """AI裸眼3D定制订单创建"""
     orderType: str = Field(default="ai_3d_custom")
-    configuration: str
-    creativeIdea: str
-    scenePhotos: List[FileUpload]
+    brand: Optional[str] = None
+    background: Optional[str] = None
+    target_group: Optional[str] = None
+    brand_tone: Optional[str] = None
+    content: Optional[str] = None
+    style: Optional[str] = None
+    prohibited_content: Optional[str] = None
+    city: Optional[str] = None
+    media_size: Optional[str] = None
+    time_number: Optional[str] = None
+    technology: Optional[str] = None
+    budget: Optional[str] = None
+    online_time: Optional[str] = None
+    sales_contact: Optional[str] = None
+    scenePhotos: Optional[List[FileUpload]] = []
 
 
 class DigitalArtOrderCreate(BaseModel):
@@ -77,8 +89,20 @@ class VideoPurchaseOrderResponse(BaseOrderResponse):
 
 class AI3DCustomOrderResponse(BaseOrderResponse):
     """AI裸眼3D定制订单响应"""
-    configuration: str
-    creativeIdea: str
+    brand: Optional[str] = None
+    background: Optional[str] = None
+    target_group: Optional[str] = None
+    brand_tone: Optional[str] = None
+    content: Optional[str] = None
+    style: Optional[str] = None
+    prohibited_content: Optional[str] = None
+    city: Optional[str] = None
+    media_size: Optional[str] = None
+    time_number: Optional[str] = None
+    technology: Optional[str] = None
+    budget: Optional[str] = None
+    online_time: Optional[str] = None
+    sales_contact: Optional[str] = None
     scenePhotos: List[FileResponse] = []
     previewFiles: Optional[List[FileResponse]] = []
 

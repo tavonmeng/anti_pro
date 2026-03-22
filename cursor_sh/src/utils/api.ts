@@ -377,6 +377,14 @@ export const userApi = {
   // 获取用户详情
   getUserById(id: string): Promise<any> {
     return request.get(`/users/${id}`)
+  },
+  
+  // 更新个人信息
+  updateProfile(data: any): Promise<any> {
+    if (ENABLE_MOCK) {
+      return Promise.resolve({ success: true })
+    }
+    return request.put('/auth/profile', data)
   }
 }
 

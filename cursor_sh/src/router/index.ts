@@ -40,6 +40,12 @@ const router = createRouter({
           meta: { requiresAuth: true, role: 'user' }
         },
         {
+          path: 'video-marketplace',
+          name: 'VideoMarketplace',
+          component: () => import('@/views/user/VideoMarketplace.vue'),
+          meta: { requiresAuth: true, role: 'user' }
+        },
+        {
           path: 'create-order/:type',
           name: 'CreateOrder',
           component: () => import('@/views/user/CreateOrder.vue'),

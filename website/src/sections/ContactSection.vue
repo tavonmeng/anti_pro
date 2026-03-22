@@ -31,15 +31,13 @@
             注册 / 登录
           </a>
         </div>
-        <div class="contact-card ai-card" @click="showChat = true" style="cursor: pointer;">
-          <span class="email-link">
-            找AI
-          </span>
+        <div class="contact-card ai-card">
+          <a href="http://localhost:3000/user/workspace" class="email-link">
+            找AI向导
+          </a>
         </div>
       </div>
     </div>
-    
-    <ChatWindow :is-visible="showChat" @close="showChat = false" />
   </section>
 </template>
 
@@ -47,14 +45,12 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import gsap from 'gsap'
 import ScrollTrigger from 'gsap/ScrollTrigger'
-import ChatWindow from '../components/ChatWindow.vue'
 
 gsap.registerPlugin(ScrollTrigger)
 
 const isHover = ref(false)
 const sectionRef = ref(null)
 const overlayRef = ref(null)
-const showChat = ref(false)
 let ctx
 
 onMounted(() => {
@@ -189,7 +185,7 @@ onUnmounted(() => {
 }
 
 .ai-card {
-  background: #111; /* A nice distinct dark hue */
+  background: #111; 
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 

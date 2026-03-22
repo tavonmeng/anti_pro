@@ -4,31 +4,91 @@
       ref="formRef"
       :model="formData"
       :rules="formRules"
-      label-width="120px"
+      label-width="140px"
       label-position="top"
     >
-      <el-form-item label="配置信息" prop="configuration">
-        <el-input
-          v-model="formData.configuration"
-          type="textarea"
-          :rows="4"
-          placeholder="请详细描述您的配置需求，包括屏幕参数、显示要求等"
-          maxlength="1000"
-          show-word-limit
-        />
+      <el-row :gutter="24">
+        <el-col :span="12">
+          <el-form-item label="品牌与产品关键词" prop="brand">
+            <el-input v-model="formData.brand" placeholder="例如：蒙牛；酸酸乳..." />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="目标受众" prop="target_group">
+            <el-input v-model="formData.target_group" placeholder="例如：18-25岁年轻女性" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <el-form-item label="项目背景" prop="background">
+        <el-input v-model="formData.background" type="textarea" :rows="2" placeholder="填写项目启动背景、核心目的等" />
       </el-form-item>
-      
-      <el-form-item label="创意说明" prop="creativeIdea">
-        <el-input
-          v-model="formData.creativeIdea"
-          type="textarea"
-          :rows="6"
-          placeholder="请详细描述您的创意想法、设计风格、期望效果等"
-          maxlength="2000"
-          show-word-limit
-        />
+
+      <el-row :gutter="24">
+        <el-col :span="12">
+          <el-form-item label="品牌调性" prop="brand_tone">
+            <el-input v-model="formData.brand_tone" placeholder="例如：高端、简约、科技感" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="风格偏好" prop="style">
+            <el-input v-model="formData.style" placeholder="例如：赛博朋克、写实、水墨" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <el-form-item label="内容需求 (方案必备要素)" prop="content">
+        <el-input v-model="formData.content" type="textarea" :rows="3" placeholder="详细描述所需的创意场景、画面元素要求等" />
       </el-form-item>
-      
+
+      <el-form-item label="品牌禁忌内容" prop="prohibited_content">
+        <el-input v-model="formData.prohibited_content" placeholder="填写不可出现的元素（如：避免红色、避免涉及某竞品）" />
+      </el-form-item>
+
+      <el-row :gutter="24">
+        <el-col :span="12">
+          <el-form-item label="投放城市或站点" prop="city">
+            <el-input v-model="formData.city" placeholder="例如：上海、北京各大商圈" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="投放媒体及尺寸" prop="media_size">
+            <el-input v-model="formData.media_size" placeholder="例如：转角LED屏 1920x1080" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <el-row :gutter="24">
+        <el-col :span="8">
+          <el-form-item label="投放时长与数量" prop="time_number">
+            <el-input v-model="formData.time_number" placeholder="例如：15秒x10个" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="技术需求" prop="technology">
+            <el-input v-model="formData.technology" placeholder="例如：4K, MP4, H264" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="制作预算" prop="budget">
+            <el-input v-model="formData.budget" placeholder="例如：5万元" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <el-row :gutter="24">
+        <el-col :span="12">
+          <el-form-item label="预计上刊时间" prop="online_time">
+            <el-input v-model="formData.online_time" placeholder="例如：2024年10月1日" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="销售对接人联系方式" prop="sales_contact">
+            <el-input v-model="formData.sales_contact" placeholder="填写电话、微信或邮箱" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
       <el-form-item label="现场实拍图" prop="scenePhotos">
         <FileUpload 
           v-model="formData.scenePhotos"
@@ -75,9 +135,22 @@ const emit = defineEmits<{
 }>()
 
 const formRef = ref<FormInstance>()
+
 const formData = reactive({
-  configuration: '',
-  creativeIdea: '',
+  brand: '',
+  background: '',
+  target_group: '',
+  brand_tone: '',
+  content: '',
+  style: '',
+  prohibited_content: '',
+  city: '',
+  media_size: '',
+  time_number: '',
+  technology: '',
+  budget: '',
+  online_time: '',
+  sales_contact: '',
   scenePhotos: [] as UploadedFile[]
 })
 
@@ -85,28 +158,50 @@ const formData = reactive({
 onMounted(() => {
   if (props.order && props.order.orderType === 'ai_3d_custom') {
     const order = props.order as any
-    formData.configuration = order.configuration || ''
-    formData.creativeIdea = order.creativeIdea || ''
+    formData.brand = order.brand || ''
+    formData.background = order.background || ''
+    formData.target_group = order.target_group || ''
+    formData.brand_tone = order.brand_tone || ''
+    formData.content = order.content || ''
+    formData.style = order.style || ''
+    formData.prohibited_content = order.prohibited_content || ''
+    formData.city = order.city || ''
+    formData.media_size = order.media_size || ''
+    formData.time_number = order.time_number || ''
+    formData.technology = order.technology || ''
+    formData.budget = order.budget || ''
+    formData.online_time = order.online_time || ''
+    formData.sales_contact = order.sales_contact || ''
     formData.scenePhotos = order.scenePhotos || []
+  } else {
+    // 检查是否有 AI 助手传过来的草稿数据
+    const draftStr = sessionStorage.getItem('ai_draft_order')
+    if (draftStr) {
+      try {
+        const draft = JSON.parse(draftStr)
+        Object.keys(draft).forEach(key => {
+          if (key in formData && draft[key] !== undefined && draft[key] !== null) {
+            (formData as any)[key] = draft[key]
+          }
+        })
+      } catch (e) {
+        console.error('解析AI草稿数据失败', e)
+      }
+      // 提取后清除草稿数据，以免影响后续新建单
+      sessionStorage.removeItem('ai_draft_order')
+    }
   }
 })
 
 const formRules: FormRules = {
-  configuration: [
-    { required: true, message: '请填写配置信息', trigger: 'blur' },
-    { min: 10, message: '配置信息至少10个字符', trigger: 'blur' }
+  brand: [
+    { required: true, message: '请填写品牌关键词', trigger: 'blur' }
   ],
-  creativeIdea: [
-    { required: true, message: '请填写创意说明', trigger: 'blur' },
-    { min: 20, message: '创意说明至少20个字符', trigger: 'blur' }
+  content: [
+    { required: true, message: '请填写内容需求', trigger: 'blur' }
   ],
-  scenePhotos: [
-    { 
-      type: 'array',
-      required: true,
-      message: '请至少上传1张现场实拍图',
-      trigger: 'change'
-    }
+  sales_contact: [
+    { required: true, message: '请填写销售联系方式', trigger: 'blur' }
   ]
 }
 
@@ -122,8 +217,8 @@ const handleSubmit = async () => {
             <div style="text-align: left;">
               <p>${isEdit ? '请确认您已核对所有修改信息：' : '请确认您已核对所有信息：'}</p>
               <ul style="margin: 12px 0; padding-left: 20px;">
+                <li>品牌与内容要求已明确</li>
                 <li>已上传 ${formData.scenePhotos.length} 张现场实拍图</li>
-                <li>已填写完整的配置信息和创意说明</li>
                 <li>预计制作周期：5-7个工作日</li>
               </ul>
               <p>${isEdit ? '提交后，订单将被更新。' : '提交后，我们将立即开始制作。'}</p>
@@ -138,11 +233,7 @@ const handleSubmit = async () => {
           }
         )
         
-        emit('submit', {
-          configuration: formData.configuration,
-          creativeIdea: formData.creativeIdea,
-          scenePhotos: formData.scenePhotos
-        })
+        emit('submit', { ...formData })
       } catch {
         // 用户取消
       }
@@ -202,4 +293,3 @@ const handleCancel = () => {
   color: #1D1D1F;
 }
 </style>
-

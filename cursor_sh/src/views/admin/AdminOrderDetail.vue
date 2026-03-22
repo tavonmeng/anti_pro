@@ -113,11 +113,27 @@
             </el-row>
           </div>
           <div v-else-if="order.orderType === 'ai_3d_custom'">
-            <p><strong>配置信息：</strong></p>
-            <p class="description-text">{{ order.configuration }}</p>
-            <p><strong>创意说明：</strong></p>
-            <p class="description-text">{{ order.creativeIdea }}</p>
-            <div v-if="order.scenePhotos.length > 0">
+            <el-descriptions :column="2" border size="small" style="margin-bottom: 20px;">
+              <el-descriptions-item label="品牌与产品关键词">{{ order.brand || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="目标受众">{{ order.target_group || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="品牌调性">{{ order.brand_tone || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="风格偏好">{{ order.style || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="投放城市/站点">{{ order.city || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="投放媒体尺寸">{{ order.media_size || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="投放时长数量">{{ order.time_number || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="技术需求">{{ order.technology || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="制作预算">{{ order.budget || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="预计上刊时间">{{ order.online_time || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="销售对接人">{{ order.sales_contact || '-' }}</el-descriptions-item>
+            </el-descriptions>
+            
+            <p><strong>项目背景：</strong></p>
+            <p class="description-text">{{ order.background || '-' }}</p>
+            <p><strong>内容需求：</strong></p>
+            <p class="description-text">{{ order.content || '-' }}</p>
+            <p><strong>品牌禁忌内容：</strong></p>
+            <p class="description-text">{{ order.prohibited_content || '-' }}</p>
+            <div v-if="order.scenePhotos && order.scenePhotos.length > 0">
               <p><strong>现场实拍图（{{ order.scenePhotos.length }}张）：</strong></p>
               <div class="file-list">
                 <div v-for="file in order.scenePhotos" :key="file.id" class="file-item">

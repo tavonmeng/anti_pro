@@ -9,6 +9,12 @@ from app.schemas.auth import LoginRequest, RegisterRequest, LoginResponse, Chang
 from app.schemas.response import ApiResponse
 from app.services.auth_service import login, register, change_password
 from app.utils.dependencies import get_current_user
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+
+class ProfileUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    real_name: Optional[str] = None
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
@@ -63,8 +69,31 @@ async def api_change_password(
     try:
         result = await change_password(db, current_user, password_data)
         return ApiResponse(code=200, message="密码修改成功", data=result)
-    except HTTPException as e:
-        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/profile", response_model=ApiResponse[dict])
+async def update_profile_api(
+    profile_data: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """更新当前用户个人资料"""
+    try:
+        if profile_data.email is not None:
+            current_user.email = profile_data.email
+        if profile_data.real_name is not None:
+            current_user.real_name = profile_data.real_name
+            
+        await db.commit()
+        await db.refresh(current_user)
+        
+        return ApiResponse(code=200, message="资料更新成功", data={
+            "id": current_user.id,
+            "username": current_user.username,
+            "email": current_user.email,
+            "role": current_user.role.value
+        })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
