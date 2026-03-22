@@ -31,8 +31,15 @@
             注册 / 登录
           </a>
         </div>
+        <div class="contact-card ai-card" @click="showChat = true" style="cursor: pointer;">
+          <span class="email-link">
+            找AI
+          </span>
+        </div>
       </div>
     </div>
+    
+    <ChatWindow :is-visible="showChat" @close="showChat = false" />
   </section>
 </template>
 
@@ -40,12 +47,14 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import gsap from 'gsap'
 import ScrollTrigger from 'gsap/ScrollTrigger'
+import ChatWindow from '../components/ChatWindow.vue'
 
 gsap.registerPlugin(ScrollTrigger)
 
 const isHover = ref(false)
 const sectionRef = ref(null)
 const overlayRef = ref(null)
+const showChat = ref(false)
 let ctx
 
 onMounted(() => {
@@ -177,6 +186,11 @@ onUnmounted(() => {
 
 .login-card {
   background: #2b2b2b; /* Slightly different dark or brand color, but let's stick to black theme */
+}
+
+.ai-card {
+  background: #111; /* A nice distinct dark hue */
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
 /* Custom styling for login text if needed, otherwise it's white */
