@@ -9,7 +9,7 @@
         <el-button text circle @click="collapse"><el-icon><Close /></el-icon></el-button>
       </div>
 
-      <div class="chat-content">
+      <div class="chat-content" ref="chatContentRef">
         <div class="messages-container" ref="messagesContainer">
           <!-- Always show initial 3 options if no option selected -->
           <div v-if="!selectedMode" class="welcome-section">
@@ -82,7 +82,7 @@ const messages = ref<any[]>([])
 const inputMsg = ref('')
 const isLoading = ref(false)
 const session_id = ref(Math.random().toString(36).substring(7))
-const messagesContainer = ref<any>(null)
+const chatContentRef = ref<any>(null)
 
 const collapse = () => {
   emit('close')
@@ -90,20 +90,37 @@ const collapse = () => {
 
 const scrollToBottom = async () => {
   await nextTick()
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight + 100
+  if (chatContentRef.value) {
+    chatContentRef.value.scrollTo({
+      top: chatContentRef.value.scrollHeight + 100,
+      behavior: 'smooth'
+    })
   }
 }
 
 watch(() => messages.value.length, scrollToBottom)
+watch(() => isLoading.value, scrollToBottom)
 
-const selectMode = (mode: string) => {
+const selectMode = async (mode: string) => {
   selectedMode.value = mode
   emit('mode-change', mode)
   if (mode === 'purchase') {
     messages.value.push({ role: 'assistant', content: '您选择了【裸眼3D成片购买适配】。您可以直接告诉我您的需求，或者点击下方按钮先去浏览我们的案例库：', isPurchasePrompt: true })
   } else if (mode === 'custom_ai') {
-    messages.value.push({ role: 'assistant', content: '您选择了【AI裸眼3D内容定制】。我将引导您梳理详细的投放需求清单，请问您的品牌和产品是什么呢？' })
+    isLoading.value = true
+    try {
+      // 从后端读取真实设计的开场白
+      const response = await fetch(`/ai/start?session_id=${session_id.value}`)
+      const result = await response.json()
+      if (result.reply) {
+        messages.value.push({ role: 'assistant', content: result.reply })
+      }
+    } catch (e) {
+      // 降级兜底
+      messages.value.push({ role: 'assistant', content: '您选择了【AI裸眼3D内容定制】。我将引导您梳理详细的投放需求清单，请问您的品牌和产品是什么呢？' })
+    } finally {
+      isLoading.value = false
+    }
   } else if (mode === 'digital_art') {
     messages.value.push({ role: 'assistant', content: '您选择了【数字艺术内容定制】。请简单描述您的视觉风格倾向和应用场景：' })
   }
@@ -144,7 +161,7 @@ const sendMessage = async () => {
 const handleCustomAiChat = async (userText: string) => {
   isLoading.value = true
   try {
-    const response = await fetch('http://localhost:8001/chat', {
+    const response = await fetch('/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: session_id.value, message: userText })

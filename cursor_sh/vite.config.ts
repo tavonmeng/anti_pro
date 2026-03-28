@@ -18,6 +18,12 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',  // 使用 IPv4 地址，避免 IPv6 连接问题
         changeOrigin: true,
         secure: false,
+      },
+      '/ai': {
+        target: 'http://127.0.0.1:8001',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/ai/, '')
       }
     }
   },

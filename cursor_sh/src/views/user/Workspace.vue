@@ -232,12 +232,12 @@ const goToOrders = () => {
 }
 
 .ai-sidebar-container.is-open {
-  width: 400px;
+  width: 480px;
   opacity: 1;
 }
 
 .ai-component {
-  width: 400px;
+  width: 480px;
   position: sticky;
   top: 24px;
 }
