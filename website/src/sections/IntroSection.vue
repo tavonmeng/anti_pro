@@ -360,17 +360,19 @@ onUnmounted(() => {
   padding: 120px 40px;
   box-sizing: border-box;
   z-index: 10;
-  pointer-events: none; /* 防止挡住鼠标的正常滚轮甚至 Hover 事件 */
+  pointer-events: none;
 }
 
 .container {
   max-width: 1400px;
+  width: 100%;
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1fr 1.2fr;
-  gap: 80px;
-  align-items: flex-start; /* 改为从上排版，不要用 center 以防文字由于左右子项高度不一样产生错位 */
-  height: calc(100vh - 240px); /* 100vh 减去上下 padding */
+  gap: clamp(40px, 5vw, 80px);
+  align-items: start;
+  /* 用 min 限制大屏上的最大高度，避免布局拉伸变散 */
+  height: min(calc(100vh - 240px), 700px);
 }
 
 .left-content {
@@ -381,12 +383,14 @@ onUnmounted(() => {
 .relative-box {
   position: relative;
   width: 100%;
-  height: 100%; /* 高度充满右侧栏网格 */
+  height: 100%;
   pointer-events: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .main-heading {
-  font-size: 48px;
+  font-size: clamp(32px, 3.5vw, 48px);
   line-height: 1.2;
   font-weight: 700;
   color: #fff;
@@ -407,17 +411,15 @@ onUnmounted(() => {
 
 .desc-highlight {
   color: #fff;
-  font-size: 28px;
+  font-size: clamp(20px, 2vw, 28px);
   font-weight: 600;
   letter-spacing: 1px;
 }
 
-/* 团队静止介绍放在右侧顶部 */
+/* 团队静止介绍放在右侧 */
 .team-block-top {
-  position: absolute;
-  top: 0;
-  left: 0;
   width: 100%;
+  margin-bottom: clamp(24px, 4vh, 60px);
 }
 
 .team-lead {
@@ -436,11 +438,9 @@ onUnmounted(() => {
 
 /* 动态服务块放在右侧底部 */
 .service-block {
-  position: absolute;
-  bottom: 0; /* 对齐到底部，给上方团队介绍留下巨大的安全空间 */
-  left: 0;
   width: 100%;
-  max-width: 80%; /* 不超过右沿以免贴着右边亮图 */
+  max-width: 80%;
+  margin-top: auto; /* flex 下自动推到底部 */
 }
 
 .service-header {
