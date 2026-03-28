@@ -52,8 +52,12 @@ const isHover = ref(false)
 const sectionRef = ref(null)
 const overlayRef = ref(null)
 
-// 动态判断应用跳转地址，优先使用部署时注入的环境变量，如果没有则自动推导当前域名+8080端口(系统的实际部署端口)
-const dashboardUrl = import.meta.env.VITE_DASHBOARD_URL || `${window.location.protocol}//${window.location.hostname}:8080`
+// 动态判断应用跳转地址，优先使用部署时注入的环境变量
+// 如果没有，判断是否为本地开发环境(localhost)，是则跳转到 3000，否则推导当前域名+8080端口(生产环境部署端口)
+const dashboardUrl = import.meta.env.VITE_DASHBOARD_URL || 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? `${window.location.protocol}//${window.location.hostname}:3000`
+    : `${window.location.protocol}//${window.location.hostname}:8080`)
 
 let ctx
 
