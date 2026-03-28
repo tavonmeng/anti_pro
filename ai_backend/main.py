@@ -15,8 +15,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from typing import Dict
+
 # Use a simple dictionary to hold sessions
-sessions: dict[str, AgentSession] = {}
+sessions: Dict[str, AgentSession] = {}
 
 
 class ChatRequest(BaseModel):
