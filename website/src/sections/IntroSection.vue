@@ -267,7 +267,7 @@ onUnmounted(() => {
 .intro-section {
   background-color: var(--color-bg-primary); /* 原为黑色兜底 */
   color: #fff;
-  width: 100%;
+  width: 100vw !important; /* Force to always span the entire viewport to defeat GSAP pin-spacer resize bugs */
   height: 100vh;
   position: relative;
   z-index: 10;
@@ -346,7 +346,7 @@ onUnmounted(() => {
 .slide-grid {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  padding: 120px 40px;
+  padding: clamp(120px, 22vh, 350px) clamp(40px, 5vw, 100px);
   box-sizing: border-box;
 }
 
@@ -357,22 +357,20 @@ onUnmounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  padding: 120px 40px;
+  padding: clamp(120px, 22vh, 350px) clamp(40px, 5vw, 100px);
   box-sizing: border-box;
   z-index: 10;
   pointer-events: none;
 }
 
 .container {
-  max-width: 1400px;
+  max-width: 1600px; /* 锁定物理布局的最大跨度，防止大屏文本出现过长的单行或空洞 gap */
   width: 100%;
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1fr 1.2fr;
   gap: clamp(40px, 5vw, 80px);
   align-items: start;
-  /* 用 min 限制大屏上的最大高度，避免布局拉伸变散 */
-  height: min(calc(100vh - 240px), 700px);
 }
 
 .left-content {
@@ -383,14 +381,11 @@ onUnmounted(() => {
 .relative-box {
   position: relative;
   width: 100%;
-  height: 100%;
   pointer-events: auto;
-  display: flex;
-  flex-direction: column;
 }
 
 .main-heading {
-  font-size: clamp(32px, 3.5vw, 48px);
+  font-size: clamp(32px, 3.5vw, 68px); /* 大屏放大顶线上限 */
   line-height: 1.2;
   font-weight: 700;
   color: #fff;
@@ -402,18 +397,18 @@ onUnmounted(() => {
 }
 
 .desc-text {
-  font-size: 20px;
+  font-size: clamp(18px, 1.3vw, 26px); /* 自适应字号 */
   color: var(--color-text-secondary);
   line-height: 1.6;
-  margin-bottom: 12px;
+  margin-bottom: clamp(12px, 1vh, 20px);
   font-weight: 300;
 }
 
 .desc-highlight {
   color: #fff;
-  font-size: clamp(20px, 2vw, 28px);
+  font-size: clamp(22px, 1.8vw, 36px); /* 强调词放大 */
   font-weight: 600;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
 }
 
 /* 团队静止介绍放在右侧 */
@@ -423,16 +418,16 @@ onUnmounted(() => {
 }
 
 .team-lead {
-  font-size: 16px;
+  font-size: clamp(16px, 1.1vw, 22px); /* 自适应变大 */
   color: #fff;
-  margin-bottom: 20px;
+  margin-bottom: clamp(20px, 1.5vh, 32px);
   line-height: 1.8;
   font-weight: 400;
 }
 
 .team-desc {
   color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
+  font-size: clamp(14px, 0.95vw, 19px); /* 自适应变大 */
   line-height: 1.8;
 }
 
@@ -440,7 +435,7 @@ onUnmounted(() => {
 .service-block {
   width: 100%;
   max-width: 80%;
-  margin-top: auto; /* flex 下自动推到底部 */
+  margin-top: clamp(160px, 20vh + 30px, 260px); /* 稍微收紧垂直距离上限 */
 }
 
 .service-header {
@@ -451,7 +446,7 @@ onUnmounted(() => {
 }
 
 .service-title {
-  font-size: 26px; /* 字体略放大加重冲击力 */
+  font-size: clamp(26px, 1.8vw, 38px); /* 冲击力加倍自适应 */
   font-weight: 700;
   color: #fff;
   margin: 0;
@@ -461,7 +456,7 @@ onUnmounted(() => {
 
 .service-desc {
   color: rgba(255, 255, 255, 0.7);
-  font-size: 15px; /* 字体略放大 */
+  font-size: clamp(15px, 1vw, 20px); /* 说明文字自适应 */
   line-height: 1.8;
 }
 

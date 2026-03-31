@@ -136,10 +136,11 @@ onUnmounted(() => {
 <style scoped>
 .cases-section {
   background-color: #000;
-  width: 100%;
+  width: 100vw !important; /* Force to always span the entire viewport to defeat GSAP pin-spacer resize bugs */
   height: calc(100vh - 68px);
   position: relative;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .cases-container {
