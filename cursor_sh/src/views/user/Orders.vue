@@ -5,7 +5,6 @@
         <h1 class="page-title">我的订单</h1>
         <p class="page-subtitle">查看和管理您的所有订单</p>
       </div>
-      <el-button :icon="ArrowLeft" @click="goBack">返回工作台</el-button>
     </div>
     
     <!-- 筛选器 -->
@@ -36,9 +35,7 @@
     
     <!-- 订单列表 -->
     <div v-if="filteredOrders.length === 0" class="empty-state">
-      <el-empty description="暂无订单">
-        <el-button type="primary" @click="goToWorkspace">创建第一个订单</el-button>
-      </el-empty>
+      <el-empty description="暂无订单" />
     </div>
     
     <div v-else class="orders-grid">
@@ -55,7 +52,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowLeft } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import OrderCard from '@/components/OrderCard.vue'
 import type { Order, OrderType, OrderStatus } from '@/types'
@@ -110,14 +106,6 @@ const viewOrder = (order: Order) => {
 // 传递给卡片的订单对象，做显示层面的状态掩蔽
 const maskOrderForUser = (order: Order): Order => {
   return { ...order, status: mapUserVisibleStatus(order.status) as OrderStatus }
-}
-
-const goBack = () => {
-  router.push('/user/workspace')
-}
-
-const goToWorkspace = () => {
-  router.push('/user/workspace')
 }
 </script>
 

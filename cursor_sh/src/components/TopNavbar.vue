@@ -92,17 +92,17 @@ const handleCommand = async (command: string) => {
 
 <style lang="scss" scoped>
 .top-navbar {
-  height: 64px;
-  background: #fff;
-  border-bottom: 1px solid #E5E7EB;
+  height: 72px; /* Increased for breathing room */
+  background: rgba(246, 243, 242, 0.7); /* surface-container-low with opacity */
+  backdrop-filter: blur(12px); /* Glassmorphism */
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 32px;
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+  box-shadow: 0 4px 24px rgba(27, 27, 28, 0.02); /* Ambient shadow */
 }
 
 .nav-left {
@@ -125,32 +125,54 @@ const handleCommand = async (command: string) => {
   .logo-text {
     font-size: 18px;
     font-weight: 700;
-    color: #1D1D1F;
-    letter-spacing: 0.5px;
+    color: #1b1b1c; /* on_surface */
+    letter-spacing: -0.02em; /* Editorial hook */
   }
 }
 
 .main-menu {
   border-bottom: none;
+  background: transparent;
   flex: 1;
-  height: 64px;
+  height: 72px;
   
   :deep(.el-menu-item) {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 500;
-    height: 64px;
-    line-height: 64px;
-    color: #4B5563;
+    height: 72px;
+    line-height: 72px;
+    color: #414754; /* on_surface_variant */
     padding: 0 20px;
+    border-bottom: none;
     
     &.is-active {
-      color: #1D1D1F;
-      border-bottom: 2px solid #1D1D1F;
+      color: #0058bc; /* Primary */
+      background: transparent;
       font-weight: 600;
+      position: relative;
+      
+      &::after {
+        content: '';
+        position: absolute;
+        bottom: 12px;
+        left: 20px;
+        right: 20px;
+        height: 3px;
+        border-radius: 9999px;
+        background: #0058bc;
+      }
     }
     
     &:hover {
-      color: #1D1D1F;
+      color: #1b1b1c; /* on_surface */
+      background-color: rgba(234, 231, 231, 0.5); /* surface-container-high pill shape hover */
+      border-radius: 8px;
+      margin: 8px 0;
+      height: 56px;
+      line-height: 56px;
+    }
+    
+    &.is-active:hover {
       background-color: transparent;
     }
   }
@@ -169,20 +191,20 @@ const handleCommand = async (command: string) => {
 .user-profile {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 8px;
+  padding: 6px 12px;
+  border-radius: 8px; /* DEFAULT rounding */
   transition: all 0.2s ease;
   
   &:hover {
-    background: #F3F4F6;
+    background: #eae7e7; /* surface_container_high */
   }
 }
 
 .user-avatar {
-  background: #1D1D1F;
-  color: #fff;
+  background: #0058bc; /* Primary */
+  color: #ffffff;
   font-weight: 600;
   font-size: 16px;
 }
@@ -190,15 +212,15 @@ const handleCommand = async (command: string) => {
 .user-name {
   font-size: 14px;
   font-weight: 500;
-  color: #1D1D1F;
+  color: #1b1b1c; /* on_surface */
 }
 
 .dropdown-icon {
   font-size: 12px;
-  color: #6B7280;
+  color: #727785; /* outline */
 }
 
 .logout-text {
-  color: #FF3B30;
+  color: #ba1a1a; /* error */
 }
 </style>

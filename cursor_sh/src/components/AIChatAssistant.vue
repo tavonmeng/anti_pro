@@ -50,20 +50,23 @@
 
       </div>
 
-      <!-- Input Area -->
-      <div class="input-area" v-if="selectedMode">
-        <el-input
+      <!-- Input Area — mirrors hero-input-area design exactly -->
+      <div class="input-area morph-ai-input" data-flip-id="ai-input-bar">
+        <input
+          type="text"
           v-model="inputMsg"
           placeholder="描述您的需求..."
+          class="chat-native-input"
           @keyup.enter="sendMessage"
           :disabled="isLoading"
+        />
+        <div
+          class="send-btn"
+          :class="{ disabled: isLoading || !inputMsg.trim() }"
+          @click="sendMessage"
         >
-          <template #append>
-            <el-button @click="sendMessage" :disabled="isLoading || !inputMsg.trim()">
-              <el-icon><Position /></el-icon>发送
-            </el-button>
-          </template>
-        </el-input>
+          发送 <span class="sparkle">✨</span>
+        </div>
       </div>
     </div>
   </div>
@@ -72,7 +75,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { Position, Close } from '@element-plus/icons-vue'
+import { Close } from '@element-plus/icons-vue'
 
 const emit = defineEmits(['close', 'mode-change'])
 const router = useRouter()
@@ -192,14 +195,12 @@ const handleCustomAiChat = async (userText: string) => {
 
 <style scoped>
 .ai-assistant-wrapper {
-  height: calc(100vh - 110px);
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+  height: 100%; /* Fill the workspace layout organically */
+  background: transparent; /* Rely on the parent container's light blue background */
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #eaeaea;
+  border: none;
   box-sizing: border-box;
 }
 
@@ -211,8 +212,7 @@ const handleCustomAiChat = async (userText: string) => {
 
 .chat-header {
   height: 60px;
-  background: #fafafa;
-  border-bottom: 1px solid #eaeaea;
+  background: transparent; /* No extra grey header anymore */
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -223,7 +223,7 @@ const handleCustomAiChat = async (userText: string) => {
 .ai-title {
   font-weight: 600;
   font-size: 16px;
-  color: #111;
+  color: #1b1b1c; /* on_surface */
 }
 
 .chat-content {
@@ -231,7 +231,7 @@ const handleCustomAiChat = async (userText: string) => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  background: #fdfdfd;
+  background: transparent; /* Expose the light blue! */
 }
 
 .messages-container {
@@ -254,8 +254,8 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 .option-card {
-  background: #fff;
-  border: 1px solid #eaeaea;
+  background: #ffffff; /* Crisp white cards on blue background */
+  border: none;
   border-radius: 12px;
   padding: 16px;
   font-size: 14px;
@@ -265,12 +265,12 @@ const handleCustomAiChat = async (userText: string) => {
   display: flex;
   align-items: center;
   gap: 12px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+  box-shadow: 0 4px 16px rgba(0, 88, 188, 0.04); /* Adjusted shadow for the blue theme */
 }
 
 .option-card:hover {
-  border-color: #000;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(0, 88, 188, 0.08); /* Elevate off the blue plane */
   transform: translateY(-2px);
 }
 
@@ -301,17 +301,18 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 .message.user .message-bubble {
-  background: #2b2b2b;
-  color: #fff;
+  background: linear-gradient(135deg, #0058bc, #0070eb); /* Primary gradient */
+  color: #ffffff;
   border-bottom-right-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 88, 188, 0.2);
 }
 
 .message.assistant .message-bubble {
-  background: #fff;
-  color: #333;
-  border: 1px solid #eaeaea;
+  background: #ffffff; /* Clean white bubble strongly popping out from the blue ambient background */
+  color: #1b1b1c; /* on_surface */
+  border: none;
   border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+  box-shadow: 0 2px 8px rgba(0, 88, 188, 0.03); /* Subtle depth */
 }
 
 .message-actions {
@@ -326,9 +327,70 @@ const handleCustomAiChat = async (userText: string) => {
 
 .input-area {
   padding: 16px;
-  background: #fff;
-  border-top: 1px solid #eaeaea;
+  background: transparent;
+  border-top: none;
   flex-shrink: 0;
+  margin-bottom: 8px;
+  /* Pill bar — exact clone of hero-input-area */
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border-radius: 9999px;
+  padding: 4px 4px 4px 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  max-width: 800px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 auto 12px auto;
+}
+
+.chat-native-input {
+  border: none;
+  background: transparent;
+  flex: 1;
+  font-size: 15px;
+  color: #1b1b1c;
+  outline: none;
+  font-family: inherit;
+  min-width: 0;
+}
+
+.chat-native-input::placeholder {
+  color: #a0a4ae;
+}
+
+.chat-native-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.send-btn {
+  background: #0058bc;
+  color: #fff;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.2s;
+}
+
+.send-btn:hover {
+  opacity: 0.9;
+}
+
+.send-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.sparkle {
+  font-size: 14px;
 }
 
 .form-area {

@@ -1,9 +1,6 @@
 <template>
   <div class="profile-page">
     <div class="page-header">
-      <el-button text type="primary" :icon="ArrowLeft" @click="goToWorkspace" class="back-button">
-        返回工作台
-      </el-button>
       <div class="header-text">
         <h1 class="page-title">个人设置</h1>
         <p class="page-subtitle">管理您的个人信息和账户设置</p>
@@ -84,13 +81,10 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { authApi, userApi } from '@/utils/api'
 
-const router = useRouter()
 const authStore = useAuthStore()
 const saving = ref(false)
 const changingPassword = ref(false)
@@ -186,10 +180,6 @@ const handleChangePassword = async () => {
     }
   })
 }
-
-const goToWorkspace = () => {
-  router.push('/user/workspace')
-}
 </script>
 
 <style lang="scss" scoped>
@@ -202,10 +192,6 @@ const goToWorkspace = () => {
   display: flex;
   align-items: center;
   gap: 16px;
-}
-
-.back-button {
-  margin-right: 8px;
 }
 
 .header-text {

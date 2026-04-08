@@ -1,78 +1,83 @@
 <template>
-  <el-popover
-    v-model:visible="visible"
-    placement="bottom-end"
-    :width="400"
-    trigger="click"
-    :teleported="true"
-    @show="handleShow"
-    @hide="handleHide"
-  >
-    <template #reference>
-      <div class="notification-bell">
-        <el-badge :value="unreadCount" :max="99">
-          <el-icon :size="24" class="bell-icon">
-            <Bell />
-          </el-icon>
-        </el-badge>
-      </div>
-    </template>
-
-    <div class="notification-panel">
-      <div class="notification-header">
-        <span class="title">消息通知</span>
-        <el-button 
-          v-if="hasUnread" 
-          link 
-          size="small" 
-          @click="handleMarkAllRead"
-        >
-          全部已读
-        </el-button>
-      </div>
-
-      <el-divider class="divider" />
-
-      <div class="notification-list" v-loading="loading">
-        <template v-if="notifications.length > 0">
-          <div
-            v-for="notification in notifications"
-            :key="notification.id"
-            class="notification-item"
-            :class="{ unread: !notification.isRead }"
-            @click="handleNotificationClick(notification)"
-          >
-            <div class="notification-content">
-              <div class="notification-title">
-                <span class="title-text">{{ notification.title }}</span>
-                <span v-if="!notification.isRead" class="unread-dot"></span>
-              </div>
-              <div class="notification-message">{{ notification.content }}</div>
-              <div class="notification-time">{{ formatTime(notification.createdAt) }}</div>
-            </div>
-            <div class="notification-actions">
-              <el-button
-                link
-                size="small"
-                @click.stop="handleDelete(notification.id)"
-              >
-                <el-icon><Delete /></el-icon>
-              </el-button>
-            </div>
-          </div>
-        </template>
-        <el-empty v-else description="暂无消息" :image-size="80" />
-      </div>
-
-      <el-divider class="divider" />
-
-      <div class="notification-footer">
-        <el-button link size="small" @click="handleViewAll">
-          查看全部
-        </el-button>
-      </div>
+  <div class="notification-wrapper">
+    <div @click="togglePopover" style="display: contents;">
+      <slot name="reference" :unreadCount="unreadCount">
+        <div class="notification-bell">
+          <el-badge :value="unreadCount" :max="99" :hidden="unreadCount === 0">
+            <el-icon :size="24" class="bell-icon">
+              <Bell />
+            </el-icon>
+          </el-badge>
+        </div>
+      </slot>
     </div>
-  </el-popover>
+
+    <!-- Centered Dialog -->
+    <el-dialog
+      v-model="visible"
+      title="消息通知"
+      width="480px"
+      append-to-body
+      @open="handleShow"
+      @close="handleHide"
+      class="notification-centered-dialog"
+    >
+      <div class="notification-panel" style="margin-top: -10px;">
+        <div class="notification-header" style="justify-content: flex-end; padding: 0 0 12px 0;">
+          <el-button 
+            v-if="hasUnread" 
+            link 
+            size="small" 
+            type="primary"
+            @click="handleMarkAllRead"
+          >
+            全部已读
+          </el-button>
+        </div>
+
+        <el-divider class="divider" />
+
+        <div class="notification-list" v-loading="loading">
+          <template v-if="notifications.length > 0">
+            <div
+              v-for="notification in notifications"
+              :key="notification.id"
+              class="notification-item"
+              :class="{ unread: !notification.isRead }"
+              @click="handleNotificationClick(notification)"
+            >
+              <div class="notification-content">
+                <div class="notification-title">
+                  <span class="title-text">{{ notification.title }}</span>
+                  <span v-if="!notification.isRead" class="unread-dot"></span>
+                </div>
+                <div class="notification-message">{{ notification.content }}</div>
+                <div class="notification-time">{{ formatTime(notification.createdAt) }}</div>
+              </div>
+              <div class="notification-actions">
+                <el-button
+                  link
+                  size="small"
+                  @click.stop="handleDelete(notification.id)"
+                >
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+          </template>
+          <el-empty v-else description="暂无消息" :image-size="80" />
+        </div>
+
+        <el-divider class="divider" />
+
+        <div class="notification-footer">
+          <el-button link size="small" @click="handleViewAll">
+            查看全部
+          </el-button>
+        </div>
+      </div>
+    </el-dialog>
+  </div>
 </template>
 
 <script setup lang="ts">

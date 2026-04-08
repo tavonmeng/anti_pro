@@ -1,376 +1,656 @@
 <template>
   <div class="workspace-page">
-    <div class="workspace-layout" :class="{ 'is-split': isAiExpanded }">
-      <div class="main-column" :class="{ 'is-squished': isAiExpanded }">
-        <div class="page-header">
-          <p class="page-subtitle">欢迎回来，{{ authStore.user?.username }}。选择您需要的服务类型开始创作</p>
-        </div>
+    
+    <!-- Top Search Header -->
+    <div class="top-search-header">
+      <el-icon class="search-icon"><Search /></el-icon>
+      <input type="text" placeholder="Search projects or assets..." class="search-input" />
+    </div>
+
+    <div class="workspace-layout" :class="{ 'is-split': uiStore.isAiExpanded }">
+      <div class="main-column" :class="{ 'is-squished': uiStore.isAiExpanded }">
         
-        <!-- Collapsed Trigger Box inside Main Column -->
-        <div class="ai-trigger-box" :class="{ 'hidden-trigger': isAiExpanded }" @click="handleAiExpand(true)">
-          <div class="input-mockup">
-            <el-icon class="search-icon"><Search /></el-icon>
-            <span class="placeholder-text">有什么我可以帮您的吗？试试点击展开 AI 助手...</span>
-            <el-button type="primary" circle size="small" class="go-btn"><el-icon><Position /></el-icon></el-button>
+        <!-- Fake Target Sidebar for Flight Destination -->
+        <div class="fake-flight-sidebar" v-if="isFlyingPhase" :class="{ 'is-visible': flySidebarVisible }">
+          <div class="secondary-header">
+            <h3>业务菜单</h3>
           </div>
+          <div class="fake-flight-sidebar-list">
+            <div class="flight-item" data-flip-id="flip-video_purchase" :class="{ 'active-flight': activeFlight === 'video_purchase' }">
+              裸眼3D成片购买
+            </div>
+            <div class="flight-item" data-flip-id="flip-ai_3d_custom" :class="{ 'active-flight': activeFlight === 'ai_3d_custom' }">
+              AI裸眼3D内容定制
+            </div>
+            <div class="flight-item" data-flip-id="flip-digital_art" :class="{ 'active-flight': activeFlight === 'digital_art' }">
+              数字艺术内容定制
+            </div>
+          </div>
+        </div>
+
+        <!-- Hero Banner (AI 智能体) -->
+        <div class="hero-banner" v-if="!uiStore.isAiExpanded && !hideServices && !hideBannerForAi" :class="{ 'is-fading-out': servicesFadingOut && activeFlight !== null }">
+          <h1 class="hero-title">AI智能体帮你理清思路</h1>
+          <div class="hero-input-area morph-ai-input" data-flip-id="ai-input-bar" @click="handleAiExpand(true)">
+            <input type="text" :placeholder="placeholderText" class="hero-input" readonly />
+            <div class="generate-btn">
+              发送 <span class="sparkle">✨</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Assistant Expanded View -->
+        <div class="full-ai-container" v-if="uiStore.isAiExpanded || showAiDuringFlight" :class="{ 'is-dropping-in': showAiDuringFlight }">
+          <div class="ai-header">
+            <h1 class="ai-hero-title">AI智能体帮你理清思路</h1>
+            <el-button text @click="handleAiExpand(false)" class="collapse-btn">收起</el-button>
+          </div>
+          <AIChatAssistant @close="handleAiExpand(false)" @mode-change="handleModeChange" />
         </div>
 
         <!-- 业务服务概览 -->
-        <div class="business-services-section">
+        <div class="business-services-section" v-if="!uiStore.isAiExpanded && !uiStore.isSecondarySidebarVisible && !hideServices">
           <div class="section-header">
-            <h2 class="section-title">业务服务</h2>
+            <div class="section-titles">
+              <h2 class="section-title">业务菜单</h2>
+              <p class="section-subtitle">高质量3D视频内容交付，让每一个户外屏都有优质的内容</p>
+            </div>
           </div>
           <!-- 服务入口卡片 -->
           <div class="service-cards">
-            <transition-group name="fade">
-              <el-card key="purchase" class="service-card" v-show="!aiSelectedMode || aiSelectedMode === 'purchase'" shadow="hover" @click="goToService('video_purchase')">
-                <div class="service-icon">📹</div>
-                <h3 class="service-title">裸眼3D成片购买适配</h3>
-              <p class="service-description">
-                专业的裸眼3D视频内容库，根据您的屏幕参数精准适配，快速交付高质量成片。
-                支持多种行业应用和视觉风格选择。
-              </p>
-              <div class="service-features">
-                <el-tag size="small">快速交付</el-tag>
-                <el-tag size="small" type="success">专业适配</el-tag>
-                <el-tag size="small" type="info">多种风格</el-tag>
+            <!-- Card 1 -->
+            <div class="service-card transition-purchase" v-show="!aiSelectedMode || aiSelectedMode === 'purchase'" @click="triggerChoreography('video_purchase')">
+                <div class="card-image-wrapper">
+                  <div class="card-img" style="background: linear-gradient(to bottom, #111, #333);">
+                    <!-- Placeholder Character -->
+                  </div>
+                  <div class="overlay-badge premium" style="background: #0070eb; color: #fff;">PREMIUM 3D</div>
+                </div>
+                <div class="card-body">
+                  <h3 class="service-title" data-flip-id="flip-video_purchase" :class="{ 'title-hidden': titlesHidden }">裸眼3D成片购买</h3>
+                  <p class="service-description">
+                    专业的裸眼3D视频内容库，根据您的屏幕参数精准适配，快速交付高质量成片。支持多种行业应用和视觉风格选择。
+                  </p>
+                  <div class="service-features">
+                    <span class="outline-tag">快速交付</span>
+                    <span class="outline-tag">专业适配</span>
+                    <span class="outline-tag">多种风格</span>
+                  </div>
+                  <div class="card-footer">
+                    <span class="price-text">From $2,499</span>
+                    <el-icon class="arrow-right"><Right /></el-icon>
+                  </div>
+                </div>
               </div>
-              <el-button type="primary" class="service-button">
-                开始选购
-                <el-icon><ArrowRight /></el-icon>
-              </el-button>
-            </el-card>
             
-              <el-card key="custom_ai" class="service-card" v-show="!aiSelectedMode || aiSelectedMode === 'custom_ai'" shadow="hover" @click="goToService('ai_3d_custom')">
-              <div class="service-icon">🎨</div>
-              <h3 class="service-title">AI裸眼3D内容定制</h3>
-              <p class="service-description">
-                基于AI技术的定制化3D内容创作，从创意构思到成品落地的全流程服务。
-                上传现场照片，描述您的想法，我们将AI技术转化为震撼的裸眼3D效果。
-              </p>
-              <div class="service-features">
-                <el-tag size="small">AI驱动</el-tag>
-                <el-tag size="small" type="success">5-7天交付</el-tag>
-                <el-tag size="small" type="warning">可修改</el-tag>
+              <!-- Card 2 -->
+              <div class="service-card transition-custom" v-show="!aiSelectedMode || aiSelectedMode === 'custom_ai'" @click="triggerChoreography('ai_3d_custom')">
+                <div class="card-image-wrapper">
+                  <div class="card-img" style="background: linear-gradient(to bottom, #001f3f, #004080);">
+                     <!-- Placeholder Typography -->
+                  </div>
+                  <div class="overlay-badge creative" style="background: #0070eb; color: #fff;">AI CREATIVE</div>
+                </div>
+                <div class="card-body">
+                  <h3 class="service-title" data-flip-id="flip-ai_3d_custom" :class="{ 'title-hidden': titlesHidden }">AI裸眼3D内容定制</h3>
+                  <p class="service-description">
+                    基于AI技术的定制化3D内容创作，从创意构思到成品落地的全流程服务。上传现场照片，描述您的想法，我们将AI技术转化为震撼的裸眼3D效果。
+                  </p>
+                  <div class="card-footer">
+                    <span class="price-text">Custom Quote</span>
+                    <el-icon class="arrow-right"><Right /></el-icon>
+                  </div>
+                </div>
               </div>
-              <el-button type="primary" class="service-button">
-                定制内容
-                <el-icon><ArrowRight /></el-icon>
-              </el-button>
-            </el-card>
             
-              <el-card key="digital_art" class="service-card" v-show="!aiSelectedMode || aiSelectedMode === 'digital_art'" shadow="hover" @click="goToService('digital_art')">
-              <div class="service-icon">🖼️</div>
-              <h3 class="service-title">数字艺术内容定制</h3>
-              <p class="service-description">
-                专业数字艺术创作服务，涵盖抽象、写实、装置、动态艺术等多种风格。
-                由资深艺术家团队倾力打造，3天内提供初稿预览。
-              </p>
-              <div class="service-features">
-                <el-tag size="small">专业艺术家</el-tag>
-                <el-tag size="small" type="success">3天初稿</el-tag>
-                <el-tag size="small" type="info">多种风格</el-tag>
-              </div>
-              <el-button type="primary" class="service-button">
-                艺术定制
-                <el-icon><ArrowRight /></el-icon>
-              </el-button>
-            </el-card>
-            </transition-group>
-          </div>
-        </div>
-
-        <!-- 我的订单概览 -->
-        <div class="my-orders-section">
-          <div class="section-header">
-            <h2 class="section-title">我的订单</h2>
-            <el-button text type="primary" @click="goToOrders">
-              查看全部
-              <el-icon><ArrowRight /></el-icon>
-            </el-button>
-          </div>
-          
-          <!-- 统计卡片 -->
-          <div class="stats-cards">
-            <el-card class="stat-card">
-              <div class="stat-content">
-                <div class="stat-icon" style="background: #E3F2FD;">
-                  <el-icon :size="24" color="#2196F3"><Document /></el-icon>
+              <!-- Card 3 -->
+              <div class="service-card transition-art" v-show="!aiSelectedMode || aiSelectedMode === 'digital_art'" @click="triggerChoreography('digital_art')">
+                <div class="card-image-wrapper">
+                  <div class="card-img" style="background: linear-gradient(to bottom, #4a0000, #ff1a1a);">
+                     <!-- Placeholder Abstract -->
+                  </div>
+                  <div class="overlay-badge art" style="background: #0070eb; color: #fff;">DIGITAL ART</div>
                 </div>
-                <div class="stat-info">
-                  <div class="stat-value">{{ orderStore.orderStats.total }}</div>
-                  <div class="stat-label">总订单数</div>
+                <div class="card-body">
+                  <h3 class="service-title" data-flip-id="flip-digital_art" :class="{ 'title-hidden': titlesHidden }">数字艺术内容定制</h3>
+                  <p class="service-description">
+                    专业数字艺术创作服务，涵盖抽象、写实、装置、动态艺术等多种风格。由资深艺术家团队倾力打造，3天内提供初稿预览。
+                  </p>
+                  <div class="card-footer">
+                    <span class="price-text">From $1,200</span>
+                    <el-icon class="arrow-right"><Right /></el-icon>
+                  </div>
                 </div>
               </div>
-            </el-card>
-            
-            <el-card class="stat-card">
-              <div class="stat-content">
-                <div class="stat-icon" style="background: #FFF3E0;">
-                  <el-icon :size="24" color="#FF9800"><Clock /></el-icon>
-                </div>
-                <div class="stat-info">
-                  <div class="stat-value">{{ orderStore.orderStats.inProduction }}</div>
-                  <div class="stat-label">制作中</div>
-                </div>
-              </div>
-            </el-card>
-            
-            <el-card class="stat-card">
-              <div class="stat-content">
-                <div class="stat-icon" style="background: #F3E5F5;">
-                  <el-icon :size="24" color="#9C27B0"><View /></el-icon>
-                </div>
-                <div class="stat-info">
-                  <div class="stat-value">{{ orderStore.orderStats.preview }}</div>
-                  <div class="stat-label">待预览</div>
-                </div>
-              </div>
-            </el-card>
-            
-            <el-card class="stat-card">
-              <div class="stat-content">
-                <div class="stat-icon" style="background: #E8F5E9;">
-                  <el-icon :size="24" color="#4CAF50"><CircleCheck /></el-icon>
-                </div>
-                <div class="stat-info">
-                  <div class="stat-value">{{ orderStore.orderStats.completed }}</div>
-                  <div class="stat-label">已完成</div>
-                </div>
-              </div>
-            </el-card>
           </div>
         </div>
     
       </div> <!-- end main-column -->
-      
-      <!-- AI Assistant Sidebar -->
-      <div class="ai-sidebar-container" :class="{ 'is-open': isAiExpanded }">
-        <AIChatAssistant key="ai-chat" class="ai-component" @close="handleAiExpand(false)" @mode-change="handleModeChange" v-if="isAiExpanded" />
-      </div>
-      
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { Document, Clock, CircleCheck, ArrowRight, View, Search, Position } from '@element-plus/icons-vue'
+import { Search, Right } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
-import { useAuthStore } from '@/stores/auth'
+import { useUiStore } from '@/stores/ui'
 import type { OrderType } from '@/types'
 import AIChatAssistant from '@/components/AIChatAssistant.vue'
+import gsap from 'gsap'
+import { Flip } from 'gsap/all'
+
+gsap.registerPlugin(Flip)
 
 const router = useRouter()
 const orderStore = useOrderStore()
-const authStore = useAuthStore()
+const uiStore = useUiStore()
 
-const isAiExpanded = ref(false)
 const aiSelectedMode = ref<string | null>(null)
+const isFlyingPhase = ref(false)
+const flySidebarVisible = ref(false)
+const titlesHidden = ref(false)
+const servicesFadingOut = ref(false)
+const hideServices = ref(false)
+const hideBannerForAi = ref(false)
+const activeFlight = ref<OrderType | string | null>(null)
+const showAiDuringFlight = ref(false)
+
+const promptTexts = [
+  "我想做一个关于蒙牛品牌推广的3D视频，主题是...",
+  "帮我设计一段赛博朋克风格的裸眼3D球鞋广告，要有超强的出屏效果...",
+  "我需要一个高端科技论坛的开场3D倒计时动画，充满未来科技感...",
+  "帮我生成一段大牌护肤品的新品发布3D视频，要求水珠材质特别逼真...",
+  "给我们的新款新能源汽车做个3D动态视频，让车穿梭在未来都市..."
+]
+
+const placeholderText = ref("|")
+let timer: ReturnType<typeof setTimeout> | null = null
+let blinkTimer: ReturnType<typeof setInterval> | null = null
+let currentPromptIndex = 0
 
 onMounted(() => {
   orderStore.fetchOrders()
+
+  const typingSpeed = 120
+  const deletingSpeed = 60
+  const pauseDuration = 10000 // 10 seconds
+
+  currentPromptIndex = Math.floor(Math.random() * promptTexts.length)
+
+  const startBlinking = (baseText: string) => {
+    if (blinkTimer) clearInterval(blinkTimer)
+    blinkTimer = setInterval(() => {
+      placeholderText.value = placeholderText.value.endsWith('|') 
+        ? baseText 
+        : baseText + '|'
+    }, 500)
+  }
+
+  const stopBlinking = () => {
+    if (blinkTimer) {
+      clearInterval(blinkTimer)
+      blinkTimer = null
+    }
+  }
+
+  const typeWriter = (text: string, index: number, isDeleting: boolean) => {
+    stopBlinking()
+    
+    if (!isDeleting && index <= text.length) {
+      placeholderText.value = text.substring(0, index) + '|'
+      timer = setTimeout(() => typeWriter(text, index + 1, false), typingSpeed)
+    } else if (isDeleting && index >= 0) {
+      placeholderText.value = text.substring(0, index) + '|'
+      timer = setTimeout(() => typeWriter(text, index - 1, true), deletingSpeed)
+    } else if (!isDeleting && index > text.length) {
+      placeholderText.value = text + '|'
+      startBlinking(text)
+      timer = setTimeout(() => typeWriter(text, text.length, true), pauseDuration)
+    } else if (isDeleting && index < 0) {
+      timer = setTimeout(() => {
+        let nextIndex = Math.floor(Math.random() * promptTexts.length)
+        if (nextIndex === currentPromptIndex && promptTexts.length > 1) {
+          nextIndex = (nextIndex + 1) % promptTexts.length
+        }
+        currentPromptIndex = nextIndex
+        typeWriter(promptTexts[currentPromptIndex], 0, false)
+      }, 500)
+    }
+  }
+  
+  timer = setTimeout(() => typeWriter(promptTexts[currentPromptIndex], 0, false), 500)
+})
+
+onUnmounted(() => {
+  if (timer) clearTimeout(timer)
+  if (blinkTimer) clearInterval(blinkTimer)
 })
 
 const handleAiExpand = (expanded: boolean) => {
-  isAiExpanded.value = expanded
   if (!expanded) {
+    uiStore.setIsAiExpanded(false)
     aiSelectedMode.value = null
+    uiStore.setSecondarySidebar(false)
+    uiStore.toggleSidebar(false)
+    hideServices.value = false // Restore services view
+    hideBannerForAi.value = false 
+    showAiDuringFlight.value = false
+    servicesFadingOut.value = false
+    titlesHidden.value = false
+    return
   }
+  // If expanding, intercept and run the same choreography!
+  triggerChoreography(null)
 }
 
 const handleModeChange = (mode: string) => {
   aiSelectedMode.value = mode
+  uiStore.setActiveModule(mode)
 }
 
-const goToService = (type: OrderType | string) => {
-  if (type === 'video_purchase') {
-    router.push('/user/video-marketplace')
-  } else {
-    router.push(`/user/create-order/${type}`)
-  }
+const triggerChoreography = (targetType: OrderType | string | null) => {
+  if (isFlyingPhase.value || hideServices.value) return 
+  
+  isFlyingPhase.value = true
+  activeFlight.value = targetType
+  
+  // ═══════════════════════════════════════════════════════════════
+  // PHASE 1: Mount REAL sidebar → workspace compresses naturally
+  // No fake padding needed! The real sidebar IS the compression.
+  // ═══════════════════════════════════════════════════════════════
+  
+  // 1. Capture title positions BEFORE any layout shift
+  const state = Flip.getState('.service-title', { props: 'backgroundColor,color,borderRadius,padding,boxShadow' })
+  
+  // Input bar FLIP is no longer used; native flexbox handles the dropdown
+  
+  // 2. Clear native titles so flight items take over
+  titlesHidden.value = true
+  
+  // 3. Mount fake sidebar (positioned absolutely, for title flight destinations only)
+  flySidebarVisible.value = true
+  
+  // 4. Squish primary sidebar to mini
+  uiStore.toggleSidebar(true)
+  
+  // 5. Mount the REAL secondary sidebar NOW! Its CSS width-transition compresses the workspace.
+  uiStore.setSecondarySidebar(true)
+  
+  // ═══════════════════════════════════════════════════════════════
+  // PHASE 2: After compression is visually underway (400ms),
+  // fire title flight + AI dropdown SIMULTANEOUSLY
+  // ═══════════════════════════════════════════════════════════════
+  
+  nextTick(() => {
+    gsap.delayedCall(0.4, () => {
+      // --- Title Flight ---
+      Flip.from(state, {
+        targets: '.flight-item',
+        duration: 0.7,
+        ease: 'power4.inOut',
+        absolute: true, 
+        stagger: 0.08,
+        onComplete: () => {
+          // ZERO layout changes here! Real sidebar is already mounted.
+          // Just clean up visual flight artifacts.
+          hideServices.value = true
+          flySidebarVisible.value = false
+          isFlyingPhase.value = false
+          
+          if (targetType) {
+            if (targetType === 'video_purchase') {
+              router.push('/user/video-marketplace')
+            } else {
+              router.push(`/user/create-order/${targetType}`)
+            }
+          } else {
+            // AI states — sidebar already mounted, just finalize AI
+            uiStore.setIsAiExpanded(true)
+            showAiDuringFlight.value = false
+            // Clear lingering clip-path
+            const aiEl = document.querySelector('.full-ai-container')
+            if (aiEl) (aiEl as HTMLElement).style.clipPath = ''
+          }
+        }
+      })
+      
+      // --- Simultaneous: Card dissolve ---
+      servicesFadingOut.value = true
+      gsap.to('.section-titles', { y: 20, opacity: 0, duration: 0.5, ease: 'power2.inOut' })
+      
+      if (targetType) {
+        gsap.to('.hero-banner', { y: -20, opacity: 0, height: 0, margin: 0, padding: 0, duration: 0.5, ease: 'power2.inOut' })
+        gsap.to(`.service-card.transition-${targetType.split('_').pop()}`, {
+          scale: 1.02, boxShadow: '0 10px 30px rgba(0,0,0,0.1)', duration: 0.2, yoyo: true, repeat: 1
+        })
+      }
+      
+      gsap.to('.service-card', {
+        y: 40, opacity: 0, scale: 0.96,
+        duration: 0.6, stagger: 0.05,
+        ease: 'back.in(1.2)', delay: 0.1
+      })
+      
+      gsap.to('.fake-flight-sidebar .secondary-header', { opacity: 1, duration: 0.5, delay: 0.2 })
+      
+      // --- Simultaneous: AI curtain dropdown (only for AI trigger) ---
+      if (!targetType) {
+        const bannerEl = document.querySelector('.hero-banner')
+        const bannerHeight = bannerEl ? bannerEl.getBoundingClientRect().height : 100
+        
+        hideBannerForAi.value = true
+        showAiDuringFlight.value = true
+        
+        nextTick(() => {
+          // Native height extension: The bottom border and the input box (which rests on the bottom) 
+          // physically slide down perfectly. No FLIP morph needed, let Flexbox handle it!
+          gsap.fromTo('.full-ai-container.is-dropping-in', 
+            { height: bannerHeight + 'px' },
+            { 
+              height: '100%',
+              duration: 0.65, 
+              ease: 'power3.inOut',
+              clearProps: 'height' // Once it hits 100%, let natural flex flex: 1 take over!
+            }
+          )
+          
+          // Smoothly fade in the chat messages behind the stretching container 
+          // so they don't look squished in the ~100px space initially
+          gsap.fromTo('.welcome-section', 
+            { opacity: 0, y: -10 }, 
+            { opacity: 1, y: 0, duration: 0.4, delay: 0.2, ease: 'power2.out' }
+          )
+        })
+      }
+    })
+  })
 }
 
-const goToOrders = () => {
-  router.push('/user/orders')
-}
 </script>
 
 <style lang="scss" scoped>
 .workspace-page {
-  padding: 24px;
+  padding: 0 24px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.top-search-header {
+  height: 64px; /* Increased for better visibility */
+  display: flex;
+  align-items: center;
+  padding: 0 8px; /* Added some subtle padding */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #fcf9f8;
+}
+
+.search-icon {
+  margin-right: 12px;
+  font-size: 18px;
+  color: #a0a4ae;
+}
+
+.search-input {
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-size: 16px;
+  color: #1b1b1c;
+  outline: none;
+  font-family: inherit;
+}
+
+.search-input::placeholder {
+  color: #a0a4ae;
 }
 
 .workspace-layout {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  gap: 0; /* Animated with margins instead for smoother transition */
-  transition: all 0.5s cubic-bezier(0.25, 1, 0.3, 1);
+  gap: 0; 
+  /* No default transition on wrapper: guarantees instantly snap layout when Vue mounts real sidebars! */
   width: 100%;
+  flex: 1; /* Take up all remaining height past the search bar */
+  min-height: 0; /* Crucial: allows internal flex elements to scroll rather than bursting bounds */
 }
+
 
 .main-column {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  transition: all 0.5s cubic-bezier(0.25, 1, 0.3, 1);
+  height: 100%; /* Ensure column fully stretches down */
+  position: relative; /* Anchor for absolute dropping items */
 }
 
 .main-column.is-squished {
   /* Dynamically squeezing content */
-  padding-right: 24px;
+  padding-right: 0;
 }
 
-.ai-sidebar-container {
-  width: 0;
-  opacity: 0;
-  overflow: hidden;
-  transition: width 0.5s cubic-bezier(0.25, 1, 0.3, 1), opacity 0.5s cubic-bezier(0.25, 1, 0.3, 1);
-}
+/* is-pushed-by-flight removed: real sidebar handles compression now */
 
-.ai-sidebar-container.is-open {
-  width: 480px;
-  opacity: 1;
-}
-
-.ai-component {
-  width: 480px;
-  position: sticky;
-  top: 24px;
-}
-
-/* Trigger Box (Replicates original collapsed state) */
-.ai-trigger-box {
-  background: #fff;
-  border-radius: 28px;
-  height: 56px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  cursor: pointer;
+.full-ai-container {
+  flex: 1; /* Smoothly occupies all available height, preventing overflow */
+  min-height: 0; 
   display: flex;
-  align-items: center;
-  padding: 0 24px;
-  border: 1px solid #eaeaea;
-  transition: all 0.3s cubic-bezier(0.25, 1, 0.3, 1);
-  margin-bottom: 48px;
-  max-width: 800px;
-  margin-left: auto;
-  margin-right: auto;
-  width: 100%;
-}
-
-.ai-trigger-box:hover {
-  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-  border-color: #ddd;
-  transform: translateY(-2px);
-}
-
-.hidden-trigger {
-  opacity: 0;
-  height: 0;
-  margin-bottom: 0;
-  padding: 0;
-  border: none;
+  flex-direction: column;
+  background: #f0f5fc; /* Perfectly aligned with the hero banner theme */
+  border-radius: 16px;
   overflow: hidden;
-  pointer-events: none;
 }
 
-.input-mockup {
+.full-ai-container.is-dropping-in {
+  /* Suspended above the dying layout to stretch downwards magically */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0; 
+  height: 100%; 
+  z-index: 10;
+}
+
+.ai-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  width: 100%;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(0, 88, 188, 0.08); /* Matches the light blue ambient */
 }
 
-.search-icon {
-  font-size: 20px;
-  color: #777;
-  margin-right: 12px;
-}
-
-.placeholder-text {
-  flex: 1;
-  color: #888;
-  font-size: 15px;
-}
-
-.go-btn {
-  margin-left: 12px;
-}
-
-.page-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.page-title {
-  font-size: 32px;
-  font-weight: 700;
-  color: #1D1D1F;
-  margin: 0 0 12px 0;
-}
-
-.page-subtitle {
-  font-size: 16px;
-  color: #86868B;
+.ai-header .ai-hero-title {
   margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  color: #1b1b1c;
+  letter-spacing: -0.01em;
+}
+
+.ai-header .collapse-btn {
+  font-weight: 600;
+}
+
+/* Hero Banner */
+.hero-banner {
+  background: #f0f5fc;
+  border-radius: 16px;
+  padding: 16px 24px; /* Ultra compressed padding */
+  margin-bottom: 16px; /* Ultra compressed margin */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  transition: all 0.6s cubic-bezier(0.25, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.hero-banner.is-fading-out {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+.hero-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #1b1b1c;
+  margin: 0 0 12px 0; /* Ultra compressed */
+  letter-spacing: -0.01em;
+}
+
+.hero-input-area {
+  background: #ffffff;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  padding: 4px 4px 4px 16px;
+  width: 100%;
+  max-width: 800px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hero-input-area:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.hero-input {
+  border: none;
+  background: transparent;
+  flex: 1;
+  font-size: 15px;
+  color: #1b1b1c;
+  outline: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.hero-input::placeholder {
+  color: #a0a4ae;
+}
+
+.generate-btn {
+  background: #0058bc;
+  color: #fff;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .service-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 24px;
-  margin-bottom: 48px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
 .service-card {
   border-radius: 16px;
-  padding: 32px;
   cursor: pointer;
   transition: all 0.3s ease;
-  border: 2px solid transparent;
+  border: 1px solid #eae7e7; /* Subtle card border */
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(27, 27, 28, 0.02);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
   
   &:hover {
     transform: translateY(-4px);
-    border-color: #667eea;
-    box-shadow: 0 12px 24px rgba(102, 126, 234, 0.15);
-  }
-  
-  :deep(.el-card__body) {
-    padding: 0;
+    box-shadow: 0 16px 32px rgba(27, 27, 28, 0.08); /* Lift effect */
   }
 }
 
-.service-icon {
-  font-size: 48px;
-  margin-bottom: 20px;
+.card-image-wrapper {
+  height: 120px; /* Extreme compression from 140px */
+  width: 100%;
+  position: relative;
+}
+
+.card-img {
+  width: 100%;
+  height: 100%;
+}
+
+.overlay-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fff;
+  background: #0070eb;
+}
+
+.card-body {
+  padding: 12px 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .service-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #1D1D1F;
-  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1b1b1c; /* on_surface */
+  margin: 0 0 6px 0;
 }
 
 .service-description {
-  font-size: 14px;
-  color: #86868B;
-  line-height: 1.6;
-  margin: 0 0 16px 0;
-  min-height: 64px;
+  font-size: 12px;
+  color: #646a78; /* lighter for 12px readability */
+  line-height: 1.4;
+  margin: 0 0 12px 0;
+  flex: 1;
 }
 
 .service-features {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 20px;
+  gap: 6px;
+  margin-bottom: 12px;
 }
 
-.service-button {
-  width: 100%;
+.outline-tag {
+  border: 1px solid #c1c6d6;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  color: #414754;
+}
+
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+}
+
+.price-text {
+  font-weight: 700;
+  font-size: 13px;
+  color: #0058bc;
+}
+
+.arrow-right {
+  color: #414754;
+  font-size: 18px;
 }
 
 .fade-enter-active,
@@ -390,64 +670,90 @@ const goToOrders = () => {
 .section-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
+  align-items: flex-end;
+  margin-bottom: 12px; /* Extreme compression */
+}
+
+.section-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .section-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #1D1D1F;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1b1b1c; /* on_surface */
   margin: 0;
+  letter-spacing: -0.01em;
 }
 
-.stats-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
+.section-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: #646a78;
+  transition: opacity 0.4s ease;
 }
 
-.stat-card {
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  
-  :deep(.el-card__body) {
-    padding: 20px;
-  }
+.service-title.title-hidden {
+  opacity: 0 !important; /* Hides original title when FLIP pseudo-title takes over */
 }
 
-.stat-content {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
+/* === THE NEW DECOUPLED FLIGHT CHOREOGRAPHY === */
 
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.fake-flight-sidebar {
+  position: fixed;
+  top: 0;
+  left: 80px; /* Aligns exactly with compressed SystemLeftSidebar */
+  width: 240px;
+  height: 100vh;
+  background: #ffffff;
+  border-right: 1px solid #eae7e7;
+  padding: 24px 0;
+  margin: 0;
+  z-index: 1000;
+  box-sizing: border-box;
+  opacity: 0;
+  pointer-events: none;
 }
-
-.stat-info {
-  flex: 1;
+.fake-flight-sidebar.is-visible {
+  opacity: 1; /* Shows the white backdrop cleanly */
 }
-
-.stat-value {
-  font-size: 24px;
-  font-weight: 600;
-  color: #1D1D1F;
-  margin-bottom: 4px;
+.fake-flight-sidebar .secondary-header {
+  padding: 0 24px;
+  margin-bottom: 16px;
+  opacity: 0; /* JS handles fade in */
 }
-
-.stat-label {
+.fake-flight-sidebar .secondary-header h3 {
   font-size: 14px;
-  color: #86868B;
+  font-weight: 700;
+  margin: 0;
+  color: #1b1b1c;
 }
+.fake-flight-sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 16px;
+}
+.flight-item {
+  width: 100%;
+  height: 42px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  background: #f6f3f2;
+  color: #414754;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+}
+.flight-item.active-flight {
+  background: #ffffff;
+  color: #1b1b1c;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
 </style>
-
-
-
-
