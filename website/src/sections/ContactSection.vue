@@ -26,11 +26,6 @@
             mlm3344521@163.com
           </a>
         </div>
-        <div class="contact-card login-card" style="cursor: pointer;" @click="openAuthModal('login')">
-          <a class="email-link" @click.prevent>
-            注册 / 登录
-          </a>
-        </div>
         <div class="contact-card ai-card">
           <a :href="dashboardUrl + '/user/workspace'" class="email-link">
             找AI向导
@@ -45,7 +40,6 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import gsap from 'gsap'
 import ScrollTrigger from 'gsap/ScrollTrigger'
-import { openAuthModal } from '../stores/ui'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -187,22 +181,6 @@ onUnmounted(() => {
   border-radius: 60px; /* 大号圆角，保持胶囊形状 */
   transition: transform 0.3s ease, background 0.3s ease;
   z-index: 10;
-}
-
-.login-card {
-  background: #2b2b2b; /* Slightly different dark or brand color, but let's stick to black theme */
-}
-
-.ai-card {
-  background: #111; 
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-/* Custom styling for login text if needed, otherwise it's white */
-.login-card .email-link {
-  font-family: 'Outfit', sans-serif;
-  font-weight: 600;
-  letter-spacing: 0;
 }
 
 .contact-card:hover {
