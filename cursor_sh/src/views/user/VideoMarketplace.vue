@@ -1,9 +1,7 @@
 <template>
   <div class="marketplace-page">
     <div class="page-header">
-      <el-button text type="primary" :icon="ArrowLeft" @click="goToWorkspace" class="back-button">
-        返回工作台
-      </el-button>
+
       <h1 class="page-title">裸眼3D成片库</h1>
       <p class="page-subtitle">探索数百项优质纯原创 AGI 与 CG 结合制作的震撼案例，挑选符合您心意的裸眼 3D 成片进行二次适配。</p>
     </div>
@@ -78,7 +76,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowLeft, VideoPlay, ArrowRight } from '@element-plus/icons-vue'
+import { VideoPlay, ArrowRight } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const isModalVisible = ref(false)
@@ -120,9 +118,7 @@ const videoList = ref([
   }
 ])
 
-const goToWorkspace = () => {
-  router.push('/user/workspace')
-}
+
 
 const openModal = (video: any) => {
   activeVideo.value = video

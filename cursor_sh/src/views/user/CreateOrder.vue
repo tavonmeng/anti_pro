@@ -1,7 +1,7 @@
 <template>
   <div class="create-order-page">
     <div class="page-header">
-      <el-button :icon="ArrowLeft" @click="goBack">返回工作台</el-button>
+
       <h1 class="page-title">{{ pageTitle }}</h1>
       <p class="page-subtitle">{{ pageSubtitle }}</p>
     </div>
@@ -9,19 +9,19 @@
     <el-card class="form-card" v-loading="loading">
       <VideoPurchaseForm
         v-if="orderType === 'video_purchase'"
-        :order="isEditMode ? order : undefined"
+        :order="isEditMode ? (order || undefined) : undefined"
         @submit="handleSubmit"
         @cancel="goBack"
       />
       <AI3DCustomForm
         v-else-if="orderType === 'ai_3d_custom'"
-        :order="isEditMode ? order : undefined"
+        :order="isEditMode ? (order || undefined) : undefined"
         @submit="handleSubmit"
         @cancel="goBack"
       />
       <DigitalArtForm
         v-else-if="orderType === 'digital_art'"
-        :order="isEditMode ? order : undefined"
+        :order="isEditMode ? (order || undefined) : undefined"
         @submit="handleSubmit"
         @cancel="goBack"
       />
@@ -32,7 +32,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useOrderStore } from '@/stores/order'
 import VideoPurchaseForm from '@/components/VideoPurchaseForm.vue'

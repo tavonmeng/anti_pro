@@ -195,13 +195,16 @@ const handleCustomAiChat = async (userText: string) => {
 
 <style scoped>
 .ai-assistant-wrapper {
-  height: 100%; /* Fill the workspace layout organically */
-  background: transparent; /* Rely on the parent container's light blue background */
+  height: 100%; 
+  background: transparent; 
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: none;
   box-sizing: border-box;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-feature-settings: "kern" 1;
+  color: #000000;
 }
 
 .expanded-view {
@@ -211,19 +214,21 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 .chat-header {
-  height: 60px;
-  background: transparent; /* No extra grey header anymore */
+  height: 52px;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
   flex-shrink: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08); /* Black scale */
 }
 
 .ai-title {
-  font-weight: 600;
-  font-size: 16px;
-  color: #1b1b1c; /* on_surface */
+  font-weight: 500;
+  font-size: 14px;
+  color: #000000;
+  letter-spacing: -0.1px;
 }
 
 .chat-content {
@@ -231,20 +236,20 @@ const handleCustomAiChat = async (userText: string) => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  background: transparent; /* Expose the light blue! */
+  background: transparent;
 }
 
 .messages-container {
-  padding: 20px;
+  padding: 24px; /* More breathing room */
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
 }
 
 .welcome-section {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .options-container {
@@ -254,24 +259,27 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 .option-card {
-  background: #ffffff; /* Crisp white cards on blue background */
-  border: none;
-  border-radius: 12px;
-  padding: 16px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px; /* Figma dialog base */
+  padding: 14px 16px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 400;
+  color: #000000;
+  letter-spacing: -0.14px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.3, 1);
   display: flex;
   align-items: center;
-  gap: 12px;
-  box-shadow: 0 4px 16px rgba(0, 88, 188, 0.04); /* Adjusted shadow for the blue theme */
+  gap: 10px;
+  box-shadow: none; /* Flat by default */
 }
 
 .option-card:hover {
-  background: #ffffff;
-  box-shadow: 0 8px 24px rgba(0, 88, 188, 0.08); /* Elevate off the blue plane */
-  transform: translateY(-2px);
+  background: #fafafa;
+  border-color: rgba(0, 0, 0, 0.16);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  transform: translateY(-1px);
 }
 
 .emoji {
@@ -281,7 +289,7 @@ const handleCustomAiChat = async (userText: string) => {
 .message {
   display: flex;
   flex-direction: column;
-  max-width: 90%;
+  max-width: 85%;
 }
 
 .message.user {
@@ -293,26 +301,29 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 .message-bubble {
-  padding: 14px 18px;
-  border-radius: 14px;
+  padding: 12px 16px;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.45;
+  letter-spacing: -0.14px;
   white-space: pre-wrap;
 }
 
+/* User Message: Black Solid */
 .message.user .message-bubble {
-  background: linear-gradient(135deg, #0058bc, #0070eb); /* Primary gradient */
+  background: #000000; 
   color: #ffffff;
-  border-bottom-right-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 88, 188, 0.2);
+  border-radius: 12px;
+  border-bottom-right-radius: 4px; /* Slight anchoring */
+  box-shadow: none;
 }
 
+/* Assistant Message: Glass Dark */
 .message.assistant .message-bubble {
-  background: #ffffff; /* Clean white bubble strongly popping out from the blue ambient background */
-  color: #1b1b1c; /* on_surface */
-  border: none;
+  background: rgba(0, 0, 0, 0.04);
+  color: #000000;
+  border-radius: 12px;
   border-bottom-left-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 88, 188, 0.03); /* Subtle depth */
+  box-shadow: none;
 }
 
 .message-actions {
@@ -320,28 +331,45 @@ const handleCustomAiChat = async (userText: string) => {
   padding-left: 12px;
 }
 
+.message-actions :deep(.el-button--primary) {
+  background: #000;
+  border-color: #000;
+  color: #fff;
+  border-radius: 50px;
+}
+
+.message-actions :deep(.el-button--primary:hover) {
+  background: rgba(0,0,0,0.8);
+  border-color: rgba(0,0,0,0.8);
+}
+
 .typing {
-  color: #999;
+  color: rgba(0, 0, 0, 0.5);
   font-style: italic;
 }
 
 .input-area {
-  padding: 16px;
+  padding: 0;
   background: transparent;
-  border-top: none;
   flex-shrink: 0;
-  margin-bottom: 8px;
-  /* Pill bar — exact clone of hero-input-area */
   display: flex;
   align-items: center;
   background: #ffffff;
-  border-radius: 9999px;
+  border-radius: 50px; /* Pill */
   padding: 4px 4px 4px 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
+  border: 1px solid rgba(0, 0, 0, 0.16);
   max-width: 800px;
-  width: 100%;
+  width: calc(100% - 48px);
   box-sizing: border-box;
-  margin: 0 auto 12px auto;
+  margin: 0 auto 24px auto; /* Spacing below */
+  transition: all 0.2s;
+}
+
+.input-area:focus-within {
+  outline: dashed 2px #000;
+  outline-offset: 2px;
+  border-color: transparent;
 }
 
 .chat-native-input {
@@ -349,14 +377,15 @@ const handleCustomAiChat = async (userText: string) => {
   background: transparent;
   flex: 1;
   font-size: 15px;
-  color: #1b1b1c;
+  letter-spacing: -0.14px;
+  color: #000000;
   outline: none;
   font-family: inherit;
   min-width: 0;
 }
 
 .chat-native-input::placeholder {
-  color: #a0a4ae;
+  color: rgba(0, 0, 0, 0.4);
 }
 
 .chat-native-input:disabled {
@@ -365,12 +394,13 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 .send-btn {
-  background: #0058bc;
-  color: #fff;
-  font-weight: 600;
-  padding: 8px 16px;
-  border-radius: 9999px;
-  font-size: 13px;
+  background: #000000; /* Black Pill Button */
+  color: #ffffff;
+  font-weight: 500;
+  padding: 8px 20px;
+  border-radius: 50px; /* Pill */
+  font-size: 14px;
+  letter-spacing: -0.1px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -380,11 +410,16 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 .send-btn:hover {
-  opacity: 0.9;
+  opacity: 0.85;
+}
+
+.send-btn:focus-visible {
+  outline: dashed 2px #000;
+  outline-offset: 2px;
 }
 
 .send-btn.disabled {
-  opacity: 0.4;
+  opacity: 0.3;
   cursor: not-allowed;
   pointer-events: none;
 }
@@ -394,9 +429,9 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 .form-area {
-  padding: 20px;
+  padding: 24px;
   background: #fff;
-  border-top: 1px solid #eee;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   max-height: 50%;
@@ -411,7 +446,8 @@ const handleCustomAiChat = async (userText: string) => {
 .form-title {
   margin-top: 0;
   margin-bottom: 16px;
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .full-btn {

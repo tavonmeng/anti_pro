@@ -16,3 +16,7 @@ INFO:     127.0.0.1:60791 - "GET /start?session_id=0zpjg HTTP/1.1" 200 OK
 INFO:     127.0.0.1:50794 - "GET /start?session_id=m6znsd HTTP/1.1" 200 OK
 INFO:     127.0.0.1:55408 - "GET /start?session_id=xuraty HTTP/1.1" 200 OK
 INFO:     127.0.0.1:55580 - "GET /start?session_id=kyfcy9 HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [60710]

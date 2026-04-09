@@ -58,6 +58,10 @@
           <el-icon><Help /></el-icon>
           <span v-if="!uiStore.isSidebarCollapsed">Help</span>
         </div>
+        <div class="nav-item logout-nav" @click="handleLogout">
+          <el-icon><SwitchButton /></el-icon>
+          <span v-if="!uiStore.isSidebarCollapsed">Logout</span>
+        </div>
       </div>
     </div>
   </div>
@@ -66,7 +70,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Grid, Setting, Bell, Help, House } from '@element-plus/icons-vue'
+import { Grid, Setting, Bell, Help, House, SwitchButton } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox } from 'element-plus'
 import NotificationBell from '@/components/NotificationBell.vue'
@@ -111,6 +115,20 @@ const showHelp = () => {
       confirmButtonText: '确定'
     }
   )
+}
+
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    await authStore.logout()
+    router.push('/login')
+  } catch (error) {
+    // catch cancel action gracefully
+  }
 }
 </script>
 
@@ -278,5 +296,17 @@ const showHelp = () => {
 :deep(.nav-item .el-badge) {
   display: flex;
   align-items: center;
+}
+
+.logout-nav {
+  margin-top: 8px;
+  color: #ba1a1a; /* Error color for distinct exit action */
+}
+.logout-nav:hover {
+  background: #ffeeec;
+  color: #ba1a1a;
+}
+.logout-nav .el-icon {
+  color: #ba1a1a !important;
 }
 </style>

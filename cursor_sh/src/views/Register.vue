@@ -1,20 +1,12 @@
 <template>
-  <div class="register-container">
+  <div class="register-container" :class="{ 'is-modal': isModal }">
     <!-- 科技感背景 -->
-    <div class="minimal-background"></div>
+    <div class="minimal-background" v-if="!isModal"></div>
 
     <div class="register-wrapper">
       <div>
         <div class="register-header">
-          <div class="logo-icon">
-            <svg viewBox="0 0 100 100" class="logo-svg">
-              <circle cx="50" cy="50" r="45" fill="none" stroke="#000" stroke-width="2" />
-              <path d="M 30 50 L 45 65 L 70 35" fill="none" stroke="#000" stroke-width="3" />
-              
-            </svg>
-          </div>
-          <h1 class="register-title">用户注册</h1>
-          <p class="register-subtitle">创建您的账户，开始使用AI设计任务管理系统</p>
+          <h1 class="register-title">Unique Vision 系统</h1>
         </div>
         
         <el-form
@@ -123,8 +115,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { User, Lock, Message, Right } from '@element-plus/icons-vue'
 import { authApi } from '@/utils/api'
@@ -132,10 +124,13 @@ import type { UserRole } from '@/types'
 import Captcha from '@/components/Captcha.vue'
 
 const router = useRouter()
+const route = useRoute()
 const registerFormRef = ref<FormInstance>()
 const loading = ref(false)
 const captchaValid = ref(false)
 const captchaRef = ref<InstanceType<typeof Captcha>>()
+
+const isModal = computed(() => route.query.modal === 'true')
 
 const registerForm = reactive({
   username: '',
@@ -146,7 +141,7 @@ const registerForm = reactive({
   captcha: ''
 })
 
-const validateUsername = (rule: any, value: string, callback: Function) => {
+const validateUsername = (_rule: any, value: string, callback: Function) => {
   if (!value) {
     callback(new Error('请输入用户名'))
   } else if (value.length < 3 || value.length > 20) {
@@ -158,7 +153,7 @@ const validateUsername = (rule: any, value: string, callback: Function) => {
   }
 }
 
-const validateEmail = (rule: any, value: string, callback: Function) => {
+const validateEmail = (_rule: any, value: string, callback: Function) => {
   if (!value) {
     callback(new Error('请输入邮箱地址'))
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
@@ -168,7 +163,7 @@ const validateEmail = (rule: any, value: string, callback: Function) => {
   }
 }
 
-const validatePassword = (rule: any, value: string, callback: Function) => {
+const validatePassword = (_rule: any, value: string, callback: Function) => {
   if (!value) {
     callback(new Error('请输入密码'))
   } else if (value.length < 6) {
@@ -178,7 +173,7 @@ const validatePassword = (rule: any, value: string, callback: Function) => {
   }
 }
 
-const validateConfirmPassword = (rule: any, value: string, callback: Function) => {
+const validateConfirmPassword = (_rule: any, value: string, callback: Function) => {
   if (!value) {
     callback(new Error('请再次输入密码'))
   } else if (value !== registerForm.password) {
@@ -188,7 +183,7 @@ const validateConfirmPassword = (rule: any, value: string, callback: Function) =
   }
 }
 
-const validateCaptcha = (rule: any, value: string, callback: Function) => {
+const validateCaptcha = (_rule: any, value: string, callback: Function) => {
   if (!value) {
     callback(new Error('请输入验证码'))
   } else if (!captchaValid.value) {
@@ -235,7 +230,11 @@ const handleRegister = async () => {
         
         if (success) {
           ElMessage.success('注册成功！请登录')
-          router.push('/login')
+          if (isModal.value) {
+            router.push({ path: '/login', query: { modal: 'true' }})
+          } else {
+            router.push('/login')
+          }
         }
       } catch (error: any) {
         console.error('注册失败:', error)
@@ -252,14 +251,17 @@ const handleRegister = async () => {
 }
 
 const goToLogin = () => {
-  router.push('/login')
+  if (isModal.value) {
+    router.push({ path: '/login', query: { modal: 'true' }})
+  } else {
+    router.push('/login')
+  }
 }
 
 
 </script>
 
 <style lang="scss" scoped>
-/* 统一最外层布局强制居中 */
 .login-container, .admin-login-container, .register-container {
   width: 100%;
   min-height: 100vh;
@@ -267,11 +269,17 @@ const goToLogin = () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #000;
-  font-family: 'Outfit', 'PingFang SC', sans-serif;
-  color: #fff;
+  background: #ffffff;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-feature-settings: "kern" 1;
+  color: #000000;
   padding: 20px 0;
   box-sizing: border-box;
+}
+
+.login-container.is-modal, .register-container.is-modal {
+  background: #ffffff;
+  padding: 24px 32px;
 }
 
 .login-wrapper, .admin-login-wrapper, .register-wrapper {
@@ -279,50 +287,37 @@ const goToLogin = () => {
   z-index: 10;
   width: 90%;
   max-width: 400px;
-  background: #000;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  background: #ffffff;
+  border-radius: 8px;
+  border: none;
+  box-shadow: none;
   margin: 0;
   padding: 32px;
   box-sizing: border-box;
 }
 
+.register-container.is-modal .register-wrapper {
+  box-shadow: none;
+  border: none;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+}
+
 /* 头部重置 */
 .login-header, .admin-login-header, .register-header {
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
-
-.logo-icon, .lock-icon {
-  width: 50px;
-  height: 50px;
-  margin: 0 auto 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #fff;
-  border-radius: 50%;
-  color: #000;
-}
-
-.logo-svg { width: 32px; height: 32px; }
-.logo-svg circle, .logo-svg path { stroke: #000 !important; }
 
 .login-title, .admin-title, .register-title {
-  font-size: 24px;
-  font-weight: 800;
-  color: #fff;
-  margin: 0 0 6px 0;
-  text-align: center;
-  line-height: 1.2;
-}
-
-.login-subtitle, .admin-subtitle, .register-subtitle {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.26px;
+  color: #000;
   margin: 0;
   text-align: center;
+  line-height: 1.35;
 }
 
 /* 表单紧凑设定 */
@@ -345,52 +340,72 @@ const goToLogin = () => {
   width: 100%;
 }
 
-/* 黑底输入框原生主题覆写 */
+/* 输入框 Figma 主题覆写 */
 .tech-input, .admin-input, .captcha-input {
   :deep(.el-input__wrapper) {
-    background-color: transparent !important;
-    border: none !important;
-    border-radius: 0 !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+    background-color: rgba(0, 0, 0, 0.04) !important;
+    border: 2px solid transparent !important;
+    border-radius: 8px !important;
     box-shadow: none !important;
-    padding: 0 10px !important;
-    height: 40px;
-    transition: all 0.3s;
+    padding: 0 12px !important;
+    height: 44px;
+    transition: all 0.2s;
     
     &.is-focus, &:hover {
-      border-bottom-color: #fff !important;
+      background-color: #ffffff !important;
+      border-color: #000 !important;
+    }
+    
+    &.is-focus {
+      outline: dashed 2px #000;
+      outline-offset: 2px;
     }
   }
 
   :deep(.el-input__inner) {
-    height: 40px !important;
-    font-size: 15px !important;
-    color: #fff !important;
+    height: 44px !important;
+    font-size: 16px !important;
+    font-weight: 400;
+    letter-spacing: -0.14px;
+    color: #000 !important;
     &::placeholder {
-      color: rgba(255, 255, 255, 0.4) !important;
+      color: rgba(0, 0, 0, 0.4) !important;
     }
   }
 }
 
 .input-border { display: none !important; }
-.input-icon { color: #888; font-size: 18px; }
+
+.input-icon { 
+  color: #000; 
+  font-size: 18px; 
+  opacity: 0.5; 
+  margin-right: 4px;
+}
+:deep(.el-input__wrapper.is-focus) .input-icon { opacity: 1; }
 
 /* 按钮 */
 .login-button, .admin-login-button, .register-button {
   width: 100%;
-  height: 44px;
+  height: 48px;
   font-size: 16px;
-  font-weight: 600;
-  background: #fff !important;
+  font-weight: 500;
+  letter-spacing: normal;
+  background: #000 !important;
   border: none !important;
-  border-radius: 60px !important;
-  color: #000 !important;
-  margin-top: 8px; 
-  transition: all 0.2s;
+  border-radius: 50px !important;
+  color: #fff !important;
+  margin-top: 16px; 
+  transition: opacity 0.2s;
   
   &:hover {
-    background: #e0e0e0 !important;
-    transform: translateY(-2px);
+    opacity: 0.85;
+    transform: none;
+  }
+  
+  &:focus-visible {
+    outline: dashed 2px #000;
+    outline-offset: 2px;
   }
 }
 
@@ -398,16 +413,18 @@ const goToLogin = () => {
 
 /* 尾部区域 */
 .login-footer, .admin-login-footer, .register-footer {
-  margin-top: 24px;
+  margin-top: 32px;
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .footer-text, .security-notice, .security-tips {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: -0.1px;
+  color: rgba(0, 0, 0, 0.5);
   margin: 0;
   display: flex;
   align-items: center;
@@ -416,21 +433,26 @@ const goToLogin = () => {
 }
 
 .footer-link, .back-link {
-  font-size: 13px;
+  font-size: 14px;
+  letter-spacing: -0.1px;
   margin: 0;
+  color: #000;
 }
 
 :deep(.el-link) {
-  color: #fff !important;
+  color: #000 !important;
   font-weight: 600;
-  &:hover { opacity: 0.8; }
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  &:hover { opacity: 0.6; }
 }
 
 /* 验证码特殊布局补丁 */
 .captcha-container { display: flex; gap: 12px; align-items: center; width: 100%; }
 .captcha-display {
-  border-radius: 8px; overflow: hidden; height: 40px; 
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px; overflow: hidden; height: 44px; 
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 .captcha-display canvas { height: 100% !important; display: block; }
 .captcha-input { flex: 1; }

@@ -9,153 +9,130 @@
 
     <div class="workspace-layout" :class="{ 'is-split': uiStore.isAiExpanded }">
       <div class="main-column" :class="{ 'is-squished': uiStore.isAiExpanded }">
-        
-        <!-- Fake Target Sidebar for Flight Destination -->
-        <div class="fake-flight-sidebar" v-if="isFlyingPhase" :class="{ 'is-visible': flySidebarVisible }">
-          <div class="secondary-header">
-            <h3>业务菜单</h3>
-          </div>
-          <div class="fake-flight-sidebar-list">
-            <div class="flight-item" data-flip-id="flip-video_purchase" :class="{ 'active-flight': activeFlight === 'video_purchase' }">
-              裸眼3D成片购买
-            </div>
-            <div class="flight-item" data-flip-id="flip-ai_3d_custom" :class="{ 'active-flight': activeFlight === 'ai_3d_custom' }">
-              AI裸眼3D内容定制
-            </div>
-            <div class="flight-item" data-flip-id="flip-digital_art" :class="{ 'active-flight': activeFlight === 'digital_art' }">
-              数字艺术内容定制
-            </div>
-          </div>
-        </div>
 
-        <!-- Hero Banner (AI 智能体) -->
-        <div class="hero-banner" v-if="!uiStore.isAiExpanded && !hideServices && !hideBannerForAi" :class="{ 'is-fading-out': servicesFadingOut && activeFlight !== null }">
-          <h1 class="hero-title">AI智能体帮你理清思路</h1>
-          <div class="hero-input-area morph-ai-input" data-flip-id="ai-input-bar" @click="handleAiExpand(true)">
-            <input type="text" :placeholder="placeholderText" class="hero-input" readonly />
-            <div class="generate-btn">
-              发送 <span class="sparkle">✨</span>
+        <!-- Professional B2B Fast Cross-Fade -->
+        <transition name="fade" mode="out-in">
+          <!-- Overview Mode -->
+          <div v-if="!uiStore.isAiExpanded && !uiStore.isSecondarySidebarVisible" class="overview-state">
+            <!-- Hero Banner (AI 智能体) -->
+            <div class="hero-banner">
+              <h1 class="hero-title">AI智能体帮你理清思路</h1>
+              <div class="hero-input-area" @click="handleAiExpand(true)">
+                <input type="text" :placeholder="placeholderText" class="hero-input" readonly />
+                <div class="generate-btn">
+                  发送 <span class="sparkle">✨</span>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        <!-- AI Assistant Expanded View -->
-        <div class="full-ai-container" v-if="uiStore.isAiExpanded || showAiDuringFlight" :class="{ 'is-dropping-in': showAiDuringFlight }">
-          <div class="ai-header">
-            <h1 class="ai-hero-title">AI智能体帮你理清思路</h1>
-            <el-button text @click="handleAiExpand(false)" class="collapse-btn">收起</el-button>
-          </div>
-          <AIChatAssistant @close="handleAiExpand(false)" @mode-change="handleModeChange" />
-        </div>
-
-        <!-- 业务服务概览 -->
-        <div class="business-services-section" v-if="!uiStore.isAiExpanded && !uiStore.isSecondarySidebarVisible && !hideServices">
+            <!-- 业务服务概览 -->
+            <div class="business-services-section">
           <div class="section-header">
             <div class="section-titles">
               <h2 class="section-title">业务菜单</h2>
               <p class="section-subtitle">高质量3D视频内容交付，让每一个户外屏都有优质的内容</p>
             </div>
           </div>
+          
           <!-- 服务入口卡片 -->
           <div class="service-cards">
             <!-- Card 1 -->
-            <div class="service-card transition-purchase" v-show="!aiSelectedMode || aiSelectedMode === 'purchase'" @click="triggerChoreography('video_purchase')">
-                <div class="card-image-wrapper">
-                  <div class="card-img" style="background: linear-gradient(to bottom, #111, #333);">
-                    <!-- Placeholder Character -->
-                  </div>
-                  <div class="overlay-badge premium" style="background: #0070eb; color: #fff;">PREMIUM 3D</div>
+            <div class="service-card" @click="triggerChoreography('video_purchase')">
+              <div class="card-image-wrapper">
+                <div class="card-img" style="background: linear-gradient(to bottom, #111, #333);">
+                  <!-- Placeholder Character -->
                 </div>
-                <div class="card-body">
-                  <h3 class="service-title" data-flip-id="flip-video_purchase" :class="{ 'title-hidden': titlesHidden }">裸眼3D成片购买</h3>
-                  <p class="service-description">
-                    专业的裸眼3D视频内容库，根据您的屏幕参数精准适配，快速交付高质量成片。支持多种行业应用和视觉风格选择。
-                  </p>
-                  <div class="service-features">
-                    <span class="outline-tag">快速交付</span>
-                    <span class="outline-tag">专业适配</span>
-                    <span class="outline-tag">多种风格</span>
-                  </div>
-                  <div class="card-footer">
-                    <span class="price-text">From $2,499</span>
-                    <el-icon class="arrow-right"><Right /></el-icon>
-                  </div>
+                <div class="overlay-badge premium" style="background: #0070eb; color: #fff;">PREMIUM 3D</div>
+              </div>
+              <div class="card-body">
+                <h3 class="service-title">裸眼3D成片购买</h3>
+                <p class="service-description">
+                  专业的裸眼3D视频内容库，根据您的屏幕参数精准适配，快速交付高质量成片。支持多种行业应用和视觉风格选择。
+                </p>
+                <div class="service-features">
+                  <span class="outline-tag">快速交付</span>
+                  <span class="outline-tag">专业适配</span>
+                  <span class="outline-tag">多种风格</span>
+                </div>
+                <div class="card-footer">
+                  <span class="price-text">From $2,499</span>
+                  <el-icon class="arrow-right"><Right /></el-icon>
                 </div>
               </div>
-            
-              <!-- Card 2 -->
-              <div class="service-card transition-custom" v-show="!aiSelectedMode || aiSelectedMode === 'custom_ai'" @click="triggerChoreography('ai_3d_custom')">
-                <div class="card-image-wrapper">
-                  <div class="card-img" style="background: linear-gradient(to bottom, #001f3f, #004080);">
-                     <!-- Placeholder Typography -->
-                  </div>
-                  <div class="overlay-badge creative" style="background: #0070eb; color: #fff;">AI CREATIVE</div>
+            </div>
+
+            <!-- Card 2 -->
+            <div class="service-card" @click="triggerChoreography('ai_3d_custom')">
+              <div class="card-image-wrapper">
+                <div class="card-img" style="background: linear-gradient(to bottom, #001f3f, #004080);">
+                   <!-- Placeholder Typography -->
                 </div>
-                <div class="card-body">
-                  <h3 class="service-title" data-flip-id="flip-ai_3d_custom" :class="{ 'title-hidden': titlesHidden }">AI裸眼3D内容定制</h3>
-                  <p class="service-description">
-                    基于AI技术的定制化3D内容创作，从创意构思到成品落地的全流程服务。上传现场照片，描述您的想法，我们将AI技术转化为震撼的裸眼3D效果。
-                  </p>
-                  <div class="card-footer">
-                    <span class="price-text">Custom Quote</span>
-                    <el-icon class="arrow-right"><Right /></el-icon>
-                  </div>
+                <div class="overlay-badge creative" style="background: #0070eb; color: #fff;">AI CREATIVE</div>
+              </div>
+              <div class="card-body">
+                <h3 class="service-title">AI裸眼3D内容定制</h3>
+                <p class="service-description">
+                  基于AI技术的定制化3D内容创作，从创意构思到成品落地的全流程服务。上传现场照片，描述您的想法，我们将AI技术转化为震撼的裸眼3D效果。
+                </p>
+                <div class="card-footer">
+                  <span class="price-text">Custom Quote</span>
+                  <el-icon class="arrow-right"><Right /></el-icon>
                 </div>
               </div>
-            
-              <!-- Card 3 -->
-              <div class="service-card transition-art" v-show="!aiSelectedMode || aiSelectedMode === 'digital_art'" @click="triggerChoreography('digital_art')">
-                <div class="card-image-wrapper">
-                  <div class="card-img" style="background: linear-gradient(to bottom, #4a0000, #ff1a1a);">
-                     <!-- Placeholder Abstract -->
-                  </div>
-                  <div class="overlay-badge art" style="background: #0070eb; color: #fff;">DIGITAL ART</div>
+            </div>
+
+            <!-- Card 3 -->
+            <div class="service-card" @click="triggerChoreography('digital_art')">
+              <div class="card-image-wrapper">
+                <div class="card-img" style="background: linear-gradient(to bottom, #4a0000, #ff1a1a);">
+                   <!-- Placeholder Abstract -->
                 </div>
-                <div class="card-body">
-                  <h3 class="service-title" data-flip-id="flip-digital_art" :class="{ 'title-hidden': titlesHidden }">数字艺术内容定制</h3>
-                  <p class="service-description">
-                    专业数字艺术创作服务，涵盖抽象、写实、装置、动态艺术等多种风格。由资深艺术家团队倾力打造，3天内提供初稿预览。
-                  </p>
-                  <div class="card-footer">
-                    <span class="price-text">From $1,200</span>
-                    <el-icon class="arrow-right"><Right /></el-icon>
-                  </div>
+                <div class="overlay-badge art" style="background: #0070eb; color: #fff;">DIGITAL ART</div>
+              </div>
+              <div class="card-body">
+                <h3 class="service-title">数字艺术内容定制</h3>
+                <p class="service-description">
+                  专业数字艺术创作服务，涵盖抽象、写实、装置、动态艺术等多种风格。由资深艺术家团队倾力打造，3天内提供初稿预览。
+                </p>
+                <div class="card-footer">
+                  <span class="price-text">From $1,200</span>
+                  <el-icon class="arrow-right"><Right /></el-icon>
                 </div>
               </div>
+            </div>
           </div>
-        </div>
-    
+          </div>
+          </div>
+
+          <!-- Working Mode: AI Assistant Expanded View -->
+          <div class="full-ai-container" v-else-if="uiStore.isAiExpanded">
+            <div class="ai-header">
+              <h1 class="ai-hero-title">AI智能体帮你理清思路</h1>
+              <el-button text @click="handleAiExpand(false)" class="collapse-btn">收起</el-button>
+            </div>
+            <AIChatAssistant @close="handleAiExpand(false)" @mode-change="handleModeChange" />
+          </div>
+        </transition>
+
       </div> <!-- end main-column -->
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, onUnmounted, nextTick } from 'vue'
+import { onMounted, ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, Right } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { useUiStore } from '@/stores/ui'
 import type { OrderType } from '@/types'
 import AIChatAssistant from '@/components/AIChatAssistant.vue'
-import gsap from 'gsap'
-import { Flip } from 'gsap/all'
-
-gsap.registerPlugin(Flip)
 
 const router = useRouter()
 const orderStore = useOrderStore()
 const uiStore = useUiStore()
 
 const aiSelectedMode = ref<string | null>(null)
-const isFlyingPhase = ref(false)
-const flySidebarVisible = ref(false)
-const titlesHidden = ref(false)
-const servicesFadingOut = ref(false)
-const hideServices = ref(false)
-const hideBannerForAi = ref(false)
-const activeFlight = ref<OrderType | string | null>(null)
-const showAiDuringFlight = ref(false)
 
 const promptTexts = [
   "我想做一个关于蒙牛品牌推广的3D视频，主题是...",
@@ -234,15 +211,12 @@ const handleAiExpand = (expanded: boolean) => {
     aiSelectedMode.value = null
     uiStore.setSecondarySidebar(false)
     uiStore.toggleSidebar(false)
-    hideServices.value = false // Restore services view
-    hideBannerForAi.value = false 
-    showAiDuringFlight.value = false
-    servicesFadingOut.value = false
-    titlesHidden.value = false
     return
   }
-  // If expanding, intercept and run the same choreography!
-  triggerChoreography(null)
+  // Instant expand without waiting for crazy delays
+  uiStore.setIsAiExpanded(true)
+  uiStore.setSecondarySidebar(true)
+  uiStore.toggleSidebar(true)
 }
 
 const handleModeChange = (mode: string) => {
@@ -251,121 +225,16 @@ const handleModeChange = (mode: string) => {
 }
 
 const triggerChoreography = (targetType: OrderType | string | null) => {
-  if (isFlyingPhase.value || hideServices.value) return 
-  
-  isFlyingPhase.value = true
-  activeFlight.value = targetType
-  
-  // ═══════════════════════════════════════════════════════════════
-  // PHASE 1: Mount REAL sidebar → workspace compresses naturally
-  // No fake padding needed! The real sidebar IS the compression.
-  // ═══════════════════════════════════════════════════════════════
-  
-  // 1. Capture title positions BEFORE any layout shift
-  const state = Flip.getState('.service-title', { props: 'backgroundColor,color,borderRadius,padding,boxShadow' })
-  
-  // Input bar FLIP is no longer used; native flexbox handles the dropdown
-  
-  // 2. Clear native titles so flight items take over
-  titlesHidden.value = true
-  
-  // 3. Mount fake sidebar (positioned absolutely, for title flight destinations only)
-  flySidebarVisible.value = true
-  
-  // 4. Squish primary sidebar to mini
-  uiStore.toggleSidebar(true)
-  
-  // 5. Mount the REAL secondary sidebar NOW! Its CSS width-transition compresses the workspace.
-  uiStore.setSecondarySidebar(true)
-  
-  // ═══════════════════════════════════════════════════════════════
-  // PHASE 2: After compression is visually underway (400ms),
-  // fire title flight + AI dropdown SIMULTANEOUSLY
-  // ═══════════════════════════════════════════════════════════════
-  
-  nextTick(() => {
-    gsap.delayedCall(0.4, () => {
-      // --- Title Flight ---
-      Flip.from(state, {
-        targets: '.flight-item',
-        duration: 0.7,
-        ease: 'power4.inOut',
-        absolute: true, 
-        stagger: 0.08,
-        onComplete: () => {
-          // ZERO layout changes here! Real sidebar is already mounted.
-          // Just clean up visual flight artifacts.
-          hideServices.value = true
-          flySidebarVisible.value = false
-          isFlyingPhase.value = false
-          
-          if (targetType) {
-            if (targetType === 'video_purchase') {
-              router.push('/user/video-marketplace')
-            } else {
-              router.push(`/user/create-order/${targetType}`)
-            }
-          } else {
-            // AI states — sidebar already mounted, just finalize AI
-            uiStore.setIsAiExpanded(true)
-            showAiDuringFlight.value = false
-            // Clear lingering clip-path
-            const aiEl = document.querySelector('.full-ai-container')
-            if (aiEl) (aiEl as HTMLElement).style.clipPath = ''
-          }
-        }
-      })
-      
-      // --- Simultaneous: Card dissolve ---
-      servicesFadingOut.value = true
-      gsap.to('.section-titles', { y: 20, opacity: 0, duration: 0.5, ease: 'power2.inOut' })
-      
-      if (targetType) {
-        gsap.to('.hero-banner', { y: -20, opacity: 0, height: 0, margin: 0, padding: 0, duration: 0.5, ease: 'power2.inOut' })
-        gsap.to(`.service-card.transition-${targetType.split('_').pop()}`, {
-          scale: 1.02, boxShadow: '0 10px 30px rgba(0,0,0,0.1)', duration: 0.2, yoyo: true, repeat: 1
-        })
-      }
-      
-      gsap.to('.service-card', {
-        y: 40, opacity: 0, scale: 0.96,
-        duration: 0.6, stagger: 0.05,
-        ease: 'back.in(1.2)', delay: 0.1
-      })
-      
-      gsap.to('.fake-flight-sidebar .secondary-header', { opacity: 1, duration: 0.5, delay: 0.2 })
-      
-      // --- Simultaneous: AI curtain dropdown (only for AI trigger) ---
-      if (!targetType) {
-        const bannerEl = document.querySelector('.hero-banner')
-        const bannerHeight = bannerEl ? bannerEl.getBoundingClientRect().height : 100
-        
-        hideBannerForAi.value = true
-        showAiDuringFlight.value = true
-        
-        nextTick(() => {
-          // Native height extension: The bottom border and the input box (which rests on the bottom) 
-          // physically slide down perfectly. No FLIP morph needed, let Flexbox handle it!
-          gsap.fromTo('.full-ai-container.is-dropping-in', 
-            { height: bannerHeight + 'px' },
-            { 
-              height: '100%',
-              duration: 0.65, 
-              ease: 'power3.inOut',
-              clearProps: 'height' // Once it hits 100%, let natural flex flex: 1 take over!
-            }
-          )
-          
-          // Smoothly fade in the chat messages behind the stretching container 
-          // so they don't look squished in the ~100px space initially
-          gsap.fromTo('.welcome-section', 
-            { opacity: 0, y: -10 }, 
-            { opacity: 1, y: 0, duration: 0.4, delay: 0.2, ease: 'power2.out' }
-          )
-        })
-      }
-    })
-  })
+  // B2B direct routing layout shift: instantly navigate and apply system states
+  if (targetType) {
+    if (targetType === 'video_purchase') {
+      router.push('/user/video-marketplace')
+    } else {
+      router.push(`/user/create-order/${targetType}`)
+    }
+  } else {
+    handleAiExpand(true)
+  }
 }
 
 </script>
@@ -443,8 +312,9 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   min-height: 0; 
   display: flex;
   flex-direction: column;
-  background: #f0f5fc; /* Perfectly aligned with the hero banner theme */
-  border-radius: 16px;
+  background: #ffffff; /* Clean white surface per Figma style */
+  border-radius: 8px; /* Figma base radius for cards/dialogs */
+  border: 1px solid rgba(0, 0, 0, 0.08); /* Minimal interface border */
   overflow: hidden;
 }
 
@@ -463,15 +333,17 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  border-bottom: 1px solid rgba(0, 88, 188, 0.08); /* Matches the light blue ambient */
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08); /* Black scale only */
 }
 
 .ai-header .ai-hero-title {
   margin: 0;
-  font-size: 24px;
-  font-weight: 800;
-  color: #1b1b1c;
-  letter-spacing: -0.01em;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-feature-settings: "kern" 1;
+  font-size: 26px;
+  font-weight: 500;
+  color: #000000;
+  letter-spacing: -0.26px;
 }
 
 .ai-header .collapse-btn {
@@ -695,65 +567,6 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   transition: opacity 0.4s ease;
 }
 
-.service-title.title-hidden {
-  opacity: 0 !important; /* Hides original title when FLIP pseudo-title takes over */
-}
 
-/* === THE NEW DECOUPLED FLIGHT CHOREOGRAPHY === */
-
-.fake-flight-sidebar {
-  position: fixed;
-  top: 0;
-  left: 80px; /* Aligns exactly with compressed SystemLeftSidebar */
-  width: 240px;
-  height: 100vh;
-  background: #ffffff;
-  border-right: 1px solid #eae7e7;
-  padding: 24px 0;
-  margin: 0;
-  z-index: 1000;
-  box-sizing: border-box;
-  opacity: 0;
-  pointer-events: none;
-}
-.fake-flight-sidebar.is-visible {
-  opacity: 1; /* Shows the white backdrop cleanly */
-}
-.fake-flight-sidebar .secondary-header {
-  padding: 0 24px;
-  margin-bottom: 16px;
-  opacity: 0; /* JS handles fade in */
-}
-.fake-flight-sidebar .secondary-header h3 {
-  font-size: 14px;
-  font-weight: 700;
-  margin: 0;
-  color: #1b1b1c;
-}
-.fake-flight-sidebar-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0 16px;
-}
-.flight-item {
-  width: 100%;
-  height: 42px;
-  padding: 12px 16px;
-  border-radius: 12px;
-  font-size: 13px;
-  font-weight: 500;
-  background: #f6f3f2;
-  color: #414754;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-}
-.flight-item.active-flight {
-  background: #ffffff;
-  color: #1b1b1c;
-  font-weight: 600;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-}
 
 </style>

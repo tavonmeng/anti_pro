@@ -30,6 +30,12 @@
       @close="handleCloseDetail"
       @navigate-case="handleNavigateCase"
     />
+
+    <AuthModal
+      :is-open="uiState.authModalOpen"
+      :mode="uiState.authMode"
+      @close="closeAuthModal"
+    />
   </div>
 </template>
 
@@ -40,10 +46,13 @@ import CaseDetailPage from './components/CaseDetailPage.vue'
 import CaseShowcasePage from './components/CaseShowcasePage.vue'
 import CustomCursor from './components/CustomCursor.vue'
 import PageLoader from './components/PageLoader.vue'
+import AuthModal from './components/AuthModal.vue'
 import gsap from 'gsap'
 import ScrollTrigger from 'gsap/ScrollTrigger'
 
 gsap.registerPlugin(ScrollTrigger)
+
+import { uiState, closeAuthModal } from './stores/ui'
 
 import HeroSection from './sections/HeroSection.vue'
 import IntroSection from './sections/IntroSection.vue'

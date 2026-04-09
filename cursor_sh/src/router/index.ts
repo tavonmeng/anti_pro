@@ -187,7 +187,12 @@ router.beforeEach((to, from, next) => {
   
   // 如果已登录，访问登录页则跳转到对应dashboard
   if (authStore.isAuthenticated()) {
-    if (to.name === 'Login') {
+    if (to.name === 'Login' || to.name === 'Register') {
+      if (to.query.modal === 'true') {
+        window.parent.postMessage({ type: 'LOGIN_SUCCESS' }, '*')
+        next(false)
+        return
+      }
       // 用户登录页 -> 根据角色跳转
       if (authStore.isAdmin()) {
         next('/admin')

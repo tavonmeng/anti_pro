@@ -26,8 +26,8 @@
             mlm3344521@163.com
           </a>
         </div>
-        <div class="contact-card login-card">
-          <a :href="dashboardUrl + '/login'" class="email-link">
+        <div class="contact-card login-card" style="cursor: pointer;" @click="openAuthModal('login')">
+          <a class="email-link" @click.prevent>
             注册 / 登录
           </a>
         </div>
@@ -45,6 +45,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import gsap from 'gsap'
 import ScrollTrigger from 'gsap/ScrollTrigger'
+import { openAuthModal } from '../stores/ui'
 
 gsap.registerPlugin(ScrollTrigger)
 

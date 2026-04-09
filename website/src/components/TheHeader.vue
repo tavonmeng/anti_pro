@@ -60,6 +60,13 @@
           <rect x="3" y="13.4" width="14" height="1.6" rx="0.8" fill="currentColor"/>
         </svg>
       </button>
+
+      <!-- Auth Buttons -->
+      <div class="divider auth-divider"></div>
+      <div class="auth-buttons">
+        <button class="auth-btn btn-login" @click.prevent="openAuthModal('login')">登录</button>
+        <button class="auth-btn btn-register" @click.prevent="openAuthModal('register')">注册</button>
+      </div>
     </div>
 
     <!-- 底部白线（进度条） -->
@@ -71,6 +78,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { openAuthModal } from '../stores/ui.js'
 
 const props = defineProps({
   forceLight: {
@@ -393,6 +401,56 @@ onUnmounted(() => {
   transform: rotate(90deg);
 }
 
+/* ─── 登录/注册 按钮 ────────────────────────────────────────────── */
+.auth-divider {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+
+.auth-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auth-btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  height: 36px;
+  border-radius: 50px; /* Pill */
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-login {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 0 16px;
+}
+
+.btn-login:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.btn-register {
+  background: #fff;
+  color: #000;
+  border: none;
+  padding: 0 20px;
+  font-weight: 600;
+}
+
+.btn-register:hover {
+  opacity: 0.85;
+}
+
 /* ─── 底部白线 + 进度条 ────────────────────────────────────── */
 .bottom-line {
   position: absolute;
@@ -442,6 +500,25 @@ onUnmounted(() => {
 .header-bar.is-light .progress-fill {
   background: #000;
   box-shadow: none;
+}
+
+.header-bar.is-light .btn-login {
+  color: #000;
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
+.header-bar.is-light .btn-login:hover {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.4);
+}
+
+.header-bar.is-light .btn-register {
+  background: #000; /* Black Pill Button in Light Mode */
+  color: #fff;
+}
+
+.header-bar.is-light .btn-register:hover {
+  opacity: 0.85;
 }
 
 
