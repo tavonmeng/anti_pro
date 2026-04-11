@@ -1,12 +1,6 @@
 <template>
   <div class="workspace-page">
     
-    <!-- Top Search Header -->
-    <div class="top-search-header">
-      <el-icon class="search-icon"><Search /></el-icon>
-      <input type="text" placeholder="Search projects or assets..." class="search-input" />
-    </div>
-
     <div class="workspace-layout" :class="{ 'is-split': uiStore.isAiExpanded }">
       <div class="main-column" :class="{ 'is-squished': uiStore.isAiExpanded }">
 
@@ -14,6 +8,12 @@
         <transition name="fade" mode="out-in">
           <!-- Overview Mode -->
           <div v-if="!uiStore.isAiExpanded && !uiStore.isSecondarySidebarVisible" class="overview-state">
+            
+            <!-- Top Search Header (Now inside overview only) -->
+            <div class="top-search-header">
+              <el-icon class="search-icon"><Search /></el-icon>
+              <input type="text" placeholder="Search projects or assets..." class="search-input" />
+            </div>
             <!-- Hero Banner (AI 智能体) -->
             <div class="hero-banner">
               <h1 class="hero-title">AI智能体帮你理清思路</h1>
@@ -24,6 +24,8 @@
                 </div>
               </div>
             </div>
+            
+            <div class="figma-divider"></div>
 
             <!-- 业务服务概览 -->
             <div class="business-services-section">
@@ -106,15 +108,15 @@
 
           <!-- Working Mode: AI Assistant Expanded View -->
           <div class="full-ai-container" v-else-if="uiStore.isAiExpanded">
-            <div class="ai-header">
-              <h1 class="ai-hero-title">AI智能体帮你理清思路</h1>
-              <el-button text @click="handleAiExpand(false)" class="collapse-btn">收起</el-button>
-            </div>
             <AIChatAssistant @close="handleAiExpand(false)" @mode-change="handleModeChange" />
           </div>
         </transition>
 
       </div> <!-- end main-column -->
+      
+      <transition name="fade">
+        <StyleInspirationSidebar v-if="uiStore.isAiExpanded && showInspiration" @close="showInspiration = false" />
+      </transition>
     </div>
   </div>
 </template>
@@ -127,12 +129,14 @@ import { useOrderStore } from '@/stores/order'
 import { useUiStore } from '@/stores/ui'
 import type { OrderType } from '@/types'
 import AIChatAssistant from '@/components/AIChatAssistant.vue'
+import StyleInspirationSidebar from '@/components/StyleInspirationSidebar.vue'
 
 const router = useRouter()
 const orderStore = useOrderStore()
 const uiStore = useUiStore()
 
 const aiSelectedMode = ref<string | null>(null)
+const showInspiration = ref(true)
 
 const promptTexts = [
   "我想做一个关于蒙牛品牌推广的3D视频，主题是...",
@@ -217,6 +221,7 @@ const handleAiExpand = (expanded: boolean) => {
   uiStore.setIsAiExpanded(true)
   uiStore.setSecondarySidebar(true)
   uiStore.toggleSidebar(true)
+  showInspiration.value = true
 }
 
 const handleModeChange = (mode: string) => {
@@ -241,22 +246,32 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 
 <style lang="scss" scoped>
 .workspace-page {
-  padding: 0 24px 24px 24px;
+  padding: 0; /* Remove card style */
   display: flex;
   flex-direction: column;
   height: 100%;
   box-sizing: border-box;
 }
 
+.overview-state {
+  padding: 0 24px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .top-search-header {
-  height: 64px; /* Increased for better visibility */
+  height: 64px;
   display: flex;
   align-items: center;
-  padding: 0 8px; /* Added some subtle padding */
+  padding: 0 8px;
   position: sticky;
   top: 0;
   z-index: 10;
   background: #fcf9f8;
+  flex-shrink: 0;
 }
 
 .search-icon {
@@ -288,6 +303,7 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   width: 100%;
   flex: 1; /* Take up all remaining height past the search bar */
   min-height: 0; /* Crucial: allows internal flex elements to scroll rather than bursting bounds */
+  box-sizing: border-box;
 }
 
 
@@ -298,6 +314,8 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   min-width: 0;
   height: 100%; /* Ensure column fully stretches down */
   position: relative; /* Anchor for absolute dropping items */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .main-column.is-squished {
@@ -308,13 +326,13 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 /* is-pushed-by-flight removed: real sidebar handles compression now */
 
 .full-ai-container {
-  flex: 1; /* Smoothly occupies all available height, preventing overflow */
-  min-height: 0; 
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #ffffff; /* Clean white surface per Figma style */
-  border-radius: 8px; /* Figma base radius for cards/dialogs */
-  border: 1px solid rgba(0, 0, 0, 0.08); /* Minimal interface border */
+  background: transparent; /* No more card background */
+  border-radius: 0;
+  border: none; /* Strip card border */
   overflow: hidden;
 }
 
@@ -332,8 +350,9 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08); /* Black scale only */
+  margin: 0 -24px; /* Pierce through the parent's padding */
+  padding: 16px 24px; /* Push text back into safe alignment */
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06); /* Soft subtle header line */
 }
 
 .ai-header .ai-hero-title {
@@ -354,13 +373,15 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 .hero-banner {
   background: #f0f5fc;
   border-radius: 16px;
-  padding: 16px 24px; /* Ultra compressed padding */
-  margin-bottom: 16px; /* Ultra compressed margin */
+  padding: 32px 40px;
+  margin-bottom: 24px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   transition: all 0.6s cubic-bezier(0.25, 1, 0.3, 1);
-  overflow: hidden;
+  overflow: visible;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .hero-banner.is-fading-out {
@@ -370,9 +391,9 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 
 .hero-title {
   font-size: 24px;
-  font-weight: 800;
+  font-weight: 500;
   color: #1b1b1c;
-  margin: 0 0 12px 0; /* Ultra compressed */
+  margin: 0 0 24px 0;
   letter-spacing: -0.01em;
 }
 
@@ -387,6 +408,7 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
   cursor: pointer;
   transition: all 0.2s ease;
+  box-sizing: border-box;
 }
 
 .hero-input-area:hover {
@@ -411,7 +433,7 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 .generate-btn {
   background: #0058bc;
   color: #fff;
-  font-weight: 600;
+  font-weight: 500;
   padding: 8px 16px;
   border-radius: 9999px;
   font-size: 13px;
@@ -428,27 +450,27 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 }
 
 .service-card {
-  border-radius: 16px;
   cursor: pointer;
-  transition: all 0.3s ease;
-  border: 1px solid #eae7e7; /* Subtle card border */
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(27, 27, 28, 0.02);
+  background: transparent;
+  border: none;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  position: relative;
-  
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 16px 32px rgba(27, 27, 28, 0.08); /* Lift effect */
-  }
+  box-shadow: none;
+  gap: 12px;
 }
 
 .card-image-wrapper {
-  height: 120px; /* Extreme compression from 140px */
+  height: 160px;
   width: 100%;
   position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  transition: border-color 0.2s ease;
+}
+
+.service-card:hover .card-image-wrapper {
+  border-color: rgba(0, 0, 0, 0.25);
 }
 
 .card-img {
@@ -463,7 +485,7 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #fff;
@@ -471,7 +493,7 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 }
 
 .card-body {
-  padding: 12px 16px;
+  padding: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -479,14 +501,14 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 
 .service-title {
   font-size: 16px;
-  font-weight: 700;
-  color: #1b1b1c; /* on_surface */
+  font-weight: 500;
+  color: #1b1b1c;
   margin: 0 0 6px 0;
 }
 
 .service-description {
   font-size: 12px;
-  color: #646a78; /* lighter for 12px readability */
+  color: #646a78;
   line-height: 1.4;
   margin: 0 0 12px 0;
   flex: 1;
@@ -515,7 +537,7 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 }
 
 .price-text {
-  font-weight: 700;
+  font-weight: 500;
   font-size: 13px;
   color: #0058bc;
 }
@@ -554,8 +576,8 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 
 .section-title {
   font-size: 18px;
-  font-weight: 700;
-  color: #1b1b1c; /* on_surface */
+  font-weight: 500;
+  color: #1b1b1c;
   margin: 0;
   letter-spacing: -0.01em;
 }
@@ -567,6 +589,35 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   transition: opacity 0.4s ease;
 }
 
+.figma-divider {
+  width: 100%;
+  height: 1px;
+  background-color: #e5e5e5;
+  margin: 24px 0 32px 0;
+}
 
+/* ─── Responsive: 3-tier breakpoint system ─────────────────── */
 
+/* Tier 2: FHD / QHD / high-res monitors (1920px+) */
+@media screen and (min-width: 1920px) {
+  .overview-state {
+    padding: 0 32px 24px 32px;
+  }
+  .card-image-wrapper {
+    height: 180px;
+  }
+}
+
+/* Tier 3: 4K at 150% scale = 2560px CSS pixels */
+@media screen and (min-width: 2560px) {
+  .overview-state {
+    padding: 0 48px 32px 48px;
+  }
+  .card-image-wrapper {
+    height: 200px;
+  }
+  .service-cards {
+    gap: 24px;
+  }
+}
 </style>

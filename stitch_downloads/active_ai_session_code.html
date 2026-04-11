@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Catalyst AI - Active Session</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@340;450;480;540;700&amp;family=Space+Grotesk:wght@320;330&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "inverse-primary": "#c6c6c6",
+                    "surface-variant": "#e2e2e2",
+                    "surface-container": "#eeeeee",
+                    "on-tertiary-fixed": "#ffffff",
+                    "on-surface-variant": "#474747",
+                    "on-primary-container": "#ffffff",
+                    "surface-container-highest": "#e2e2e2",
+                    "inverse-on-surface": "#f0f1f1",
+                    "secondary-fixed-dim": "#ababab",
+                    "on-tertiary-container": "#ffffff",
+                    "on-error-container": "#410002",
+                    "outline": "#777777",
+                    "secondary-fixed": "#c6c6c6",
+                    "primary-container": "#3b3b3b",
+                    "on-tertiary": "#e2e2e2",
+                    "primary-fixed-dim": "#474747",
+                    "on-surface": "#1a1c1c",
+                    "on-secondary-container": "#1b1b1b",
+                    "on-primary": "#e2e2e2",
+                    "inverse-surface": "#2f3131",
+                    "tertiary-container": "#747474",
+                    "secondary": "#5e5e5e",
+                    "on-secondary-fixed-variant": "#3b3b3b",
+                    "surface-bright": "#f9f9f9",
+                    "on-secondary-fixed": "#1b1b1b",
+                    "tertiary-fixed-dim": "#474747",
+                    "surface-container-low": "#f3f3f4",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary": "#ffffff",
+                    "on-background": "#1a1c1c",
+                    "secondary-container": "#d4d4d4",
+                    "on-primary-fixed": "#ffffff",
+                    "on-error": "#ffffff",
+                    "primary": "#000000",
+                    "surface-dim": "#dadada",
+                    "outline-variant": "#c6c6c6",
+                    "background": "#f9f9f9",
+                    "error-container": "#ffdad6",
+                    "error": "#ba1a1a",
+                    "on-tertiary-fixed-variant": "#e2e2e2",
+                    "on-primary-fixed-variant": "#e2e2e2",
+                    "tertiary": "#3b3b3b",
+                    "surface-container-high": "#e8e8e8",
+                    "tertiary-fixed": "#5e5e5e",
+                    "surface": "#f9f9f9",
+                    "primary-fixed": "#5e5e5e",
+                    "surface-tint": "#5e5e5e"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Inter"],
+                    "body": ["Inter"],
+                    "label": ["Space Grotesk"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+        .tracking-editorial { letter-spacing: -0.02em; }
+        .label-tracking { letter-spacing: 0.15em; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
+        .catalyst-gradient {
+            background: linear-gradient(135deg, #4ade80 0%, #facc15 35%, #a855f7 70%, #ec4899 100%);
+        }
+        .glass-ai {
+            background: rgba(0, 0, 0, 0.04);
+            backdrop-filter: blur(8px);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface overflow-hidden h-screen flex">
+<!-- Left Rail: SideNavBar (JSON Derived) -->
+<aside class="fixed left-0 top-0 h-full w-20 flex flex-col items-center py-6 border-r-0 bg-white z-50">
+<div class="mb-10">
+<div class="text-xl font-bold text-black tracking-tighter">C</div>
+</div>
+<nav class="flex flex-col gap-6 flex-1">
+<!-- Workspace Active -->
+<button class="bg-black text-white rounded-full p-3 focus:outline-dashed focus:outline-2 focus:outline-black focus:outline-offset-4 transition-all">
+<span class="material-symbols-outlined" data-icon="grid_view">grid_view</span>
+</button>
+<button class="text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-full p-3 transition-all">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+</button>
+<button class="text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-full p-3 transition-all">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+</button>
+<button class="text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-full p-3 transition-all">
+<span class="material-symbols-outlined" data-icon="insights">insights</span>
+</button>
+</nav>
+<div class="mt-auto flex flex-col gap-6 items-center">
+<button class="text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-full p-3 transition-all">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<div class="w-10 h-10 rounded-full bg-zinc-100 overflow-hidden">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="User profile portrait, close-up with neutral expression and high-key lighting, professional aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBFkmsb-U2qtmi1-jCxwN2rLhq2xZe8WDRG1l901KjMcMcXeamCv80l72bym6GOHtwHgBkA0TTetVHVqJkVJKxvRRN3-7tTrIJ0MxuXy50XiueLY3cmpotmBygMTqM7dOcLIfooixqfW7Mx_FBBmcrg-_WoPuw3pzMNWNEdVYMtaW7b4mkx0SFh_oMxy-YUJjs--waNMu1rHHQ2DfnCT3tTAFFd8V61ODLTiUreoFjnLHt3eRmUTp39XzjYGF5iKFyqNnQOa_AuFds"/>
+</div>
+</div>
+</aside>
+<!-- App Shell Container (Accounting for fixed sidebar) -->
+<main class="flex-1 ml-20 flex">
+<!-- Middle Column: Service Menu (Catalyst Specific) -->
+<section class="w-80 bg-surface-container-low h-full flex flex-col">
+<header class="px-8 py-10">
+<p class="font-label uppercase label-tracking text-[10px] font-[330] text-zinc-500 mb-2">Workspace</p>
+<h1 class="font-headline font-[700] text-2xl tracking-tight text-black">Active Context</h1>
+</header>
+<div class="flex-1 px-4 overflow-y-auto space-y-1">
+<div class="px-4 py-3 rounded-xl bg-surface-container-lowest flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-green-500"></div>
+<div>
+<p class="font-headline font-[540] text-sm tracking-editorial">Core Model 4.5</p>
+<p class="font-label uppercase text-[8px] label-tracking text-zinc-400">Primary Engine</p>
+</div>
+</div>
+<div class="px-4 py-8 mt-4">
+<p class="font-label uppercase label-tracking text-[10px] font-[330] text-zinc-500 mb-6">Recent Sessions</p>
+<div class="space-y-4">
+<div class="group cursor-pointer">
+<p class="font-headline font-[480] text-sm tracking-editorial group-hover:text-black text-zinc-600">Product Strategy Q3</p>
+<p class="text-[11px] text-zinc-400 font-[340]">2h ago</p>
+</div>
+<div class="group cursor-pointer">
+<p class="font-headline font-[480] text-sm tracking-editorial group-hover:text-black text-zinc-600">Editorial Brand Guidelines</p>
+<p class="text-[11px] text-zinc-400 font-[340]">Yesterday</p>
+</div>
+<div class="group cursor-pointer">
+<p class="font-headline font-[480] text-sm tracking-editorial group-hover:text-black text-zinc-600">System Architecture Audit</p>
+<p class="text-[11px] text-zinc-400 font-[340]">3 days ago</p>
+</div>
+</div>
+</div>
+</div>
+<div class="p-6">
+<div class="bg-surface-container-high rounded-2xl p-4">
+<p class="font-label uppercase text-[9px] label-tracking text-zinc-500 mb-2">System Status</p>
+<div class="flex items-center justify-between">
+<span class="font-headline font-[540] text-xs tracking-editorial">SYSTEM OPTIMAL</span>
+<span class="material-symbols-outlined text-xs text-green-600" data-icon="check_circle">check_circle</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Main Workspace: Active AI Chat Interface -->
+<section class="flex-1 bg-white h-full flex flex-col relative">
+<!-- TopAppBar Context (Integrated into Main Canvas) -->
+<header class="h-16 flex items-center justify-between px-8 bg-white/80 backdrop-blur-xl z-20">
+<div class="flex items-center gap-4">
+<p class="font-label uppercase text-[10px] font-[330] label-tracking text-zinc-400">Current Session</p>
+<div class="h-4 w-[1px] bg-zinc-200"></div>
+<h2 class="font-headline font-[540] tracking-tight text-black">Editorial Analysis</h2>
+</div>
+<div class="flex items-center gap-3">
+<button class="text-zinc-500 hover:text-black transition-colors"><span class="material-symbols-outlined" data-icon="notifications">notifications</span></button>
+<button class="text-zinc-500 hover:text-black transition-colors"><span class="material-symbols-outlined" data-icon="help_outline">help_outline</span></button>
+<button class="bg-black text-white px-5 py-2 rounded-full font-label uppercase text-[10px] label-tracking hover:scale-95 duration-150">New Session</button>
+</div>
+</header>
+<!-- Gradient Header Banner -->
+<div class="w-full h-1 catalyst-gradient opacity-80"></div>
+<!-- Chat History -->
+<div class="flex-1 overflow-y-auto px-8 py-10 space-y-12">
+<!-- System/AI Welcome -->
+<div class="flex flex-col gap-4 max-w-3xl">
+<div class="flex items-center gap-2">
+<span class="font-label uppercase text-[9px] label-tracking text-zinc-500">Catalyst Engine</span>
+<span class="text-[8px] bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-400">PRO</span>
+</div>
+<div class="glass-ai p-8 rounded-tr-3xl rounded-br-3xl rounded-bl-3xl">
+<p class="font-headline font-[340] text-lg leading-relaxed text-zinc-800 tracking-editorial">
+                            Session initialized. I've analyzed the <span class="font-[540] text-black">Editorial Catalyst</span> design documentation. How shall we begin the breakdown of the typographic optical tension?
+                        </p>
+</div>
+</div>
+<!-- User Message -->
+<div class="flex flex-col gap-4 max-w-3xl ml-auto items-end">
+<span class="font-label uppercase text-[9px] label-tracking text-zinc-500">You</span>
+<div class="bg-white p-6 rounded-tl-3xl rounded-bl-3xl rounded-br-3xl border border-zinc-100">
+<p class="font-headline font-[450] text-lg leading-relaxed text-black tracking-editorial">
+                            Let's focus on the "No-Line" rule. How can we ensure the tonal shifts remain accessible while maintaining the premium, editorial feel?
+                        </p>
+</div>
+</div>
+<!-- AI Response -->
+<div class="flex flex-col gap-4 max-w-3xl">
+<div class="flex items-center gap-2">
+<span class="font-label uppercase text-[9px] label-tracking text-zinc-500">Catalyst Engine</span>
+</div>
+<div class="glass-ai p-8 rounded-tr-3xl rounded-br-3xl rounded-bl-3xl">
+<p class="font-headline font-[340] text-lg leading-relaxed text-zinc-800 tracking-editorial mb-6">
+                            To maintain accessibility without 1px borders, we leverage <span class="font-[540] text-black">Tonal Layering</span>. By using a luminance contrast of at least 15% between the `surface` and `surface-container-low`, we create perceived depth that satisfies structural clarity.
+                        </p>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-white/40 p-4 rounded-xl">
+<p class="font-label uppercase text-[8px] label-tracking text-zinc-500 mb-1">Hierarchy A</p>
+<div class="h-12 bg-surface rounded-lg"></div>
+</div>
+<div class="bg-white/40 p-4 rounded-xl">
+<p class="font-label uppercase text-[8px] label-tracking text-zinc-500 mb-1">Hierarchy B</p>
+<div class="h-12 bg-surface-container-low rounded-lg"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Chat Input Bar -->
+<div class="p-8 bg-white border-t-0">
+<div class="max-w-4xl mx-auto flex items-center gap-4 bg-surface-container-low p-2 rounded-full ring-2 ring-transparent focus-within:ring-black/10 transition-all">
+<div class="flex items-center gap-1 pl-4">
+<button class="w-10 h-10 flex items-center justify-center text-zinc-400 hover:text-black transition-colors">
+<span class="material-symbols-outlined" data-icon="add_circle">add_circle</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center text-zinc-400 hover:text-black transition-colors">
+<span class="material-symbols-outlined" data-icon="image">image</span>
+</button>
+</div>
+<input class="flex-1 bg-transparent border-none focus:ring-0 font-headline font-[340] text-sm tracking-editorial text-black placeholder:text-zinc-400" placeholder="Analyze the editorial rhythm..." type="text"/>
+<button class="bg-black text-white h-10 px-6 rounded-full font-label uppercase text-[10px] label-tracking hover:scale-[0.98] active:scale-95 transition-all flex items-center gap-2">
+<span>Send</span>
+<span class="material-symbols-outlined text-sm" data-icon="arrow_upward">arrow_upward</span>
+</button>
+</div>
+<div class="mt-4 flex justify-center gap-6">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-zinc-300"></span>
+<span class="font-label uppercase text-[8px] label-tracking text-zinc-400">GPT-4 Turbo</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-zinc-300"></span>
+<span class="font-label uppercase text-[8px] label-tracking text-zinc-400">Context: Editorial Guidelines</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- FAB Suppression: Contextually hidden as per rules for Workspace/Active Session -->
+</body></html>

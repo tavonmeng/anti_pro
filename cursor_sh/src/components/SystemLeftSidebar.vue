@@ -31,6 +31,27 @@
           <el-icon><Grid /></el-icon>
           <span v-if="!uiStore.isSidebarCollapsed">My Orders</span>
         </div>
+        
+        <!-- Ongoing projects listing when in overview -->
+        <div class="ongoing-projects-nav" v-if="!uiStore.isSidebarCollapsed && uiStore.activeModule === '' && ongoingOrders.length > 0">
+          <transition name="fade" mode="out-in">
+            <div 
+              class="active-order-box" 
+              :key="currentOrder?.id"
+              v-if="currentOrder"
+              @click="router.push(`/user/orders/${currentOrder.id}`)"
+            >
+              <div class="box-header">
+                <el-icon><Document /></el-icon>
+                <span class="truncate">{{ getOrderName(currentOrder) }}</span>
+              </div>
+              <div class="box-status">
+                <span class="status-dot"></span>
+                {{ getStatusText(currentOrder.status) }}
+              </div>
+            </div>
+          </transition>
+        </div>
       </div>
     </div>
 
@@ -68,18 +89,72 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Grid, Setting, Bell, Help, House, SwitchButton } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox } from 'element-plus'
 import NotificationBell from '@/components/NotificationBell.vue'
 import { useUiStore } from '@/stores/ui'
+import { useOrderStore } from '@/stores/order'
+import { Document } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const uiStore = useUiStore()
+const orderStore = useOrderStore()
+
+const ongoingOrders = computed(() => {
+  return orderStore.orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled')
+})
+
+const currentOrderIndex = ref(0)
+let orderInterval: any = null
+
+onMounted(() => {
+  orderInterval = setInterval(() => {
+     if (ongoingOrders.value.length > 1) {
+       currentOrderIndex.value = (currentOrderIndex.value + 1) % ongoingOrders.value.length
+     } else {
+       currentOrderIndex.value = 0
+     }
+  }, 4000) // Switch every 4 seconds
+})
+
+onUnmounted(() => {
+   if (orderInterval) clearInterval(orderInterval)
+})
+
+const currentOrder = computed(() => {
+   if (ongoingOrders.value.length === 0) return null
+   if (currentOrderIndex.value >= ongoingOrders.value.length) {
+     currentOrderIndex.value = 0
+   }
+   return ongoingOrders.value[currentOrderIndex.value]
+})
+
+const getStatusText = (status: string) => {
+  const map: Record<string, string> = {
+    'pending_assign': '等待接单',
+    'in_production': '制作生产中',
+    'pending_review': '内部待审核',
+    'preview_ready': '初稿待您确认',
+    'revision_needed': '修改中',
+    'final_preview': '终稿确认'
+  }
+  return map[status] || status
+}
+
+const getOrderName = (order: any) => {
+  if (order.title) return order.title
+  const typeMap: Record<string, string> = {
+    'video_purchase': '裸眼3D成片购买',
+    'ai_3d_custom': 'AI裸眼3D定制',
+    'digital_art': '数字艺术定制'
+  }
+  return typeMap[order.orderType] || order.id.slice(0, 8)
+}
 
 const userInitial = computed(() => {
   const name = authStore.user?.username || 'U'
@@ -134,13 +209,13 @@ const handleLogout = async () => {
 
 <style scoped>
 .system-sidebar {
-  width: 220px; /* Compressed width */
+  width: 220px;
   height: 100vh;
-  background: #f6f3f2; /* surface-container-low */
+  background: #f6f3f2;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  border-right: none; /* No-line rule */
+  border-right: none;
   padding: 24px 0;
   box-sizing: border-box;
   transition: width 0.3s cubic-bezier(0.25, 1, 0.3, 1);
@@ -156,16 +231,17 @@ const handleLogout = async () => {
 }
 
 .system-sidebar.is-collapsed .sidebar-header {
-  padding: 0 8px;
+  display: none; /* Hide header completely to pull icons up */
 }
 
 .system-sidebar.is-collapsed .user-profile-top {
-  padding: 4px;
+  padding: 0;
   justify-content: center;
   border-radius: 50%;
   box-shadow: none;
   background: transparent;
-  margin: 0 16px 20px 16px;
+  width: 40px;
+  margin: 0 auto 16px auto; /* Reduce bottom margin, auto horizontal */
 }
 
 .system-sidebar.is-collapsed .nav-item {
@@ -190,9 +266,9 @@ const handleLogout = async () => {
 }
 
 .logo-text {
-  font-size: 12px; /* Set smaller to fit */
+  font-size: 12px;
   font-weight: 700;
-  color: #1b1b1c; /* on_surface */
+  color: #1b1b1c;
   letter-spacing: -0.01em;
   display: block;
   text-align: center;
@@ -205,9 +281,9 @@ const handleLogout = async () => {
   gap: 12px;
   padding: 4px 12px;
   margin: 0 16px 20px 16px;
-  border-radius: 20px; /* matched nav-item pill style */
-  background: #ffffff; /* Lifted user profile card */
-  box-shadow: 0 2px 8px rgba(27, 27, 28, 0.04); /* Reduced shadow and gap */
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(27, 27, 28, 0.04);
 }
 
 .user-info {
@@ -217,7 +293,7 @@ const handleLogout = async () => {
 }
 
 .user-name {
-  font-size: 13px; /* Reduced */
+  font-size: 13px;
   font-weight: 600;
   color: #1b1b1c;
 }
@@ -233,26 +309,26 @@ const handleLogout = async () => {
 .nav-section {
   display: flex;
   flex-direction: column;
-  gap: 4px; /* Compressed gap */
+  gap: 4px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 40px; /* Thinner height */
+  height: 40px;
   padding: 0 16px;
-  border-radius: 20px; /* Pill shape adjusted to height */
+  border-radius: 20px;
   cursor: pointer;
-  color: #414754; /* on_surface_variant */
-  font-size: 13px; /* Smaller more elegant text */
+  color: #414754;
+  font-size: 13px;
   font-weight: 500;
   transition: all 0.2s ease;
 }
 
 .nav-item .el-icon {
-  font-size: 16px; /* Smaller icon */
-  color: #1b1b1c; /* Black by default */
+  font-size: 16px;
+  color: #1b1b1c;
   transition: color 0.2s ease;
 }
 
@@ -270,6 +346,74 @@ const handleLogout = async () => {
 
 .nav-item.active .el-icon {
   color: #0058bc; /* Primary color when active */
+}
+
+.ongoing-projects-nav {
+  padding: 0 16px;
+  margin-top: 12px;
+}
+
+.active-order-box {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08); /* Clean Figma border */
+  border-radius: 8px; /* Figma tile */
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.active-order-box:hover {
+  border-color: rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.box-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #1b1b1c;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.box-header .el-icon {
+  color: #0071e3; /* Apple active blue */
+  font-size: 14px;
+}
+
+.box-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #646a78;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0071e3; 
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
 }
 
 .sidebar-footer {

@@ -228,9 +228,8 @@ const goToRegister = () => {
   align-items: center;
   justify-content: center;
   background: #ffffff;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  font-feature-settings: "kern" 1;
-  color: #000000;
+  font-family: 'SF Pro Text', 'SF Pro Display', system-ui, -apple-system, sans-serif;
+  color: #1d1d1f;
   padding: 20px 0;
   box-sizing: border-box;
 }
@@ -269,13 +268,14 @@ const goToRegister = () => {
 }
 
 .login-title, .admin-title, .register-title {
-  font-size: 26px;
-  font-weight: 500;
-  letter-spacing: -0.26px;
-  color: #000;
+  font-family: 'SF Pro Display', system-ui, sans-serif;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.196px;
+  color: #1d1d1f;
   margin: 0;
   text-align: center;
-  line-height: 1.35;
+  line-height: 1.14;
 }
 
 /* 表单紧凑设定 */
@@ -301,31 +301,31 @@ const goToRegister = () => {
 /* 输入框 Figma 主题覆写 */
 .tech-input, .admin-input, .captcha-input {
   :deep(.el-input__wrapper) {
-    background-color: rgba(0, 0, 0, 0.04) !important;
-    border: 2px solid transparent !important;
-    border-radius: 8px !important;
+    background-color: #fafafc !important;
+    border: 3px solid rgba(0, 0, 0, 0.04) !important;
+    border-radius: 11px !important;
     box-shadow: none !important;
-    padding: 0 12px !important;
+    padding: 0 14px !important;
     height: 44px;
     transition: all 0.2s;
     
     &.is-focus, &:hover {
       background-color: #ffffff !important;
-      border-color: #000 !important;
     }
     
     &.is-focus {
-      outline: dashed 2px #000;
+      outline: 2px solid #0071e3 !important;
       outline-offset: 2px;
+      border-color: transparent !important;
     }
   }
 
   :deep(.el-input__inner) {
     height: 44px !important;
-    font-size: 16px !important;
+    font-size: 17px !important;
     font-weight: 400;
-    letter-spacing: -0.14px;
-    color: #000 !important;
+    letter-spacing: -0.374px;
+    color: #1d1d1f !important;
     &::placeholder {
       color: rgba(0, 0, 0, 0.4) !important;
     }
@@ -335,9 +335,9 @@ const goToRegister = () => {
 .input-border { display: none !important; }
 
 .input-icon { 
-  color: #000; 
+  color: #1d1d1f; 
   font-size: 18px; 
-  opacity: 0.5; 
+  opacity: 0.48; 
   margin-right: 4px;
 }
 :deep(.el-input__wrapper.is-focus) .input-icon { opacity: 1; }
@@ -345,24 +345,30 @@ const goToRegister = () => {
 /* 按钮 */
 .login-button, .admin-login-button, .register-button {
   width: 100%;
-  height: 48px;
-  font-size: 16px;
-  font-weight: 500;
-  letter-spacing: normal;
-  background: #000 !important;
-  border: none !important;
-  border-radius: 50px !important;
-  color: #fff !important;
+  height: 44px;
+  font-family: 'SF Pro Text', system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: -0.374px;
+  background: #0071e3 !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
   margin-top: 16px; 
-  transition: opacity 0.2s;
+  transition: background-color 0.2s, transform 0.1s;
   
   &:hover {
-    opacity: 0.85;
+    background: #0077ed !important; /* Slightly brighter Apple Blue */
+    opacity: 1;
     transform: none;
   }
   
+  &:active {
+    background: #005bb5 !important;
+  }
+  
   &:focus-visible {
-    outline: dashed 2px #000;
+    outline: 2px solid #0071e3;
     outline-offset: 2px;
   }
 }
@@ -381,8 +387,8 @@ const goToRegister = () => {
 .footer-text, .security-notice, .security-tips {
   font-size: 14px;
   font-weight: 400;
-  letter-spacing: -0.1px;
-  color: rgba(0, 0, 0, 0.5);
+  letter-spacing: -0.224px;
+  color: rgba(0, 0, 0, 0.48);
   margin: 0;
   display: flex;
   align-items: center;
@@ -392,18 +398,16 @@ const goToRegister = () => {
 
 .footer-link, .back-link {
   font-size: 14px;
-  letter-spacing: -0.1px;
+  letter-spacing: -0.224px;
   margin: 0;
-  color: #000;
+  color: #1d1d1f;
 }
 
 :deep(.el-link) {
-  color: #000 !important;
-  font-weight: 600;
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
-  &:hover { opacity: 0.6; }
+  color: #0066cc !important;
+  font-weight: 400;
+  text-decoration: none;
+  &:hover { text-decoration: underline; opacity: 1; }
 }
 
 /* 验证码特殊布局补丁 */

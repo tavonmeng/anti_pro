@@ -64,8 +64,8 @@
     </div>
     
     <div class="form-actions">
-      <el-button @click="handleCancel">取消</el-button>
-      <el-button type="primary" @click="handleSubmit">确认提交</el-button>
+      <button class="btn-secondary" @click="handleCancel">取消</button>
+      <button class="btn-primary" @click="handleSubmit">确认提交</button>
     </div>
   </div>
 </template>
@@ -185,23 +185,39 @@ const getArtDirectionText = (): string => {
 
 <style lang="scss" scoped>
 .digital-art-form {
-  padding: 24px;
+  padding: 0;
 }
 
 .production-notice {
-  margin: 24px 0;
+  margin: 32px 0 24px 0;
+  padding: 16px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
   
   :deep(.el-alert) {
-    border-radius: 12px;
-    padding: 16px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    
+    .el-alert__title {
+      font-family: 'SF Mono', 'Menlo', monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #747474;
+    }
+    
+    .el-alert__icon {
+      display: none;
+    }
     
     p {
       margin: 8px 0;
-      font-size: 14px;
+      font-size: 13px;
       line-height: 1.6;
+      color: #414754;
       
       &:first-child {
-        margin-top: 0;
+        margin-top: 8px;
       }
       
       &:last-child {
@@ -209,7 +225,7 @@ const getArtDirectionText = (): string => {
       }
       
       strong {
-        color: #667eea;
+        color: #1a1c1c;
         font-weight: 600;
       }
     }
@@ -220,19 +236,76 @@ const getArtDirectionText = (): string => {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  margin-top: 24px;
+  margin-top: 32px;
   padding-top: 24px;
-  border-top: 1px solid #E8E8ED;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.btn-primary {
+  background: #000000;
+  color: #ffffff;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  font-family: inherit;
+}
+
+.btn-primary:hover {
+  opacity: 0.85;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: #414754;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  padding: 10px 24px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.btn-secondary:hover {
+  border-color: rgba(0, 0, 0, 0.3);
+  color: #1a1c1c;
 }
 
 :deep(.el-form-item__label) {
-  font-weight: 600;
-  color: #1D1D1F;
+  font-weight: 500;
+  font-size: 13px;
+  color: #1a1c1c;
+  letter-spacing: -0.01em;
+}
+
+:deep(.el-input__wrapper),
+:deep(.el-textarea__inner) {
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+  transition: box-shadow 0.2s;
+}
+
+:deep(.el-input__wrapper:focus-within),
+:deep(.el-textarea__inner:focus) {
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15) !important;
 }
 
 :deep(.el-radio-button__inner) {
-  border-radius: 8px;
+  border-radius: 9999px;
   margin-right: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: none;
+}
+
+:deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: #000000;
+  border-color: #000000;
+  box-shadow: none;
 }
 </style>
 

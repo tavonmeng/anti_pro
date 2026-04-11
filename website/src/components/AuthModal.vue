@@ -62,7 +62,9 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.4);
+  background-color: rgba(210, 210, 215, 0.64);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   z-index: 9999;
   display: flex;
   align-items: center;
@@ -74,8 +76,8 @@ onUnmounted(() => {
   max-width: 440px;
   height: 620px;
   background-color: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  box-shadow: rgba(0, 0, 0, 0.22) 3px 5px 30px 0px;
   border: none;
   position: relative;
   overflow: hidden;
@@ -89,18 +91,19 @@ onUnmounted(() => {
   right: 20px;
   background: transparent;
   border: none;
-  color: #000000;
-  opacity: 0.3;
+  color: #1d1d1f;
+  opacity: 0.48;
   font-size: 28px;
   cursor: pointer;
   z-index: 10;
   line-height: 1;
-  transition: opacity 0.2s;
+  transition: all 0.2s;
   padding: 0;
 }
 
 .close-btn:hover {
   opacity: 1;
+  transform: scale(1.1);
 }
 
 .auth-iframe {

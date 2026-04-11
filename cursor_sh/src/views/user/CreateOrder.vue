@@ -1,12 +1,17 @@
 <template>
   <div class="create-order-page">
-    <div class="page-header">
+    <!-- Stitch Mono Section Label -->
+    <div class="section-label">ORDER BRIEF</div>
 
+    <div class="page-header">
       <h1 class="page-title">{{ pageTitle }}</h1>
       <p class="page-subtitle">{{ pageSubtitle }}</p>
     </div>
     
-    <el-card class="form-card" v-loading="loading">
+    <!-- Flat divider instead of card wrapper -->
+    <div class="header-divider"></div>
+
+    <div class="form-surface" v-loading="loading">
       <VideoPurchaseForm
         v-if="orderType === 'video_purchase'"
         :order="isEditMode ? (order || undefined) : undefined"
@@ -25,7 +30,7 @@
         @submit="handleSubmit"
         @cancel="goBack"
       />
-    </el-card>
+    </div>
   </div>
 </template>
 
@@ -131,35 +136,57 @@ const goBack = () => {
 
 <style lang="scss" scoped>
 .create-order-page {
-  padding: 24px;
+  padding: 32px 40px;
   max-width: 900px;
   margin: 0 auto;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+/* Stitch monospace section label */
+.section-label {
+  font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: #747474;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 16px;
 }
 
 .page-header {
-  margin-bottom: 24px;
-  
-  .el-button {
-    margin-bottom: 16px;
-  }
+  margin-bottom: 0;
 }
 
 .page-title {
-  font-size: 28px;
-  font-weight: 600;
-  color: #1D1D1F;
+  font-size: 24px;
+  font-weight: 500;
+  color: #1a1c1c;
   margin: 0 0 8px 0;
+  letter-spacing: -0.01em;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 .page-subtitle {
-  font-size: 14px;
-  color: #86868B;
+  font-size: 13px;
+  color: #747474;
   margin: 0;
+  line-height: 1.5;
 }
 
-.form-card {
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+.header-divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 24px 0;
+}
+
+/* Flat surface — no card, no shadow, no border-radius */
+.form-surface {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
 }
 </style>
-
