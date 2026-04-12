@@ -10,21 +10,22 @@
           :style="{ zIndex: index + 1 }"
           @click="emit('open-showcase', item)"
         >
-          <div class="media-wrapper">
-            <!-- 标题栏现在放在这里，附属于自身的卡片，实现真正背景透视 -->
-            <div class="sticky-header">
-              <div class="header-inner">
-                <div class="case-meta-left">
-                  <span class="case-id">{{ item.id }}</span>
-                </div>
-                <div class="case-title-center">
-                  <h3 class="case-title">{{ item.title }}</h3>
-                </div>
-                <div class="case-meta-right">
-                  <span class="case-arrow">↗</span>
-                </div>
+          <!-- 标题栏独立出来，保证缩放时不被影响，全宽覆盖黑色底 -->
+          <div class="sticky-header">
+            <div class="header-inner">
+              <div class="case-meta-left">
+                <span class="case-id">{{ item.id }}</span>
+              </div>
+              <div class="case-title-center">
+                <h3 class="case-title">{{ item.title }}</h3>
+              </div>
+              <div class="case-meta-right">
+                <span class="case-arrow">↗</span>
               </div>
             </div>
+          </div>
+
+          <div class="media-wrapper">
 
             <img 
               v-if="item.detail?.gallery?.[0]" 
@@ -78,7 +79,11 @@ onMounted(() => {
 
     // 初始化状态，设定顶部中心缩放以便精准叠放
     cards.forEach((card, index) => {
+      // 设定顶部中心缩放
+      const media = card.querySelector('.media-wrapper')
       gsap.set(card, { transformOrigin: "top center" })
+      if(media) gsap.set(media, { transformOrigin: "top center" })
+      
       if (index !== 0) {
         gsap.set(card, { yPercent: 100, force3D: true })
       } else {
@@ -108,21 +113,33 @@ onMounted(() => {
 
       const scrollPos = index - 1
 
-      // 卡片往上滑，正好压住前一张卡片，并在顶部留出它的标题条
+      // 卡片往上滑，正好压住前一张卡片
       tl.to(card, {
         yPercent: 0,
-        y: index * headerHeight,
+        y: index * headerHeight, // 顶部留出之前的标题空间
         ease: 'none',
         force3D: true
       }, scrollPos)
 
-      // 前一张卡片微缩变暗
-      tl.to(cards[index - 1], {
-        scale: 0.95,
-        opacity: 0.5,
-        ease: 'none',
-        force3D: true
-      }, scrollPos)
+      // 仅仅让前一张卡片的图片内容部分（media-wrapper）微缩变暗，标题栏保持全宽
+      const prevMedia = cards[index - 1].querySelector('.media-wrapper')
+      const prevHeader = cards[index - 1].querySelector('.sticky-header')
+      
+      if (prevMedia) {
+        tl.to(prevMedia, {
+          scale: 0.95,
+          opacity: 0.4,
+          ease: 'none',
+          force3D: true
+        }, scrollPos)
+      }
+      // 标题栏在下面一层变暗一点以增加堆叠效果，但不缩小
+      if (prevHeader) {
+        tl.to(prevHeader, {
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          ease: 'none',
+        }, scrollPos)
+      }
     })
 
   }, sectionRef.value)
@@ -133,10 +150,17 @@ onUnmounted(() => {
 })
 </script>
 
+<style>
+/* 非scoped：强制 GSAP pin-spacer 包裹层也显示黑色背景，防止滚动时边缘露出底色 */
+.pin-spacer {
+  background-color: #000 !important;
+}
+</style>
+
 <style scoped>
 .cases-section {
   background-color: #000;
-  width: 100vw !important; /* Force to always span the entire viewport to defeat GSAP pin-spacer resize bugs */
+  width: 100%;
   height: calc(100vh - 68px);
   position: relative;
   box-sizing: border-box;
@@ -147,12 +171,14 @@ onUnmounted(() => {
   height: 100%;
   position: relative;
   overflow: hidden;
+  background-color: #000 !important;
 }
 
 .cases-stack {
   position: relative;
   width: 100%;
   height: 100%;
+  background-color: #000;
 }
 
 .case-item {
@@ -163,7 +189,7 @@ onUnmounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: #000;
+  background-color: #000 !important;
   will-change: transform, opacity;
 }
 
@@ -171,15 +197,18 @@ onUnmounted(() => {
   flex: 1;
   position: relative;
   width: 100%;
-  height: 100%;
   overflow: hidden;
+  background-color: #000 !important;
+  will-change: transform, opacity;
+  /* Safari edge bleed & subpixel ghosting fix for transformed contents */
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  mask-image: radial-gradient(white, black);
+  transform: translateZ(0);
 }
 
-/* 核心：现在的标题栏位于每张卡片的体系内，只模糊自身的图 */
+/* 改变 sticky-header 位置：因为现在与 media-wrapper 是同级元素了 */
 .sticky-header {
-  position: absolute;
-  top: 0;
-  left: 0;
+  position: relative; /* 换成 relative 以便堆叠，防止随图片缩小 */
   width: 100%;
   height: 20px; 
   padding: 0 5%;
@@ -188,9 +217,10 @@ onUnmounted(() => {
   background: rgba(0, 0, 0, 0.4); 
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   z-index: 200;
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .header-inner {
@@ -246,6 +276,7 @@ onUnmounted(() => {
   object-fit: cover;
   transition: transform 1.2s cubic-bezier(0.2, 0, 0.2, 1);
   will-change: transform;
+  transform: translateZ(0); /* Hardware acceleration to prevent edge ghosting */
 }
 
 .case-details {

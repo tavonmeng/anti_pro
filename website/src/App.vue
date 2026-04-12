@@ -13,7 +13,7 @@
         <ContactSection />
       </main>
       
-      <TheFooter />
+      <TheFooter @open-experiment="isExperimentOpen = true" />
     </div>
 
     <CaseShowcasePage 
@@ -36,6 +36,11 @@
       :mode="uiState.authMode"
       @close="closeAuthModal"
     />
+
+    <Experiment3D 
+      v-if="isExperimentOpen" 
+      @close="isExperimentOpen = false" 
+    />
   </div>
 </template>
 
@@ -47,6 +52,7 @@ import CaseShowcasePage from './components/CaseShowcasePage.vue'
 import CustomCursor from './components/CustomCursor.vue'
 import PageLoader from './components/PageLoader.vue'
 import AuthModal from './components/AuthModal.vue'
+import Experiment3D from './components/Experiment3D.vue'
 import gsap from 'gsap'
 import ScrollTrigger from 'gsap/ScrollTrigger'
 
@@ -69,6 +75,7 @@ const activeCaseShowcase = ref(null)
 const isShowcaseOpen = ref(false)
 const activeCaseDetail = ref(null)
 const isDetailOpen = ref(false)
+const isExperimentOpen = ref(false)
 
 // 页面加载状态
 const isLoaded = ref(false)

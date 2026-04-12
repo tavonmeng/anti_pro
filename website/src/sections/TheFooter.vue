@@ -110,6 +110,7 @@
       <div class="footer-bottom">
         <span class="copyright">© 2025 Unique Vision. All rights reserved.</span>
         <div class="footer-legal">
+          <a href="#" @click.prevent="$emit('open-experiment')">✨ 3D Lab</a>
           <a href="#">使用条款</a>
           <a href="#">隐私政策</a>
         </div>

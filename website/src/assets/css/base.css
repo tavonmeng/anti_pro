@@ -6,11 +6,15 @@
 
 body {
     font-family: var(--font-primary);
-    background-color: var(--color-bg-primary);
+    background-color: #000000 !important;
     color: var(--color-text-primary);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
+}
+
+html {
+    background-color: #000000 !important;
 }
 
 a {
