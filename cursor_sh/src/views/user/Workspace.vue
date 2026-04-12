@@ -404,7 +404,6 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   align-items: center;
   padding: 4px 4px 4px 16px;
   width: 100%;
-  max-width: 800px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -431,7 +430,7 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 }
 
 .generate-btn {
-  background: #0058bc;
+  background: #0d99ff; /* Matched to Figma primary blue (View orders color) */
   color: #fff;
   font-weight: 500;
   padding: 8px 16px;
@@ -440,6 +439,12 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   display: flex;
   align-items: center;
   gap: 6px;
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+
+.generate-btn:hover {
+  background: #0a8bed;
+  transform: scale(0.98);
 }
 
 .service-cards {

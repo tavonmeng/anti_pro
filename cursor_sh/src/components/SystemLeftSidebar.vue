@@ -6,7 +6,7 @@
       </div>
     </div>
     
-    <div class="user-profile-top">
+    <div class="user-profile-top" @click="navigate('workspace')" title="返回主页">
       <el-avatar :size="32" class="user-avatar" src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png">{{ userInitial }}</el-avatar>
       <div class="user-info" v-if="!uiStore.isSidebarCollapsed">
         <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
@@ -34,23 +34,38 @@
         
         <!-- Ongoing projects listing when in overview -->
         <div class="ongoing-projects-nav" v-if="!uiStore.isSidebarCollapsed && uiStore.activeModule === '' && ongoingOrders.length > 0">
-          <transition name="fade" mode="out-in">
+          <div class="orders-stack-container" @mouseenter="pauseRotation" @mouseleave="resumeRotation">
             <div 
-              class="active-order-box" 
-              :key="currentOrder?.id"
-              v-if="currentOrder"
-              @click="router.push(`/user/orders/${currentOrder.id}`)"
+              v-for="order in ongoingOrders"
+              :key="order.id"
+              class="active-order-box figma-upgrade-card" 
+              :style="getStackStyle(order)"
+              @click="handleStackClick(order)"
             >
-              <div class="box-header">
+              <div class="card-icon-wrap" :style="{ opacity: getVisualIndex(order) === 0 ? 1 : 0.5 }">
                 <el-icon><Document /></el-icon>
-                <span class="truncate">{{ getOrderName(currentOrder) }}</span>
               </div>
-              <div class="box-status">
-                <span class="status-dot"></span>
-                {{ getStatusText(currentOrder.status) }}
+              <div class="card-text-wrap">
+                <div class="card-title truncate">{{ getOrderName(order) }}</div>
+                <div class="card-subtitle">
+                  <span class="status-dot"></span>
+                  {{ getStatusText(order.status) }}
+                </div>
               </div>
+              <button class="card-action-btn" @click.stop="router.push(`/user/orders/${order.id}`)">View order</button>
             </div>
-          </transition>
+
+            <!-- Pagination dots over stack -->
+            <div class="stack-pagination" v-if="ongoingOrders.length > 1">
+              <span 
+                v-for="(_, idx) in ongoingOrders" 
+                :key="idx" 
+                class="stack-dot"
+                :class="{ active: idx === currentOrderIndex }"
+                @click.stop="goToIndex(idx)"
+              ></span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -110,29 +125,123 @@ const ongoingOrders = computed(() => {
 })
 
 const currentOrderIndex = ref(0)
+const animatingOutId = ref<string | null>(null)
 let orderInterval: any = null
 
-onMounted(() => {
+const advanceToNext = () => {
+  const currentList = ongoingOrders.value;
+  if (currentList.length <= 1) return;
+  
+  animatingOutId.value = currentList[currentOrderIndex.value].id;
+  currentOrderIndex.value = (currentOrderIndex.value + 1) % currentList.length;
+
+  setTimeout(() => {
+    animatingOutId.value = null; // Snap back quietly
+  }, 400); 
+}
+
+const goToIndex = (idx: number) => {
+  if (idx === currentOrderIndex.value) return;
+  const currentList = ongoingOrders.value;
+  animatingOutId.value = currentList[currentOrderIndex.value].id;
+  currentOrderIndex.value = idx;
+  
+  setTimeout(() => {
+    animatingOutId.value = null; 
+  }, 400);
+}
+
+const startRotation = () => {
+  if (orderInterval) clearInterval(orderInterval)
   orderInterval = setInterval(() => {
-     if (ongoingOrders.value.length > 1) {
-       currentOrderIndex.value = (currentOrderIndex.value + 1) % ongoingOrders.value.length
-     } else {
-       currentOrderIndex.value = 0
-     }
-  }, 4000) // Switch every 4 seconds
+     advanceToNext();
+  }, 10000) // Much slower rotation (10s)
+}
+
+const pauseRotation = () => {
+  if (orderInterval) clearInterval(orderInterval)
+}
+
+const resumeRotation = () => {
+  startRotation()
+}
+
+onMounted(() => {
+  startRotation()
 })
 
 onUnmounted(() => {
    if (orderInterval) clearInterval(orderInterval)
 })
 
-const currentOrder = computed(() => {
-   if (ongoingOrders.value.length === 0) return null
-   if (currentOrderIndex.value >= ongoingOrders.value.length) {
-     currentOrderIndex.value = 0
-   }
-   return ongoingOrders.value[currentOrderIndex.value]
-})
+// Visual stacking logic for horizontal right-stack display
+const getVisualIndex = (order: any) => {
+  if (order.id === animatingOutId.value) return -100; // Special magic index for sliding out
+  
+  const list = ongoingOrders.value;
+  if (!list.length) return -1;
+  const realIndex = list.findIndex(o => o.id === order.id);
+  // Calculate index offset simulating a cyclic deck of cards
+  const rawDiff = realIndex - currentOrderIndex.value;
+  return rawDiff >= 0 ? rawDiff : rawDiff + list.length;
+}
+
+const getStackStyle = (order: any) => {
+  const vIndex = getVisualIndex(order);
+  
+  if (vIndex === -100) {
+    return {
+       position: 'absolute', top: 0, left: 0, right: 0,
+       transform: 'translateX(-120%) scale(0.85) rotate(-4deg)', /* Swipe Left Out */
+       opacity: 0,
+       zIndex: 20, /* Keep top precedence during animation */
+       pointerEvents: 'none',
+       transition: 'all 0.4s cubic-bezier(0.25, 1, 0.3, 1)',
+       visibility: 'visible'
+    }
+  }
+
+  if (vIndex === -1) return { display: 'none' };
+  
+  if (vIndex > 2) {
+    return {
+      position: 'absolute', top: 0, left: 0, right: 0,
+      opacity: 0,
+      transform: 'translateY(24px) scale(0.8)',
+      pointerEvents: 'none',
+      zIndex: 0,
+      transition: animatingOutId.value === order.id ? 'none' : 'all 0.4s cubic-bezier(0.25, 1, 0.3, 1)',
+      visibility: 'hidden'
+    }
+  }
+  
+  // Top card: vIndex = 0. Further cards shift strictly downward and scale down to reveal edge.
+  const yOffset = vIndex * 14; // Push downwards
+  const scale = 1 - (vIndex * 0.05); 
+  const zIndex = 10 - vIndex; 
+  const opacity = vIndex === 0 ? 1 : (vIndex === 1 ? 0.8 : 0.4)
+
+  return {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    transform: `translateY(${yOffset}px) scale(${scale})`,
+    transformOrigin: 'top center', /* Pin top scaling so translation pushes it cleanly downwards */
+    zIndex,
+    opacity,
+    pointerEvents: vIndex === 0 ? 'auto' : (vIndex === 1 ? 'auto' : 'none'),
+    visibility: 'visible',
+    transition: animatingOutId.value === order.id ? 'none' : 'all 0.4s cubic-bezier(0.25, 1, 0.3, 1)'
+  }
+}
+
+const handleStackClick = (order: any) => {
+  const vIndex = getVisualIndex(order);
+  if (vIndex === 1 || vIndex === 2) {
+    advanceToNext();
+  }
+}
 
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
@@ -284,6 +393,14 @@ const handleLogout = async () => {
   border-radius: 20px;
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(27, 27, 28, 0.04);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.user-profile-top:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(27, 27, 28, 0.08); /* Soft lift on hover to indicate clikability */
+  background: #fdfdfd;
 }
 
 .user-info {
@@ -349,47 +466,72 @@ const handleLogout = async () => {
 }
 
 .ongoing-projects-nav {
-  padding: 0 16px;
+  padding: 0; /* Fully flushed with the container for a tighter look */
   margin-top: 12px;
 }
 
-.active-order-box {
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.08); /* Clean Figma border */
-  border-radius: 8px; /* Figma tile */
-  padding: 10px 12px;
+.orders-stack-container {
+  position: relative;
+  height: 140px; /* Base height for the stacked cards area */
   cursor: pointer;
+  perspective: 1000px;
+}
+
+.active-order-box.figma-upgrade-card {
+  background: #f7f7f8; /* Soft light gray similar to the Figma upgrade card */
+  border: 1px solid rgba(0, 0, 0, 0.05); 
+  border-radius: 12px;
+  padding: 12px 10px; /* Reduced internal padding to keep the box sleek */
+  cursor: default; /* Action is handled by the button */
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 12px;
   transition: all 0.2s ease;
+  position: relative;
+  text-align: center;
 }
 
-.active-order-box:hover {
-  border-color: rgba(0, 0, 0, 0.25);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+.active-order-box.figma-upgrade-card:hover {
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
 }
 
-.box-header {
+.card-icon-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ffffff;
   display: flex;
   align-items: center;
-  gap: 6px;
-  color: #1b1b1c;
-  font-size: 13px;
-  font-weight: 600;
+  justify-content: center;
+  border: 1px solid rgba(0,0,0,0.08); /* Distinct circular outline */
+  color: #0d99ff; /* Use primary blue inside the icon circle */
+  font-size: 16px;
 }
 
-.box-header .el-icon {
-  color: #0071e3; /* Apple active blue */
-  font-size: 14px;
+.card-text-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
 }
 
-.box-status {
+.card-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #1a1c1c;
+  width: 100%;
+}
+
+.card-subtitle {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   font-size: 11px;
-  color: #646a78;
+  color: #747474;
 }
 
 .status-dot {
@@ -397,6 +539,25 @@ const handleLogout = async () => {
   height: 6px;
   border-radius: 50%;
   background: #0071e3; 
+}
+
+.card-action-btn {
+  width: 100%;
+  background: #0d99ff; /* Figma blue */
+  color: #ffffff;
+  border: none;
+  padding: 6px 0; /* Flatter button */
+  border-radius: 6px;
+  font-size: 11px; /* More refined typography */
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 2px;
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+
+.card-action-btn:hover {
+  background: #0a8bed;
+  transform: scale(0.98);
 }
 
 .fade-enter-active,
@@ -414,6 +575,31 @@ const handleLogout = async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+}
+
+.stack-pagination {
+  position: absolute;
+  bottom: -16px;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+}
+
+.stack-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.stack-dot.active {
+  background: #000000;
+  transform: scale(1.2);
 }
 
 .sidebar-footer {

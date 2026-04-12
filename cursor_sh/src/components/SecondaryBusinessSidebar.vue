@@ -252,8 +252,8 @@ const goToService = async (type: string) => {
 }
 
 .module-pill.is-active {
-  background: rgba(0, 0, 0, 0.06); /* Deeper subtle grey for active */
-  color: #1b1b1c; /* Text: dark gray/black */
+  background: #e5f4ff; /* Figma active item light blue */
+  color: #1a1c1c; /* Text stays dark/black as in Figma */
   font-weight: 500;
   margin-bottom: 8px; /* space before intro drops down */
 }
@@ -265,7 +265,7 @@ const goToService = async (type: string) => {
 }
 
 .expand-icon.is-active-icon {
-  color: #1b1b1c;
+  color: #0d99ff; /* The icon takes the Figma primary blue to pop */
 }
 
 .expand-icon.rotated {

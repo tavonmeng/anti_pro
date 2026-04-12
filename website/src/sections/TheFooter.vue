@@ -1,9 +1,10 @@
 <template>
   <footer class="footer">
-    <div class="footer-inner">
 
-      <!-- 顶部分割线 -->
-      <div class="footer-divider"></div>
+    <!-- 顶部分割线 -->
+    <div class="footer-divider-full"></div>
+
+    <div class="footer-inner">
 
       <!-- 主体区域 -->
       <div class="footer-main">
@@ -100,7 +101,11 @@
           </div>
         </nav>
       </div>
+    </div>
 
+    <div class="footer-bottom-divider"></div>
+
+    <div class="footer-inner">
       <!-- 底部版权栏 -->
       <div class="footer-bottom">
         <span class="copyright">© 2025 Unique Vision. All rights reserved.</span>
@@ -122,16 +127,15 @@
 }
 
 .footer-inner {
-  max-width: 1280px;
-  margin: 0 auto;
+  width: 100%;
   padding: 0 48px;
 }
 
 /* 顶部分割线 */
-.footer-divider {
+.footer-divider-full {
   height: 1px;
   background-color: #d8d8d8;
-  margin-bottom: 40px;
+  width: 100%;
 }
 
 /* 主体布局 */
@@ -140,6 +144,7 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 40px;
+  padding-top: 40px;
   padding-bottom: 36px;
 }
 
@@ -251,7 +256,7 @@
 /* ======= 右侧导航 ======= */
 .footer-nav {
   display: flex;
-  gap: 64px;
+  gap: clamp(64px, 6vw, 160px);
   flex-shrink: 0;
   padding-top: 2px;
 }
@@ -259,7 +264,7 @@
 .nav-col {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: clamp(14px, 1.5vw, 24px);
   min-width: 110px;
 }
 
@@ -308,8 +313,13 @@
 }
 
 /* ======= 底部版权 ======= */
+.footer-bottom-divider {
+  height: 1px;
+  background-color: #e8e8e8;
+  width: 100%;
+}
+
 .footer-bottom {
-  border-top: 1px solid #e8e8e8;
   padding: 16px 0 24px;
   display: flex;
   justify-content: space-between;

@@ -118,9 +118,9 @@ onMounted(() => {
 }
 
 .brand-logo {
-  height: 45px;
+  height: 60px;
   width: auto;
-  min-width: 45px;
+  min-width: 60px;
   object-fit: contain;
   opacity: 0.8;
   filter: brightness(0); /* Make any white pixels black to render safely on white bg */
@@ -130,7 +130,7 @@ onMounted(() => {
 
 .brand-item:hover .brand-logo {
   opacity: 1;
-  filter: brightness(0) drop-shadow(0 4px 6px rgba(0,0,0,0.2));
+  filter: brightness(0) drop-shadow(0 4px 10px rgba(0,0,0,0.15));
   transform: translateY(-3px) scale(1.05);
 }
 
@@ -146,7 +146,7 @@ onMounted(() => {
 
 @media (max-width: 768px) {
   .brand-logo {
-    height: 30px;
+    height: 45px;
   }
   .brands-wrapper {
     gap: 30px;

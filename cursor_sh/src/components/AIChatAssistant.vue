@@ -316,6 +316,8 @@ const handleCustomAiChat = async (userText: string) => {
   padding: 0 24px;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06); /* Perfectly align with inspiration sidebar tracker */
+  box-sizing: border-box;
   z-index: 20;
 }
 
@@ -396,12 +398,12 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 .new-session-btn {
-  background: #f3f3f4;
-  color: #1a1c1c;
+  background: #0d99ff; /* Figma primary blue */
+  color: #ffffff;
   padding: 6px 14px;
   border-radius: 9999px;
   font-size: 10px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   border: none;
@@ -411,8 +413,8 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 .new-session-btn:hover {
-  background: #e2e2e2;
-  transform: scale(0.95);
+  background: #0a8bed; /* Slightly darker vivid blue */
+  transform: scale(0.98);
 }
 
 .gradient-banner {

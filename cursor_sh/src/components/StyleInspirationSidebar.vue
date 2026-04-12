@@ -11,11 +11,19 @@
     </div>
     
     <div class="styles-container" @mouseenter="isHovering = true" @mouseleave="isHovering = false" :class="{ 'is-paused': isHovering }">
-      <transition-group name="fade-slide" tag="div" class="styles-list">
+      <transition-group 
+        appear
+        @before-enter="beforeEnter"
+        @enter="onEnter"
+        @leave="onLeave"
+        :css="false"
+        tag="div" 
+        class="styles-list">
         <div 
-          v-for="item in visibleStyles" 
+          v-for="(item, index) in visibleStyles" 
           :key="item.id" 
           class="style-card"
+          :data-index="index"
         >
           <div class="style-image" :style="{ background: item.bg }">
              <span class="style-emoji">{{ item.emoji }}</span>
@@ -32,6 +40,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import gsap from 'gsap'
 
 const emit = defineEmits(['close'])
 
@@ -76,25 +85,73 @@ onMounted(() => {
 onUnmounted(() => {
   if (progressInterval) clearInterval(progressInterval)
 })
+
+// GSAP transition hooks
+const beforeEnter = (el: any) => {
+  el.style.opacity = 0
+  el.style.transform = 'translateY(15px)'
+  el.style.position = 'absolute'
+  el.style.width = '100%'
+}
+
+const onEnter = (el: any, done: () => void) => {
+  const index = parseInt(el.dataset.index) || 0
+  gsap.to(el, {
+    opacity: 1,
+    y: 0,
+    duration: 0.6,
+    ease: "power3.out",
+    delay: index * 0.15,
+    onComplete: () => {
+      el.style.position = 'relative'
+      el.style.transform = 'none' /* Clear transform so hover continues to work cleanly */
+      done()
+    }
+  })
+}
+
+const onLeave = (el: any, done: () => void) => {
+  el.style.position = 'absolute'
+  el.style.width = '100%'
+  gsap.to(el, {
+    opacity: 0,
+    y: -15,
+    duration: 0.4,
+    ease: "power2.in",
+    onComplete: done
+  })
+}
 </script>
 
 <style scoped>
 .style-inspiration-sidebar {
   width: 260px;
   background: #ffffff;
-  border-left: 1px solid rgba(0,0,0,0.04);
+  border-left: 1px solid rgba(0,0,0,0.06);
   display: flex;
   flex-direction: column;
-  padding: 24px 20px;
+  padding: 0; /* Remove wrapper padding so header reaches edges */
   box-sizing: border-box;
   flex-shrink: 0;
+  height: 100vh; /* Stretch full height to resolve background visual gap */
 }
 
 .sidebar-header {
-  margin-bottom: 20px;
+  height: 56px; /* Align perfectly with ai-chat-assistant header height */
+  margin-bottom: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  justify-content: center;
+  padding: 0 24px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
 }
 
 .sidebar-title {
@@ -105,25 +162,6 @@ onUnmounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
-}
-
-.timer-line {
-  height: 2px;
-  background: rgba(0,0,0,0.05);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.timer-progress {
-  height: 100%;
-  background: #c8c8cc; /* Subtle grey */
-  transition: width 0.016s linear;
-}
-
-.header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 
 .close-btn {
@@ -141,8 +179,27 @@ onUnmounted(() => {
   color: #1a1c1c;
 }
 
+/* Base divider line spanning the full width of the sidebar exactly at the bottom of the 56px header */
+.timer-line {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: rgba(0,0,0,0.06); /* Gray tracking line that visually acts as the divider */
+  overflow: visible;
+}
+
+/* The active progress overlays perfectly on top of the divider */
+.timer-progress {
+  height: 100%;
+  background: #1a1c1c; /* Distinct dark progress so it stands out */
+  transition: width 0.016s linear;
+}
+
 .styles-container {
   flex: 1;
+  padding: 24px 20px; /* Restore padding strictly to content area */
   overflow: hidden;
   position: relative;
 }
@@ -205,21 +262,5 @@ onUnmounted(() => {
   line-height: 1.4;
 }
 
-/* Transitions */
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: all 0.5s cubic-bezier(0.25, 1, 0.3, 1);
-  position: absolute;
-  width: 100%;
-}
 
-.fade-slide-enter-from {
-  opacity: 0;
-  transform: translateY(20px);
-}
-
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-20px);
-}
 </style>
