@@ -140,7 +140,7 @@ onUnmounted(() => {
 .marquee-track {
   display: flex;
   width: max-content;
-  animation: scroll-left 25s linear infinite; /* 控制循环速度 */
+  animation: scroll-left 50s linear infinite; /* 放慢循环速度 */
   will-change: transform;
 }
 

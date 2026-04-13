@@ -73,7 +73,7 @@
         <div class="login-footer">
           <p class="footer-text">
             <el-icon><InfoFilled /></el-icon>
-            测试账号：user | 密码：123456
+            测试账号：test | 密码：123456
           </p>
           <p class="footer-link">
             还没有账户？
