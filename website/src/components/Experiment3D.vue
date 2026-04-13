@@ -1,5 +1,5 @@
 <template>
-  <div class="experiment-modal" ref="modalRef" @wheel.prevent="onWheel">
+  <div class="experiment-modal" @wheel.prevent="onWheel">
     <!-- Close Button -->
     <div class="close-btn" @click="$emit('close')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -9,120 +9,43 @@
       <span>Back</span>
     </div>
 
-    <!-- Scroll Progress Indicator -->
-    <div class="progress-bar">
-      <div class="progress-fill" :style="{ height: progressPercent + '%' }"></div>
-    </div>
+    <!-- Scroll container -->
+    <div class="scroll-container" ref="scrollContainerRef">
+      <!-- Intro -->
+      <section class="section-intro">
+        <h1>Unique Video 案例展示</h1>
+        <p>Scroll to explore</p>
+      </section>
 
-    <!-- Title Overlay -->
-    <div class="title-overlay" ref="titleRef">
-      <h1>Infinite Dimension</h1>
-      <p>Scroll to explore the depth ↓</p>
-    </div>
-
-    <!-- The camera viewport -->
-    <div class="camera-viewport">
-
-      <!-- Layer 1: Front -->
-      <div class="tunnel-layer" ref="layer1Ref">
-        <div class="grid-layout">
-          <!-- Row 1: span1 + span2 + span1 = 4 -->
-          <div class="grid-item span-1" @click="openLightbox('/pic/20a69413b2033fc4dabeca13a8fdfab9.jpg', 'December · Aethel Unit')">
-            <img src="/pic/20a69413b2033fc4dabeca13a8fdfab9.jpg" alt="" />
-            <span class="img-label">December · Aethel Unit</span>
-          </div>
-          <div class="grid-item span-2" @click="openLightbox('/pic/42ba05238c238a52ae5653ad2fb32027.jpg', 'July · Pressure Suit')">
-            <img src="/pic/42ba05238c238a52ae5653ad2fb32027.jpg" alt="" />
-            <span class="img-label">July · Pressure Suit</span>
-          </div>
-          <div class="grid-item span-1" @click="openLightbox('/pic/7aa43a1533cec10c05e9f80e34c5e292.jpg', 'March · Cybertron')">
-            <img src="/pic/7aa43a1533cec10c05e9f80e34c5e292.jpg" alt="" />
-            <span class="img-label">March · Cybertron</span>
-          </div>
-          <!-- Row 2: span2 + span1 + span1 = 4 -->
-          <div class="grid-item span-2" @click="openLightbox('/pic/7e456b2c4d4a127bab98aac2fc36b1d9.jpg', 'August · Desert Scout')">
-            <img src="/pic/7e456b2c4d4a127bab98aac2fc36b1d9.jpg" alt="" />
-            <span class="img-label">August · Desert Scout</span>
-          </div>
-          <div class="grid-item span-1" @click="openLightbox('/pic/969382b6ee1d410cd38e86c61c909596.jpg', 'February · Terminate')">
-            <img src="/pic/969382b6ee1d410cd38e86c61c909596.jpg" alt="" />
-            <span class="img-label">February · Terminate</span>
-          </div>
-          <div class="grid-item span-1" @click="openLightbox('/pic/be6db41b4a3679f16c1f0e9b987d8b40.jpg', 'May · Explorer')">
-            <img src="/pic/be6db41b4a3679f16c1f0e9b987d8b40.jpg" alt="" />
-            <span class="img-label">May · Explorer</span>
+      <!-- Projects grid -->
+      <section class="projects" ref="sectionRef">
+        <div
+          v-for="(row, rowIndex) in rowsData"
+          :key="rowIndex"
+          class="projects-row"
+          :ref="el => { if (el) rowEls[rowIndex] = el }"
+        >
+          <div
+            v-for="(item, colIndex) in row"
+            :key="colIndex"
+            class="project"
+            @click="openLightbox(item.src, item.label)"
+          >
+            <div class="project-img">
+              <img :src="item.src" :alt="item.label" />
+            </div>
+            <div class="project-info">
+              <p>{{ item.name }}</p>
+              <p>{{ item.year }}</p>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- Layer 2: Mid -->
-      <div class="tunnel-layer" ref="layer2Ref">
-        <div class="grid-layout">
-          <!-- Row 1: span1 + span1 + span2 = 4 -->
-          <div class="grid-item span-1" @click="openLightbox('/pic/c67ec27b4eec4e1a786af8aac51ace74.jpg', 'January · Pilot')">
-            <img src="/pic/c67ec27b4eec4e1a786af8aac51ace74.jpg" alt="" />
-            <span class="img-label">January · Pilot</span>
-          </div>
-          <div class="grid-item span-1" @click="openLightbox('/pic/c73653708752c3501a8fa2f4c63567e4.jpg', 'April · Mech Unit')">
-            <img src="/pic/c73653708752c3501a8fa2f4c63567e4.jpg" alt="" />
-            <span class="img-label">April · Mech Unit</span>
-          </div>
-          <div class="grid-item span-2" @click="openLightbox('/pic/d9e70ccc770aea92c3e8aaa4f5b2e400.jpg', 'September · Outpost')">
-            <img src="/pic/d9e70ccc770aea92c3e8aaa4f5b2e400.jpg" alt="" />
-            <span class="img-label">September · Outpost</span>
-          </div>
-          <!-- Row 2: span1 + span2 + span1 = 4 -->
-          <div class="grid-item span-1" @click="openLightbox('/pic/e3eb318b75ae146c5caad4eb93e9f9d6.jpg', 'June · Wanderer')">
-            <img src="/pic/e3eb318b75ae146c5caad4eb93e9f9d6.jpg" alt="" />
-            <span class="img-label">June · Wanderer</span>
-          </div>
-          <div class="grid-item span-2" @click="openLightbox('/pic/20a69413b2033fc4dabeca13a8fdfab9.jpg', 'October · Forge')">
-            <img src="/pic/20a69413b2033fc4dabeca13a8fdfab9.jpg" alt="" />
-            <span class="img-label">October · Forge</span>
-          </div>
-          <div class="grid-item span-1" @click="openLightbox('/pic/42ba05238c238a52ae5653ad2fb32027.jpg', 'November · Basin')">
-            <img src="/pic/42ba05238c238a52ae5653ad2fb32027.jpg" alt="" />
-            <span class="img-label">November · Basin</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Layer 3: Back -->
-      <div class="tunnel-layer" ref="layer3Ref">
-        <div class="grid-layout">
-          <!-- Row 1: span2 + span1 + span1 = 4 -->
-          <div class="grid-item span-2" @click="openLightbox('/pic/969382b6ee1d410cd38e86c61c909596.jpg', 'February · Train')">
-            <img src="/pic/969382b6ee1d410cd38e86c61c909596.jpg" alt="" />
-            <span class="img-label">February · Train</span>
-          </div>
-          <div class="grid-item span-1" @click="openLightbox('/pic/be6db41b4a3679f16c1f0e9b987d8b40.jpg', 'August · Guardian')">
-            <img src="/pic/be6db41b4a3679f16c1f0e9b987d8b40.jpg" alt="" />
-            <span class="img-label">August · Guardian</span>
-          </div>
-          <div class="grid-item span-1" @click="openLightbox('/pic/7e456b2c4d4a127bab98aac2fc36b1d9.jpg', 'March · Override')">
-            <img src="/pic/7e456b2c4d4a127bab98aac2fc36b1d9.jpg" alt="" />
-            <span class="img-label">March · Override</span>
-          </div>
-          <!-- Row 2: span1 + span1 + span2 = 4 -->
-          <div class="grid-item span-1" @click="openLightbox('/pic/c73653708752c3501a8fa2f4c63567e4.jpg', 'July · Sentinel')">
-            <img src="/pic/c73653708752c3501a8fa2f4c63567e4.jpg" alt="" />
-            <span class="img-label">July · Sentinel</span>
-          </div>
-          <div class="grid-item span-1" @click="openLightbox('/pic/e3eb318b75ae146c5caad4eb93e9f9d6.jpg', 'April · Horizon')">
-            <img src="/pic/e3eb318b75ae146c5caad4eb93e9f9d6.jpg" alt="" />
-            <span class="img-label">April · Horizon</span>
-          </div>
-          <div class="grid-item span-2" @click="openLightbox('/pic/c67ec27b4eec4e1a786af8aac51ace74.jpg', 'December · Station')">
-            <img src="/pic/c67ec27b4eec4e1a786af8aac51ace74.jpg" alt="" />
-            <span class="img-label">December · Station</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Final Text Layer -->
-      <div class="tunnel-layer final-layer" ref="finalLayerRef">
-        <h2 class="final-text">THE END OF TUNNEL</h2>
-      </div>
+      <!-- Outro -->
+      <section class="section-outro">
+        <h2>THE END OF TUNNEL</h2>
+      </section>
     </div>
 
     <!-- Lightbox Overlay -->
@@ -144,23 +67,55 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import gsap from 'gsap'
 
 const emit = defineEmits(['close'])
 
-const modalRef = ref(null)
-const layer1Ref = ref(null)
-const layer2Ref = ref(null)
-const layer3Ref = ref(null)
-const finalLayerRef = ref(null)
-const titleRef = ref(null)
+// ======= Refs =======
+const scrollContainerRef = ref(null)
+const sectionRef = ref(null)
+const rowEls = reactive({})
 
-// Virtual scroll progress: 0 → 1
-const progress = ref(0)
-const progressPercent = computed(() => Math.round(progress.value * 100))
+// ======= Constants (same as reference) =======
+const PROJECTS_PER_ROW = 9
+const TOTAL_ROWS = 10
+const ROW_START_WIDTH = 125  // %
+const ROW_END_WIDTH = 500    // %
 
-// Lightbox state
+// ======= Image data =======
+const pics = [
+  { src: '/pic/20a69413b2033fc4dabeca13a8fdfab9.jpg', name: 'Aethel Unit', year: '2024' },
+  { src: '/pic/42ba05238c238a52ae5653ad2fb32027.jpg', name: 'Pressure Suit', year: '2023' },
+  { src: '/pic/7aa43a1533cec10c05e9f80e34c5e292.jpg', name: 'Cybertron', year: '2024' },
+  { src: '/pic/7e456b2c4d4a127bab98aac2fc36b1d9.jpg', name: 'Desert Scout', year: '2022' },
+  { src: '/pic/969382b6ee1d410cd38e86c61c909596.jpg', name: 'Terminate', year: '2023' },
+  { src: '/pic/be6db41b4a3679f16c1f0e9b987d8b40.jpg', name: 'Explorer', year: '2024' },
+  { src: '/pic/c67ec27b4eec4e1a786af8aac51ace74.jpg', name: 'Pilot', year: '2023' },
+  { src: '/pic/c73653708752c3501a8fa2f4c63567e4.jpg', name: 'Mech Unit', year: '2022' },
+  { src: '/pic/d9e70ccc770aea92c3e8aaa4f5b2e400.jpg', name: 'Outpost', year: '2024' },
+  { src: '/pic/e3eb318b75ae146c5caad4eb93e9f9d6.jpg', name: 'Wanderer', year: '2023' },
+]
+
+// Build row data (cycle through images, same as reference)
+const rowsData = []
+let idx = 0
+for (let r = 0; r < TOTAL_ROWS; r++) {
+  const row = []
+  for (let c = 0; c < PROJECTS_PER_ROW; c++) {
+    const p = pics[idx % pics.length]
+    row.push({
+      src: p.src,
+      name: p.name,
+      year: p.year,
+      label: `${p.name} · ${p.year}`,
+    })
+    idx++
+  }
+  rowsData.push(row)
+}
+
+// ======= Lightbox =======
 const lightboxOpen = ref(false)
 const lightboxSrc = ref('')
 const lightboxLabel = ref('')
@@ -177,91 +132,111 @@ function closeLightbox() {
 
 function onKeydown(e) {
   if (e.key === 'Escape') {
-    if (lightboxOpen.value) {
-      closeLightbox()
-    } else {
-      emit('close')
-    }
+    if (lightboxOpen.value) closeLightbox()
+    else emit('close')
   }
 }
 
-// Sensitivity
-const SCROLL_SENSITIVITY = 0.0006
+// ======= Smooth scroll engine (replaces Lenis) =======
+let targetScroll = 0
+let currentScroll = 0
+const LERP = 0.075  // lower = smoother/slower , higher = snappier
 
 function onWheel(e) {
   if (lightboxOpen.value) return
-  const delta = e.deltaY * SCROLL_SENSITIVITY
-  progress.value = Math.max(0, Math.min(1, progress.value + delta))
-  applyProgress(progress.value)
+  const container = scrollContainerRef.value
+  if (!container) return
+  targetScroll += e.deltaY
+  const maxScroll = container.scrollHeight - container.clientHeight
+  targetScroll = Math.max(0, Math.min(targetScroll, maxScroll))
 }
 
-function applyProgress(p) {
-  // --- Title ---
-  const titleFade = gsap.utils.clamp(0, 1, 1 - p * 10)
-  gsap.set(titleRef.value, { opacity: titleFade, scale: 1 + p * 1.5, yPercent: -p * 60 })
+// ======= Per-frame update =======
+let tickerFn = null
 
-  // --- Layer 1 (exits upward) ---
-  const exit1 = gsap.utils.clamp(0, 1, p / 0.35)
-  gsap.set(layer1Ref.value, {
-    scale: 1 + exit1 * 1.8,
-    yPercent: -exit1 * 50,
-    opacity: 1 - exit1,
-    zIndex: 12,
-    visibility: exit1 >= 1 ? 'hidden' : 'visible',
-  })
-
-  // --- Layer 2 (enters from below, then exits upward) ---
-  const enter2 = gsap.utils.clamp(0, 1, (p - 0.20) / 0.15)
-  const exit2 = gsap.utils.clamp(0, 1, (p - 0.35) / 0.33)
-  const scale2 = gsap.utils.interpolate(0.5, 1, enter2) * (1 + exit2 * 1.8)
-  const y2 = gsap.utils.interpolate(50, 0, enter2) + (exit2 * -50)
-  const opacity2 = enter2 * (1 - exit2)
-  gsap.set(layer2Ref.value, {
-    scale: scale2,
-    yPercent: y2,
-    opacity: gsap.utils.clamp(0, 1, opacity2),
-    zIndex: 11,
-    visibility: (enter2 <= 0 || exit2 >= 1) ? 'hidden' : 'visible',
-  })
-
-  // --- Layer 3 (enters from below, then exits upward) ---
-  const enter3 = gsap.utils.clamp(0, 1, (p - 0.52) / 0.15)
-  const exit3 = gsap.utils.clamp(0, 1, (p - 0.68) / 0.32)
-  const scale3 = gsap.utils.interpolate(0.5, 1, enter3) * (1 + exit3 * 1.8)
-  const y3 = gsap.utils.interpolate(50, 0, enter3) + (exit3 * -50)
-  const opacity3 = enter3 * (1 - exit3)
-  gsap.set(layer3Ref.value, {
-    scale: scale3,
-    yPercent: y3,
-    opacity: gsap.utils.clamp(0, 1, opacity3),
-    zIndex: 10,
-    visibility: (enter3 <= 0 || exit3 >= 1) ? 'hidden' : 'visible',
-  })
-
-  // --- Final Layer ---
-  const pf = gsap.utils.clamp(0, 1, (p - 0.80) / 0.20)
-  gsap.set(finalLayerRef.value, {
-    scale: gsap.utils.interpolate(0.15, 1, pf),
-    yPercent: gsap.utils.interpolate(60, 0, pf),
-    opacity: pf,
-    zIndex: 9,
-    visibility: pf <= 0 ? 'hidden' : 'visible',
-  })
-}
-
-onMounted(() => {
-  applyProgress(0)
+onMounted(async () => {
   document.body.style.overflow = 'hidden'
   window.addEventListener('keydown', onKeydown)
+
+  await nextTick()
+
+  const container = scrollContainerRef.value
+  const section = sectionRef.current || sectionRef.value
+  if (!container || !section) return
+
+  const rows = []
+  for (let i = 0; i < TOTAL_ROWS; i++) {
+    if (rowEls[i]) rows.push(rowEls[i])
+  }
+  if (!rows.length) return
+
+  // Pre-calculate expanded section height (same as reference, lines 28-44)
+  const firstRow = rows[0]
+  firstRow.style.width = `${ROW_END_WIDTH}%`
+  const expandedRowHeight = firstRow.offsetHeight
+  firstRow.style.width = ''
+
+  const sectionGap = parseFloat(getComputedStyle(section).gap) || 0
+  const sectionPadding = parseFloat(getComputedStyle(section).paddingTop) || 0
+  const expandedSectionHeight =
+    expandedRowHeight * rows.length +
+    sectionGap * (rows.length - 1) +
+    sectionPadding * 2
+
+  section.style.height = `${expandedSectionHeight}px`
+
+  // Main update loop (runs every frame via gsap.ticker)
+  function onTick() {
+    // 1. Smooth scroll interpolation (this is what Lenis does)
+    currentScroll += (targetScroll - currentScroll) * LERP
+
+    // Snap to target when close enough to avoid infinite micro-updates
+    if (Math.abs(targetScroll - currentScroll) < 0.5) {
+      currentScroll = targetScroll
+    }
+
+    // 2. Apply scroll position
+    container.scrollTop = currentScroll
+
+    // 3. Update each row's width based on its scroll progress (reference lines 46-69)
+    const scrollY = currentScroll
+    const viewportHeight = container.clientHeight
+    const containerRect = container.getBoundingClientRect()
+
+    rows.forEach((row) => {
+      const rect = row.getBoundingClientRect()
+
+      const rowTop = rect.top - containerRect.top + scrollY
+      const rowBottom = rowTop + rect.height
+
+      const scrollStart = rowTop - viewportHeight
+      const scrollEnd = rowBottom
+
+      let progress = (scrollY - scrollStart) / (scrollEnd - scrollStart)
+      progress = Math.max(0, Math.min(1, progress))
+
+      const width =
+        ROW_START_WIDTH +
+        (ROW_END_WIDTH - ROW_START_WIDTH) * progress
+
+      row.style.width = `${width}%`
+    })
+  }
+
+  tickerFn = onTick
+  gsap.ticker.add(onTick)
+  gsap.ticker.lagSmoothing(0) // Critical: same as reference (line 18)
 })
 
 onUnmounted(() => {
   document.body.style.overflow = ''
   window.removeEventListener('keydown', onKeydown)
+  if (tickerFn) gsap.ticker.remove(tickerFn)
 })
 </script>
 
 <style scoped>
+/* ====== Modal Shell ====== */
 .experiment-modal {
   position: fixed;
   top: 0;
@@ -269,67 +244,112 @@ onUnmounted(() => {
   width: 100vw;
   height: 100vh;
   z-index: 9999;
-  background-color: #050505;
-  color: #fff;
-  font-family: 'Inter', sans-serif;
-  overflow: hidden;
-  cursor: ns-resize;
-}
-
-.camera-viewport {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  background-color: #f5f3ef;
+  color: #111;
+  font-family: 'Inter', 'PP Neue Montreal', sans-serif;
   overflow: hidden;
 }
 
-.tunnel-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
+.scroll-container {
   width: 100%;
   height: 100%;
-  will-change: transform, opacity;
-  transform-origin: center bottom;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Hide scrollbar for cleaner look */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-/* ====== Grid Layout ====== */
-.grid-layout {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: 1fr 1fr;
-  gap: 6px;
-  padding: 6px;
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box;
-  background: #050505;
+.scroll-container::-webkit-scrollbar {
+  display: none;
 }
 
-.grid-item {
+/* ====== Intro & Outro ====== */
+.section-intro {
   position: relative;
+  width: 100%;
+  height: 50vh; /* Reduced from 100vh so first row is visible by default */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding-top: 15vh; /* Moves title upwards */
+  align-items: center;
+  overflow: hidden;
+}
+
+.section-outro {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.section-intro h1 {
+  font-size: clamp(32px, 6vw, 80px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  color: #111;
+}
+
+.section-intro p {
+  margin-top: 12px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #888;
+}
+
+.section-outro h2 {
+  font-size: clamp(24px, 5vw, 64px);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: linear-gradient(135deg, #111, #888);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ====== Projects Section (same as reference globals.css) ====== */
+.projects {
+  position: relative;
+  width: 100%;
+  padding: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+}
+
+.projects-row {
+  width: 125%;
+  display: flex;
+  gap: 1rem;
+}
+
+.project {
+  flex: 1;
+  aspect-ratio: 7 / 5;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.project-img {
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   border-radius: 6px;
-  background: #111;
-  cursor: pointer;
-  transition: filter 0.3s ease;
+  background: #ddd;
 }
 
-.grid-item:hover {
-  filter: brightness(1.15);
-}
-
-.grid-item.span-1 {
-  grid-column: span 1;
-}
-
-.grid-item.span-2 {
-  grid-column: span 2;
-}
-
-.grid-item img {
+.project-img img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -337,40 +357,40 @@ onUnmounted(() => {
   transition: transform 0.4s ease;
 }
 
-.grid-item:hover img {
-  transform: scale(1.05);
+.project:hover .project-img img {
+  transform: scale(1.04);
 }
 
-/* Small label at the bottom of each image */
-.img-label {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 6px 10px;
-  font-size: 10px;
+.project-info {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.25rem 0;
+}
+
+.project-info p {
+  font-size: 0.75rem;
   font-weight: 500;
-  letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.75);
-  background: linear-gradient(transparent, rgba(0,0,0,0.5));
-  pointer-events: none;
+  text-transform: uppercase;
+  letter-spacing: -0.02rem;
+  line-height: 1;
+  color: #555;
 }
 
 /* ====== Close Button ====== */
 .close-btn {
   position: fixed;
-  top: 32px;
-  left: 32px;
+  top: 28px;
+  left: 28px;
   z-index: 100000;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  opacity: 0.6;
+  opacity: 0.5;
   transition: opacity 0.2s;
-  color: #fff;
+  color: #222;
 }
 
 .close-btn:hover {
@@ -378,108 +398,38 @@ onUnmounted(() => {
 }
 
 .close-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
-/* ====== Progress Indicator ====== */
-.progress-bar {
-  position: fixed;
-  right: 24px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 100000;
-  width: 3px;
-  height: 120px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  width: 100%;
-  background: rgba(255, 255, 255, 0.7);
-  border-radius: 2px;
-  transition: height 0.15s ease-out;
-}
-
-/* ====== Title Overlay ====== */
-.title-overlay {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-  z-index: 10001;
-  pointer-events: none;
-}
-
-.title-overlay h1 {
-  font-size: clamp(32px, 5vw, 72px);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 0 0 12px;
-  text-transform: uppercase;
-  text-shadow: 0 4px 40px rgba(0, 0, 0, 0.6);
-}
-
-.title-overlay p {
-  font-size: 16px;
-  opacity: 0.5;
-  letter-spacing: 0.1em;
-}
-
-/* ====== Final Layer ====== */
-.final-layer {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.final-text {
-  font-size: clamp(28px, 6vw, 80px);
-  font-weight: 900;
-  background: linear-gradient(135deg, #fff 0%, #666 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  width: 18px;
+  height: 18px;
 }
 
 /* ====== Lightbox ====== */
 .lightbox-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
   z-index: 200000;
   background: rgba(0, 0, 0, 0.88);
   display: flex;
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .lightbox-close {
   position: absolute;
-  top: 32px;
-  right: 32px;
+  top: 28px; right: 28px;
   cursor: pointer;
   opacity: 0.6;
   transition: opacity 0.2s;
   color: #fff;
 }
 
-.lightbox-close:hover {
-  opacity: 1;
-}
+.lightbox-close:hover { opacity: 1; }
 
 .lightbox-close svg {
-  width: 28px;
-  height: 28px;
+  width: 28px; height: 28px;
 }
 
 .lightbox-content {
@@ -496,26 +446,19 @@ onUnmounted(() => {
   max-width: 82vw;
   max-height: 80vh;
   object-fit: contain;
-  border-radius: 10px;
-  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
+  border-radius: 8px;
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.5);
 }
 
 .lightbox-label {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.65);
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 /* Lightbox transition */
-.lightbox-enter-active {
-  transition: opacity 0.3s ease;
-}
-.lightbox-leave-active {
-  transition: opacity 0.25s ease;
-}
-.lightbox-enter-from,
-.lightbox-leave-to {
-  opacity: 0;
-}
+.lightbox-enter-active { transition: opacity 0.3s ease; }
+.lightbox-leave-active { transition: opacity 0.2s ease; }
+.lightbox-enter-from, .lightbox-leave-to { opacity: 0; }
 </style>
