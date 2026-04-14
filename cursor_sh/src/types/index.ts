@@ -195,14 +195,17 @@ export interface Task {
 
 // 登录请求接口
 export interface LoginRequest {
-  username: string
-  password: string
+  phone: string
+  password?: string
+  sms_code?: string      // 短信验证码登录
   role: UserRole
   captcha?: string
 }
 
 // 注册请求接口
 export interface RegisterRequest {
+  phone: string
+  sms_code: string
   username: string
   email: string
   password: string

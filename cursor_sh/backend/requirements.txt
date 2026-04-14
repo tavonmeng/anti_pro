@@ -23,6 +23,12 @@ aiofiles
 # 阿里云 OSS (预留)
 oss2
 
+# 阿里云号码认证服务（短信验证码）
+alibabacloud_dypnsapi20170525
+alibabacloud_credentials
+alibabacloud_tea_openapi
+alibabacloud_tea_util
+
 # 邮件
 aiosmtplib
 

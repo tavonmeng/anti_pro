@@ -68,6 +68,15 @@ class Settings(BaseSettings):
     OSS_BUCKET_NAME: str = ""
     OSS_ENDPOINT: str = ""
     
+    # 阿里云号码认证服务（Dypnsapi - 短信验证码）配置
+    SMS_ENABLED: bool = True
+    SMS_ACCESS_KEY_ID: str = ""      # 可与 OSS 共用
+    SMS_ACCESS_KEY_SECRET: str = ""
+    SMS_SIGN_NAME: str = ""          # 短信签名 (如: "速通互联验证码")
+    SMS_TEMPLATE_CODE: str = ""      # 模板CODE (如: "100001")
+    SMS_CODE_LENGTH: int = 6         # 验证码长度
+    SMS_VALID_TIME: int = 300        # 验证码有效期（秒）
+    
     # 邮件配置
     SMTP_HOST: str = "smtp.qq.com"
     SMTP_PORT: int = 465

@@ -156,6 +156,16 @@ export const authApi = {
     }
   },
   
+  // 发送短信验证码
+  async sendSms(phone: string): Promise<any> {
+    return request.post('/auth/send-sms', { phone })
+  },
+  
+  // 重置密码（忘记密码）
+  async resetPassword(phone: string, sms_code: string, new_password: string): Promise<any> {
+    return request.post('/auth/reset-password', { phone, sms_code, new_password })
+  },
+  
   // 登出
   logout(): Promise<void> {
     if (ENABLE_MOCK) {

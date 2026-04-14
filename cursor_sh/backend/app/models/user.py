@@ -22,6 +22,7 @@ class User(Base):
     username = Column(String(50), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     email = Column(String(100), index=True)
+    phone = Column(String(20), unique=True, index=True)  # 手机号
     role = Column(Enum(UserRole), nullable=False)
     real_name = Column(String(50))
     avatar = Column(String(255))

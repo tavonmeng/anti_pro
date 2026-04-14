@@ -5,9 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RegisterRequest, LoginResponse, ChangePasswordRequest
+from app.schemas.auth import (
+    LoginRequest, RegisterRequest, LoginResponse, 
+    ChangePasswordRequest, SendSmsRequest, ResetPasswordRequest
+)
 from app.schemas.response import ApiResponse
-from app.services.auth_service import login, register, change_password
+from app.services.auth_service import login, register, change_password, reset_password
+from app.services.sms_service import send_sms_verify_code
 from app.utils.dependencies import get_current_user
 from pydantic import BaseModel, EmailStr
 from typing import Optional
@@ -24,10 +28,24 @@ async def api_login(
     login_data: LoginRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """用户登录"""
+    """用户登录（支持用户名+密码 或 手机号+验证码）"""
     try:
         result = await login(db, login_data)
         return ApiResponse(code=200, message="登录成功", data=result)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/send-sms", response_model=ApiResponse[dict])
+async def api_send_sms(
+    sms_data: SendSmsRequest,
+):
+    """发送短信验证码"""
+    try:
+        result = await send_sms_verify_code(sms_data.phone)
+        return ApiResponse(code=200, message="验证码已发送", data=result)
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -39,7 +57,7 @@ async def api_register(
     register_data: RegisterRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """用户注册"""
+    """用户注册（手机号+验证码+用户名+密码+邮箱）"""
     try:
         result = await register(db, register_data)
         return ApiResponse(code=200, message="注册成功", data=result)
@@ -48,7 +66,22 @@ async def api_register(
     except Exception as e:
         import traceback
         error_detail = f"{str(e)}\n{traceback.format_exc()}"
-        print(f"注册接口错误: {error_detail}")  # 打印到控制台
+        print(f"注册接口错误: {error_detail}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/reset-password", response_model=ApiResponse[dict])
+async def api_reset_password(
+    data: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """忘记密码 - 通过短信验证码重置密码"""
+    try:
+        result = await reset_password(db, data)
+        return ApiResponse(code=200, message="密码重置成功", data=result)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -96,4 +129,3 @@ async def update_profile_api(
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
