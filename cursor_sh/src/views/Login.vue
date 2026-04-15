@@ -69,18 +69,10 @@
             </div>
           </el-form-item>
 
-          <!-- 图形验证码 -->
-          <el-form-item v-if="!smsCaptchaValid && isSmsPhoneValid">
-            <div class="step-hint">
-              <span class="step-hint-icon">🔒</span>
-              请完成安全验证后发送短信验证码
-            </div>
-            <Captcha ref="smsCaptchaRef" v-model="smsForm.captcha" @verify="handleSmsCaptchaVerify" />
-          </el-form-item>
 
-          <!-- 短信验证码 -->
-          <el-form-item prop="smsCode" v-if="smsCaptchaValid">
-            <div class="step-hint step-hint-success">
+          <!-- 短信验证码（常驻显示） -->
+          <el-form-item prop="smsCode">
+            <div class="step-hint step-hint-success" v-if="smsCooldown > 0">
               <span class="step-hint-icon">✅</span>
               验证码已发送至 {{ smsForm.phone.slice(0,3) }}****{{ smsForm.phone.slice(7) }}
             </div>
@@ -88,8 +80,8 @@
               <el-input v-model="smsForm.smsCode" placeholder="请输入短信验证码" size="large" class="tech-input sms-input" maxlength="6" @keyup.enter="handleSmsLogin">
                 <template #prefix><el-icon class="input-icon"><Key /></el-icon></template>
               </el-input>
-              <el-button class="sms-button" :disabled="smsCooldown > 0 || !isSmsPhoneValid" :loading="smsSending" @click="handleSendSms('login')">
-                {{ smsCooldown > 0 ? `${smsCooldown}s` : '重新发送' }}
+              <el-button class="sms-button" :disabled="smsCooldown > 0 || !isSmsPhoneValid" :loading="smsSending" @click="openCaptchaDialog('login')">
+                {{ smsCooldown > 0 ? `${smsCooldown}s` : '发送验证码' }}
               </el-button>
             </div>
           </el-form-item>
@@ -125,18 +117,9 @@
             </div>
           </el-form-item>
 
-          <!-- 图形验证码 -->
-          <el-form-item v-if="!resetCaptchaValid && isResetPhoneValid">
-            <div class="step-hint">
-              <span class="step-hint-icon">🔒</span>
-              请完成安全验证后发送短信验证码
-            </div>
-            <Captcha ref="resetCaptchaRef" v-model="resetForm.captcha" @verify="handleResetCaptchaVerify" />
-          </el-form-item>
-
-          <!-- 短信验证码 -->
-          <el-form-item prop="smsCode" v-if="resetCaptchaValid">
-            <div class="step-hint step-hint-success">
+          <!-- 短信验证码（常驻显示） -->
+          <el-form-item prop="smsCode">
+            <div class="step-hint step-hint-success" v-if="resetCooldown > 0">
               <span class="step-hint-icon">✅</span>
               验证码已发送至 {{ resetForm.phone.slice(0,3) }}****{{ resetForm.phone.slice(7) }}
             </div>
@@ -144,14 +127,14 @@
               <el-input v-model="resetForm.smsCode" placeholder="请输入短信验证码" size="large" class="tech-input sms-input" maxlength="6">
                 <template #prefix><el-icon class="input-icon"><Key /></el-icon></template>
               </el-input>
-              <el-button class="sms-button" :disabled="resetCooldown > 0 || !isResetPhoneValid" :loading="resetSmsSending" @click="handleSendSms('reset')">
-                {{ resetCooldown > 0 ? `${resetCooldown}s` : '重新发送' }}
+              <el-button class="sms-button" :disabled="resetCooldown > 0 || !isResetPhoneValid" :loading="resetSmsSending" @click="openCaptchaDialog('reset')">
+                {{ resetCooldown > 0 ? `${resetCooldown}s` : '发送验证码' }}
               </el-button>
             </div>
           </el-form-item>
 
           <!-- 新密码 -->
-          <el-form-item prop="newPassword" v-if="resetCaptchaValid">
+          <el-form-item prop="newPassword">
             <div class="input-wrapper">
               <el-input v-model="resetForm.newPassword" type="password" placeholder="请设置新密码（至少6位）" size="large" class="tech-input" show-password>
                 <template #prefix><el-icon class="input-icon"><Lock /></el-icon></template>
@@ -159,7 +142,7 @@
             </div>
           </el-form-item>
 
-          <el-form-item prop="confirmPassword" v-if="resetCaptchaValid">
+          <el-form-item prop="confirmPassword">
             <div class="input-wrapper">
               <el-input v-model="resetForm.confirmPassword" type="password" placeholder="请再次输入新密码" size="large" class="tech-input" show-password @keyup.enter="handleResetPassword">
                 <template #prefix><el-icon class="input-icon"><Lock /></el-icon></template>
@@ -167,7 +150,7 @@
             </div>
           </el-form-item>
 
-          <el-form-item v-if="resetCaptchaValid">
+          <el-form-item>
             <el-button type="primary" size="large" class="login-button" :loading="loading" @click="handleResetPassword">
               <span v-if="!loading">重置密码</span>
               <span v-else>重置中...</span>
@@ -189,6 +172,21 @@
         </div>
       </div>
     </div>
+
+    <!-- 安全验证弹窗 (只针对发短信) -->
+    <el-dialog
+      v-model="captchaDialogVisible"
+      title="安全验证"
+      width="340px"
+      center
+      :close-on-click-modal="false"
+      class="captcha-dialog"
+    >
+      <div class="dialog-captcha-wrapper">
+        <p class="dialog-captcha-tip">请完成下方图形验证以发送短信</p>
+        <Captcha ref="dialogCaptchaRef" v-model="dialogCaptcha" @verify="handleDialogCaptchaVerify" />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -265,13 +263,10 @@ const smsFormRef = ref<FormInstance>()
 const smsSending = ref(false)
 const smsCooldown = ref(0)
 let smsCooldownTimer: ReturnType<typeof setInterval> | null = null
-const smsCaptchaValid = ref(false)
-const smsCaptchaRef = ref<InstanceType<typeof Captcha>>()
 
 const smsForm = reactive({
   phone: '',
   smsCode: '',
-  captcha: '',
   role: 'user' as UserRole,
 })
 
@@ -307,8 +302,6 @@ const handleSmsLogin = async () => {
 
 // ========== 忘记密码 ==========
 const resetFormRef = ref<FormInstance>()
-const resetCaptchaValid = ref(false)
-const resetCaptchaRef = ref<InstanceType<typeof Captcha>>()
 const resetSmsSending = ref(false)
 const resetCooldown = ref(0)
 let resetCooldownTimer: ReturnType<typeof setInterval> | null = null
@@ -316,7 +309,6 @@ let resetCooldownTimer: ReturnType<typeof setInterval> | null = null
 const resetForm = reactive({
   phone: '',
   smsCode: '',
-  captcha: '',
   newPassword: '',
   confirmPassword: '',
 })
@@ -328,11 +320,6 @@ const resetRules: FormRules = {
   smsCode: [{ validator: (_r: any, v: string, cb: Function) => { if (!v || v.length < 4) cb(new Error('请输入验证码')); else cb() }, trigger: 'blur' }],
   newPassword: [{ validator: (_r: any, v: string, cb: Function) => { if (!v || v.length < 6) cb(new Error('密码长度至少6个字符')); else cb() }, trigger: 'blur' }],
   confirmPassword: [{ validator: (_r: any, v: string, cb: Function) => { if (!v) cb(new Error('请再次输入密码')); else if (v !== resetForm.newPassword) cb(new Error('两次输入的密码不一致')); else cb() }, trigger: 'blur' }],
-}
-
-const handleResetCaptchaVerify = (isValid: boolean) => {
-  resetCaptchaValid.value = isValid
-  if (isValid && isResetPhoneValid.value) handleSendSms('reset')
 }
 
 const handleResetPassword = async () => {
@@ -358,7 +345,34 @@ const handleResetPassword = async () => {
   })
 }
 
-// ========== 公共：发送短信 ==========
+// ========== 公共：弹窗图形验证与发送短信 ==========
+const captchaDialogVisible = ref(false)
+const currentCaptchaScene = ref<'login' | 'reset'>('login')
+const dialogCaptcha = ref('')
+const dialogCaptchaRef = ref<InstanceType<typeof Captcha>>()
+
+const openCaptchaDialog = (scene: 'login' | 'reset') => {
+  const phone = scene === 'login' ? smsForm.phone : resetForm.phone
+  if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
+    ElMessage.warning('请输入有效的11位手机号')
+    return
+  }
+  currentCaptchaScene.value = scene
+  dialogCaptcha.value = ''
+  captchaDialogVisible.value = true
+  // dialog 出现后再刷新验证码
+  setTimeout(() => {
+    if (dialogCaptchaRef.value) dialogCaptchaRef.value.refresh()
+  }, 100)
+}
+
+const handleDialogCaptchaVerify = (isValid: boolean) => {
+  if (isValid) {
+    captchaDialogVisible.value = false
+    handleSendSms(currentCaptchaScene.value)
+  }
+}
+
 const handleSendSms = async (scene: 'login' | 'reset') => {
   const phone = scene === 'login' ? smsForm.phone : resetForm.phone
   if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
@@ -580,4 +594,19 @@ const goToRegister = () => {
 }
 .step-hint-success { background: #f0faf0; color: #1a7f37; }
 .step-hint-icon { font-size: 14px; flex-shrink: 0; }
+
+/* 弹窗验证码 */
+.dialog-captcha-wrapper {
+  padding: 10px 0;
+}
+.dialog-captcha-tip {
+  font-size: 14px;
+  color: #666;
+  text-align: center;
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+:deep(.captcha-dialog) {
+  border-radius: 12px;
+}
 </style>

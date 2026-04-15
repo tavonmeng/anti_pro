@@ -33,18 +33,9 @@
             </div>
           </el-form-item>
           
-          <!-- 图形验证码（防短信轰炸） -->
-          <el-form-item v-if="!regCaptchaValid && isPhoneValid">
-            <div class="step-hint">
-              <span class="step-hint-icon">🔒</span>
-              请完成安全验证后发送短信验证码
-            </div>
-            <Captcha ref="regCaptchaRef" v-model="registerForm.captcha" @verify="handleRegCaptchaVerify" />
-          </el-form-item>
-
-          <!-- 短信验证码（图形验证码通过后显示） -->
-          <el-form-item prop="smsCode" v-if="regCaptchaValid">
-            <div class="step-hint step-hint-success">
+          <!-- 短信验证码（常驻显示） -->
+          <el-form-item prop="smsCode">
+            <div class="step-hint step-hint-success" v-if="smsCooldown > 0">
               <span class="step-hint-icon">✅</span>
               验证码已发送至 {{ registerForm.phone.slice(0,3) }}****{{ registerForm.phone.slice(7) }}
             </div>
@@ -64,9 +55,9 @@
                 class="sms-button"
                 :disabled="smsCooldown > 0 || !isPhoneValid"
                 :loading="smsSending"
-                @click="handleSendSms"
+                @click="openCaptchaDialog"
               >
-                {{ smsCooldown > 0 ? `${smsCooldown}s 后重发` : '重新发送' }}
+                {{ smsCooldown > 0 ? `${smsCooldown}s 后重发` : '发送验证码' }}
               </el-button>
             </div>
           </el-form-item>
@@ -162,6 +153,21 @@
         </div>
       </div>
     </div>
+
+    <!-- 安全验证弹窗 (只针对发短信) -->
+    <el-dialog
+      v-model="captchaDialogVisible"
+      title="安全验证"
+      width="340px"
+      center
+      :close-on-click-modal="false"
+      class="captcha-dialog"
+    >
+      <div class="dialog-captcha-wrapper">
+        <p class="dialog-captcha-tip">请完成下方图形验证以发送短信</p>
+        <Captcha ref="dialogCaptchaRef" v-model="dialogCaptcha" @verify="handleDialogCaptchaVerify" />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -181,15 +187,16 @@ const loading = ref(false)
 const smsSending = ref(false)
 const smsCooldown = ref(0)
 let cooldownTimer: ReturnType<typeof setInterval> | null = null
-const regCaptchaValid = ref(false)
-const regCaptchaRef = ref<InstanceType<typeof Captcha>>()
+
+const captchaDialogVisible = ref(false)
+const dialogCaptcha = ref('')
+const dialogCaptchaRef = ref<InstanceType<typeof Captcha>>()
 
 const isModal = computed(() => route.query.modal === 'true')
 
 const registerForm = reactive({
   phone: '',
   smsCode: '',
-  captcha: '',
   username: '',
   email: '',
   password: '',
@@ -197,9 +204,21 @@ const registerForm = reactive({
   role: 'user' as UserRole,
 })
 
-const handleRegCaptchaVerify = (isValid: boolean) => {
-  regCaptchaValid.value = isValid
-  if (isValid && isPhoneValid.value) {
+const openCaptchaDialog = () => {
+  if (!isPhoneValid.value) {
+    ElMessage.warning('请输入有效的11位手机号')
+    return
+  }
+  dialogCaptcha.value = ''
+  captchaDialogVisible.value = true
+  setTimeout(() => {
+    if (dialogCaptchaRef.value) dialogCaptchaRef.value.refresh()
+  }, 100)
+}
+
+const handleDialogCaptchaVerify = (isValid: boolean) => {
+  if (isValid) {
+    captchaDialogVisible.value = false
     handleSendSms()
   }
 }
@@ -285,10 +304,6 @@ const registerRules: FormRules = {
 const handleSendSms = async () => {
   if (!isPhoneValid.value) {
     ElMessage.warning('请先输入有效的手机号')
-    return
-  }
-  if (!regCaptchaValid.value) {
-    ElMessage.warning('请先通过图形验证码')
     return
   }
   
@@ -609,5 +624,20 @@ const goToLogin = () => {
 .step-hint-icon {
   font-size: 14px;
   flex-shrink: 0;
+}
+
+/* 弹窗验证码 */
+.dialog-captcha-wrapper {
+  padding: 10px 0;
+}
+.dialog-captcha-tip {
+  font-size: 14px;
+  color: #666;
+  text-align: center;
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+:deep(.captcha-dialog) {
+  border-radius: 12px;
 }
 </style>
