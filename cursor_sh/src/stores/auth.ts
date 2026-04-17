@@ -26,8 +26,8 @@ export const useAuthStore = defineStore('auth', () => {
       return true
     } catch (error: any) {
       // 错误消息已经在 request 拦截器中处理（如果不是静默模式）
-      // 这里只需要返回 false，不重复显示错误消息
-      return false
+      // 我们把 error 抛出，方便调用端拦截并定制交互（比如提示去注册）
+      throw error
     }
   }
 

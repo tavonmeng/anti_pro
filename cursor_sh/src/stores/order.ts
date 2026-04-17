@@ -35,14 +35,14 @@ export const useOrderStore = defineStore('order', () => {
   }
 
   // 创建订单
-  const createOrder = async (orderData: any) => {
+  const createOrder = async (orderData: any, isDraft: boolean = false) => {
     try {
-      const newOrder = await orderApi.createOrder(orderData)
+      const newOrder = await orderApi.createOrder(orderData, isDraft)
       orders.value.unshift(newOrder)
-      ElMessage.success('订单创建成功')
+      ElMessage.success(isDraft ? '草稿保存成功' : '订单创建成功')
       return newOrder
     } catch (error: any) {
-      ElMessage.error(error.message || '创建订单失败')
+      ElMessage.error(error.message || (isDraft ? '保存草稿失败' : '创建订单失败'))
       throw error
     }
   }
@@ -162,6 +162,7 @@ export const useOrderStore = defineStore('order', () => {
   const orderStats = computed(() => {
     const stats = {
       total: orders.value.length,
+      draft: orders.value.filter(o => o.status === 'draft').length,
       pendingAssign: orders.value.filter(o => o.status === 'pending_assign').length,
       inProduction: orders.value.filter(o => o.status === 'in_production').length,
       pendingReview: orders.value.filter(o => o.status === 'pending_review').length,

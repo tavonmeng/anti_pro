@@ -65,6 +65,7 @@
     
     <div class="form-actions">
       <button class="btn-secondary" @click="handleCancel">取消</button>
+      <button class="btn-draft" @click="handleSaveDraft">保存草稿</button>
       <button class="btn-primary" @click="handleSubmit">确认提交</button>
     </div>
   </div>
@@ -82,6 +83,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   submit: [data: any]
+  'save-draft': [data: any]
   cancel: []
 }>()
 
@@ -169,6 +171,15 @@ const handleSubmit = async () => {
 
 const handleCancel = () => {
   emit('cancel')
+}
+
+const handleSaveDraft = () => {
+  emit('save-draft', {
+    artDirection: formData.artDirection,
+    customDirection: formData.artDirection === 'custom' ? formData.customDirection : undefined,
+    description: formData.description,
+    materials: formData.materials
+  })
 }
 
 const getArtDirectionText = (): string => {
@@ -274,6 +285,23 @@ const getArtDirectionText = (): string => {
 .btn-secondary:hover {
   border-color: rgba(0, 0, 0, 0.3);
   color: #1a1c1c;
+}
+
+.btn-draft {
+  background: transparent;
+  color: #0071e3;
+  border: 1px solid #0071e3;
+  padding: 10px 24px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.btn-draft:hover {
+  background: rgba(0, 113, 227, 0.06);
 }
 
 :deep(.el-form-item__label) {

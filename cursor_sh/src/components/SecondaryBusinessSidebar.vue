@@ -107,7 +107,8 @@ const goToService = async (type: string) => {
 .secondary-sidebar {
   width: 260px;
   background: #f3f3f4;
-  border-right: 1px solid rgba(0,0,0,0.05);
+  border-left: 1px solid rgba(0,0,0,0.06);
+  border-right: 1px solid rgba(0,0,0,0.06);
   display: flex;
   flex-direction: column;
   padding: 24px 0;

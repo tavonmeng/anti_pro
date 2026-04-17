@@ -21,10 +21,32 @@
           >
             上传预览文件
           </el-button>
+          <el-dropdown trigger="click" @command="handlePdfDownload">
+            <el-button :icon="Download">
+              下载 PDF
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="confirmation">需求告知函</el-dropdown-item>
+                <el-dropdown-item command="detail">订单详情报告</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
       
       <el-card class="detail-card">
+        <!-- 订单进度条 -->
+        <div class="order-progress" style="margin-bottom: 30px; padding: 20px 10px; background: #fafafa; border-radius: 8px;">
+          <el-steps :active="activeStep" :process-status="order.status === 'cancelled' ? 'error' : 'process'" finish-status="success" align-center>
+            <el-step title="需求确认" description="收到订单，待分配" />
+            <el-step title="内容制作" description="开发与设计环节" />
+            <el-step title="初稿交付" description="内部审核与客户反馈" />
+            <el-step title="终稿交付" description="内部审核与定稿" />
+            <el-step title="项目完成" description="订单已结束" />
+          </el-steps>
+        </div>
+        
         <template #header>
           <div class="card-header">
             <div>
@@ -225,9 +247,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ArrowLeft, Upload, ArrowDown, Picture, Document as DocumentIcon, VideoPlay, View } from '@element-plus/icons-vue'
-import { ElMessageBox } from 'element-plus'
+import { ArrowLeft, Upload, ArrowDown, Picture, Document as DocumentIcon, VideoPlay, View, Download } from '@element-plus/icons-vue'
+import { ElMessageBox, ElMessage } from 'element-plus'
 import { useOrderStore } from '@/stores/order'
+import { orderApi } from '@/utils/api'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
 import type { Order, OrderStatus, VideoPurchaseOrder, DigitalArtOrder, UploadedFile, TimelineItem } from '@/types'
@@ -284,6 +307,26 @@ const timelineItems = computed<TimelineItem[]>(() => {
     const timeB = new Date(b.data.createdAt).getTime()
     return timeA - timeB
   })
+})
+
+const activeStep = computed(() => {
+  if (!order.value) return 0
+  const status = order.value.status
+  switch(status) {
+    case 'draft': return 0
+    case 'pending_assign': return 0
+    case 'in_production': return 1
+    case 'pending_review': 
+    case 'review_rejected':
+    case 'preview_ready':
+    case 'revision_needed':
+      const isFinal = timelineItems.value.some(item => item.type === 'preview' && item.data.previewType === 'final')
+      return isFinal ? 3 : 2
+    case 'final_preview': return 3
+    case 'completed': return 5
+    case 'cancelled': return 0
+    default: return 0
+  }
 })
 
 onMounted(async () => {
@@ -431,6 +474,21 @@ const reviewTagType = (status: 'pending' | 'approved' | 'rejected') => {
     rejected: 'danger'
   }
   return map[status]
+}
+
+const handlePdfDownload = async (type: string) => {
+  if (!order.value) return
+  try {
+    if (type === 'confirmation') {
+      await orderApi.downloadConfirmationPdf(order.value.id)
+    } else {
+      await orderApi.downloadDetailPdf(order.value.id)
+    }
+    ElMessage.success('PDF 下载成功')
+  } catch (error) {
+    console.error('下载 PDF 失败:', error)
+    ElMessage.error('下载 PDF 失败')
+  }
 }
 
 const goBack = () => {

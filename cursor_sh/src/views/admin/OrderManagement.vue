@@ -179,7 +179,7 @@
             </el-badge>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="360" fixed="right">
           <template #default="{ row }">
             <el-button-group>
               <el-button
@@ -213,6 +213,17 @@
               >
                 上传预览
               </el-button>
+              <el-dropdown trigger="click" @command="(cmd: string) => handlePdfDownload(row, cmd)">
+                <el-button size="small" :icon="Download">
+                  PDF
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="confirmation">需求告知函</el-dropdown-item>
+                    <el-dropdown-item command="detail">订单详情报告</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
               <el-button size="small" @click="viewDetail(row)">
                 详情
               </el-button>
@@ -241,10 +252,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Refresh, Document, Clock, Loading, CircleCheck, CircleClose, View, ChatLineSquare } from '@element-plus/icons-vue'
+import { Refresh, Document, Clock, Loading, CircleCheck, CircleClose, View, ChatLineSquare, Download } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useOrderStore } from '@/stores/order'
 import { useStaffStore } from '@/stores/staff'
+import { orderApi } from '@/utils/api'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import AssigneeDialog from '@/components/AssigneeDialog.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
@@ -390,6 +402,21 @@ const handleReview = async (row: Order, action: 'approve' | 'reject') => {
     await refreshData()
   } catch {
     // 取消或失败
+  }
+}
+
+// PDF 下载
+const handlePdfDownload = async (row: Order, type: string) => {
+  try {
+    if (type === 'confirmation') {
+      await orderApi.downloadConfirmationPdf(row.id)
+    } else {
+      await orderApi.downloadDetailPdf(row.id)
+    }
+    ElMessage.success('PDF 下载成功')
+  } catch (error) {
+    console.error('下载 PDF 失败:', error)
+    ElMessage.error('下载 PDF 失败')
   }
 }
 </script>

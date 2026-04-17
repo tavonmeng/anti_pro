@@ -119,6 +119,7 @@
     
     <div class="form-actions">
       <el-button @click="handleCancel">取消</el-button>
+      <el-button @click="handleSaveDraft">保存草稿</el-button>
       <el-button type="primary" @click="handleSubmit">确认提交</el-button>
     </div>
   </div>
@@ -135,6 +136,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   submit: [data: any]
+  'save-draft': [data: any]
   cancel: []
 }>()
 
@@ -260,6 +262,24 @@ const handleSubmit = async () => {
 
 const handleCancel = () => {
   emit('cancel')
+}
+
+const handleSaveDraft = () => {
+  const submitData = {
+    industryType: formData.industryType,
+    customIndustry: formData.industryType === 'custom' ? formData.customIndustry : undefined,
+    visualStyle: formData.visualStyle,
+    customStyle: formData.visualStyle === 'custom' ? formData.customStyle : undefined,
+    duration: formData.duration,
+    priceRange: (formData.priceMin && formData.priceMax) ? {
+      min: formData.priceMin,
+      max: formData.priceMax
+    } : undefined,
+    resolution: formData.resolution === 'custom' ? formData.customResolution : formData.resolution,
+    size: formData.size || undefined,
+    curvature: formData.curvature || undefined
+  }
+  emit('save-draft', submitData)
 }
 </script>
 

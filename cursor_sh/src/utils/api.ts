@@ -449,10 +449,10 @@ export const orderApi = {
   },
   
   // 创建订单
-  async createOrder(data: any): Promise<Order> {
+  async createOrder(data: any, isDraft: boolean = false): Promise<Order> {
     if (ENABLE_MOCK) {
       try {
-        return await request.post('/orders', data)
+        return await request.post(`/orders?is_draft=${isDraft}`, data)
       } catch (error) {
         console.log('使用模拟创建订单')
         const authStore = JSON.parse(localStorage.getItem('auth') || '{}')
@@ -461,7 +461,7 @@ export const orderApi = {
         const baseOrder = {
           id: `order-${Date.now()}`,
           orderNumber: generateOrderNumber(),
-          status: 'pending_assign' as OrderStatus,
+          status: (isDraft ? 'draft' : 'pending_assign') as OrderStatus,
           userId: user?.id || 'unknown',
           userName: user?.username || 'Unknown',
           assignee: undefined,
@@ -484,7 +484,7 @@ export const orderApi = {
         return newOrder
       }
     } else {
-      return request.post('/orders', data)
+      return request.post(`/orders?is_draft=${isDraft}`, data)
     }
   },
   
@@ -719,6 +719,54 @@ export const orderApi = {
     } else {
       return request.post(`/orders/${orderId}/feedback`, feedbackData)
     }
+  },
+  
+  // 下载需求告知函 PDF
+  async downloadConfirmationPdf(orderId: string): Promise<void> {
+    const token = localStorage.getItem('token')
+    const response = await fetch(`/api/orders/${orderId}/pdf/confirmation`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    if (!response.ok) {
+      throw new Error('下载 PDF 失败')
+    }
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const disposition = response.headers.get('Content-Disposition')
+    const filename = disposition?.match(/filename="(.+)"/)?.[1] || `confirmation_${orderId}.pdf`
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  },
+  
+  // 下载订单详情 PDF（管理员）
+  async downloadDetailPdf(orderId: string): Promise<void> {
+    const token = localStorage.getItem('token')
+    const response = await fetch(`/api/orders/${orderId}/pdf/detail`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    if (!response.ok) {
+      throw new Error('下载 PDF 失败')
+    }
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const disposition = response.headers.get('Content-Disposition')
+    const filename = disposition?.match(/filename="(.+)"/)?.[1] || `order_detail_${orderId}.pdf`
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
   }
 }
 

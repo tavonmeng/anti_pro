@@ -75,6 +75,12 @@ const router = createRouter({
           component: () => import('@/views/user/Profile.vue'),
           meta: { requiresAuth: true, role: 'user' }
         },
+        {
+          path: 'drafts',
+          name: 'Drafts',
+          component: () => import('@/views/user/Drafts.vue'),
+          meta: { requiresAuth: true, role: 'user' }
+        },
         // 保留旧路由用于兼容
         {
           path: 'tasks',

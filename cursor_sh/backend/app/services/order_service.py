@@ -18,6 +18,7 @@ from app.utils.validators import generate_order_number, generate_id
 from app.services.file_service import FileService
 from app.services.email_service import EmailService
 from app.services.notification_service import NotificationService
+from app.services.pdf_service import PDFService
 
 
 class OrderStateMachine:
@@ -25,6 +26,7 @@ class OrderStateMachine:
     
     # 允许的状态转换
     ALLOWED_TRANSITIONS = {
+        OrderStatus.DRAFT: [OrderStatus.PENDING_ASSIGN, OrderStatus.CANCELLED],
         OrderStatus.PENDING_ASSIGN: [OrderStatus.IN_PRODUCTION, OrderStatus.CANCELLED],
         OrderStatus.IN_PRODUCTION: [
             OrderStatus.PENDING_REVIEW,
@@ -82,9 +84,10 @@ class OrderService:
     async def create_order(
         db: AsyncSession,
         order_data: Union[VideoPurchaseOrderCreate, AI3DCustomOrderCreate, DigitalArtOrderCreate],
-        user: User
+        user: User,
+        is_draft: bool = False
     ) -> dict:
-        """创建订单"""
+        """创建订单（支持草稿模式）"""
         # 生成订单 ID 和订单号
         order_id = generate_id("order")
         order_number = generate_order_number()
@@ -143,7 +146,7 @@ class OrderService:
             id=order_id,
             order_number=order_number,
             order_type=order_type,
-            status=OrderStatus.PENDING_ASSIGN,
+            status=OrderStatus.DRAFT if is_draft else OrderStatus.PENDING_ASSIGN,
             user_id=user.id,
             revision_count=0,
             order_data=order_dict
@@ -163,7 +166,18 @@ class OrderService:
         await db.refresh(new_order)
         
         # 构造响应
-        return await OrderService._build_order_response(db, new_order, user)
+        order_response = await OrderService._build_order_response(db, new_order, user)
+
+        # 如果不是草稿（直接提交），生成 PDF 并发邮件
+        if not is_draft and user.email:
+            pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response)
+            await EmailService.send_order_confirmation(
+                user.email,
+                new_order.order_number,
+                pdf_bytes
+            )
+
+        return order_response
     
     @staticmethod
     async def update_order(
@@ -183,11 +197,11 @@ class OrderService:
         if order.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="无权修改此订单")
         
-        # 状态检查：只有待分配状态的订单可以修改
-        if order.status != OrderStatus.PENDING_ASSIGN:
+        # 状态检查：只有草稿状态的订单可以修改（签名后不可修改）
+        if order.status != OrderStatus.DRAFT:
             raise HTTPException(
                 status_code=400,
-                detail=f"只有待分配状态的订单可以修改，当前状态：{order.status.value}"
+                detail=f"只有草稿状态的订单可以修改，当前状态：{order.status.value}"
             )
         
         # 验证订单类型不能改变
@@ -384,7 +398,14 @@ class OrderService:
             raise HTTPException(status_code=404, detail="订单不存在")
         
         # 权限检查
-        if current_user.role not in [UserRole.ADMIN, UserRole.STAFF]:
+        # 允许订单创建者将自己的草稿提交（draft -> pending_assign）
+        is_draft_submit = (
+            order.status == OrderStatus.DRAFT 
+            and new_status == OrderStatus.PENDING_ASSIGN 
+            and order.user_id == current_user.id
+        )
+        
+        if not is_draft_submit and current_user.role not in [UserRole.ADMIN, UserRole.STAFF]:
             raise HTTPException(status_code=403, detail="权限不足")
         
         if current_user.role == UserRole.STAFF:
@@ -412,16 +433,28 @@ class OrderService:
         user_result = await db.execute(select(User).where(User.id == order.user_id))
         user = user_result.scalar_one_or_none()
         if user and user.email:
-            await EmailService.send_order_status_notification(
-                user.email,
-                order.order_number,
-                old_status.value,
-                new_status.value
-            )
+            if is_draft_submit:
+                # 生成需求告知函 PDF 并作为附件发送
+                order_response_for_pdf = await OrderService._build_order_response(db, order, user)
+                pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response_for_pdf)
+                await EmailService.send_order_confirmation(
+                    user.email,
+                    order.order_number,
+                    pdf_bytes
+                )
+            else:
+                # 发送普通的状态变更邮件
+                await EmailService.send_order_status_notification(
+                    user.email,
+                    order.order_number,
+                    old_status.value,
+                    new_status.value
+                )
         
         # 创建系统内消息通知
         # 1. 通知订单用户状态变更
         status_map = {
+            "draft": "草稿",
             "pending_assign": "待分配",
             "in_production": "制作中",
             "pending_review": "待审核",

@@ -20,6 +20,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const statusConfig: Record<OrderStatus, { text: string; type: 'success' | 'info' | 'warning' | 'danger' | '' }> = {
+  draft: { text: '草稿', type: 'info' },
   pending_assign: { text: '待分配', type: 'info' },
   in_production: { text: '制作中', type: '' },
   pending_review: { text: '待审核', type: 'warning' },

@@ -115,6 +115,18 @@ chown -R www-data:www-data $CURSOR_FE_DIR || chown -R root:root $CURSOR_FE_DIR
 # 4. 部署业务系统后端 (Cursor Backend) -> 本地 8000 端口
 echo "⚙️ 开始部署业务后端..."
 cd "$PROJECT_ROOT/cursor_sh/backend"
+
+# ================= 新增：自动生成环境变量文件保护 =================
+if [ ! -f ".env" ]; then
+    echo "⚠️ 检测到缺少 .env 配置文件！"
+    echo "📄 正在自动从 .env.example 复制基础模板..."
+    cp .env.example .env
+    echo "❌ 自动中止部署引擎：请先手动编辑 $(pwd)/.env 文件"
+    echo "📝 填入你的阿里云 AK/SK 等真实密钥后，再次重新运行此部署脚本。"
+    exit 1
+fi
+# =============================================================
+
 if [ ! -d "venv" ]; then
     $PYTHON_CMD -m venv venv
 fi

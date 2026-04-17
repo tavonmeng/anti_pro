@@ -193,7 +193,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Lock, Right, InfoFilled, Iphone, Key } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/utils/api'
@@ -251,8 +251,22 @@ const handleLogin = async () => {
           role: loginForm.role,
         })
         if (success) handleLoginSuccess()
-        else { captchaRef.value?.refresh(); loginForm.captcha = ''; captchaValid.value = false }
-      } catch { captchaRef.value?.refresh(); loginForm.captcha = ''; captchaValid.value = false
+      } catch (error: any) { 
+        if (error?.message && (error.message.includes('尚未注册') || error.message.includes('不存在'))) {
+          ElMessageBox.confirm(
+            '该手机号尚未注册，是否直接去注册？',
+            '提示',
+            {
+              confirmButtonText: '去注册',
+              cancelButtonText: '再看看',
+              type: 'warning',
+              center: true
+            }
+          ).then(() => {
+            goToRegister()
+          }).catch(() => {})
+        }
+        captchaRef.value?.refresh(); loginForm.captcha = ''; captchaValid.value = false
       } finally { loading.value = false }
     }
   })
@@ -294,7 +308,23 @@ const handleSmsLogin = async () => {
           role: smsForm.role,
         })
         if (success) handleLoginSuccess()
-      } catch (e: any) { console.error('登录失败:', e)
+      } catch (error: any) { 
+        if (error?.message && error.message.includes('尚未注册')) {
+          ElMessageBox.confirm(
+            '该手机号尚未注册，是否直接去注册？',
+            '提示',
+            {
+              confirmButtonText: '去注册',
+              cancelButtonText: '再看看',
+              type: 'warning',
+              center: true
+            }
+          ).then(() => {
+            goToRegister()
+          }).catch(() => {})
+        } else {
+          console.error('登录失败:', error)
+        }
       } finally { loading.value = false }
     }
   })

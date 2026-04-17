@@ -31,6 +31,15 @@
           <el-icon><Grid /></el-icon>
           <span v-if="!uiStore.isSidebarCollapsed">My Orders</span>
         </div>
+        <div 
+          class="nav-item" 
+          :class="{ active: activeMenu === 'drafts' }" 
+          @click="navigate('drafts')"
+        >
+          <el-icon><EditPen /></el-icon>
+          <span v-if="!uiStore.isSidebarCollapsed">Drafts</span>
+          <el-badge v-if="draftCount > 0 && !uiStore.isSidebarCollapsed" :value="draftCount" :max="99" class="draft-nav-badge" />
+        </div>
         
         <!-- Ongoing projects listing when in overview -->
         <div class="ongoing-projects-nav" v-if="!uiStore.isSidebarCollapsed && uiStore.activeModule === '' && ongoingOrders.length > 0">
@@ -106,7 +115,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Grid, Setting, Bell, Help, House, SwitchButton } from '@element-plus/icons-vue'
+import { Grid, Setting, Bell, Help, House, SwitchButton, EditPen } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox } from 'element-plus'
 import NotificationBell from '@/components/NotificationBell.vue'
@@ -121,8 +130,10 @@ const uiStore = useUiStore()
 const orderStore = useOrderStore()
 
 const ongoingOrders = computed(() => {
-  return orderStore.orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled')
+  return orderStore.orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'draft')
 })
+
+const draftCount = computed(() => orderStore.orderStats.draft)
 
 const currentOrderIndex = ref(0)
 const animatingOutId = ref<string | null>(null)
@@ -245,6 +256,7 @@ const handleStackClick = (order: any) => {
 
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
+    'draft': '草稿',
     'pending_assign': '等待接单',
     'in_production': '制作生产中',
     'pending_review': '内部待审核',
@@ -273,6 +285,7 @@ const userInitial = computed(() => {
 const activeMenu = computed(() => {
   const path = route.path
   if (path.includes('/workspace')) return 'workspace'
+  if (path.includes('/drafts')) return 'drafts'
   if (path.includes('/orders') || path.includes('/create-order')) return 'orders'
   if (path.includes('/profile')) return 'profile'
   return route.name as string
@@ -287,6 +300,7 @@ const navigate = async (name: string) => {
     await router.push('/user/workspace')
   }
   else if (name === 'orders') router.push('/user/orders')
+  else if (name === 'drafts') router.push('/user/drafts')
   else if (name === 'profile') router.push('/user/profile')
 }
 
@@ -638,5 +652,16 @@ const handleLogout = async () => {
 }
 .logout-nav .el-icon {
   color: #ba1a1a !important;
+}
+
+.draft-nav-badge {
+  margin-left: auto;
+  :deep(.el-badge__content) {
+    font-size: 10px;
+    height: 16px;
+    line-height: 16px;
+    padding: 0 5px;
+    background: #0071e3;
+  }
 }
 </style>

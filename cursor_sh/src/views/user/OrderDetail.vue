@@ -130,11 +130,26 @@
         <!-- 操作按钮 -->
         <div class="action-buttons">
           <el-button
-            v-if="order.status === 'pending_assign'"
+            v-if="order.status !== 'draft'"
+            :icon="Download"
+            :loading="downloadingPdf"
+            @click="handleDownloadPdf"
+          >
+            下载需求告知函
+          </el-button>
+          <el-button
+            v-if="order.status === 'draft'"
             type="primary"
             @click="handleEdit"
           >
-            修改订单
+            继续编辑
+          </el-button>
+          <el-button
+            v-if="order.status === 'draft'"
+            type="success"
+            @click="handleSubmitDraft"
+          >
+            提交订单
           </el-button>
           <el-button
             v-if="order.status === 'preview_ready' || order.status === 'final_preview'"
@@ -153,6 +168,17 @@
         </div>
       </el-card>
     </div>
+    
+    <!-- 需求告知函确认弹窗 -->
+    <OrderConfirmationDialog
+      v-if="order && showConfirmation"
+      v-model="showConfirmation"
+      :order-number="order.orderNumber"
+      :order-type="order.orderType"
+      :form-data="order"
+      @confirm="handleConfirmOrder"
+      @cancel="showConfirmation = false"
+    />
     
     <!-- 反馈对话框 -->
     <el-dialog v-model="feedbackDialogVisible" :title="feedbackType === 'approval' ? '确认通过' : '提交修改意见'" width="500px">
@@ -177,9 +203,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ArrowLeft, VideoPlay } from '@element-plus/icons-vue'
+import { ArrowLeft, VideoPlay, Download } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
+import { orderApi } from '@/utils/api'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
+import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
+import { ElMessage } from 'element-plus'
 import type { Order, VideoPurchaseOrder, DigitalArtOrder, TimelineItem, OrderStatus } from '@/types'
 
 const router = useRouter()
@@ -191,6 +220,8 @@ const loading = ref(true)
 const feedbackDialogVisible = ref(false)
 const feedbackType = ref<'approval' | 'revision'>('approval')
 const submitting = ref(false)
+const showConfirmation = ref(false)
+const downloadingPdf = ref(false)
 
 const feedbackForm = ref({
   content: ''
@@ -360,6 +391,50 @@ const handleEdit = () => {
   if (!order.value) return
   // 跳转到编辑订单页面
   router.push(`/user/edit-order/${order.value.id}`)
+}
+
+const handleSubmitDraft = async () => {
+  if (!order.value) return
+  showConfirmation.value = true
+}
+
+const handleConfirmOrder = async (confirmData: { email: string; phone: string }) => {
+  if (!order.value) return
+  
+  try {
+    const finalData = {
+      ...order.value,
+      confirmEmail: confirmData.email,
+      confirmPhone: confirmData.phone
+    }
+    
+    // 更新订单数据并通过草稿状态提交
+    await orderStore.updateOrder(order.value.id, {
+      orderType: order.value.orderType,
+      ...finalData
+    })
+    
+    await orderStore.updateOrderStatus(order.value.id, 'pending_assign')
+    showConfirmation.value = false
+    ElMessage.success('订单已成功提交')
+    order.value = await orderStore.getOrderDetail(order.value.id)
+  } catch (error) {
+    console.error('提交草稿失败:', error)
+  }
+}
+
+const handleDownloadPdf = async () => {
+  if (!order.value) return
+  downloadingPdf.value = true
+  try {
+    await orderApi.downloadConfirmationPdf(order.value.id)
+    ElMessage.success('PDF 下载成功')
+  } catch (error) {
+    console.error('下载 PDF 失败:', error)
+    ElMessage.error('下载 PDF 失败，请稍后重试')
+  } finally {
+    downloadingPdf.value = false
+  }
 }
 
 const goBack = () => {

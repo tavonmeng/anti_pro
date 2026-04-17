@@ -20,15 +20,16 @@ export type NotificationType =
 
 // 订单状态
 export type OrderStatus = 
-  | 'pending_assign'      // 待分配
-  | 'in_production'       // 制作中
-  | 'pending_review'      // 待审核
-  | 'preview_ready'       // 初稿预览
-  | 'review_rejected'     // 审核拒绝
-  | 'revision_needed'     // 需要修改
-  | 'final_preview'       // 终稿预览
-  | 'completed'           // 已完成
-  | 'cancelled'           // 已取消
+  | 'draft'                // 草稿
+  | 'pending_assign'       // 待分配
+  | 'in_production'        // 制作中
+  | 'pending_review'       // 待审核
+  | 'preview_ready'        // 初稿预览
+  | 'review_rejected'      // 审核拒绝
+  | 'revision_needed'      // 需要修改
+  | 'final_preview'        // 终稿预览
+  | 'completed'            // 已完成
+  | 'cancelled'            // 已取消
 
 // 行业类型
 export type IndustryType = 'movie' | 'outdoor' | 'custom'

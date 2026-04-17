@@ -16,6 +16,7 @@ class OrderType(str, enum.Enum):
 
 class OrderStatus(str, enum.Enum):
     """订单状态枚举"""
+    DRAFT = "draft"                        # 草稿
     PENDING_ASSIGN = "pending_assign"      # 待分配
     IN_PRODUCTION = "in_production"        # 制作中
     PENDING_REVIEW = "pending_review"      # 待审核

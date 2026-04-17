@@ -47,6 +47,14 @@
         <el-icon><Document /></el-icon>
         <template #title>我的订单</template>
       </el-menu-item>
+
+      <el-menu-item index="drafts">
+        <el-icon><EditPen /></el-icon>
+        <template #title>
+          <span>草稿箱</span>
+          <el-badge v-if="draftCount > 0" :value="draftCount" :max="99" class="draft-badge" />
+        </template>
+      </el-menu-item>
       
       <el-menu-item index="profile">
         <el-icon><Setting /></el-icon>
@@ -64,8 +72,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Grid, Document, User, Setting, SwitchButton } from '@element-plus/icons-vue'
+import { Grid, Document, User, Setting, SwitchButton, EditPen } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { useOrderStore } from '@/stores/order'
 import NotificationBell from './NotificationBell.vue'
 
 interface Props {
@@ -79,14 +88,18 @@ const props = withDefaults(defineProps<Props>(), {
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const orderStore = useOrderStore()
 
 const isAdmin = computed(() => authStore.isAdmin())
 const isStaff = computed(() => authStore.isStaff())
+const draftCount = computed(() => orderStore.orderStats.draft)
 
 const activeMenu = computed(() => {
   const path = route.path
   if (path.includes('/workspace')) {
     return 'workspace'
+  } else if (path.includes('/drafts')) {
+    return 'drafts'
   } else if (path.includes('/orders') || path.includes('/create-order')) {
     return 'orders'
   } else if (path.includes('/profile')) {
@@ -94,11 +107,11 @@ const activeMenu = computed(() => {
   } else if (path.includes('/staff') && isAdmin.value) {
     return 'staff'
   } else if (path.includes('/admin')) {
-    return 'orders' // 管理员默认订单管理
+    return 'orders'
   } else if (path.includes('/staff')) {
-    return 'orders' // 负责人默认订单列表
+    return 'orders'
   } else if (path.includes('/user')) {
-    return 'workspace' // 用户默认工作台
+    return 'workspace'
   }
   return route.name as string
 })
@@ -122,6 +135,8 @@ const handleMenuSelect = (index: string) => {
     } else {
       router.push('/user/profile')
     }
+  } else if (index === 'drafts') {
+    router.push('/user/drafts')
   } else if (index === 'staff') {
     router.push('/admin/staff')
   }
@@ -175,6 +190,16 @@ const handleLogout = async () => {
     &:hover {
       background-color: #FFF5F5;
     }
+  }
+}
+
+.draft-badge {
+  margin-left: 8px;
+  :deep(.el-badge__content) {
+    font-size: 10px;
+    height: 16px;
+    line-height: 16px;
+    padding: 0 5px;
   }
 }
 </style>

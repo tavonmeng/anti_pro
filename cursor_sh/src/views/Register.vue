@@ -174,7 +174,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { User, Lock, Message, Right, Iphone, Key } from '@element-plus/icons-vue'
 import { authApi } from '@/utils/api'
 import type { UserRole } from '@/types'
@@ -354,7 +354,22 @@ const handleRegister = async () => {
           }
         }
       } catch (error: any) {
-        console.error('注册失败:', error)
+        if (error?.message && error.message.includes('该手机号已注册')) {
+          ElMessageBox.confirm(
+            '该手机号已经注册过了，是否直接去登录？',
+            '提示',
+            {
+              confirmButtonText: '去登录',
+              cancelButtonText: '再看看',
+              type: 'info',
+              center: true
+            }
+          ).then(() => {
+            goToLogin()
+          }).catch(() => {})
+        } else {
+          console.error('注册失败:', error)
+        }
       } finally {
         loading.value = false
       }

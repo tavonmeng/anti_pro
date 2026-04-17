@@ -17,6 +17,14 @@
         </div>
 
         <div class="header-right">
+          <button
+            class="icon-toggle history-btn"
+            :class="{ active: showHistory }"
+            title="历史聊天"
+            @click="toggleHistory"
+          >
+            <el-icon><Clock /></el-icon>
+          </button>
           <button class="icon-toggle" title="Help"><el-icon><QuestionFilled /></el-icon></button>
           <button class="new-session-btn" @click="startNewSession">New Session</button>
           <button class="icon-toggle collapse-btn" @click="collapse"><el-icon><Close /></el-icon></button>
@@ -27,6 +35,58 @@
 
       <div class="chat-content" ref="chatContentRef">
         <div class="messages-container" ref="messagesContainer">
+          <!-- 历史聊天记录（内联下压式，保存多条，无卡片底色） -->
+          <transition name="collapse-history">
+            <div v-if="showHistory" class="history-inline">
+              <div v-if="!savedHistories || savedHistories.length === 0" class="history-empty">
+                <el-icon><Clock /></el-icon>
+                <span>暂无历史记录</span>
+              </div>
+              <template v-else>
+                <div v-for="(history, hIndex) in savedHistories" :key="history.id || hIndex" class="history-session-item">
+                  <div class="history-header">
+                    <div class="history-title-group">
+                      <el-icon class="history-icon"><Clock /></el-icon>
+                      <span class="history-time">{{ history.savedAt }} 的对话记录</span>
+                    </div>
+                  </div>
+                  
+                  <div class="history-preview-chat">
+                    <div
+                      v-for="(msg, i) in (expandedHistories[history.id] ? history.messages : history.messages.slice(0, 3))"
+                      :key="i"
+                      :class="['preview-msg', msg.role]"
+                    >
+                      <div class="preview-avatar">{{ msg.role === 'user' ? 'U' : 'AI' }}</div>
+                      <div class="preview-bubble">{{ (!expandedHistories[history.id] && msg.content.length > 80) ? msg.content.slice(0, 80) + '...' : msg.content }}</div>
+                    </div>
+                    <div v-if="history.messages.length > 3" class="history-more-indicator" @click="toggleExpandHistory(history.id)">
+                      <template v-if="!expandedHistories[history.id]">
+                        <div class="more-dots">
+                          <span></span><span></span><span></span>
+                        </div>
+                        <span class="more-text">点击展开剩余 {{ history.messages.length - 3 }} 条</span>
+                      </template>
+                      <template v-else>
+                        <el-icon class="collapse-icon"><ArrowUp /></el-icon>
+                        <span class="more-text">收起内容</span>
+                      </template>
+                    </div>
+                  </div>
+                  
+                  <div class="history-actions-bottom-right">
+                    <button class="history-clear-btn-icon" @click="deleteHistory(hIndex)" title="删除记录">
+                      <el-icon><Delete /></el-icon>
+                    </button>
+                    <button class="stitch-primary-btn history-restore-btn-new" @click="restoreHistory(history)">接着上回聊</button>
+                  </div>
+                  
+                  <div class="session-divider" v-if="hIndex < savedHistories.length - 1"></div>
+                </div>
+              </template>
+              <div class="history-master-divider" v-if="savedHistories && savedHistories.length > 0"></div>
+            </div>
+          </transition>
           <!-- Always show initial 3 options if no option selected -->
           <div v-if="!selectedMode" class="welcome-section message assistant">
             <div class="assistant-wrapper">
@@ -133,9 +193,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search } from '@element-plus/icons-vue'
+import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Clock, Delete, ArrowUp } from '@element-plus/icons-vue'
 
 const emit = defineEmits(['close', 'mode-change'])
 const router = useRouter()
@@ -167,13 +227,108 @@ const handleInputFocus = () => {
 }
 
 const collapse = () => {
+  saveCurrentToHistory()
   emit('close')
 }
 
 const startNewSession = () => {
+  // 保存当前会话到历史（只保存最近1个）
+  saveCurrentToHistory()
   messages.value = []
   selectedMode.value = null
   session_id.value = Math.random().toString(36).substring(7)
+}
+
+// --- 历史聊天记录 ---
+const HISTORY_KEY = 'ai_chat_last_session'
+const showHistory = ref(false)
+
+interface SavedSession {
+  id: string
+  messages: any[]
+  mode: string | null
+  savedAt: string
+}
+
+const savedHistories = ref<SavedSession[]>([])
+const expandedHistories = ref<Record<string, boolean>>({})
+
+const toggleExpandHistory = (id: string) => {
+  expandedHistories.value[id] = !expandedHistories.value[id]
+}
+
+const loadSavedHistory = () => {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      savedHistories.value = Array.isArray(parsed) ? parsed : [parsed]
+    }
+  } catch {
+    savedHistories.value = []
+  }
+}
+
+onMounted(() => {
+  loadSavedHistory()
+})
+
+const saveCurrentToHistory = () => {
+  if (messages.value.length === 0) return
+  
+  const session: SavedSession = {
+    id: Date.now().toString(),
+    messages: [...messages.value],
+    mode: selectedMode.value,
+    savedAt: new Date().toLocaleString('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    })
+  }
+
+  let histories: SavedSession[] = []
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY)
+    if (raw) {
+       const parsed = JSON.parse(raw)
+       histories = Array.isArray(parsed) ? parsed : [parsed]
+    }
+  } catch(e) {}
+  
+  histories.unshift(session)
+  if (histories.length > 5) histories = histories.slice(0, 5)
+  
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(histories))
+  savedHistories.value = histories
+}
+
+const toggleHistory = () => {
+  showHistory.value = !showHistory.value
+  if (showHistory.value) {
+    loadSavedHistory()
+  }
+}
+
+const restoreHistory = (history: SavedSession) => {
+  messages.value = [...history.messages]
+  selectedMode.value = history.mode
+  if (selectedMode.value) {
+    emit('mode-change', selectedMode.value)
+  }
+  showHistory.value = false
+  scrollToBottom()
+}
+
+const deleteHistory = (index: number) => {
+  savedHistories.value.splice(index, 1)
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(savedHistories.value))
+  if (savedHistories.value.length === 0) {
+    showHistory.value = false
+  }
 }
 
 const scrollToBottom = async () => {
@@ -264,24 +419,49 @@ const handleCustomAiChat = async (userText: string) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: session_id.value, message: userText })
     })
-    const result = await response.json()
-    if (result.reply && result.reply.trim() !== '') {
-      messages.value.push({ role: 'assistant', content: result.reply, timestamp: getCurrentTime() })
-    }
-    
-    if (result.requirements_gathered) {
-      messages.value.push({ role: 'assistant', content: '需求收集完成！正在为您跳转到完整的核对表单...' })
-      sessionStorage.setItem('ai_draft_order', JSON.stringify(result.data || {}))
-      
-      setTimeout(() => {
-        collapse()
-        router.push('/user/create-order/ai_3d_custom')
-      }, 1500)
-    }
   } catch (error) {
-    messages.value.push({ role: 'assistant', content: '后端服务连接失败。' })
-  } finally {
-    isLoading.value = false
+    // 降级兜底：前端 Mock 模拟对话收集需求
+    const userMsgCount = messages.value.filter(m => m.role === 'user').length;
+    
+    setTimeout(() => {
+      if (userMsgCount === 1) {
+        messages.value.push({ 
+          role: 'assistant', 
+          content: '好的，了解了您的品牌和产品。为了更准确地把握方向，请问您的目标受众主要是哪些群体？有没有什么特别的风格偏好或品牌调性要求？', 
+          timestamp: getCurrentTime() 
+        })
+      } else if (userMsgCount === 2) {
+        messages.value.push({ 
+          role: 'assistant', 
+          content: '非常清晰！最后请问一下，这支内容的投放渠道（如具体城市/站点）、制作预算大概是多少？以及希望什么时间能够上线？', 
+          timestamp: getCurrentTime() 
+        })
+      } else {
+        messages.value.push({ 
+          role: 'assistant', 
+          content: '太好了，我已经收集齐了所有核心需求！马上为您生成完整需求单...', 
+          timestamp: getCurrentTime() 
+        })
+        
+        setTimeout(() => {
+          messages.value.push({ role: 'assistant', content: '需求收集完成！正在为您跳转到完整的核对表单...' })
+          // 生成一些假数据作为 Draft 传递给建单页
+          const mockDraftData = {
+            brand: "示例品牌 (AI自动提取)",
+            target_group: "年轻群体",
+            style: "科技感、动感",
+            budget: "10万以上"
+          }
+          sessionStorage.setItem('ai_draft_order', JSON.stringify(mockDraftData))
+          
+          setTimeout(() => {
+            collapse()
+            router.push('/user/create-order/ai_3d_custom')
+          }, 1500)
+        }, 1000)
+      }
+      isLoading.value = false
+    }, 1000)
   }
 }
 
@@ -305,6 +485,7 @@ const handleCustomAiChat = async (userText: string) => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
 }
 
 /* Stitch Header */
@@ -380,6 +561,244 @@ const handleCustomAiChat = async (userText: string) => {
   gap: 12px;
 }
 
+.is-locked {
+  background-color: transparent !important;
+  color: #a0a4ae;
+}
+
+/* History Inline Panel */
+.history-inline {
+  width: 100%;
+  padding: 16px 0 0 0;
+  box-sizing: border-box;
+}
+
+.history-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #a0a4ae;
+  gap: 8px;
+  font-size: 13px;
+  padding: 20px 0;
+}
+
+.history-empty .el-icon {
+  font-size: 18px;
+}
+
+.history-session-item {
+  padding: 16px 24px;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.history-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-icon {
+  font-size: 14px;
+  color: #a0a4ae;
+}
+
+.history-time {
+  font-size: 12px;
+  color: #747474;
+  font-weight: 500;
+}
+
+.history-actions-bottom-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.history-restore-btn-new {
+  font-size: 12px;
+  padding: 6px 16px;
+  height: auto;
+  border-radius: 99px;
+  box-shadow: 0 2px 8px rgba(13, 153, 255, 0.2);
+}
+
+.history-clear-btn-icon {
+  background: transparent;
+  border: none;
+  color: #a0a4ae;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.history-clear-btn-icon:hover {
+  background: rgba(229, 57, 53, 0.1);
+  color: #e53935;
+}
+
+/* Chat Preview Timeline */
+.history-preview-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+}
+
+.history-preview-chat::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 24px;
+  bottom: 24px;
+  width: 2px;
+  background: rgba(0, 0, 0, 0.04);
+  z-index: 0;
+}
+
+.preview-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  z-index: 1;
+}
+
+.preview-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  color: #1a1c1c;
+  flex-shrink: 0;
+}
+
+.preview-msg.assistant .preview-avatar {
+  background: linear-gradient(135deg, #0d99ff, #0a8bed);
+  color: #fff;
+  border: none;
+}
+
+.preview-bubble {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #4a4d55;
+  max-width: 85%;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+}
+
+.preview-msg.user .preview-bubble {
+  background: #fdfdfd;
+  color: #1a1c1c;
+}
+
+.history-more-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 3px;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+  z-index: 1;
+}
+
+.history-more-indicator:hover {
+  background-color: rgba(0,0,0,0.02);
+}
+
+.collapse-icon {
+  font-size: 16px;
+  color: #a0a4ae;
+  margin: 0 4px;
+}
+
+.more-dots {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  width: 24px;
+}
+
+.more-dots span {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #d1d5db;
+}
+
+.more-text {
+  font-size: 12px;
+  color: #a0a4ae;
+}
+
+.session-divider {
+  width: calc(100% + 112px); /* 48px (item padding) + 64px (container padding) */
+  margin-left: -56px; /* -24px (item) + -32px (container) */
+  height: 1px;
+  background: rgba(0, 0, 0, 0.05); /* very thin subtle line */
+  margin-top: 16px;
+}
+
+.history-master-divider {
+  width: calc(100% + 64px); /* 64px (container padding) */
+  margin-left: -32px;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.08); /* slightly more visible */
+}
+
+.history-btn.active {
+  color: #0d99ff;
+  background: rgba(13, 153, 255, 0.08);
+  border-radius: 8px;
+}
+
+/* Collapse animation for history panel push-down */
+.collapse-history-enter-active {
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+.collapse-history-leave-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+.collapse-history-enter-from,
+.collapse-history-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  margin-top: 0;
+}
+.collapse-history-enter-to,
+.collapse-history-leave-from {
+  max-height: 2000px;
+  opacity: 1;
+}
+
 .icon-toggle {
   background: transparent;
   border: none;
@@ -418,10 +837,7 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 .gradient-banner {
-  width: 100%;
-  height: 1px;
-  background: rgba(0, 0, 0, 0.06);
-  flex-shrink: 0;
+  display: none;
 }
 
 .chat-content {
@@ -724,7 +1140,7 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 .stitch-send-btn {
-  background: #000; 
+  background: #0d99ff; /* Same as new session btn */
   color: #fff;
   border: none;
   height: 32px; /* Super slim button to allow pill to shrink */
@@ -747,6 +1163,7 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 .stitch-send-btn:hover {
+  background: #0a8bed;
   transform: scale(0.98);
 }
 

@@ -1,8 +1,10 @@
 """订单 API 路由"""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List, Union
+import io
 
 from app.database import get_db
 from app.models.user import User
@@ -11,6 +13,7 @@ from app.schemas.order import *
 from app.schemas.feedback import FeedbackCreate
 from app.schemas.response import ApiResponse
 from app.services.order_service import OrderService
+from app.services.pdf_service import PDFService
 from app.utils.dependencies import get_current_user, require_admin, require_admin_or_staff
 
 router = APIRouter(prefix="/orders", tags=["订单"])
@@ -38,20 +41,24 @@ async def get_orders(
 @router.post("", response_model=ApiResponse[dict])
 async def create_order(
     order_data: Union[VideoPurchaseOrderCreate, AI3DCustomOrderCreate, DigitalArtOrderCreate],
+    is_draft: bool = Query(False, description="是否保存为草稿"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """创建订单"""
+    """创建订单（支持草稿模式）"""
     try:
-        order = await OrderService.create_order(db, order_data, current_user)
+        order = await OrderService.create_order(db, order_data, current_user, is_draft=is_draft)
         
-        # 根据订单类型返回不同的提示消息
-        messages = {
-            "video_purchase": "订单创建成功",
-            "ai_3d_custom": "订单创建成功，预计5-7个工作日完成制作",
-            "digital_art": "订单创建成功，预计3个工作日交付初稿"
-        }
-        message = messages.get(order_data.orderType, "订单创建成功")
+        if is_draft:
+            message = "草稿保存成功"
+        else:
+            # 根据订单类型返回不同的提示消息
+            messages = {
+                "video_purchase": "订单创建成功",
+                "ai_3d_custom": "订单创建成功，预计5-7个工作日完成制作",
+                "digital_art": "订单创建成功，预计3个工作日交付初稿"
+            }
+            message = messages.get(order_data.orderType, "订单创建成功")
         
         return ApiResponse(code=201, message=message, data=order)
     except HTTPException as e:
@@ -97,7 +104,7 @@ async def update_order(
 async def update_order_status(
     order_id: str,
     status_update: OrderStatusUpdate,
-    current_user: User = Depends(require_admin_or_staff),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """更新订单状态"""
@@ -185,3 +192,63 @@ async def submit_feedback(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/{order_id}/pdf/confirmation")
+async def download_confirmation_pdf(
+    order_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """下载需求告知函 PDF（用户可用）"""
+    try:
+        order = await OrderService.get_order_detail(db, order_id, current_user)
+        
+        # 确保 orderData 字段存在（从 order_data 合并到响应中）
+        order_for_pdf = {**order, "orderData": order}
+        
+        pdf_bytes = PDFService.generate_order_confirmation_pdf(order_for_pdf)
+        
+        filename = f"confirmation_{order.get('orderNumber', order_id)}.pdf"
+        
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(pdf_bytes)),
+            }
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{order_id}/pdf/detail")
+async def download_detail_pdf(
+    order_id: str,
+    current_user: User = Depends(require_admin_or_staff),
+    db: AsyncSession = Depends(get_db)
+):
+    """下载订单详情 PDF（仅管理员/负责人可用）"""
+    try:
+        order = await OrderService.get_order_detail(db, order_id, current_user)
+        
+        order_for_pdf = {**order, "orderData": order}
+        
+        pdf_bytes = PDFService.generate_order_detail_pdf(order_for_pdf)
+        
+        filename = f"order_detail_{order.get('orderNumber', order_id)}.pdf"
+        
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(pdf_bytes)),
+            }
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
