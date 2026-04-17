@@ -1,6 +1,7 @@
 """邮件服务"""
 
 import aiosmtplib
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -56,16 +57,23 @@ class EmailService:
                 message.attach(attachment)
         
         try:
+            # 解决某些服务器（如macOS本地）证书验证失败的问题
+            tls_context = ssl.create_default_context()
+            tls_context.check_hostname = False
+            tls_context.verify_mode = ssl.CERT_NONE
+
             # 发送邮件
-            await aiosmtplib.send(
+            result = await aiosmtplib.send(
                 message,
                 hostname=settings.SMTP_HOST,
                 port=settings.SMTP_PORT,
                 username=settings.SMTP_USER,
                 password=settings.SMTP_PASSWORD,
-                use_tls=True
+                use_tls=True,
+                tls_context=tls_context
             )
             print(f"邮件发送成功: {subject} -> {to_emails}")
+            return True
         except Exception as e:
             print(f"邮件发送失败: {e}")
     
