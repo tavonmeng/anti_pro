@@ -94,6 +94,11 @@ class Settings(BaseSettings):
     INIT_ADMIN_PASSWORD: str = "123456"
     INIT_ADMIN_EMAIL: str = "admin@example.com"
     
+    # 大模型 API 配置 
+    AI_API_KEY: str = ""
+    AI_BASE_URL: str = "https://api.openai.com/v1"
+    AI_MODEL_NAME: str = "gpt-3.5-turbo"
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

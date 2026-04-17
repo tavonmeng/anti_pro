@@ -138,6 +138,15 @@
                       先去浏览
                     </el-button>
                   </div>
+                  <!-- 需求收集完成后的三个操作按钮 -->
+                  <div v-if="msg.isCompletePrompt" class="completion-actions">
+                    <p class="completion-hint">您可以在表单中修改信息、补充细节字段、上传现场实拍图等附件资料</p>
+                    <div class="completion-btns">
+                      <button class="comp-btn comp-btn-ghost" @click="handleStayInChat">继续对话</button>
+                      <button class="comp-btn comp-btn-outline" @click="handleSaveDraftFromChat">保存草稿</button>
+                      <button class="comp-btn comp-btn-primary" @click="handleGoToForm">前往确认表单 →</button>
+                    </div>
+                  </div>
                 </div>
                 <span class="msg-time ai-time" v-if="msg.timestamp">{{ msg.timestamp }}</span>
               </div>
@@ -149,6 +158,9 @@
                <div class="assistant-tag"><span class="engine-name">Catalyst Engine</span></div>
                <div class="message-bubble glass-ai typing">正在思考中...</div>
             </div>
+          </div>
+          <div v-if="isTyping && !isLoading" class="typing-cursor-indicator">
+            <span class="cursor-blink">▍</span>
           </div>
         </div>
       </div>
@@ -170,7 +182,7 @@
             :class="{ 'is-locked': !selectedMode }"
             @input="adjustTextareaHeight"
             @keydown.enter.prevent="sendMessage"
-            :disabled="isLoading || !selectedMode"
+            :disabled="isLoading || isTyping || !selectedMode"
             @focus="handleInputFocus"
             rows="1"
           ></textarea>
@@ -179,7 +191,7 @@
           <div class="right-tools">
             <button
               class="stitch-send-btn"
-              :class="{ disabled: isLoading || !inputMsg.trim() || !selectedMode }"
+              :class="{ disabled: isLoading || isTyping || !inputMsg.trim() || !selectedMode }"
               @click="sendMessage"
             >
               <span>Send</span>
@@ -195,15 +207,19 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
 import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Clock, Delete, ArrowUp } from '@element-plus/icons-vue'
+import { useOrderStore } from '@/stores/order'
 
 const emit = defineEmits(['close', 'mode-change'])
 const router = useRouter()
+const orderStore = useOrderStore()
 
 const selectedMode = ref<string | null>(null)
 const messages = ref<any[]>([])
 const inputMsg = ref('')
 const isLoading = ref(false)
+const isTyping = ref(false) // AI 正在逐字输出中
 const session_id = ref(Math.random().toString(36).substring(7))
 const chatContentRef = ref<any>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -227,6 +243,40 @@ const handleInputFocus = () => {
 }
 
 const collapse = () => {
+  // 当用户选择了定制模式，且对话已经开始，但还没收集全信息（测试阈值设为3）
+  if (selectedMode.value === 'custom_ai' || selectedMode.value === 'digital_art') {
+    const userMsgCount = messages.value.filter(m => m.role === 'user').length;
+    if (userMsgCount > 0 && userMsgCount < 4) {
+      ElMessageBox.confirm(
+        '我们发现您的项目部分需求信息（如预算、人群、投放场景等）还未提供完整。您希望继续由 AI 帮您引导梳理，还是直接退出并跳转到表单页面手动填写？',
+        '需求尚未收集完整 📝',
+        {
+          confirmButtonText: '去手动填表',
+          cancelButtonText: '继续聊天',
+          type: 'warning',
+          center: true,
+          closeOnClickModal: false,
+          showClose: false
+        }
+      ).then(() => {
+        // 用户选择去填表：保存历史，将已有数据打成草稿带过去
+        saveCurrentToHistory()
+        const mockDraftData = {
+          brand: messages.value.find(m => m.role === 'user')?.content.slice(0, 15) + "..." || "未提及品牌",
+          target_group: "",
+          style: "",
+          budget: ""
+        }
+        sessionStorage.setItem('ai_draft_order', JSON.stringify(mockDraftData))
+        emit('close')
+        router.push(selectedMode.value === 'digital_art' ? '/user/create-order/digital_art' : '/user/create-order/ai_3d_custom')
+      }).catch(() => {
+        // 用户选择继续聊天，面板保持开启，啥都不做
+      })
+      return; 
+    }
+  }
+
   saveCurrentToHistory()
   emit('close')
 }
@@ -341,6 +391,44 @@ const scrollToBottom = async () => {
   }
 }
 
+// ===== 打字机效果：逐字显示 AI 回复 =====
+const typewriterEffect = (fullText: string, onComplete?: () => void) => {
+  isLoading.value = false
+  isTyping.value = true
+  
+  // 先 push 一条空的 assistant 消息
+  const msgIndex = messages.value.length
+  messages.value.push({
+    role: 'assistant',
+    content: '',
+    timestamp: getCurrentTime()
+  })
+
+  let charIndex = 0
+  const speed = 25 // 每个字符间隔 ms
+  
+  const typeNext = () => {
+    if (charIndex < fullText.length) {
+      // 一次追加 1~2 个字符，让速度更自然
+      const chunk = fullText.slice(charIndex, charIndex + 2)
+      messages.value[msgIndex].content += chunk
+      charIndex += chunk.length
+      
+      // 每 20 个字符滚动一次，避免过于频繁
+      if (charIndex % 20 === 0) scrollToBottom()
+      
+      setTimeout(typeNext, speed)
+    } else {
+      // 打字完成
+      isTyping.value = false
+      scrollToBottom()
+      if (onComplete) onComplete()
+    }
+  }
+  
+  typeNext()
+}
+
 watch(() => messages.value.length, scrollToBottom)
 watch(() => isLoading.value, scrollToBottom)
 
@@ -359,13 +447,17 @@ const selectMode = async (mode: string) => {
     try {
       // 从后端读取真实设计的开场白
       const response = await fetch(`/ai/start?session_id=${session_id.value}`)
+      if (!response.ok || (response.headers.get('content-type') && response.headers.get('content-type')?.includes('text/html'))) {
+        throw new Error('API not available, fallback to mock')
+      }
       const result = await response.json()
       if (result.reply) {
-        messages.value.push({ role: 'assistant', content: result.reply, timestamp: getCurrentTime() })
+        typewriterEffect(result.reply)
       }
     } catch (e) {
       // 降级兜底
-      messages.value.push({ role: 'assistant', content: '您选择了【AI裸眼3D内容定制】。我将引导您梳理详细的投放需求清单，请问您的品牌和产品是什么呢？', timestamp: getCurrentTime() })
+      const fallbackMsg = `你好！我是您的项目需求AI助手 👋\n\n你可以直接告诉我你的项目想法，不用担心格式——哪怕只是一段随意的描述，比如：\n\n> "我们是一个运动饮料品牌，想在今年夏天做一波地铁广告投放，主要面向年轻白领..."\n\n我会从你的描述里提取需要的信息，然后针对还不清楚的地方，我们会一个个讨论 😊\n\n**所以，先告诉我你的项目是什么吧？**`;
+      typewriterEffect(fallbackMsg)
     } finally {
       isLoading.value = false
     }
@@ -414,11 +506,44 @@ const sendMessage = async () => {
 const handleCustomAiChat = async (userText: string) => {
   isLoading.value = true
   try {
+    // 提取所有除当前这句（即最后一条）以外的历史记录
+    const historyMessages = messages.value.slice(0, messages.value.length - 1);
+    const formattedHistory = historyMessages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.content }));
+
     const response = await fetch('/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: session_id.value, message: userText })
+      body: JSON.stringify({ 
+        session_id: session_id.value, 
+        message: userText,
+        history: formattedHistory
+      })
     })
+    
+    // 如果线上环境 Nginx 把请求拦截并回退给了 index.html 导致没报错而是 200 OK，我们需要手动抛出异常去触发降级
+    if (!response.ok || (response.headers.get('content-type') && response.headers.get('content-type')?.includes('text/html'))) {
+      throw new Error('API not available, fallback to mock')
+    }
+
+    const data = await response.json()
+    const replyContent = data.message || data.answer || '处理成功';
+    // 隐藏掉触发表单的系统标记串，避免在UI中展示给用户
+    const cleanContent = replyContent.replace('【需求收集完成】', '').trim();
+    
+    // 使用打字机效果逐字显示
+    typewriterEffect(cleanContent, () => {
+      // 打字完成后，检测是否触发建单
+      if (replyContent.includes('【需求收集完成】')) {
+        // 给最后一条 AI 消息加上操作按钮标记
+        const lastMsg = messages.value[messages.value.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant') {
+          lastMsg.isCompletePrompt = true
+        }
+      }
+    })
+
   } catch (error) {
     // 降级兜底：前端 Mock 模拟对话收集需求
     const userMsgCount = messages.value.filter(m => m.role === 'user').length;
@@ -427,19 +552,25 @@ const handleCustomAiChat = async (userText: string) => {
       if (userMsgCount === 1) {
         messages.value.push({ 
           role: 'assistant', 
-          content: '好的，了解了您的品牌和产品。为了更准确地把握方向，请问您的目标受众主要是哪些群体？有没有什么特别的风格偏好或品牌调性要求？', 
+          content: '好的，产品很有意思。为了让最终视觉效果更匹配，您期望这支视频想要打动哪类年轻受众呢？（比如在校学生、或者职场新人等）', 
           timestamp: getCurrentTime() 
         })
       } else if (userMsgCount === 2) {
         messages.value.push({ 
           role: 'assistant', 
-          content: '非常清晰！最后请问一下，这支内容的投放渠道（如具体城市/站点）、制作预算大概是多少？以及希望什么时间能够上线？', 
+          content: '明白。在视觉呈现上，您大概有什么特定的风格倾向吗？（比如赛博朋克、极简风，或者写实拟真都可以）', 
+          timestamp: getCurrentTime() 
+        })
+      } else if (userMsgCount === 3) {
+        messages.value.push({ 
+          role: 'assistant', 
+          content: '非常清晰。最后了解一下，您准备把这支内容具体投放在哪里？以及大概的预算区间是多少呢？', 
           timestamp: getCurrentTime() 
         })
       } else {
         messages.value.push({ 
           role: 'assistant', 
-          content: '太好了，我已经收集齐了所有核心需求！马上为您生成完整需求单...', 
+          content: '太好了，所有核心信息都已经收集完毕！我这就为您整理生成标准的专属开发需求单...', 
           timestamp: getCurrentTime() 
         })
         
@@ -447,9 +578,9 @@ const handleCustomAiChat = async (userText: string) => {
           messages.value.push({ role: 'assistant', content: '需求收集完成！正在为您跳转到完整的核对表单...' })
           // 生成一些假数据作为 Draft 传递给建单页
           const mockDraftData = {
-            brand: "示例品牌 (AI自动提取)",
+            brand: "示例品牌 (AI已提取)",
             target_group: "年轻群体",
-            style: "科技感、动感",
+            style: "科技感设计",
             budget: "10万以上"
           }
           sessionStorage.setItem('ai_draft_order', JSON.stringify(mockDraftData))
@@ -465,10 +596,117 @@ const handleCustomAiChat = async (userText: string) => {
   }
 }
 
+// ===== 需求收集完成后的三个操作按钮处理 =====
+const buildDraftData = () => {
+  const brandMatch = messages.value.find(m => m.role === 'user')?.content.slice(0, 15) || "未知品牌";
+  return {
+    brand: brandMatch + "... (AI提取)",
+    target_group: "基于对话已梳理",
+    style: "基于对话已判定",
+    budget: "基于对话已记录"
+  }
+}
+
+const handleStayInChat = () => {
+  // 移除最后一条消息的完成按钮标记，让用户继续聊天
+  const lastMsg = messages.value[messages.value.length - 1]
+  if (lastMsg) lastMsg.isCompletePrompt = false
+}
+
+const handleSaveDraftFromChat = async () => {
+  try {
+    const draftData = buildDraftData()
+    await orderStore.createOrder({
+      orderType: selectedMode.value === 'digital_art' ? 'digital_art' : 'ai_3d_custom',
+      ...draftData
+    }, true)
+    saveCurrentToHistory()
+  } catch (e) {
+    console.error('保存草稿失败', e)
+  }
+}
+
+const handleGoToForm = () => {
+  sessionStorage.setItem('ai_draft_order', JSON.stringify(buildDraftData()))
+  saveCurrentToHistory()
+  emit('close')
+  router.push(selectedMode.value === 'digital_art' ? '/user/create-order/digital_art' : '/user/create-order/ai_3d_custom')
+}
 
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+/* 打字机光标动画 */
+.typing-cursor-indicator {
+  display: inline-block;
+  margin-left: 4px;
+  margin-top: -8px;
+}
+.cursor-blink {
+  animation: blink-cursor 0.8s step-end infinite;
+  color: #0071e3;
+  font-size: 16px;
+  font-weight: 600;
+}
+@keyframes blink-cursor {
+  50% { opacity: 0; }
+}
+
+/* \u9700\u6c42\u6536\u96c6\u5b8c\u6210\u540e\u7684\u5185\u8054\u64cd\u4f5c\u6309\u94ae */
+.completion-actions {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+.completion-hint {
+  font-size: 12px;
+  color: #86868b;
+  line-height: 1.5;
+  margin: 0 0 12px 0;
+}
+.completion-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.comp-btn {
+  padding: 7px 16px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.comp-btn-ghost {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: #747474;
+}
+.comp-btn-ghost:hover {
+  border-color: rgba(0, 0, 0, 0.25);
+  color: #1a1c1c;
+}
+.comp-btn-outline {
+  background: transparent;
+  border: 1px solid #0071e3;
+  color: #0071e3;
+}
+.comp-btn-outline:hover {
+  background: rgba(0, 113, 227, 0.06);
+}
+.comp-btn-primary {
+  background: #0d99ff;
+  border: 1px solid #0d99ff;
+  color: #fff;
+}
+.comp-btn-primary:hover {
+  background: #0a8bed;
+  border-color: #0a8bed;
+}
+
+/* === Main Layout === */
 .ai-assistant-wrapper {
   height: 100%; 
   background: transparent; 

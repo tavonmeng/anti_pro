@@ -168,27 +168,29 @@ systemctl daemon-reload
 systemctl enable $SERVICE_NAME
 systemctl restart $SERVICE_NAME
 
-# 4.5 部署AI对话后端 (ai_backend) -> 本地 8001 端口
-echo "🤖 开始部署AI后端..."
-cd "$PROJECT_ROOT/ai_backend"
-if [ ! -d "venv" ]; then
-    $PYTHON_CMD -m venv venv
-fi
-source venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-pip install gunicorn uvicorn
+# 4.5 (可选) 部署旧版独立AI后端 — 新版 AI 已集成进主后端 (8000端口)
+# 如果 ai_backend 目录存在，仍然部署以保持向后兼容
+if [ -d "$PROJECT_ROOT/ai_backend" ] && [ -f "$PROJECT_ROOT/ai_backend/requirements.txt" ]; then
+    echo "🤖 检测到独立 AI 后端目录，部署中..."
+    cd "$PROJECT_ROOT/ai_backend"
+    if [ ! -d "venv" ]; then
+        $PYTHON_CMD -m venv venv
+    fi
+    source venv/bin/activate
+    pip install --upgrade pip
+    pip install -r requirements.txt
+    pip install gunicorn uvicorn
 
-cat > gunicorn_config.py << 'EOF'
+    cat > gunicorn_config.py << 'EOF'
 bind = "127.0.0.1:8001"
 workers = 2
 worker_class = "uvicorn.workers.UvicornWorker"
 timeout = 120
 EOF
 
-cat > /etc/systemd/system/$AI_SERVICE_NAME.service << EOF
+    cat > /etc/systemd/system/$AI_SERVICE_NAME.service << EOF
 [Unit]
-Description=AI Agent API
+Description=AI Agent API (Legacy)
 After=network.target
 
 [Service]
@@ -197,7 +199,6 @@ User=$USER_TO_RUN
 Group=$GROUP_TO_RUN
 WorkingDirectory=$PROJECT_ROOT/ai_backend
 Environment="PATH=$PROJECT_ROOT/ai_backend/venv/bin"
-# 注意如果用到 DASHSCOPE_API_KEY，推荐在此添加 Environment="DASHSCOPE_API_KEY=xxx" 或者靠 .env 加载
 ExecStart=$PROJECT_ROOT/ai_backend/venv/bin/gunicorn main:app -c $PROJECT_ROOT/ai_backend/gunicorn_config.py
 Restart=always
 RestartSec=10
@@ -206,9 +207,12 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable $AI_SERVICE_NAME
-systemctl restart $AI_SERVICE_NAME
+    systemctl daemon-reload
+    systemctl enable $AI_SERVICE_NAME
+    systemctl restart $AI_SERVICE_NAME
+else
+    echo "ℹ️ 未检测到独立 AI 后端目录，跳过此步骤（AI 已集成在主后端中）"
+fi
 
 # 5. 配置 Nginx
 echo "🛠 配置 Nginx..."
@@ -250,12 +254,14 @@ server {
         proxy_set_header Connection "upgrade";
     }
 
-    location /ai/ {
-        proxy_pass http://127.0.0.1:8001/;
+    # AI 大模型端点（已集成在主后端 8000 端口）
+    location /ai {
+        proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 180s;
     }
 }
 EOF

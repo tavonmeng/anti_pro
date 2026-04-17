@@ -20,10 +20,9 @@ export default defineConfig({
         secure: false,
       },
       '/ai': {
-        target: 'http://127.0.0.1:8001',
+        target: 'http://127.0.0.1:8000',  // 指向真实的 FastAPI 后端
         changeOrigin: true,
-        secure: false,
-        rewrite: (path) => path.replace(/^\/ai/, '')
+        secure: false
       }
     }
   },
