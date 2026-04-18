@@ -27,8 +27,17 @@
 
           <div class="media-wrapper">
 
+            <video 
+              v-if="item.video" 
+              muted 
+              loop 
+              playsinline
+              autoplay
+              :src="item.video"
+              class="case-video"
+            ></video>
             <img 
-              v-if="item.detail?.gallery?.[0]" 
+              v-else-if="item.detail?.gallery?.[0]" 
               :src="item.detail.gallery[0]" 
               :alt="item.title"
               class="case-image"
@@ -270,13 +279,16 @@ onUnmounted(() => {
 }
 
 .media-wrapper img,
+.media-wrapper video,
 .media-wrapper .placeholder-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: fill; /* 强制填满，避免原图比例不一 */
+  transform: scale(1.02); /* 默认轻微放大掩盖边缘瑕疵 */
   transition: transform 1.2s cubic-bezier(0.2, 0, 0.2, 1);
   will-change: transform;
-  transform: translateZ(0); /* Hardware acceleration to prevent edge ghosting */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .case-details {
@@ -330,6 +342,7 @@ onUnmounted(() => {
 }
 
 .case-item:hover .media-wrapper img,
+.case-item:hover .media-wrapper video,
 .case-item:hover .media-wrapper .placeholder-image {
   transform: scale(1.05);
 }
