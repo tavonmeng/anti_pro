@@ -20,12 +20,7 @@
       </section>
 
       <!-- Section 2: Video -->
-      <section class="video-section" 
-        @mousemove="onMouseMove" 
-        @mouseenter="showCursor = true" 
-        @mouseleave="showCursor = false"
-        @click="toggleVideo"
-      >
+      <section class="video-section" @click="toggleVideo">
         <video 
           ref="videoRef"
           class="hero-video"
@@ -33,15 +28,8 @@
           muted 
           loop 
           playsinline
+          autoplay
         ></video>
-        <!-- Custom Play Cursor -->
-        <div class="custom-play-cursor" 
-          v-if="showCursor"
-          :class="{ 'playing': isPlaying }"
-          :style="{ transform: `translate(${mouseX}px, ${mouseY}px)` }"
-        >
-          {{ isPlaying ? '暂停' : '播放' }}
-        </div>
       </section>
 
       <!-- Section 3: Details Content -->
@@ -67,7 +55,7 @@
         </div>
 
         <!-- Stats Section -->
-        <div class="stats-container">
+        <div class="stats-container" ref="statsContainerRef">
           <div class="stats-header-line">
             <span class="stats-label">传播效应 <span class="arrow-left">←</span></span>
           </div>
@@ -77,12 +65,12 @@
             <div class="stats-row-main">
               <div class="stat-block">
                 <span class="small-txt">上线仅在</span>
-                <span class="big-txt">{{ durationNum }}</span>
+                <span class="big-txt">{{ animatedDuration }}</span>
                 <span class="small-txt">日内</span>
               </div>
               <div class="stat-block">
                 <span class="small-txt">累计流量</span>
-                <span class="big-txt">{{ trafficNum }}</span>
+                <span class="big-txt">{{ animatedTraffic }}</span>
                 <span class="small-txt">亿+</span>
               </div>
             </div>
@@ -142,7 +130,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref, computed, watch } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import gsap from 'gsap'
 import ContactSection from '../sections/ContactSection.vue'
 import TheFooter from '../sections/TheFooter.vue'
@@ -173,24 +161,18 @@ const navigateNext = () => {
 }
 
 watch(() => props.caseData, () => {
-  // 当案例切换时，滚动条置顶（因为本页面 .case-detail-page 是滚动容器）
+  // 当案例切换时，滚动条置顶
   if (pageRef.value) {
     pageRef.value.scrollTo({ top: 0, behavior: 'auto' })
   }
+  // 重置动画状态
+  animatedDuration.value = 0
+  animatedTraffic.value = 0
+  // 重新绑定观察器以触发新案例的动画
+  setTimeout(() => {
+    setupObserver()
+  }, 100)
 })
-
-// Video states
-const videoRef = ref(null)
-const showCursor = ref(false)
-const isPlaying = ref(false)
-const mouseX = ref(0)
-const mouseY = ref(0)
-
-const onMouseMove = (e) => {
-  const rect = e.currentTarget.getBoundingClientRect()
-  mouseX.value = e.clientX - rect.left
-  mouseY.value = e.clientY - rect.top
-}
 
 const toggleVideo = () => {
   if (videoRef.value) {
@@ -234,11 +216,65 @@ const rankings = computed(() => {
   return list.map((r, i) => `NO.${i+1}-${r}`)
 })
 
+// === 滚动动画逻辑 ===
+const statsContainerRef = ref(null)
+const animatedDuration = ref(0)
+const animatedTraffic = ref(0)
+let observer = null
+
+const setupObserver = () => {
+  if (observer) {
+    observer.disconnect()
+  }
+  
+  if (!statsContainerRef.value) return
+
+  observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) {
+      // 使用 dVal 和 tVal 防止与 gsap 自带的 duration 关键字冲突
+      const proxy = { dVal: 0, tVal: 0 }
+      
+      const targetDuration = Number(durationNum.value) || 15
+      const targetTraffic = Number(trafficNum.value) || 10
+
+      gsap.to(proxy, {
+        dVal: targetDuration,
+        tVal: targetTraffic,   
+        duration: 2.2, // 动画时长 2.2 秒
+        ease: 'power3.out',
+        onUpdate: () => {
+          animatedDuration.value = Math.floor(proxy.dVal)
+          animatedTraffic.value = Math.floor(proxy.tVal)
+        }
+      })
+
+      // 给排行榜文字加个从下向上的错开浮现效果
+      gsap.fromTo('.rank-item', 
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0, duration: 0.8, stagger: 0.15, ease: 'power2.out', delay: 0.2 }
+      )
+      
+      observer.disconnect()
+    }
+  }, { threshold: 0.2 }) 
+  
+  observer.observe(statsContainerRef.value)
+}
+
 onMounted(() => {
   gsap.fromTo(pageRef.value, 
     { x: '100%' },
     { x: '0%', duration: 0.8, ease: 'power3.out' }
   )
+  
+  // 初始化滚动动画观察者
+  setupObserver()
+})
+
+onUnmounted(() => {
+  if (observer) {
+    observer.disconnect()
+  }
 })
 </script>
 
@@ -299,35 +335,13 @@ onMounted(() => {
   width: 100%;
   height: 80vh;
   background: #000;
-  cursor: none; /* hide native cursor */
   overflow: hidden;
+  cursor: pointer; /* restore pointer cursor so users know they can click to play/pause */
 }
 .hero-video {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-.custom-play-cursor {
-  position: absolute;
-  top: 0; left: 0;
-  width: 80px; height: 80px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.1);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  pointer-events: none;
-  border: 1px solid rgba(255,255,255,0.3);
-  backdrop-filter: blur(4px);
-  margin-top: -40px;
-  margin-left: -40px;
-  z-index: 10;
-  transition: opacity 0.3s ease;
-}
-.custom-play-cursor.playing {
-  opacity: 0.5;
 }
 
 /* DETAILS CONTENT */
