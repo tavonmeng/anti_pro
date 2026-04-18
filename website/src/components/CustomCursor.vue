@@ -12,13 +12,14 @@ onMounted(() => {
   gsap.set(cursor.value, { xPercent: -50, yPercent: -50, opacity: 0 })
 
   const onMouseMove = (e) => {
-    // Check if mouse is over Header
+    // Check if mouse is over Header or Auth Modal
     const isOverHeader = !!e.target.closest('.header-bar')
+    const isOverAuthModal = !!e.target.closest('.auth-modal-overlay')
     
     let isVisible = false
     
-    if (isOverHeader) {
-      isVisible = false // Do not show cursor effect on header
+    if (isOverHeader || isOverAuthModal) {
+      isVisible = false // Do not show cursor effect on header or modal
     } else {
       isVisible = true // Always visible globally now
     }
@@ -41,9 +42,11 @@ onMounted(() => {
   }
 
   const onMouseOver = (e) => {
-    // If the mouse is over the header, ensure we show the native cursor
+    // If the mouse is over the header or modal, ensure we show the native cursor
     const isOverHeader = !!e.target.closest('.header-bar')
-    if (isOverHeader) {
+    const isOverAuthModal = !!e.target.closest('.auth-modal-overlay')
+    
+    if (isOverHeader || isOverAuthModal) {
       onLeave()
       return
     }
