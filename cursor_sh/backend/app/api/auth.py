@@ -104,6 +104,8 @@ async def api_change_password(
     try:
         result = await change_password(db, current_user, password_data)
         return ApiResponse(code=200, message="密码修改成功", data=result)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -136,5 +138,7 @@ async def update_profile_api(
             "company": current_user.company,
             "address": current_user.address
         })
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
