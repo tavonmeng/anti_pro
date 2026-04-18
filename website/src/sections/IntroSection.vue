@@ -267,7 +267,7 @@ onUnmounted(() => {
 .intro-section {
   background-color: var(--color-bg-primary); /* 原为黑色兜底 */
   color: #fff;
-  width: 100%;
+  width: 100vw !important; /* Force to always span the entire viewport to defeat GSAP pin-spacer resize bugs */
   height: 100vh;
   position: relative;
   z-index: 10;
@@ -346,7 +346,7 @@ onUnmounted(() => {
 .slide-grid {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  padding: 120px 40px;
+  padding: clamp(120px, 22vh, 450px) clamp(40px, 5vw, 200px);
   box-sizing: border-box;
 }
 
@@ -357,20 +357,20 @@ onUnmounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  padding: 120px 40px;
+  padding: clamp(120px, 22vh, 450px) clamp(40px, 5vw, 200px);
   box-sizing: border-box;
   z-index: 10;
-  pointer-events: none; /* 防止挡住鼠标的正常滚轮甚至 Hover 事件 */
+  pointer-events: none;
 }
 
 .container {
-  max-width: 1400px;
+  max-width: 2000px; /* 放宽更大屏幕下的宽度界限 */
+  width: 100%;
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1fr 1.2fr;
-  gap: 80px;
-  align-items: flex-start; /* 改为从上排版，不要用 center 以防文字由于左右子项高度不一样产生错位 */
-  height: calc(100vh - 240px); /* 100vh 减去上下 padding */
+  gap: clamp(40px, 5vw, 80px);
+  align-items: start;
 }
 
 .left-content {
@@ -381,12 +381,11 @@ onUnmounted(() => {
 .relative-box {
   position: relative;
   width: 100%;
-  height: 100%; /* 高度充满右侧栏网格 */
   pointer-events: auto;
 }
 
 .main-heading {
-  font-size: 48px;
+  font-size: clamp(32px, 3.5vw, 96px); /* 大屏放大顶线上限 */
   line-height: 1.2;
   font-weight: 700;
   color: #fff;
@@ -398,49 +397,45 @@ onUnmounted(() => {
 }
 
 .desc-text {
-  font-size: 20px;
+  font-size: clamp(18px, 1.3vw, 36px); /* 自适应字号上限提高 */
   color: var(--color-text-secondary);
   line-height: 1.6;
-  margin-bottom: 12px;
+  margin-bottom: clamp(12px, 1vh, 20px);
   font-weight: 300;
 }
 
 .desc-highlight {
   color: #fff;
-  font-size: 28px;
+  font-size: clamp(22px, 1.8vw, 48px); /* 强调词放大上限提高 */
   font-weight: 600;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
 }
 
-/* 团队静止介绍放在右侧顶部 */
+/* 团队静止介绍放在右侧 */
 .team-block-top {
-  position: absolute;
-  top: 0;
-  left: 0;
   width: 100%;
+  margin-bottom: clamp(24px, 4vh, 60px);
 }
 
 .team-lead {
-  font-size: 16px;
+  font-size: clamp(16px, 1.1vw, 28px); /* 增大上限 */
   color: #fff;
-  margin-bottom: 20px;
+  margin-bottom: clamp(20px, 1.5vh, 32px);
   line-height: 1.8;
   font-weight: 400;
 }
 
 .team-desc {
   color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
+  font-size: clamp(14px, 0.95vw, 24px); /* 大屏幕不显得过小 */
   line-height: 1.8;
 }
 
 /* 动态服务块放在右侧底部 */
 .service-block {
-  position: absolute;
-  bottom: 0; /* 对齐到底部，给上方团队介绍留下巨大的安全空间 */
-  left: 0;
   width: 100%;
-  max-width: 80%; /* 不超过右沿以免贴着右边亮图 */
+  max-width: 80%;
+  margin-top: clamp(240px, 35vh, 650px); /* 让4K屏上也能保持充分底距 */
 }
 
 .service-header {
@@ -451,7 +446,7 @@ onUnmounted(() => {
 }
 
 .service-title {
-  font-size: 26px; /* 字体略放大加重冲击力 */
+  font-size: clamp(26px, 1.8vw, 48px); /* 大屏冲击力上限加倍 */
   font-weight: 700;
   color: #fff;
   margin: 0;
@@ -461,7 +456,7 @@ onUnmounted(() => {
 
 .service-desc {
   color: rgba(255, 255, 255, 0.7);
-  font-size: 15px; /* 字体略放大 */
+  font-size: clamp(15px, 1vw, 26px); /* 说明文字更大最高限度 */
   line-height: 1.8;
 }
 

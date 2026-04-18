@@ -20,10 +20,17 @@
         </div>
       </div>
 
-      <div class="contact-card">
-        <a href="mailto:mlm3344521@163.com" class="email-link">
-          mlm3344521@163.com
-        </a>
+      <div class="action-container">
+        <div class="contact-card">
+          <a href="mailto:mlm3344521@163.com" class="email-link">
+            mlm3344521@163.com
+          </a>
+        </div>
+        <div class="contact-card ai-card">
+          <a :href="dashboardUrl + '/user/workspace'" class="email-link">
+            找AI向导
+          </a>
+        </div>
       </div>
     </div>
   </section>
@@ -39,6 +46,14 @@ gsap.registerPlugin(ScrollTrigger)
 const isHover = ref(false)
 const sectionRef = ref(null)
 const overlayRef = ref(null)
+
+// 动态判断应用跳转地址，优先使用部署时注入的环境变量
+// 如果没有，判断是否为本地开发环境(localhost)，是则跳转到 3000，否则推导当前域名+8080端口(生产环境部署端口)
+const dashboardUrl = import.meta.env.VITE_DASHBOARD_URL || 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? `${window.location.protocol}//${window.location.hostname}:3000`
+    : `${window.location.protocol}//${window.location.hostname}:8080`)
+
 let ctx
 
 onMounted(() => {
@@ -125,7 +140,7 @@ onUnmounted(() => {
 .marquee-track {
   display: flex;
   width: max-content;
-  animation: scroll-left 25s linear infinite; /* 控制循环速度 */
+  animation: scroll-left 50s linear infinite; /* 放慢循环速度 */
   will-change: transform;
 }
 
@@ -151,11 +166,20 @@ onUnmounted(() => {
   100% { transform: translateX(-50%); }
 }
 
+.action-container {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  z-index: 10;
+}
+
 .contact-card {
   background: #000;
   padding: 16px 48px; /* 加大胶囊体积 */
   border-radius: 60px; /* 大号圆角，保持胶囊形状 */
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, background 0.3s ease;
   z-index: 10;
 }
 

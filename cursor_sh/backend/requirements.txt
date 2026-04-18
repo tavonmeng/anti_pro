@@ -1,0 +1,47 @@
+# FastAPI 核心
+fastapi
+uvicorn
+python-multipart
+
+# 数据库
+sqlalchemy
+aiosqlite
+
+# 数据验证
+pydantic
+pydantic-settings
+email-validator
+
+# 认证和安全
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt<5.0.0
+
+# 文件处理
+aiofiles
+
+# PDF 生成
+reportlab
+
+# 阿里云 OSS (预留)
+oss2
+
+# 阿里云号码认证服务（短信验证码）
+alibabacloud_dypnsapi20170525
+alibabacloud_credentials
+alibabacloud_tea_openapi
+alibabacloud_tea_util
+
+# 邮件
+aiosmtplib
+
+# API 限流
+slowapi
+
+# 工具
+python-dotenv
+
+# 开发工具
+pytest
+pytest-asyncio
+httpx

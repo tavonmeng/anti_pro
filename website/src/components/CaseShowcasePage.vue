@@ -9,25 +9,32 @@
           class="showcase-slide"
           @click="openDetail(currentCase)"
         >
-          <!-- Priority: Showcase uses images just like homepage -->
-          <img 
-            v-if="currentCase.detail?.gallery?.[0]" 
-            :src="currentCase.detail.gallery[0]"
-            :alt="currentCase.title"
-          />
+          <!-- 优先使用视频作为封面展示 -->
           <video 
-            v-else-if="currentCase.video" 
+            v-if="currentCase.video" 
             muted 
             loop 
             playsinline
             autoplay
             :src="currentCase.video"
-            :poster="currentCase.detail?.gallery?.[0]"
             class="media-layer"
           ></video>
+          <img 
+            v-else-if="currentCase.detail?.gallery?.[0]" 
+            :src="currentCase.detail.gallery[0]"
+            :alt="currentCase.title"
+          />
           <div class="slide-overlay"></div>
         </div>
       </Transition>
+    </div>
+
+    <!-- Slide Navigation Arrows -->
+    <div class="nav-arrow left-arrow hover-target" @click.stop="prevSlide">
+      <span class="arrow-icon">〈</span>
+    </div>
+    <div class="nav-arrow right-arrow hover-target" @click.stop="nextSlide">
+      <span class="arrow-icon">〉</span>
     </div>
 
     <!-- Info text at bottom left -->
@@ -108,6 +115,14 @@ const goToSlide = (index) => {
   currentIndex.value = index
 }
 
+const nextSlide = () => {
+  currentIndex.value = (currentIndex.value + 1) % displayCases.value.length
+}
+
+const prevSlide = () => {
+  currentIndex.value = (currentIndex.value - 1 + displayCases.value.length) % displayCases.value.length
+}
+
 const openDetail = (item) => {
   emit('open-detail', item)
 }
@@ -151,7 +166,10 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   cursor: pointer;
-  outline: none !important; /* prevent browser focus ring */
+  outline: none !important;
+  overflow: hidden; /* prevent scale(1.05) from bleeding past edges */
+  background: #000;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* ─── 从右到左 拉开特效 (Wipe from right to left) ─── */
@@ -187,21 +205,53 @@ onUnmounted(() => {
 .showcase-slide video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  transition: transform 1.2s cubic-bezier(0.2, 0, 0.2, 1);
+  object-fit: fill; /* 强制拉伸铺满，消除任何边缘间隙 */
+  transform: scale(1.02); /* 微量放大，确保完全覆盖边缘 */
   outline: none !important;
-}
-
-.showcase-slide:hover img,
-.showcase-slide:hover video {
-  transform: scale(1.05); /* Keeps subtle interactivity */
+  -webkit-tap-highlight-color: transparent;
 }
 
 .slide-overlay {
   position: absolute;
   inset: 0;
-  box-shadow: inset 0 0 150px 0 rgba(0, 0, 0, 0.8); /* Replaced hazy gradient with crisp dark edge */
   pointer-events: none;
+  /* Removed inset box-shadow that was causing blue edge artifacts */
+}
+
+/* 左右切换箭头 */
+.nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 30;
+  color: rgba(255, 255, 255, 0.5);
+  transition: all 0.3s;
+}
+
+.nav-arrow:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  backdrop-filter: blur(4px);
+}
+
+.arrow-icon {
+  font-size: 32px;
+  font-weight: 300;
+}
+
+.left-arrow {
+  left: 20px;
+}
+
+.right-arrow {
+  right: 20px;
 }
 
 .showcase-info {

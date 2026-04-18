@@ -1,0 +1,456 @@
+{
+  "info": {
+    "name": "AI设计任务管理系统 API",
+    "description": "VR+AI 裸眼3D内容定制管理系统 API 集合",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "1"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "认证",
+      "item": [
+        {
+          "name": "用户登录",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('authToken', jsonData.data.token);",
+                  "    console.log('Token saved:', jsonData.data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"user\",\n  \"password\": \"123456\",\n  \"role\": \"user\",\n  \"captcha\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "普通用户登录，自动保存 token 到环境变量"
+          }
+        },
+        {
+          "name": "管理员登录",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('authToken', jsonData.data.token);",
+                  "    console.log('Admin token saved:', jsonData.data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"123456\",\n  \"role\": \"admin\",\n  \"captcha\": \"5678\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "管理员登录"
+          }
+        },
+        {
+          "name": "用户注册",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"newuser@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"user\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "注册新用户"
+          }
+        },
+        {
+          "name": "用户登出",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "退出登录"
+          }
+        }
+      ]
+    },
+    {
+      "name": "订单管理",
+      "item": [
+        {
+          "name": "获取订单列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"],
+              "query": [
+                {
+                  "key": "orderType",
+                  "value": "video_purchase",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "pending_assign",
+                  "disabled": true
+                },
+                {
+                  "key": "assigneeId",
+                  "value": "staff-001",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "获取订单列表，支持筛选"
+          }
+        },
+        {
+          "name": "创建订单 - 裸眼3D成片购买",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderType\": \"video_purchase\",\n  \"industryType\": \"movie\",\n  \"visualStyle\": \"scifi\",\n  \"duration\": 120,\n  \"priceRange\": {\n    \"min\": 5000,\n    \"max\": 10000\n  },\n  \"resolution\": \"3840x2160\",\n  \"size\": \"55英寸\",\n  \"curvature\": \"1800R\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "创建裸眼3D成片购买订单"
+          }
+        },
+        {
+          "name": "创建订单 - AI裸眼3D定制",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderType\": \"ai_3d_custom\",\n  \"configuration\": \"裸眼3D显示屏，分辨率4K，尺寸100英寸\",\n  \"creativeIdea\": \"科幻主题的太空场景，需要展示星球和飞船，强调科技感和未来感\",\n  \"scenePhotos\": [\n    {\n      \"id\": \"file-001\",\n      \"name\": \"scene1.jpg\",\n      \"size\": 2048000,\n      \"type\": \"image/jpeg\",\n      \"uploadTime\": \"2025-11-05T10:30:00Z\",\n      \"url\": \"https://cdn.example.com/uploads/scene1.jpg\"\n    },\n    {\n      \"id\": \"file-002\",\n      \"name\": \"scene2.jpg\",\n      \"size\": 1856000,\n      \"type\": \"image/jpeg\",\n      \"uploadTime\": \"2025-11-05T10:31:00Z\",\n      \"url\": \"https://cdn.example.com/uploads/scene2.jpg\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "创建AI裸眼3D内容定制订单（5-7天制作周期）"
+          }
+        },
+        {
+          "name": "创建订单 - 数字艺术定制",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderType\": \"digital_art\",\n  \"artDirection\": \"abstract\",\n  \"description\": \"抽象风格的数字艺术作品，色彩鲜艳，充满科技感，适合大厅展示\",\n  \"materials\": [\n    {\n      \"id\": \"file-003\",\n      \"name\": \"reference.zip\",\n      \"size\": 5120000,\n      \"type\": \"application/zip\",\n      \"uploadTime\": \"2025-11-05T10:35:00Z\",\n      \"url\": \"https://cdn.example.com/uploads/reference.zip\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "创建数字艺术内容定制订单（3天初稿）"
+          }
+        },
+        {
+          "name": "获取订单详情",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/:orderId",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", ":orderId"],
+              "variable": [
+                {
+                  "key": "orderId",
+                  "value": "order-1730880000000"
+                }
+              ]
+            },
+            "description": "获取单个订单的详细信息"
+          }
+        },
+        {
+          "name": "更新订单状态",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_production\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/:orderId/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", ":orderId", "status"],
+              "variable": [
+                {
+                  "key": "orderId",
+                  "value": "order-1730880000000"
+                }
+              ]
+            },
+            "description": "更新订单状态（管理员/负责人）"
+          }
+        },
+        {
+          "name": "分配负责人",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigneeId\": \"staff-001\",\n  \"assigneeName\": \"张设计\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/:orderId/assign",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", ":orderId", "assign"],
+              "variable": [
+                {
+                  "key": "orderId",
+                  "value": "order-1730880000000"
+                }
+              ]
+            },
+            "description": "为订单分配负责人（仅管理员）"
+          }
+        },
+        {
+          "name": "上传预览文件",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"files\": [\n    {\n      \"id\": \"preview-001\",\n      \"name\": \"preview_v1.mp4\",\n      \"size\": 10240000,\n      \"type\": \"video/mp4\",\n      \"uploadTime\": \"2025-11-05T15:00:00Z\",\n      \"url\": \"https://cdn.example.com/previews/preview_v1.mp4\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/:orderId/preview",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", ":orderId", "preview"],
+              "variable": [
+                {
+                  "key": "orderId",
+                  "value": "order-1730880000000"
+                }
+              ]
+            },
+            "description": "上传预览文件（管理员/负责人）"
+          }
+        },
+        {
+          "name": "提交反馈 - 确认通过",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"approval\",\n  \"content\": \"初稿效果很好，请继续制作终稿\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/:orderId/feedback",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", ":orderId", "feedback"],
+              "variable": [
+                {
+                  "key": "orderId",
+                  "value": "order-1730880000000"
+                }
+              ]
+            },
+            "description": "客户确认预览通过"
+          }
+        },
+        {
+          "name": "提交反馈 - 需要修改",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"revision\",\n  \"content\": \"背景颜色需要调整为蓝色调，太空飞船的细节需要更精致，整体节奏可以更快一些\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/:orderId/feedback",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", ":orderId", "feedback"],
+              "variable": [
+                {
+                  "key": "orderId",
+                  "value": "order-1730880000000"
+                }
+              ]
+            },
+            "description": "客户提交修改意见"
+          }
+        }
+      ]
+    },
+    {
+      "name": "负责人管理",
+      "item": [
+        {
+          "name": "获取负责人列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/staff",
+              "host": ["{{baseUrl}}"],
+              "path": ["staff"]
+            },
+            "description": "获取所有负责人列表"
+          }
+        },
+        {
+          "name": "添加负责人",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"staff3\",\n  \"email\": \"staff3@example.com\",\n  \"realName\": \"王制作\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/staff",
+              "host": ["{{baseUrl}}"],
+              "path": ["staff"]
+            },
+            "description": "添加新的负责人（仅管理员）"
+          }
+        }
+      ]
+    }
+  ]
+}
+

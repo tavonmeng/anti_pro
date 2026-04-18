@@ -93,6 +93,34 @@ sudo chown -R $USER:$USER $DEPLOY_DIR
 echo "🏗️ 开始本地构建..."
 if [ -f "package.json" ]; then
     npm install
+
+    # 配置管理后台的动态环境变量
+    echo "🌐 配置管理后台 (Dashboard) 访问路径..."
+    TEMP_PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || curl -s ip.sb 2>/dev/null || echo "")
+    if [ -n "$TEMP_PUBLIC_IP" ]; then
+        DEFAULT_DASHBOARD="http://$TEMP_PUBLIC_IP"
+    else
+        DEFAULT_DASHBOARD="http://localhost"
+    fi
+    echo "请选择 Dashboard 的访问方式："
+    echo "1. 自动填入当前服务器公网 IP ($DEFAULT_DASHBOARD)"
+    echo "2. 手动指定"
+    read -p "请输入 [1/2] (默认 1): " DASHBOARD_CHOICE
+    case "${DASHBOARD_CHOICE:-1}" in
+        1)
+            DASHBOARD_URL=$DEFAULT_DASHBOARD
+            ;;
+        2)
+            read -p "请输入详细的前端访问网址 (例如 http://xxxx:3000 或 https://xxx.com): " DASHBOARD_URL
+            ;;
+        *)
+            DASHBOARD_URL=$DEFAULT_DASHBOARD
+            ;;
+    esac
+    
+    echo "VITE_DASHBOARD_URL=$DASHBOARD_URL" > .env.production
+    echo "✅ 已生成前端控制台变量: VITE_DASHBOARD_URL=$DASHBOARD_URL"
+
     npm run build
 else
     echo "❌ 错误: 未找到 package.json，请在项目根目录下运行此脚本。"

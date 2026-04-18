@@ -2,15 +2,25 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+*:focus,
+*:focus-visible {
+    outline: none !important;
 }
 
 body {
     font-family: var(--font-primary);
-    background-color: var(--color-bg-primary);
+    background-color: #000000 !important;
     color: var(--color-text-primary);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
+}
+
+html {
+    background-color: #000000 !important;
 }
 
 a {
