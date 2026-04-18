@@ -135,6 +135,11 @@ pip install --upgrade pip
 pip install -r requirements.txt
 pip install gunicorn uvicorn
 
+# 创建日志目录（日志系统需要写入权限）
+echo "📝 创建日志目录..."
+mkdir -p logs/{auth,workspace,order,ai,staff,notification,system,error,crash,ai_sessions}
+echo "✅ 日志目录已准备: $(pwd)/logs/"
+
 cat > gunicorn_config.py << 'EOF'
 bind = "127.0.0.1:8000"
 workers = 4

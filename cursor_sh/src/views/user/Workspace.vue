@@ -130,6 +130,7 @@ import { useUiStore } from '@/stores/ui'
 import type { OrderType } from '@/types'
 import AIChatAssistant from '@/components/AIChatAssistant.vue'
 import StyleInspirationSidebar from '@/components/StyleInspirationSidebar.vue'
+import { logger } from '@/utils/logger'
 
 const router = useRouter()
 const orderStore = useOrderStore()
@@ -153,6 +154,7 @@ let currentPromptIndex = 0
 
 onMounted(() => {
   orderStore.fetchOrders()
+  logger.logAction('Workspace', 'page_enter')
 
   const typingSpeed = 120
   const deletingSpeed = 60
@@ -222,16 +224,19 @@ const handleAiExpand = (expanded: boolean) => {
   uiStore.setSecondarySidebar(true)
   uiStore.toggleSidebar(true)
   showInspiration.value = true
+  logger.logAction('Workspace', 'open_ai_assistant')
 }
 
 const handleModeChange = (mode: string) => {
   aiSelectedMode.value = mode
   uiStore.setActiveModule(mode)
+  logger.logAction('Workspace', 'switch_ai_mode', { mode })
 }
 
 const triggerChoreography = (targetType: OrderType | string | null) => {
   // B2B direct routing layout shift: instantly navigate and apply system states
   if (targetType) {
+    logger.logAction('Workspace', 'click_service_card', { targetType })
     if (targetType === 'video_purchase') {
       router.push('/user/video-marketplace')
     } else {
