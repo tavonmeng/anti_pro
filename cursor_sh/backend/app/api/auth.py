@@ -18,7 +18,9 @@ from typing import Optional
 
 class ProfileUpdate(BaseModel):
     email: Optional[EmailStr] = None
-    real_name: Optional[str] = None
+    realName: Optional[str] = None
+    company: Optional[str] = None
+    address: Optional[str] = None
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
@@ -115,8 +117,12 @@ async def update_profile_api(
     try:
         if profile_data.email is not None:
             current_user.email = profile_data.email
-        if profile_data.real_name is not None:
-            current_user.real_name = profile_data.real_name
+        if profile_data.realName is not None:
+            current_user.real_name = profile_data.realName
+        if profile_data.company is not None:
+            current_user.company = profile_data.company
+        if profile_data.address is not None:
+            current_user.address = profile_data.address
             
         await db.commit()
         await db.refresh(current_user)
@@ -125,7 +131,10 @@ async def update_profile_api(
             "id": current_user.id,
             "username": current_user.username,
             "email": current_user.email,
-            "role": current_user.role.value
+            "role": current_user.role.value,
+            "realName": current_user.real_name,
+            "company": current_user.company,
+            "address": current_user.address
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -25,6 +25,8 @@ class User(Base):
     phone = Column(String(20), unique=True, index=True)  # 手机号
     role = Column(Enum(UserRole), nullable=False)
     real_name = Column(String(50))
+    company = Column(String(100))
+    address = Column(String(255))
     avatar = Column(String(255))
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

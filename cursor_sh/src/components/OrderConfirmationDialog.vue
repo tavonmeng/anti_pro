@@ -156,7 +156,11 @@
 import { ref, computed, watch } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { WarningFilled } from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
+import { authApi } from '@/utils/api'
 import type { OrderType } from '@/types'
+
+const authStore = useAuthStore()
 
 const props = defineProps<{
   modelValue: boolean
@@ -199,11 +203,9 @@ const validateSignature = (_rule: any, value: string, callback: Function) => {
 
 const confirmRules: FormRules = {
   email: [
-    { required: true, message: '请输入联系邮箱', trigger: 'blur' },
     { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
   ],
   phone: [
-    { required: true, message: '请输入联系手机', trigger: 'blur' },
     { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }
   ],
   smsCode: [
@@ -218,8 +220,6 @@ const confirmRules: FormRules = {
 
 const isFormValid = computed(() => {
   return (
-    confirmForm.value.email &&
-    confirmForm.value.phone?.length === 11 &&
     confirmForm.value.smsCode?.length === 6 &&
     confirmForm.value.signature === '我已知晓'
   )
@@ -309,7 +309,6 @@ const summaryItems = computed(() => {
     if (d.media_size) items.push({ label: '投放媒体尺寸', value: d.media_size })
     if (d.budget) items.push({ label: '制作预算', value: d.budget })
     if (d.online_time) items.push({ label: '预计上刊时间', value: d.online_time })
-    if (d.sales_contact) items.push({ label: '销售对接人', value: d.sales_contact })
     if (d.scenePhotos?.length) items.push({ label: '现场实拍图', value: `${d.scenePhotos.length} 张` })
   } else if (props.orderType === 'digital_art') {
     const artMap: Record<string, string> = { abstract: '抽象', realistic: '写实', installation: '装置', dynamic: '动态艺术', custom: d.customDirection || '自定义' }
@@ -329,8 +328,8 @@ const handleSendSms = async () => {
   }
 
   try {
-    // 这里调用实际的短信发送接口
-    // await authApi.sendSms(confirmForm.value.phone, 'order_confirm')
+    // 调用实际的短信发送接口
+    await authApi.sendSms(confirmForm.value.phone)
     ElMessage.success('验证码已发送')
     smsCooldown.value = 60
     smsTimer = setInterval(() => {
@@ -369,10 +368,16 @@ const handleCancel = () => {
   visible.value = false
 }
 
-// 重置表单
+// 重置表单，并从用户注册信息预填邮箱和手机号
 watch(visible, (val) => {
   if (val) {
-    confirmForm.value = { email: '', phone: '', smsCode: '', signature: '' }
+    const user = authStore.user
+    confirmForm.value = {
+      email: user?.email || '',
+      phone: user?.phone || '',
+      smsCode: '',
+      signature: ''
+    }
   } else {
     if (smsTimer) {
       clearInterval(smsTimer)

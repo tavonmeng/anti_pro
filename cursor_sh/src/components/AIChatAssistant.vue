@@ -142,9 +142,9 @@
                   <div v-if="msg.isCompletePrompt" class="completion-actions">
                     <p class="completion-hint">您可以在表单中修改信息、补充细节字段、上传现场实拍图等附件资料</p>
                     <div class="completion-btns">
-                      <button class="comp-btn comp-btn-ghost" @click="handleStayInChat">继续对话</button>
-                      <button class="comp-btn comp-btn-outline" @click="handleSaveDraftFromChat">保存草稿</button>
-                      <button class="comp-btn comp-btn-primary" @click="handleGoToForm">前往确认表单 →</button>
+                      <button class="comp-btn comp-btn-ghost" @click="handleStayInChat" :disabled="extractLoading">继续对话</button>
+                      <button class="comp-btn comp-btn-outline" @click="handleSaveDraftFromChat" :disabled="extractLoading">{{ extractLoading ? '正在整理...' : '保存草稿' }}</button>
+                      <button class="comp-btn comp-btn-primary" @click="handleGoToForm" :disabled="extractLoading">{{ extractLoading ? '正在整理...' : '前往确认表单 →' }}</button>
                     </div>
                   </div>
                 </div>
@@ -220,6 +220,7 @@ const messages = ref<any[]>([])
 const inputMsg = ref('')
 const isLoading = ref(false)
 const isTyping = ref(false) // AI 正在逐字输出中
+const extractLoading = ref(false) // 信息提取整理中
 const session_id = ref(Math.random().toString(36).substring(7))
 const chatContentRef = ref<any>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -422,6 +423,12 @@ const typewriterEffect = (fullText: string, onComplete?: () => void) => {
       // 打字完成
       isTyping.value = false
       scrollToBottom()
+      
+      // 打字结束后自动让输入框获取焦点，方便用户继续输入
+      nextTick(() => {
+        textareaRef.value?.focus()
+      })
+      
       if (onComplete) onComplete()
     }
   }
@@ -597,10 +604,30 @@ const handleCustomAiChat = async (userText: string) => {
 }
 
 // ===== 需求收集完成后的三个操作按钮处理 =====
-const buildDraftData = () => {
+const buildDraftData = async () => {
+  try {
+    const formattedHistory = messages.value
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.content }));
+      
+    const response = await fetch('/ai/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history: formattedHistory })
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      if (Object.keys(data).length > 0) return data
+    }
+  } catch (e) {
+    console.error('提取需求字段失败:', e)
+  }
+  
+  // 降级兜底
   const brandMatch = messages.value.find(m => m.role === 'user')?.content.slice(0, 15) || "未知品牌";
   return {
-    brand: brandMatch + "... (AI提取)",
+    brand: brandMatch + "... (提取失败降级)",
     target_group: "基于对话已梳理",
     style: "基于对话已判定",
     budget: "基于对话已记录"
@@ -615,7 +642,8 @@ const handleStayInChat = () => {
 
 const handleSaveDraftFromChat = async () => {
   try {
-    const draftData = buildDraftData()
+    extractLoading.value = true
+    const draftData = await buildDraftData()
     await orderStore.createOrder({
       orderType: selectedMode.value === 'digital_art' ? 'digital_art' : 'ai_3d_custom',
       ...draftData
@@ -623,14 +651,24 @@ const handleSaveDraftFromChat = async () => {
     saveCurrentToHistory()
   } catch (e) {
     console.error('保存草稿失败', e)
+  } finally {
+    extractLoading.value = false
   }
 }
 
-const handleGoToForm = () => {
-  sessionStorage.setItem('ai_draft_order', JSON.stringify(buildDraftData()))
-  saveCurrentToHistory()
-  emit('close')
-  router.push(selectedMode.value === 'digital_art' ? '/user/create-order/digital_art' : '/user/create-order/ai_3d_custom')
+const handleGoToForm = async () => {
+  extractLoading.value = true
+  try {
+    const draftData = await buildDraftData()
+    sessionStorage.setItem('ai_draft_order', JSON.stringify(draftData))
+    saveCurrentToHistory()
+    emit('close')
+    router.push(selectedMode.value === 'digital_art' ? '/user/create-order/digital_art' : '/user/create-order/ai_3d_custom')
+  } catch (e) {
+    console.error('前往表单失败', e)
+  } finally {
+    extractLoading.value = false
+  }
 }
 
 </script>
@@ -678,6 +716,10 @@ const handleGoToForm = () => {
   transition: all 0.2s ease;
   font-family: inherit;
   white-space: nowrap;
+}
+.comp-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .comp-btn-ghost {
   background: transparent;

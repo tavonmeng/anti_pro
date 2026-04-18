@@ -77,14 +77,9 @@
       </el-row>
 
       <el-row :gutter="24">
-        <el-col :span="12">
+        <el-col :span="24">
           <el-form-item label="预计上刊时间" prop="online_time">
             <el-input v-model="formData.online_time" placeholder="例如：2024年10月1日" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item label="销售对接人联系方式" prop="sales_contact">
-            <el-input v-model="formData.sales_contact" placeholder="填写电话、微信或邮箱" />
           </el-form-item>
         </el-col>
       </el-row>
@@ -152,7 +147,6 @@ const formData = reactive({
   technology: '',
   budget: '',
   online_time: '',
-  sales_contact: '',
   scenePhotos: [] as UploadedFile[]
 })
 
@@ -173,7 +167,6 @@ onMounted(() => {
     formData.technology = order.technology || ''
     formData.budget = order.budget || ''
     formData.online_time = order.online_time || ''
-    formData.sales_contact = order.sales_contact || ''
     formData.scenePhotos = order.scenePhotos || []
   } else {
     // 检查是否有 AI 助手传过来的草稿数据
@@ -202,8 +195,11 @@ const formRules: FormRules = {
   content: [
     { required: true, message: '请填写内容需求', trigger: 'blur' }
   ],
-  sales_contact: [
-    { required: true, message: '请填写销售联系方式', trigger: 'blur' }
+  budget: [
+    { max: 50, message: '不能超过50个字符', trigger: 'blur' }
+  ],
+  online_time: [
+    { max: 50, message: '不能超过50个字符', trigger: 'blur' }
   ]
 }
 

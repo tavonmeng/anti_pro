@@ -115,3 +115,62 @@ async def ai_chat(request: ChatRequest):
         print(f"大模型调用失败: {e}")
         # 抛出异常，前端会自动切回 fallback
         raise HTTPException(status_code=500, detail=str(e))
+class ExtractRequest(BaseModel):
+    history: list = []
+
+@router.post("/extract")
+async def ai_extract(request: ExtractRequest):
+    """从对话历史中提取结构化信息"""
+    if not settings.AI_API_KEY:
+        return {
+            "brand": "示例品牌 (Mock)",
+            "target_group": "年轻群体",
+            "style": "科技感设计",
+            "budget": "10万以上"
+        }
+        
+    try:
+        system_prompt = (
+            "你是一个数据提取专家。请阅读以下对话记录，提取客户的项目需求信息。\n"
+            "将提取的信息整理为严格的 JSON 格式返回，只返回 JSON，不要任何其他废话。\n"
+            "支持的字段名（如果有对应信息则提取，没有则留空字符串）：\n"
+            "brand, background, target_group, brand_tone, content, style, prohibited_content, "
+            "city, media_size, time_number, technology, budget, online_time."
+        )
+        
+        chat_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in request.history])
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{settings.AI_BASE_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.AI_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": settings.AI_MODEL_NAME,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"对话记录如下：\n{chat_text}\n\n请提取为JSON。"}
+                    ],
+                    "response_format": {"type": "json_object"}
+                },
+                timeout=30.0
+            )
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            
+            import json
+            # 简单的清洗，如果有 markdown 格式
+            if content.startswith("```json"):
+                content = content.split("```json")[-1].split("```")[0].strip()
+            elif content.startswith("```"):
+                content = content.split("```")[-1].split("```")[0].strip()
+                
+            parsed = json.loads(content)
+            return parsed
+            
+    except Exception as e:
+        print(f"提取信息失败: {e}")
+        return {}

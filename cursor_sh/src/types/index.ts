@@ -46,8 +46,11 @@ export interface User {
   username: string
   role: UserRole
   email?: string
+  phone?: string
   avatar?: string
-  realName?: string  // 真实姓名，用于负责人显示
+  realName?: string  // 真实姓名或联系人姓名
+  company?: string   // 公司或单位
+  address?: string   // 地址
   isActive?: boolean  // 是否启用
   orderCount?: number  // 负责的订单数量
   createdAt?: string  // 创建时间

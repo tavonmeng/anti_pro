@@ -17,6 +17,18 @@
           <el-input v-model="profileForm.email" placeholder="请输入邮箱" />
         </el-form-item>
         
+        <el-form-item label="联系人姓名">
+          <el-input v-model="profileForm.realName" placeholder="请输入联系人姓名" />
+        </el-form-item>
+
+        <el-form-item label="公司/单位">
+          <el-input v-model="profileForm.company" placeholder="请输入公司或单位名称" />
+        </el-form-item>
+
+        <el-form-item label="联系地址">
+          <el-input v-model="profileForm.address" placeholder="请输入常用联系地址" />
+        </el-form-item>
+        
         <el-form-item label="角色">
           <el-tag :type="authStore.isAdmin() ? 'warning' : authStore.isStaff() ? 'primary' : 'info'">
             {{ authStore.isAdmin() ? '管理员' : authStore.isStaff() ? '负责人' : '普通用户' }}
@@ -93,6 +105,9 @@ const passwordFormRef = ref<FormInstance>()
 const profileForm = reactive({
   username: '',
   email: '',
+  realName: '',
+  company: '',
+  address: '',
   userId: ''
 })
 
@@ -128,6 +143,9 @@ onMounted(() => {
   if (authStore.user) {
     profileForm.username = authStore.user.username
     profileForm.email = authStore.user.email || ''
+    profileForm.realName = authStore.user.realName || ''
+    profileForm.company = authStore.user.company || ''
+    profileForm.address = authStore.user.address || ''
     profileForm.userId = authStore.user.id
   }
 })
@@ -139,6 +157,13 @@ const handleSave = async () => {
     const res = await userApi.updateProfile(profileForm)
     if (res && authStore.user) {
       authStore.user.email = profileForm.email
+      authStore.user.realName = profileForm.realName
+      authStore.user.company = profileForm.company
+      authStore.user.address = profileForm.address
+      // 如果后端把所有用户信息通过 res.data 返回了，最好覆盖
+      // authStore.user = { ...authStore.user, ...res.data }
+      // 同时更新 localStorage
+      localStorage.setItem('user', JSON.stringify(authStore.user))
     }
     ElMessage.success('保存成功')
   } catch (error: any) {
@@ -152,6 +177,9 @@ const handleReset = () => {
   if (authStore.user) {
     profileForm.username = authStore.user.username
     profileForm.email = authStore.user.email || ''
+    profileForm.realName = authStore.user.realName || ''
+    profileForm.company = authStore.user.company || ''
+    profileForm.address = authStore.user.address || ''
     profileForm.userId = authStore.user.id
   }
 }

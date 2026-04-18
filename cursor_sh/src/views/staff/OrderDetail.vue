@@ -136,7 +136,6 @@
               <el-descriptions-item label="技术需求">{{ order.technology || '-' }}</el-descriptions-item>
               <el-descriptions-item label="制作预算">{{ order.budget || '-' }}</el-descriptions-item>
               <el-descriptions-item label="预计上刊时间">{{ order.online_time || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="销售对接人">{{ order.sales_contact || '-' }}</el-descriptions-item>
             </el-descriptions>
             
             <p><strong>项目背景：</strong></p>
