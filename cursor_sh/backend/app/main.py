@@ -49,6 +49,13 @@ async def startup_event():
     await init_db()
     print(f"✅ 数据库初始化完成")
     
+    # 确保管理员账户存在（幂等，从 .env 读取配置）
+    from scripts.init_admin import ensure_admin
+    try:
+        await ensure_admin()
+    except Exception as e:
+        print(f"⚠️  管理员初始化异常（不影响启动）: {e}")
+    
     # 确保上传目录存在
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     print(f"✅ 上传目录已准备: {settings.UPLOAD_DIR}")

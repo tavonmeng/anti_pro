@@ -6,6 +6,8 @@ python-multipart
 # 数据库
 sqlalchemy
 aiosqlite
+aiomysql
+cryptography
 
 # 数据验证
 pydantic

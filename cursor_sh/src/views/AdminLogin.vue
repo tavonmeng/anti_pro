@@ -21,10 +21,10 @@
           class="admin-login-form"
           @submit.prevent="handleLogin"
         >
-          <el-form-item prop="username">
+          <el-form-item prop="phone">
             <el-input
-              v-model="loginForm.username"
-              placeholder="管理员账号"
+              v-model="loginForm.phone"
+              placeholder="管理员手机号"
               size="large"
               class="admin-input"
             >
@@ -99,17 +99,17 @@ const captchaValid = ref(false)
 const captchaRef = ref<InstanceType<typeof Captcha>>()
 
 const loginForm = reactive({
-  username: '',
+  phone: '',
   password: '',
   role: 'admin' as UserRole,  // 固定为 admin
   captcha: ''
 })
 
-const validateUsername = (rule: any, value: string, callback: Function) => {
+const validatePhone = (rule: any, value: string, callback: Function) => {
   if (!value) {
-    callback(new Error('请输入管理员账号'))
-  } else if (value.length < 3) {
-    callback(new Error('账号长度至少3个字符'))
+    callback(new Error('请输入管理员手机号'))
+  } else if (value.length !== 11) {
+    callback(new Error('手机号必须是11位'))
   } else {
     callback()
   }
@@ -136,7 +136,7 @@ const validateCaptcha = (rule: any, value: string, callback: Function) => {
 }
 
 const loginRules: FormRules = {
-  username: [{ validator: validateUsername, trigger: 'blur' }],
+  phone: [{ validator: validatePhone, trigger: 'blur' }],
   password: [{ validator: validatePassword, trigger: 'blur' }],
   captcha: [{ validator: validateCaptcha, trigger: 'blur' }]
 }

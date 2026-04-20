@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 
 from app.models.order import Order, OrderType, OrderStatus, OrderAssignee
 from app.models.user import User, UserRole
+from app.models.admin import Admin
+from app.models.staff_member import StaffMember
 from app.models.file import File, FileType
 from app.models.feedback import Feedback, FeedbackType
 from app.models.notification import NotificationType
@@ -19,6 +21,14 @@ from app.services.file_service import FileService
 from app.services.email_service import EmailService
 from app.services.notification_service import NotificationService
 from app.services.pdf_service import PDFService
+
+
+async def _get_order_assignee_ids(db: AsyncSession, order_id: str) -> List[str]:
+    """获取订单的所有负责人 ID（从 order_assignees 表查询）"""
+    result = await db.execute(
+        select(OrderAssignee.assignee_id).where(OrderAssignee.order_id == order_id)
+    )
+    return [row[0] for row in result.all()]
 
 
 class OrderStateMachine:
@@ -477,8 +487,8 @@ class OrderService:
         )
         
         # 2. 通知所有负责该订单的staff
-        if order.assignees:
-            assignee_ids = [assignee.id for assignee in order.assignees]
+        assignee_ids = await _get_order_assignee_ids(db, order.id)
+        if assignee_ids:
             await NotificationService.create_notification_for_multiple_users(
                 db=db,
                 user_ids=assignee_ids,
@@ -511,9 +521,9 @@ class OrderService:
         if len(assignee_ids) != len(assignee_names):
             raise HTTPException(status_code=400, detail="负责人ID和名称数量不匹配")
         
-        # 验证所有负责人
+        # 验证所有负责人（从 staff_members 表）
         assignees_result = await db.execute(
-            select(User).where(User.id.in_(assignee_ids))
+            select(StaffMember).where(StaffMember.id.in_(assignee_ids))
         )
         assignees = assignees_result.scalars().all()
         assignee_dict = {a.id: a for a in assignees}
@@ -523,7 +533,7 @@ class OrderService:
         
         for assignee_id in assignee_ids:
             assignee = assignee_dict.get(assignee_id)
-            if not assignee or assignee.role not in [UserRole.ADMIN, UserRole.STAFF]:
+            if not assignee:
                 raise HTTPException(status_code=400, detail=f"无效的负责人: {assignee_id}")
         
         # 获取旧的负责人ID列表（用于判断是新分配还是重新分配）
@@ -687,8 +697,8 @@ class OrderService:
         await db.commit()
         await db.refresh(order)
         
-        # 通知管理员有新的预览待审核
-        admin_result = await db.execute(select(User).where(User.role == UserRole.ADMIN))
+        # 通知管理员有新的预览待审核（从 admins 表查询）
+        admin_result = await db.execute(select(Admin))
         admins = admin_result.scalars().all()
         admin_ids = [admin.id for admin in admins]
         preview_type_text = "终稿" if preview_type_value == "final" else "初稿"
@@ -703,8 +713,8 @@ class OrderService:
             )
         
         # 通知所有负责该订单的 staff 预览已提交并等待审核
-        if order.assignees:
-            assignee_ids = [assignee.id for assignee in order.assignees]
+        assignee_ids = await _get_order_assignee_ids(db, order.id)
+        if assignee_ids:
             await NotificationService.create_notification_for_multiple_users(
                 db=db,
                 user_ids=assignee_ids,
@@ -799,11 +809,11 @@ class OrderService:
                 order_id=order.id
             )
             
-            if order.assignees:
-                assignee_ids = [assignee.id for assignee in order.assignees]
+            assignee_ids_approved = await _get_order_assignee_ids(db, order.id)
+            if assignee_ids_approved:
                 await NotificationService.create_notification_for_multiple_users(
                     db=db,
-                    user_ids=assignee_ids,
+                    user_ids=assignee_ids_approved,
                     notification_type=NotificationType.PREVIEW_REVIEW_APPROVED,
                     title=f"{preview_type_text}预览审核通过",
                     content=f"订单 {order.order_number} 的{preview_type_text}预览通过审核，客户可查看。",
@@ -812,11 +822,11 @@ class OrderService:
         else:
             # 审核拒绝：通知负责人员
             rejection_reason = review_data.note or "请重新上传预览文件。"
-            if order.assignees:
-                assignee_ids = [assignee.id for assignee in order.assignees]
+            assignee_ids_rejected = await _get_order_assignee_ids(db, order.id)
+            if assignee_ids_rejected:
                 await NotificationService.create_notification_for_multiple_users(
                     db=db,
-                    user_ids=assignee_ids,
+                    user_ids=assignee_ids_rejected,
                     notification_type=NotificationType.PREVIEW_REVIEW_REJECTED,
                     title=f"{preview_type_text}预览审核被拒绝",
                     content=f"订单 {order.order_number} 的{preview_type_text}预览未通过审核：{rejection_reason}",
@@ -883,8 +893,8 @@ class OrderService:
         await db.refresh(feedback)
         
         # 创建系统内消息通知 - 通知所有负责该订单的staff
-        if order.assignees:
-            assignee_ids = [assignee.id for assignee in order.assignees]
+        assignee_ids = await _get_order_assignee_ids(db, order.id)
+        if assignee_ids:
             feedback_type_text = "需要修改" if feedback_data.type == FeedbackType.REVISION else "确认通过"
             await NotificationService.create_notification_for_multiple_users(
                 db=db,
@@ -912,23 +922,23 @@ class OrderService:
         }
     
     @staticmethod
-    async def _build_order_response(db: AsyncSession, order: Order, current_user: User) -> dict:
+    async def _build_order_response(db: AsyncSession, order: Order, current_user) -> dict:
         """构建订单响应"""
-        # 获取用户信息
+        # 获取用户信息（从 users 表，即客户表）
         user_result = await db.execute(select(User).where(User.id == order.user_id))
         user = user_result.scalar_one_or_none()
         
-        # 获取所有负责人信息
+        # 获取所有负责人信息（从 staff_members 表）
         assignees_result = await db.execute(
-            select(OrderAssignee, User).join(
-                User, OrderAssignee.assignee_id == User.id
+            select(OrderAssignee, StaffMember).join(
+                StaffMember, OrderAssignee.assignee_id == StaffMember.id
             ).where(OrderAssignee.order_id == order.id)
         )
         assignees_data = []
-        for order_assignee, assignee_user in assignees_result.all():
+        for order_assignee, assignee_staff in assignees_result.all():
             assignees_data.append({
-                "id": assignee_user.id,
-                "name": assignee_user.real_name or assignee_user.username
+                "id": assignee_staff.id,
+                "name": assignee_staff.real_name or assignee_staff.username
             })
         
         # 获取反馈记录

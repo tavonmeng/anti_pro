@@ -29,14 +29,18 @@ class OrderStatus(str, enum.Enum):
 
 
 class OrderAssignee(Base):
-    """订单-负责人关联模型（用于查询）"""
+    """订单-负责人关联模型
+    
+    assignee_id 引用 staff_members 表（设计师/负责人）。
+    不使用 FK 约束以避免跨表依赖问题。
+    """
     __tablename__ = "order_assignees"
     __table_args__ = (
         UniqueConstraint('order_id', 'assignee_id', name='uq_order_assignee'),
     )
     
     order_id = Column(String(50), ForeignKey("orders.id", ondelete="CASCADE"), primary_key=True)
-    assignee_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    assignee_id = Column(String(50), primary_key=True)  # 引用 staff_members 表，不用 FK
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     def __repr__(self):
@@ -52,8 +56,8 @@ class Order(Base):
     order_type = Column(Enum(OrderType), nullable=False, index=True)
     status = Column(Enum(OrderStatus), nullable=False, default=OrderStatus.PENDING_ASSIGN, index=True)
     
-    # 用户关联
-    user_id = Column(String(50), ForeignKey("users.id"), nullable=False, index=True)
+    # 用户关联（客户 ID，引用 users 表，但不用 FK 以简化三表架构）
+    user_id = Column(String(50), nullable=False, index=True)
     
     # 修改次数
     revision_count = Column(Integer, default=0)
@@ -65,12 +69,9 @@ class Order(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
-    # 关系（延迟加载，避免循环引用）
+    # 关系（保留文件和反馈的 ORM 关系，移除 user/assignee 的 ORM 关系）
     files = relationship("File", back_populates="order", cascade="all, delete-orphan", lazy="selectin")
     feedbacks = relationship("Feedback", back_populates="order", cascade="all, delete-orphan", lazy="selectin")
-    assignees = relationship("User", secondary=OrderAssignee.__table__, lazy="selectin")
-    notifications = relationship("Notification", back_populates="order", cascade="all, delete-orphan", lazy="selectin")
     
     def __repr__(self):
         return f"<Order(id={self.id}, order_number={self.order_number}, type={self.order_type}, status={self.status})>"
-

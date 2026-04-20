@@ -80,44 +80,12 @@
           label-position="top"
           class="confirm-form"
         >
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <el-form-item label="联系邮箱" prop="email">
-                <el-input
-                  v-model="confirmForm.email"
-                  placeholder="将用于接收制作进度通知"
-                  prefix-icon="Message"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="联系手机" prop="phone">
-                <el-input
-                  v-model="confirmForm.phone"
-                  placeholder="将用于短信通知"
-                  prefix-icon="Phone"
-                  maxlength="11"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <el-form-item label="短信验证码" prop="smsCode">
-            <div class="sms-row">
-              <el-input
-                v-model="confirmForm.smsCode"
-                placeholder="请输入验证码"
-                maxlength="6"
-                class="sms-input"
-              />
-              <el-button
-                :disabled="smsCooldown > 0 || !confirmForm.phone || confirmForm.phone.length !== 11"
-                @click="handleSendSms"
-                class="sms-btn"
-              >
-                {{ smsCooldown > 0 ? `${smsCooldown}s 后重发` : '获取验证码' }}
-              </el-button>
-            </div>
+          <el-form-item label="联系邮箱" prop="email">
+            <el-input
+              v-model="confirmForm.email"
+              placeholder="将用于接收制作进度通知"
+              prefix-icon="Message"
+            />
           </el-form-item>
 
           <el-form-item label="签名确认" prop="signature">
@@ -129,6 +97,38 @@
             <div class="signature-hint">
               <el-icon><WarningFilled /></el-icon>
               请在上方输入框中手动输入"<strong>我已知晓</strong>"完成签名确认
+            </div>
+          </el-form-item>
+
+          <div class="sms-notice">
+            <el-icon><WarningFilled /></el-icon>
+            最后一步：请完成手机安全验证以提交需求
+          </div>
+
+          <el-form-item label="联系手机" prop="phone">
+            <el-input
+              v-model="confirmForm.phone"
+              placeholder="将用于接收短信通知"
+              prefix-icon="Phone"
+              maxlength="11"
+            />
+          </el-form-item>
+
+          <el-form-item label="短信验证码" prop="smsCode">
+            <div class="sms-row">
+              <el-input
+                v-model="confirmForm.smsCode"
+                placeholder="请输入验证码"
+                maxlength="6"
+                class="sms-input"
+              />
+              <el-button
+                :disabled="smsCooldown > 0 || !confirmForm.phone || confirmForm.phone.length !== 11 || confirmForm.signature !== '我已知晓'"
+                @click="handleSendSms"
+                class="sms-btn"
+              >
+                {{ smsCooldown > 0 ? `${smsCooldown}s 后重发` : '获取验证码' }}
+              </el-button>
             </div>
           </el-form-item>
         </el-form>
@@ -643,6 +643,19 @@ watch(visible, (val) => {
   strong {
     color: #e6a23c;
   }
+}
+
+.sms-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #e6a23c;
+  padding: 8px 12px;
+  background: rgba(230, 162, 60, 0.08);
+  border-radius: 6px;
+  border: 1px solid rgba(230, 162, 60, 0.2);
 }
 
 // --- 底部按钮 ---

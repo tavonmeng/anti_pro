@@ -5,11 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from app.database import get_db
-from app.models.user import User
 from app.schemas.notification import NotificationResponse, NotificationList, UnreadCountResponse
 from app.schemas.response import ApiResponse
 from app.services.notification_service import NotificationService
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_current_user, AnyUser
 
 router = APIRouter(prefix="/notifications", tags=["消息通知"])
 
@@ -19,7 +18,7 @@ async def get_notifications(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     unread_only: bool = Query(False),
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """获取当前用户的消息列表"""
@@ -45,7 +44,7 @@ async def get_notifications(
 
 @router.get("/unread-count", response_model=ApiResponse[UnreadCountResponse])
 async def get_unread_count(
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """获取未读消息数量"""
@@ -57,7 +56,7 @@ async def get_unread_count(
 @router.put("/{notification_id}/read", response_model=ApiResponse[NotificationResponse])
 async def mark_notification_as_read(
     notification_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """标记消息为已读"""
@@ -73,7 +72,7 @@ async def mark_notification_as_read(
 
 @router.put("/read-all", response_model=ApiResponse[dict])
 async def mark_all_as_read(
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """标记所有消息为已读"""
@@ -88,7 +87,7 @@ async def mark_all_as_read(
 @router.delete("/{notification_id}", response_model=ApiResponse[None])
 async def delete_notification(
     notification_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """删除消息"""

@@ -8,7 +8,6 @@ from sqlalchemy import select, func, and_
 from fastapi import HTTPException, status
 
 from app.models.notification import Notification, NotificationType
-from app.models.user import User
 from app.schemas.notification import NotificationCreate, NotificationResponse
 
 

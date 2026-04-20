@@ -3,14 +3,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
-from typing import List, Optional
+from typing import Optional
 
 from app.database import get_db
-from app.models.user import User, UserRole
+from app.models.user import UserRole
+from app.models.staff_member import StaffMember
 from app.models.order import Order, OrderAssignee
-from app.schemas.user import UserResponse, UserCreate, UserUpdate
+from app.schemas.user import UserCreate, UserUpdate
 from app.schemas.response import ApiResponse
-from app.utils.dependencies import get_current_user, require_admin
+from app.utils.dependencies import get_current_user, require_admin, AnyUser
 from app.utils.security import get_password_hash
 from app.utils.validators import generate_id
 
@@ -24,37 +25,27 @@ async def get_staff_list(
     keyword: Optional[str] = Query(None, description="搜索关键词"),
     role: Optional[str] = Query(None, description="角色筛选"),
     isActive: Optional[bool] = Query(None, description="状态筛选"),
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """获取负责人列表（支持分页和筛选）"""
+    """获取负责人列表（从 staff_members 表查询）"""
     try:
-        # 构建查询条件
-        query = select(User).where(
-            User.role.in_([UserRole.STAFF, UserRole.ADMIN])
-        )
+        # 只查 staff_members 表
+        query = select(StaffMember)
         
         # 关键词搜索
         if keyword:
             query = query.where(
                 or_(
-                    User.username.ilike(f"%{keyword}%"),
-                    User.real_name.ilike(f"%{keyword}%"),
-                    User.email.ilike(f"%{keyword}%")
+                    StaffMember.username.ilike(f"%{keyword}%"),
+                    StaffMember.real_name.ilike(f"%{keyword}%"),
+                    StaffMember.email.ilike(f"%{keyword}%")
                 )
             )
         
-        # 角色筛选
-        if role:
-            try:
-                role_enum = UserRole(role)
-                query = query.where(User.role == role_enum)
-            except ValueError:
-                pass
-        
         # 状态筛选
         if isActive is not None:
-            query = query.where(User.is_active == isActive)
+            query = query.where(StaffMember.is_active == isActive)
         
         # 查询总数
         count_query = select(func.count()).select_from(query.subquery())
@@ -87,7 +78,7 @@ async def get_staff_list(
                 "username": staff.username,
                 "email": staff.email,
                 "realName": staff.real_name,
-                "role": staff.role.value,
+                "role": "staff",
                 "isActive": staff.is_active,
                 "orderCount": order_count,
                 "createdAt": staff.created_at.isoformat() if staff.created_at else None,
@@ -110,32 +101,27 @@ async def get_staff_list(
 @router.post("")
 async def add_staff(
     user_data: UserCreate,
-    current_user: User = Depends(require_admin),
+    current_user: AnyUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """添加负责人"""
+    """添加负责人（创建到 staff_members 表）"""
     try:
-        # 检查用户名是否已存在
+        # 检查用户名是否已存在（在 staff_members 表中）
         result = await db.execute(
-            select(User).where(User.username == user_data.username)
+            select(StaffMember).where(StaffMember.username == user_data.username)
         )
         existing_user = result.scalar_one_or_none()
         
         if existing_user:
             raise HTTPException(status_code=409, detail="用户名已存在")
         
-        # 验证角色
-        if user_data.role not in ["admin", "staff"]:
-            raise HTTPException(status_code=400, detail="角色必须是 admin 或 staff")
-        
-        # 创建负责人账户
-        new_staff = User(
-            id=generate_id("user"),
+        # 创建负责人账户（到 staff_members 表）
+        new_staff = StaffMember(
+            id=generate_id("staff"),
             username=user_data.username,
             email=user_data.email,
             real_name=user_data.realName,
             password_hash=get_password_hash(user_data.password),
-            role=UserRole(user_data.role),
             is_active=user_data.isActive if user_data.isActive is not None else True
         )
         
@@ -148,7 +134,7 @@ async def add_staff(
             "username": new_staff.username,
             "email": new_staff.email,
             "realName": new_staff.real_name,
-            "role": new_staff.role.value,
+            "role": "staff",
             "isActive": new_staff.is_active,
             "orderCount": 0,
             "createdAt": new_staff.created_at.isoformat() if new_staff.created_at else None
@@ -165,14 +151,14 @@ async def add_staff(
 async def update_staff(
     staff_id: str,
     user_data: UserUpdate,
-    current_user: User = Depends(require_admin),
+    current_user: AnyUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """更新负责人信息"""
     try:
-        # 查询负责人
+        # 查询负责人（从 staff_members 表）
         result = await db.execute(
-            select(User).where(User.id == staff_id)
+            select(StaffMember).where(StaffMember.id == staff_id)
         )
         staff = result.scalar_one_or_none()
         
@@ -184,10 +170,6 @@ async def update_staff(
             staff.email = user_data.email
         if user_data.realName is not None:
             staff.real_name = user_data.realName
-        if user_data.role is not None:
-            if user_data.role not in ["admin", "staff"]:
-                raise HTTPException(status_code=400, detail="角色必须是 admin 或 staff")
-            staff.role = UserRole(user_data.role)
         if user_data.isActive is not None:
             staff.is_active = user_data.isActive
         
@@ -212,7 +194,7 @@ async def update_staff(
             "username": staff.username,
             "email": staff.email,
             "realName": staff.real_name,
-            "role": staff.role.value,
+            "role": "staff",
             "isActive": staff.is_active,
             "orderCount": order_count,
             "createdAt": staff.created_at.isoformat() if staff.created_at else None,
@@ -229,14 +211,14 @@ async def update_staff(
 @router.delete("/{staff_id}")
 async def delete_staff(
     staff_id: str,
-    current_user: User = Depends(require_admin),
+    current_user: AnyUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """删除负责人"""
     try:
         # 查询负责人
         result = await db.execute(
-            select(User).where(User.id == staff_id)
+            select(StaffMember).where(StaffMember.id == staff_id)
         )
         staff = result.scalar_one_or_none()
         
@@ -271,4 +253,3 @@ async def delete_staff(
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

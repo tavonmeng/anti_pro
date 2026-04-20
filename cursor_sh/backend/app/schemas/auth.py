@@ -7,10 +7,17 @@ from app.schemas.user import UserResponse
 
 
 class LoginRequest(BaseModel):
-    """登录请求模型（手机号+密码 或 手机号+验证码）"""
-    phone: str = Field(..., min_length=11, max_length=11)
+    """登录请求模型
+    
+    支持三种登录方式：
+    1. 手机号 + 密码
+    2. 手机号 + 短信验证码
+    3. 用户名 + 密码（备用）
+    """
+    phone: Optional[str] = Field(None, min_length=11, max_length=11)
+    username: Optional[str] = None   # 备用：用户名登录
     password: Optional[str] = Field(None, min_length=6)
-    sms_code: Optional[str] = None    # 短信验证码登录
+    sms_code: Optional[str] = None   # 短信验证码登录
     role: UserRole = UserRole.USER
     captcha: Optional[str] = None
 

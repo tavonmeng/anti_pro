@@ -31,7 +31,50 @@ class Settings(BaseSettings):
     PORT: int = 8000
     
     # 数据库配置
-    DATABASE_URL: str = "sqlite+aiosqlite:///./app.db"
+    # 方式1: 直接指定完整连接串（优先级最高）
+    #   SQLite:  sqlite+aiosqlite:///./app.db
+    #   MySQL:   mysql+aiomysql://user:pass@host:3306/dbname
+    DATABASE_URL: str = ""
+    
+    # 方式2: 通过结构化字段自动拼接连接串（当 DATABASE_URL 为空时生效）
+    DB_TYPE: str = "sqlite"              # sqlite / mysql
+    DB_HOST: str = "localhost"           # RDS 内网地址，如: rm-xxxxx.mysql.rds.aliyuncs.com
+    DB_PORT: int = 3306                  # MySQL 默认端口
+    DB_NAME: str = "app"                 # 数据库名，SQLite 模式下为文件名(不含.db)
+    DB_USER: str = ""                    # RDS 用户名
+    DB_PASSWORD: str = ""                # RDS 密码
+    DB_CHARSET: str = "utf8mb4"          # MySQL 字符集
+    
+    # 连接池配置（MySQL RDS 专用）
+    DB_POOL_SIZE: int = 10               # 连接池常驻连接数
+    DB_MAX_OVERFLOW: int = 20            # 最大溢出连接数
+    DB_POOL_TIMEOUT: int = 30            # 获取连接超时（秒）
+    DB_POOL_RECYCLE: int = 1800          # 连接回收时间（秒），RDS 推荐 1800
+    DB_POOL_PRE_PING: bool = True        # 连接健康检查，防止 RDS 闲置断开
+    
+    @property
+    def database_url(self) -> str:
+        """获取最终的数据库连接串"""
+        # 优先使用直接指定的 DATABASE_URL
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
+        
+        # 根据 DB_TYPE 自动拼接
+        if self.DB_TYPE == "mysql":
+            return (
+                f"mysql+aiomysql://{self.DB_USER}:{self.DB_PASSWORD}"
+                f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+                f"?charset={self.DB_CHARSET}"
+            )
+        else:
+            # 默认 SQLite
+            return f"sqlite+aiosqlite:///./{self.DB_NAME}.db"
+    
+    @property
+    def is_mysql(self) -> bool:
+        """判断当前是否使用 MySQL"""
+        url = self.database_url
+        return url.startswith("mysql")
     
     # JWT 配置
     JWT_SECRET_KEY: str = "dev-jwt-secret-key-change-in-production"
@@ -93,6 +136,7 @@ class Settings(BaseSettings):
     INIT_ADMIN_USERNAME: str = "admin"
     INIT_ADMIN_PASSWORD: str = "123456"
     INIT_ADMIN_EMAIL: str = "admin@example.com"
+    INIT_ADMIN_PHONE: str = "13800000000"  # 管理员登录手机号
     
     # 大模型 API 配置 
     AI_API_KEY: str = ""
@@ -102,6 +146,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # 忽略 .env 中未声明的字段（如 LOG_* 等）
 
 
 # 创建全局配置实例

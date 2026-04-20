@@ -7,14 +7,13 @@ from typing import Optional, List, Union
 import io
 
 from app.database import get_db
-from app.models.user import User
 from app.models.order import OrderType, OrderStatus
 from app.schemas.order import *
 from app.schemas.feedback import FeedbackCreate
 from app.schemas.response import ApiResponse
 from app.services.order_service import OrderService
 from app.services.pdf_service import PDFService
-from app.utils.dependencies import get_current_user, require_admin, require_admin_or_staff
+from app.utils.dependencies import get_current_user, require_admin, require_admin_or_staff, AnyUser
 
 router = APIRouter(prefix="/orders", tags=["订单"])
 
@@ -25,7 +24,7 @@ async def get_orders(
     order_type: Optional[OrderType] = Query(None),
     status: Optional[OrderStatus] = Query(None),
     assignee_id: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """获取订单列表"""
@@ -42,7 +41,7 @@ async def get_orders(
 async def create_order(
     order_data: Union[VideoPurchaseOrderCreate, AI3DCustomOrderCreate, DigitalArtOrderCreate],
     is_draft: bool = Query(False, description="是否保存为草稿"),
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """创建订单（支持草稿模式）"""
@@ -70,7 +69,7 @@ async def create_order(
 @router.get("/{order_id}", response_model=ApiResponse[dict])
 async def get_order_detail(
     order_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """获取订单详情"""
@@ -87,7 +86,7 @@ async def get_order_detail(
 async def update_order(
     order_id: str,
     order_data: Union[VideoPurchaseOrderCreate, AI3DCustomOrderCreate, DigitalArtOrderCreate],
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """修改订单（仅待分配状态可修改）"""
@@ -104,7 +103,7 @@ async def update_order(
 async def update_order_status(
     order_id: str,
     status_update: OrderStatusUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """更新订单状态"""
@@ -178,7 +177,7 @@ async def review_preview(
 async def submit_feedback(
     order_id: str,
     feedback_data: FeedbackCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """提交订单反馈"""
@@ -196,7 +195,7 @@ async def submit_feedback(
 @router.get("/{order_id}/pdf/confirmation")
 async def download_confirmation_pdf(
     order_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """下载需求告知函 PDF（用户可用）"""
