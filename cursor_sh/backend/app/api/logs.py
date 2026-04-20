@@ -7,10 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit_database import get_audit_db
 from app.models.audit_log import AuditLog
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_current_user, AnyUser
 from app.utils.log_setup import get_module_logger, sanitize_payload, truncate_payload
 from app.utils.validators import generate_id
-from app.models.user import User
 from app.schemas.response import ApiResponse
 
 import json
@@ -36,7 +35,7 @@ class FrontendLogBatchRequest(BaseModel):
 async def receive_frontend_log(
     log_data: FrontendLogRequest,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_audit_db),
 ):
     """接收单条前端交互日志"""
@@ -52,7 +51,7 @@ async def receive_frontend_log(
 async def receive_frontend_log_batch(
     batch_data: FrontendLogBatchRequest,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_audit_db),
 ):
     """批量接收前端交互日志"""
@@ -69,7 +68,7 @@ async def receive_frontend_log_batch(
 async def _save_frontend_log(
     log_data: FrontendLogRequest,
     request: Request,
-    current_user: User,
+    current_user: AnyUser,
     db: AsyncSession,
 ):
     """保存单条前端日志到数据库和文件"""

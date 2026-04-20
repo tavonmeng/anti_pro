@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from app.models.order import Order, OrderType, OrderStatus, OrderAssignee
 from app.models.user import User, UserRole
+from app.utils.dependencies import AnyUser
 from app.models.admin import Admin
 from app.models.staff_member import StaffMember
 from app.models.file import File, FileType
@@ -194,7 +195,7 @@ class OrderService:
         db: AsyncSession,
         order_id: str,
         order_data: Union[VideoPurchaseOrderCreate, AI3DCustomOrderCreate, DigitalArtOrderCreate],
-        current_user: User
+        current_user: AnyUser
     ) -> dict:
         """修改订单（仅待分配状态可修改）"""
         result = await db.execute(select(Order).where(Order.id == order_id))
@@ -306,7 +307,7 @@ class OrderService:
     @staticmethod
     async def get_orders(
         db: AsyncSession,
-        current_user: User,
+        current_user: AnyUser,
         user_id: Optional[str] = None,
         order_type: Optional[OrderType] = None,
         status: Optional[OrderStatus] = None,
@@ -367,7 +368,7 @@ class OrderService:
     async def get_order_detail(
         db: AsyncSession,
         order_id: str,
-        current_user: User
+        current_user: AnyUser
     ) -> dict:
         """获取订单详情"""
         result = await db.execute(select(Order).where(Order.id == order_id))
@@ -398,7 +399,7 @@ class OrderService:
         db: AsyncSession,
         order_id: str,
         new_status: OrderStatus,
-        current_user: User
+        current_user: AnyUser
     ) -> dict:
         """更新订单状态"""
         result = await db.execute(select(Order).where(Order.id == order_id))
@@ -506,7 +507,7 @@ class OrderService:
         order_id: str,
         assignee_ids: List[str],
         assignee_names: List[str],
-        current_user: User
+        current_user: AnyUser
     ) -> dict:
         """分配订单负责人"""
         if current_user.role != UserRole.ADMIN:
@@ -610,7 +611,7 @@ class OrderService:
         files: List[FileUpload],
         note: Optional[str],
         preview_type: str,
-        current_user: User
+        current_user: AnyUser
     ) -> dict:
         """上传预览文件"""
         result = await db.execute(select(Order).where(Order.id == order_id))
@@ -731,7 +732,7 @@ class OrderService:
         db: AsyncSession,
         order_id: str,
         review_data: PreviewReview,
-        current_user: User
+        current_user: AnyUser
     ) -> dict:
         """审核预览文件"""
         if current_user.role != UserRole.ADMIN:
@@ -852,7 +853,7 @@ class OrderService:
         db: AsyncSession,
         order_id: str,
         feedback_data: FeedbackCreate,
-        current_user: User
+        current_user: AnyUser
     ) -> dict:
         """提交订单反馈"""
         result = await db.execute(select(Order).where(Order.id == order_id))

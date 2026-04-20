@@ -122,7 +122,7 @@ async def update_order_status(
 async def assign_order(
     order_id: str,
     assign_data: OrderAssign,
-    current_user: User = Depends(require_admin_or_staff),
+    current_user: AnyUser = Depends(require_admin_or_staff),
     db: AsyncSession = Depends(get_db)
 ):
     """分配订单负责人"""
@@ -141,7 +141,7 @@ async def assign_order(
 async def upload_preview(
     order_id: str,
     preview_data: PreviewUpload,
-    current_user: User = Depends(require_admin_or_staff),
+    current_user: AnyUser = Depends(require_admin_or_staff),
     db: AsyncSession = Depends(get_db)
 ):
     """上传预览文件"""
@@ -160,7 +160,7 @@ async def upload_preview(
 async def review_preview(
     order_id: str,
     review_data: PreviewReview,
-    current_user: User = Depends(require_admin),
+    current_user: AnyUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """审核预览文件"""
@@ -226,7 +226,7 @@ async def download_confirmation_pdf(
 @router.get("/{order_id}/pdf/detail")
 async def download_detail_pdf(
     order_id: str,
-    current_user: User = Depends(require_admin_or_staff),
+    current_user: AnyUser = Depends(require_admin_or_staff),
     db: AsyncSession = Depends(get_db)
 ):
     """下载订单详情 PDF（仅管理员/负责人可用）"""
