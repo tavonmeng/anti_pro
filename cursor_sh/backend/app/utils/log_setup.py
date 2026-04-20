@@ -232,7 +232,7 @@ def _register_crash_handlers():
     def _signal_handler(signum, frame):
         sig_name = signal.Signals(signum).name if hasattr(signal, "Signals") else str(signum)
         logger.bind(module="system").critical(f"⚡ 收到终止信号 {sig_name} (signum={signum})，进程即将退出")
-        sys.exit(0)
+        # 不要调用 sys.exit()，让 gunicorn/uvicorn 自行处理优雅关闭
 
     # 仅在主线程中注册信号
     try:

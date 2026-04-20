@@ -128,7 +128,7 @@ class AuditLoggerMiddleware(BaseHTTPMiddleware):
                     trace_id=trace_id,
                     user_id=user_id,
                     username=username,
-                    log_type="api_call",
+                    type="api_call",
                     module=module.capitalize(),
                     action=action_str,
                     ip_address=_get_client_ip(request),
