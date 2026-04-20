@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit_database import get_audit_db
@@ -28,7 +28,7 @@ class FrontendLogRequest(BaseModel):
 
 class FrontendLogBatchRequest(BaseModel):
     """批量前端日志请求"""
-    logs: list[FrontendLogRequest] = Field(..., min_length=1, max_length=50)
+    logs: List[FrontendLogRequest] = Field(..., min_length=1, max_length=50)
 
 
 @router.post("", response_model=ApiResponse[dict])
