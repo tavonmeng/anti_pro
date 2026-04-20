@@ -6,7 +6,7 @@
       </div>
     </div>
     
-    <div class="user-profile-top" @click="navigate('workspace')" title="返回主页">
+    <div class="user-profile-top" @click="navigate('profile')" title="个人设置">
       <el-avatar :size="32" class="user-avatar" src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png">{{ userInitial }}</el-avatar>
       <div class="user-info" v-if="!uiStore.isSidebarCollapsed">
         <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
@@ -81,14 +81,19 @@
 
     <div class="sidebar-footer">
       <div class="bottom-nav">
-        <div 
-          class="nav-item" 
-          :class="{ active: activeMenu === 'profile' }" 
-          @click="navigate('profile')"
-        >
-          <el-icon><Setting /></el-icon>
-          <span v-if="!uiStore.isSidebarCollapsed">User Settings</span>
-        </div>
+        <!-- 公告 -->
+        <SystemAnnouncement :show-text="!uiStore.isSidebarCollapsed">
+          <template #reference="{ hasUnread }">
+            <div class="nav-item">
+              <el-icon class="announcement-icon-btn" :class="{ 'is-unread': hasUnread }">
+                <ChatDotRound />
+              </el-icon>
+              <span v-if="!uiStore.isSidebarCollapsed" :class="{ 'text-unread': hasUnread }">Announcements</span>
+            </div>
+          </template>
+        </SystemAnnouncement>
+
+
         <NotificationBell>
           <template #reference="{ unreadCount }">
             <div class="nav-item">
@@ -115,10 +120,11 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Grid, Setting, Bell, Help, House, SwitchButton, EditPen } from '@element-plus/icons-vue'
+import { Grid, Bell, Help, House, SwitchButton, EditPen, ChatDotRound } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox } from 'element-plus'
 import NotificationBell from '@/components/NotificationBell.vue'
+import SystemAnnouncement from '@/components/SystemAnnouncement.vue'
 import { useUiStore } from '@/stores/ui'
 import { useOrderStore } from '@/stores/order'
 import { Document } from '@element-plus/icons-vue'
@@ -617,10 +623,11 @@ const handleLogout = async () => {
 }
 
 .sidebar-footer {
-  padding: 0 16px 24px 16px;
+  padding: 0 16px 32px 16px;
   margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
 }
-
 .bottom-nav {
   display: flex;
   flex-direction: column;
@@ -663,5 +670,28 @@ const handleLogout = async () => {
     padding: 0 5px;
     background: #0071e3;
   }
+}
+
+.announcement-icon-btn {
+  transition: all 0.3s ease;
+  
+  &.is-unread {
+    color: #f56c6c !important;
+    animation: heartbeat 2s infinite;
+  }
+}
+
+.text-unread {
+  color: #f56c6c;
+  font-weight: 500;
+}
+
+@keyframes heartbeat {
+  0% { transform: scale(1); }
+  10% { transform: scale(1.15); }
+  20% { transform: scale(1); }
+  30% { transform: scale(1.15); }
+  40% { transform: scale(1); }
+  100% { transform: scale(1); }
 }
 </style>

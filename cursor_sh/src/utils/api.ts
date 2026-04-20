@@ -93,6 +93,16 @@ const mockRegister = (data: RegisterRequest): Promise<{ success: boolean }> => {
 }
 
 // 认证相关API
+export interface Announcement {
+  id: string
+  title: string
+  content: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  created_by: string
+}
+
 export const authApi = {
   // 登录
   async login(data: LoginRequest, silent = false): Promise<LoginResponse> {
@@ -1007,3 +1017,28 @@ export const notificationApi = {
   }
 }
 
+// 公告 API 接口
+export const announcementApi = {
+  // 获取公告列表 (activeOnly 为 true 时仅获取展示中的)
+  async getAnnouncements(activeOnly: boolean = true): Promise<Announcement[]> {
+    const res = await request.get('/announcements', { params: { active_only: activeOnly } })
+    return res.data
+  },
+  
+  // 创建公告
+  async createAnnouncement(data: { title: string; content: string; is_active: boolean }): Promise<Announcement> {
+    const res = await request.post('/announcements', data)
+    return res.data
+  },
+  
+  // 更新公告
+  async updateAnnouncement(id: string, data: Partial<{ title: string; content: string; is_active: boolean }>): Promise<Announcement> {
+    const res = await request.put(`/announcements/${id}`, data)
+    return res.data
+  },
+  
+  // 删除公告
+  async deleteAnnouncement(id: string): Promise<void> {
+    await request.delete(`/announcements/${id}`)
+  }
+}

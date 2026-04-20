@@ -111,6 +111,12 @@ const router = createRouter({
           name: 'StaffManagement',
           component: () => import('../views/admin/StaffManagement.vue'),
           meta: { requiresAuth: true, role: 'admin' }
+        },
+        {
+          path: 'announcements',
+          name: 'AnnouncementManagement',
+          component: () => import('../views/admin/AnnouncementManagement.vue'),
+          meta: { requiresAuth: true, role: 'admin' }
         }
       ]
     },

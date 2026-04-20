@@ -8,7 +8,7 @@ import os
 from app.config import settings
 from app.database import init_db
 from app.audit_database import init_audit_db
-from app.api import auth, orders, staff, notifications, ai, logs
+from app.api import auth, orders, staff, notifications, ai, logs, announcements
 from app.middleware.cors import setup_cors
 from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
 from app.middleware.audit_logger import AuditLoggerMiddleware
@@ -41,6 +41,7 @@ app.include_router(orders.router, prefix="/api")
 app.include_router(staff.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(logs.router, prefix="/api")
+app.include_router(announcements.router, prefix="/api")
 
 # 挂载没有任何 api 前缀的 ai 路由，因为前端直接请求 /ai/start 和 /ai/chat
 app.include_router(ai.router)

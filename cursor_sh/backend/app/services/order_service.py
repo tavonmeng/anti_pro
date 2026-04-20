@@ -416,7 +416,17 @@ class OrderService:
             and order.user_id == current_user.id
         )
         
-        if not is_draft_submit and current_user.role not in [UserRole.ADMIN, UserRole.STAFF]:
+        # 允许订单创建者删除自己的草稿（draft -> cancelled）
+        is_draft_delete = (
+            order.status == OrderStatus.DRAFT 
+            and new_status == OrderStatus.CANCELLED 
+            and order.user_id == current_user.id
+        )
+        
+        if not is_draft_submit and not is_draft_delete and current_user.role not in [UserRole.ADMIN, UserRole.STAFF]:
+            print(f"🔒 权限不足 DEBUG: order.status={order.status}, new_status={new_status}, "
+                  f"order.user_id={order.user_id!r}, current_user.id={current_user.id!r}, "
+                  f"role={current_user.role}, is_draft_submit={is_draft_submit}, is_draft_delete={is_draft_delete}")
             raise HTTPException(status_code=403, detail="权限不足")
         
         if current_user.role == UserRole.STAFF:
