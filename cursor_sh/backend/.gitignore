@@ -34,6 +34,7 @@ htmlcov/
 
 # 日志
 *.log
+logs/
 
 # 系统文件
 .DS_Store

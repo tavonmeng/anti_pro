@@ -30,11 +30,13 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     
-    # 数据库配置
     # 方式1: 直接指定完整连接串（优先级最高）
     #   SQLite:  sqlite+aiosqlite:///./app.db
     #   MySQL:   mysql+aiomysql://user:pass@host:3306/dbname
     DATABASE_URL: str = ""
+    
+    # 审计日志独立库，与主业务库物理隔离
+    AUDIT_DATABASE_URL: str = "sqlite+aiosqlite:///./audit.db"
     
     # 方式2: 通过结构化字段自动拼接连接串（当 DATABASE_URL 为空时生效）
     DB_TYPE: str = "sqlite"              # sqlite / mysql
@@ -131,6 +133,19 @@ class Settings(BaseSettings):
     # API 限流配置
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_PER_MINUTE: int = 60
+    
+    # 日志配置
+    LOG_ENABLED: bool = True                  # 总开关：是否启用日志系统
+    LOG_LEVEL: str = "INFO"                   # 日志级别：DEBUG / INFO / WARNING / ERROR
+    LOG_DIR: str = "./logs"                   # 日志文件根目录
+    LOG_ROTATION: str = "50 MB"              # 单文件轮转阈值（支持 "50 MB" / "00:00" 每天零点）
+    LOG_RETENTION: str = "30 days"           # 日志保留时长，超期自动删除
+    LOG_COMPRESSION: str = "gz"              # 归档压缩格式：gz / zip / None
+    LOG_DB_ENABLED: bool = True              # 是否将审计日志写入数据库
+    LOG_DB_METHODS: str = "POST,PUT,DELETE"  # 哪些 HTTP Method 触发数据库记录
+    LOG_SANITIZE_FIELDS: str = "password,oldPassword,newPassword,old_password,new_password,token,secret,sms_code,captcha"
+    LOG_MAX_PAYLOAD_SIZE: int = 4096         # payload 字段最大字符数（超出截断）
+    LOG_MODULES: str = "Auth,Workspace,Order,AI,Staff,Notification,System"
     
     # 初始管理员账户
     INIT_ADMIN_USERNAME: str = "admin"

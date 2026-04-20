@@ -1,7 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 import httpx
+import json
+import os
+from datetime import datetime
 from app.config import settings
+from app.utils.security import decode_access_token
 
 router = APIRouter(prefix="/ai", tags=["AI 智能体对话"])
 
@@ -26,8 +30,18 @@ async def ai_start(session_id: str):
     return {"reply": reply}
 
 @router.post("/chat")
-async def ai_chat(request: ChatRequest):
+async def ai_chat(request: ChatRequest, raw_request: Request):
     """核心聊天接口"""
+    # 提取用户信息（用于会话文件归档）
+    user_id = "anonymous"
+    username = "anonymous"
+    auth_header = raw_request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        payload = decode_access_token(auth_header[7:])
+        if payload:
+            user_id = payload.get("user_id", "anonymous")
+            username = payload.get("username", "anonymous")
+
     # 如果系统没有配置大模型的 KEY，先使用高级模拟测试逻辑
     if not settings.AI_API_KEY:
         mock_reply = "【真实后端接口调试中】"
@@ -38,7 +52,17 @@ async def ai_chat(request: ChatRequest):
         else:
             mock_reply += "好的，请继续详细描述您的诉求。"
             
+        # 保存会话记录
+        _save_session_file(
+            session_id=request.session_id,
+            user_id=user_id,
+            username=username,
+            history=request.history,
+            user_msg=request.message,
+            assistant_msg=mock_reply,
+        )
         return {"message": mock_reply}
+
         
     try:
         # 构建历史对话上下文
@@ -109,12 +133,78 @@ async def ai_chat(request: ChatRequest):
             data = response.json()
             reply = data["choices"][0]["message"]["content"]
             
+            # 保存会话记录
+            _save_session_file(
+                session_id=request.session_id,
+                user_id=user_id,
+                username=username,
+                history=request.history,
+                user_msg=request.message,
+                assistant_msg=reply,
+            )
             return {"message": reply}
+
             
     except Exception as e:
         print(f"大模型调用失败: {e}")
         # 抛出异常，前端会自动切回 fallback
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _save_session_file(
+    session_id: str,
+    user_id: str,
+    username: str,
+    history: list,
+    user_msg: str,
+    assistant_msg: str,
+):
+    """将完整的 AI 对话 session 保存为 JSON 文件
+    
+    文件结构：
+    logs/ai_sessions/
+    └── {user_id}/
+        └── {session_id}.json
+    """
+    try:
+        # 构建完整的对话历史（原有 history + 本次交互）
+        full_messages = []
+        for h in history:
+            if h.get("role") in ["user", "assistant"] and h.get("content"):
+                full_messages.append({
+                    "role": h["role"],
+                    "content": h["content"],
+                    "timestamp": h.get("timestamp", ""),
+                })
+        
+        # 追加本次的新对话
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        full_messages.append({"role": "user", "content": user_msg, "timestamp": now})
+        full_messages.append({"role": "assistant", "content": assistant_msg, "timestamp": now})
+        
+        session_data = {
+            "session_id": session_id,
+            "user_id": user_id,
+            "username": username,
+            "message_count": len(full_messages),
+            "created_at": full_messages[0].get("timestamp", now) if full_messages else now,
+            "updated_at": now,
+            "messages": full_messages,
+        }
+        
+        # 确保目录存在
+        session_dir = os.path.join(settings.LOG_DIR, "ai_sessions", user_id)
+        os.makedirs(session_dir, exist_ok=True)
+        
+        # 写入 JSON 文件（覆写模式，保持为最新状态）
+        filepath = os.path.join(session_dir, f"{session_id}.json")
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(session_data, f, ensure_ascii=False, indent=2)
+            
+    except Exception as e:
+        # 会话保存失败不影响主业务
+        print(f"AI 会话保存失败: {e}")
+
 class ExtractRequest(BaseModel):
     history: list = []
 

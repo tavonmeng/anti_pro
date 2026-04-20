@@ -210,6 +210,7 @@ import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Clock, Delete, ArrowUp } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
+import { logger } from '@/utils/logger'
 
 const emit = defineEmits(['close', 'mode-change'])
 const router = useRouter()
@@ -486,6 +487,7 @@ const sendMessage = async () => {
   const userText = inputMsg.value.trim()
   messages.value.push({ role: 'user', content: userText, timestamp: getCurrentTime() })
   inputMsg.value = ''
+  logger.logAction('AI', 'send_message', { mode: selectedMode.value, textLength: userText.length })
   
   // reset textarea height
   if (textareaRef.value) {

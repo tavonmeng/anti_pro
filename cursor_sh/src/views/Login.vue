@@ -199,6 +199,7 @@ import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/utils/api'
 import type { UserRole } from '@/types'
 import Captcha from '@/components/Captcha.vue'
+import { logger } from '@/utils/logger'
 
 const router = useRouter()
 const route = useRoute()
@@ -245,6 +246,7 @@ const handleLogin = async () => {
       }
       loading.value = true
       try {
+        logger.logAction('Auth', 'login_attempt', { method: 'password', phone: loginForm.phone.slice(0,3) + '****' })
         const success = await authStore.login({
           phone: loginForm.phone,
           password: loginForm.password,
@@ -302,6 +304,7 @@ const handleSmsLogin = async () => {
     if (valid) {
       loading.value = true
       try {
+        logger.logAction('Auth', 'login_attempt', { method: 'sms', phone: smsForm.phone.slice(0,3) + '****' })
         const success = await authStore.login({
           phone: smsForm.phone,
           sms_code: smsForm.smsCode,
