@@ -68,11 +68,13 @@ import { useRouter } from 'vue-router'
 import { EditPen } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useOrderStore } from '@/stores/order'
+import { useUiStore } from '@/stores/ui'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 import type { Order } from '@/types'
 
 const router = useRouter()
 const orderStore = useOrderStore()
+const uiStore = useUiStore()
 
 const showConfirmation = ref(false)
 const selectedOrder = ref<Order | null>(null)
@@ -169,6 +171,10 @@ const handleDelete = async (order: Order) => {
 }
 
 const goToWorkspace = () => {
+  uiStore.setActiveModule('ai_agent')
+  uiStore.setIsAiExpanded(true)
+  uiStore.setSecondarySidebar(true) // 确保二级侧边栏显示（可选）
+  uiStore.toggleSidebar(true) // 确保一级侧边栏压缩显示
   router.push('/user/workspace')
 }
 </script>

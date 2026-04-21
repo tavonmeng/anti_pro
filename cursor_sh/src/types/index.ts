@@ -199,9 +199,10 @@ export interface Task {
 
 // 登录请求接口
 export interface LoginRequest {
-  phone: string
+  phone?: string          // 手机号登录
+  username?: string       // 用户名登录（备用）
   password?: string
-  sms_code?: string      // 短信验证码登录
+  sms_code?: string       // 短信验证码登录
   role: UserRole
   captcha?: string
 }

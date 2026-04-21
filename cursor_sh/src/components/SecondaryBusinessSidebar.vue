@@ -81,6 +81,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUiStore } from '@/stores/ui'
 import { ArrowDown, Right } from '@element-plus/icons-vue'
+import { logger } from '@/utils/logger'
 
 const router = useRouter()
 const uiStore = useUiStore()
@@ -88,6 +89,7 @@ const uiStore = useUiStore()
 const currentModule = computed(() => uiStore.activeModule)
 
 const goToService = async (type: string) => {
+  logger.logAction('Workspace', 'sidebar_navigate', { target: type })
   if (type === 'ai_agent') {
     uiStore.setIsAiExpanded(true)
     uiStore.setSecondarySidebar(false)

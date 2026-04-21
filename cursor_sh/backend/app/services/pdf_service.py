@@ -19,10 +19,50 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 # ========== 中文字体注册 ==========
 
+def _try_register_ttfont(font_path: str, font_name: str = "Chinese") -> bool:
+    """尝试注册一个 TTF/TTC 字体文件，返回是否成功"""
+    if not os.path.exists(font_path):
+        return False
+    try:
+        if font_path.lower().endswith('.ttc'):
+            # TTC 文件必须指定 subfontIndex，否则某些系统上会随机失败
+            pdfmetrics.registerFont(TTFont(font_name, font_path, subfontIndex=0))
+        else:
+            pdfmetrics.registerFont(TTFont(font_name, font_path))
+        return True
+    except Exception:
+        return False
+
+
+def _find_linux_cjk_font_via_fc() -> str:
+    """通过 fc-list 命令动态查找系统中的任意 CJK 字体文件"""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['fc-list', ':lang=zh', '-f', '%{file}\n'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            # 返回第一个找到的字体文件路径
+            for line in result.stdout.strip().split('\n'):
+                path = line.strip()
+                if path and os.path.exists(path):
+                    return path
+    except Exception:
+        pass
+    return ""
+
+
 def _register_chinese_fonts():
-    """注册中文字体，根据操作系统自动寻找可用字体"""
+    """
+    注册中文字体（多层容错）：
+    1. 优先尝试常见系统字体路径（包含 .ttc subfontIndex 修复）
+    2. 通过 fc-list 动态查找任意已安装的 CJK 字体
+    3. 使用 ReportLab 内置 CID 字体（STSong-Light）作为终极后备
+    """
     system = platform.system()
     
+    # 第一层：常见系统字体路径
     font_paths = {
         "Darwin": [  # macOS
             "/System/Library/Fonts/PingFang.ttc",
@@ -31,10 +71,22 @@ def _register_chinese_fonts():
             "/Library/Fonts/Arial Unicode.ttf",
         ],
         "Linux": [
+            # wqy 系列（最常见的 Linux 中文字体）
             "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
             "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+            "/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
+            "/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
+            # Noto CJK 系列
             "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/noto/NotoSansCJK-Regular.ttc",
+            # Droid 系列
             "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+            "/usr/share/fonts/droid/DroidSansFallbackFull.ttf",
+            # 通用路径（阿里云 Alibaba Cloud Linux）
+            "/usr/share/fonts/chinese/TrueType/simhei.ttf",
+            "/usr/share/fonts/chinese/TrueType/simsun.ttc",
         ],
         "Windows": [
             "C:\\Windows\\Fonts\\msyh.ttc",
@@ -46,21 +98,45 @@ def _register_chinese_fonts():
     candidates = font_paths.get(system, [])
     
     for path in candidates:
-        if os.path.exists(path):
-            try:
-                pdfmetrics.registerFont(TTFont("Chinese", path))
-                pdfmetrics.registerFont(TTFont("ChineseBold", path))
-                return True
-            except Exception:
-                continue
+        if _try_register_ttfont(path, "Chinese"):
+            _try_register_ttfont(path, "ChineseBold")
+            print(f"  📝 PDF 字体: {path}")
+            return "ttf"
     
-    # Fallback: 使用 Helvetica（不支持中文但不会崩溃）
-    return False
+    # 第二层：通过 fc-list 动态查找（仅 Linux）
+    if system == "Linux":
+        fc_path = _find_linux_cjk_font_via_fc()
+        if fc_path:
+            if _try_register_ttfont(fc_path, "Chinese"):
+                _try_register_ttfont(fc_path, "ChineseBold")
+                print(f"  📝 PDF 字体 (fc-list): {fc_path}")
+                return "ttf"
+    
+    # 第三层：使用 ReportLab 内置 CID 字体（不需要任何外部文件）
+    try:
+        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+        pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light'))
+        print("  📝 PDF 字体: STSong-Light (CID 内置)")
+        return "cid"
+    except Exception:
+        pass
+    
+    # 全部失败
+    print("  ⚠️  未找到中文字体，PDF 将无法正确显示中文")
+    return "none"
 
 
-_HAS_CHINESE = _register_chinese_fonts()
-_FONT = "Chinese" if _HAS_CHINESE else "Helvetica"
-_FONT_BOLD = "ChineseBold" if _HAS_CHINESE else "Helvetica-Bold"
+_FONT_TYPE = _register_chinese_fonts()
+
+if _FONT_TYPE == "ttf":
+    _FONT = "Chinese"
+    _FONT_BOLD = "ChineseBold"
+elif _FONT_TYPE == "cid":
+    _FONT = "STSong-Light"
+    _FONT_BOLD = "STSong-Light"  # CID 字体没有 Bold 变体
+else:
+    _FONT = "Helvetica"
+    _FONT_BOLD = "Helvetica-Bold"
 
 
 # ========== 样式定义 ==========

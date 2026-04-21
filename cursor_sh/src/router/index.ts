@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '../stores/auth'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -12,73 +12,73 @@ const router = createRouter({
     {
       path: '/login',
       name: 'Login',
-      component: () => import('@/views/Login.vue'),
+      component: () => import('../views/Login.vue'),
       meta: { requiresAuth: false }
     },
     {
       path: '/admin/login',
       name: 'AdminLogin',
-      component: () => import('@/views/AdminLogin.vue'),
+      component: () => import('../views/AdminLogin.vue'),
       meta: { requiresAuth: false }
     },
     {
       path: '/register',
       name: 'Register',
-      component: () => import('@/views/Register.vue'),
+      component: () => import('../views/Register.vue'),
       meta: { requiresAuth: false }
     },
     {
       path: '/user',
-      component: () => import('@/views/UserDashboard.vue'),
+      component: () => import('../views/UserDashboard.vue'),
       meta: { requiresAuth: true, role: 'user' },
       redirect: '/user/workspace',
       children: [
         {
           path: 'workspace',
           name: 'Workspace',
-          component: () => import('@/views/user/Workspace.vue'),
+          component: () => import('../views/user/Workspace.vue'),
           meta: { requiresAuth: true, role: 'user' }
         },
         {
           path: 'video-marketplace',
           name: 'VideoMarketplace',
-          component: () => import('@/views/user/VideoMarketplace.vue'),
+          component: () => import('../views/user/VideoMarketplace.vue'),
           meta: { requiresAuth: true, role: 'user' }
         },
         {
           path: 'create-order/:type',
           name: 'CreateOrder',
-          component: () => import('@/views/user/CreateOrder.vue'),
+          component: () => import('../views/user/CreateOrder.vue'),
           meta: { requiresAuth: true, role: 'user' }
         },
         {
           path: 'orders',
           name: 'Orders',
-          component: () => import('@/views/user/Orders.vue'),
+          component: () => import('../views/user/Orders.vue'),
           meta: { requiresAuth: true, role: 'user' }
         },
         {
           path: 'orders/:id',
           name: 'OrderDetail',
-          component: () => import('@/views/user/OrderDetail.vue'),
+          component: () => import('../views/user/OrderDetail.vue'),
           meta: { requiresAuth: true, role: 'user' }
         },
         {
           path: 'edit-order/:id',
           name: 'EditOrder',
-          component: () => import('@/views/user/CreateOrder.vue'),
+          component: () => import('../views/user/CreateOrder.vue'),
           meta: { requiresAuth: true, role: 'user' }
         },
         {
           path: 'profile',
           name: 'Profile',
-          component: () => import('@/views/user/Profile.vue'),
+          component: () => import('../views/user/Profile.vue'),
           meta: { requiresAuth: true, role: 'user' }
         },
         {
           path: 'drafts',
           name: 'Drafts',
-          component: () => import('@/views/user/Drafts.vue'),
+          component: () => import('../views/user/Drafts.vue'),
           meta: { requiresAuth: true, role: 'user' }
         },
         // 保留旧路由用于兼容
@@ -90,52 +90,58 @@ const router = createRouter({
     },
     {
       path: '/admin',
-      component: () => import('@/views/AdminDashboard.vue'),
+      component: () => import('../views/AdminDashboard.vue'),
       meta: { requiresAuth: true, role: 'admin' },
       redirect: '/admin/orders',
       children: [
         {
           path: 'orders',
           name: 'AdminOrders',
-          component: () => import('@/views/admin/OrderManagement.vue'),
+          component: () => import('../views/admin/OrderManagement.vue'),
           meta: { requiresAuth: true, role: 'admin' }
         },
         {
           path: 'orders/:id',
           name: 'AdminOrderDetail',
-          component: () => import('@/views/admin/AdminOrderDetail.vue'),
+          component: () => import('../views/admin/AdminOrderDetail.vue'),
           meta: { requiresAuth: true, role: 'admin' }
         },
         {
           path: 'staff',
           name: 'StaffManagement',
-          component: () => import('@/views/admin/StaffManagement.vue'),
+          component: () => import('../views/admin/StaffManagement.vue'),
+          meta: { requiresAuth: true, role: 'admin' }
+        },
+        {
+          path: 'announcements',
+          name: 'AnnouncementManagement',
+          component: () => import('../views/admin/AnnouncementManagement.vue'),
           meta: { requiresAuth: true, role: 'admin' }
         }
       ]
     },
     {
       path: '/staff',
-      component: () => import('@/views/StaffDashboard.vue'),
+      component: () => import('../views/StaffDashboard.vue'),
       meta: { requiresAuth: true, role: 'staff' },
       redirect: '/staff/orders',
       children: [
         {
           path: 'orders',
           name: 'StaffOrders',
-          component: () => import('@/views/staff/OrderList.vue'),
+          component: () => import('../views/staff/OrderList.vue'),
           meta: { requiresAuth: true, role: 'staff' }
         },
         {
           path: 'orders/:id',
           name: 'StaffOrderDetail',
-          component: () => import('@/views/staff/OrderDetail.vue'),
+          component: () => import('../views/staff/OrderDetail.vue'),
           meta: { requiresAuth: true, role: 'staff' }
         },
         {
           path: 'profile',
           name: 'StaffProfile',
-          component: () => import('@/views/staff/Profile.vue'),
+          component: () => import('../views/staff/Profile.vue'),
           meta: { requiresAuth: true, role: 'staff' }
         }
       ]

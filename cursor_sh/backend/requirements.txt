@@ -6,6 +6,8 @@ python-multipart
 # 数据库
 sqlalchemy
 aiosqlite
+aiomysql
+cryptography
 
 # 数据验证
 pydantic
@@ -40,6 +42,7 @@ slowapi
 
 # 工具
 python-dotenv
+loguru
 
 # 开发工具
 pytest

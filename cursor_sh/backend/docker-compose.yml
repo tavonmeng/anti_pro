@@ -12,31 +12,23 @@ services:
       - ./app.db:/app/app.db
     environment:
       - DEBUG=False
-      - DATABASE_URL=sqlite+aiosqlite:///./app.db
+      # ---- SQLite 模式（默认）----
+      - DB_TYPE=sqlite
+      - DB_NAME=app
+      # ---- MySQL RDS 模式（生产环境取消注释）----
+      # - DB_TYPE=mysql
+      # - DB_HOST=rm-xxxxx.mysql.rds.aliyuncs.com
+      # - DB_PORT=3306
+      # - DB_NAME=anti_pro_db
+      # - DB_USER=anti_pro_user
+      # - DB_PASSWORD=your_strong_password
+      # - DB_POOL_SIZE=10
+      # - DB_POOL_RECYCLE=1800
+      # - DB_POOL_PRE_PING=True
     restart: unless-stopped
     networks:
       - app-network
 
-  # PostgreSQL 数据库（生产环境可选）
-  # postgres:
-  #   image: postgres:15-alpine
-  #   container_name: ai-design-postgres
-  #   environment:
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: your_password
-  #     POSTGRES_DB: ai_design
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   restart: unless-stopped
-  #   networks:
-  #     - app-network
-
 networks:
   app-network:
     driver: bridge
-
-# volumes:
-#   postgres_data:
-

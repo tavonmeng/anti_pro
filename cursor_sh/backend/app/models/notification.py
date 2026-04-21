@@ -25,12 +25,16 @@ class NotificationType(str, Enum):
 
 
 class Notification(Base):
-    """消息通知模型"""
+    """消息通知模型
+    
+    user_id 不再使用外键约束，因为通知可能发给 admins/staff_members/users 三张表中的任意用户。
+    通过 user_id 的前缀（admin-/staff-/user-）可判断所属表。
+    """
     __tablename__ = "notifications"
 
     id = Column(String(50), primary_key=True, default=lambda: generate_id("notif"))
-    user_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    order_id = Column(String(50), ForeignKey("orders.id", ondelete="CASCADE"), nullable=True, index=True)
+    user_id = Column(String(50), nullable=False, index=True)  # 不再有 FK，支持三表
+    order_id = Column(String(50), nullable=True, index=True)
     type = Column(SQLEnum(NotificationType), nullable=False)
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)
@@ -38,10 +42,5 @@ class Notification(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     read_at = Column(DateTime, nullable=True)
 
-    # 关系
-    user = relationship("User", back_populates="notifications", lazy="selectin")
-    order = relationship("Order", back_populates="notifications", lazy="selectin")
-
     def __repr__(self):
         return f"<Notification {self.id} - {self.type.value} - User {self.user_id}>"
-

@@ -4,7 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
 
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.models.admin import Admin
+from app.models.staff_member import StaffMember
 from app.schemas.auth import (
     LoginRequest, RegisterRequest, LoginResponse, 
     ChangePasswordRequest, ResetPasswordRequest
@@ -15,19 +17,35 @@ from app.utils.validators import generate_id
 from app.services.sms_service import verify_sms_code
 
 
+def _get_model_for_role(role: UserRole):
+    """根据角色获取对应的数据库模型"""
+    if role == UserRole.ADMIN:
+        return Admin
+    elif role == UserRole.STAFF:
+        return StaffMember
+    else:
+        return User
+
+
 async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
     """
-    用户登录
-    支持两种方式:
+    用户登录（支持三种角色，各查各的表）
+    
+    支持方式:
     1. 手机号 + 密码
     2. 手机号 + 短信验证码
     """
-    # 通过手机号查找用户
-    result = await db.execute(
-        select(User).where(
-            User.phone == login_data.phone,
-            User.role == login_data.role
+    Model = _get_model_for_role(login_data.role)
+    
+    if not login_data.phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请提供手机号"
         )
+    
+    # 通过手机号在对应表中查找
+    result = await db.execute(
+        select(Model).where(Model.phone == login_data.phone)
     )
     user = result.scalar_one_or_none()
     
@@ -36,7 +54,7 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="该手机号尚未注册"
+                detail="尚未注册或角色不匹配"
             )
         is_valid = await verify_sms_code(login_data.phone, login_data.sms_code)
         if not is_valid:
@@ -63,20 +81,38 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
             detail="用户已被禁用"
         )
     
+    # 获取角色值（Admin/StaffMember 用 property，User 用 column）
+    role_value = user.role.value if hasattr(user.role, 'value') else user.role
+    
     # 生成 JWT token
     token_data = {
         "user_id": user.id,
         "username": user.username,
-        "role": user.role.value
+        "role": role_value
     }
     token = create_access_token(token_data)
-    user_response = UserResponse.model_validate(user)
+    
+    # 构造统一响应
+    user_response = UserResponse(
+        id=user.id,
+        username=user.username,
+        role=UserRole(role_value),
+        email=getattr(user, 'email', None),
+        phone=getattr(user, 'phone', None),
+        real_name=getattr(user, 'real_name', None),
+        avatar=getattr(user, 'avatar', None),
+        is_active=user.is_active,
+        created_at=user.created_at
+    )
     
     return LoginResponse(token=token, user=user_response)
 
 
 async def register(db: AsyncSession, register_data: RegisterRequest) -> dict:
-    """用户注册（手机号+验证码+用户名+密码+邮箱）"""
+    """用户注册（手机号+验证码+用户名+密码+邮箱）
+    
+    注册只允许 user 角色。admin 和 staff 由管理员后台创建。
+    """
     try:
         # 1. 校验短信验证码
         is_valid = await verify_sms_code(register_data.phone, register_data.sms_code)
@@ -86,7 +122,7 @@ async def register(db: AsyncSession, register_data: RegisterRequest) -> dict:
                 detail="验证码错误或已过期"
             )
         
-        # 2. 检查手机号是否已注册
+        # 2. 检查手机号是否已注册（只查 users 表）
         result = await db.execute(
             select(User).where(User.phone == register_data.phone)
         )
@@ -96,15 +132,16 @@ async def register(db: AsyncSession, register_data: RegisterRequest) -> dict:
                 detail="该手机号已注册"
             )
         
-        # 3. 检查用户名是否已存在
-        result = await db.execute(
-            select(User).where(User.username == register_data.username)
-        )
-        if result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="用户名已存在"
+        # 3. 检查用户名是否已存在（需查三张表）
+        for Model in [User, Admin, StaffMember]:
+            result = await db.execute(
+                select(Model).where(Model.username == register_data.username)
             )
+            if result.scalar_one_or_none():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="用户名已存在"
+                )
         
         # 4. 检查邮箱是否已使用
         result = await db.execute(
@@ -116,14 +153,14 @@ async def register(db: AsyncSession, register_data: RegisterRequest) -> dict:
                 detail="该邮箱已被使用"
             )
         
-        # 5. 创建新用户
+        # 5. 创建新用户（只在 users 表）
         new_user = User(
             id=generate_id("user"),
             username=register_data.username,
             email=register_data.email,
             phone=register_data.phone,
             password_hash=get_password_hash(register_data.password),
-            role=register_data.role,
+            role=UserRole.USER,  # 注册只允许 user 角色
             is_active=True
         )
         
@@ -145,7 +182,7 @@ async def register(db: AsyncSession, register_data: RegisterRequest) -> dict:
 
 
 async def reset_password(db: AsyncSession, data: ResetPasswordRequest) -> dict:
-    """忘记密码 - 通过短信验证码重置密码"""
+    """忘记密码 - 通过短信验证码重置密码（所有角色通用）"""
     # 1. 校验短信验证码
     is_valid = await verify_sms_code(data.phone, data.sms_code)
     if not is_valid:
@@ -154,11 +191,16 @@ async def reset_password(db: AsyncSession, data: ResetPasswordRequest) -> dict:
             detail="验证码错误或已过期"
         )
     
-    # 2. 查找用户
-    result = await db.execute(
-        select(User).where(User.phone == data.phone)
-    )
-    user = result.scalar_one_or_none()
+    # 2. 在三张表中查找用户
+    user = None
+    for Model in [User, Admin, StaffMember]:
+        result = await db.execute(
+            select(Model).where(Model.phone == data.phone)
+        )
+        user = result.scalar_one_or_none()
+        if user:
+            break
+    
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -176,7 +218,7 @@ async def reset_password(db: AsyncSession, data: ResetPasswordRequest) -> dict:
 
 async def change_password(
     db: AsyncSession,
-    user: User,
+    user,  # 可以是 User, Admin, 或 StaffMember
     password_data: ChangePasswordRequest
 ) -> dict:
     """修改密码"""

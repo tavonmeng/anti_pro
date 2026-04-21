@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.user import User
 from app.schemas.auth import (
     LoginRequest, RegisterRequest, LoginResponse, 
     ChangePasswordRequest, SendSmsRequest, ResetPasswordRequest
@@ -12,7 +11,7 @@ from app.schemas.auth import (
 from app.schemas.response import ApiResponse
 from app.services.auth_service import login, register, change_password, reset_password
 from app.services.sms_service import send_sms_verify_code
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_current_user, AnyUser
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 
@@ -97,7 +96,7 @@ async def api_logout():
 @router.put("/change-password", response_model=ApiResponse[dict])
 async def api_change_password(
     password_data: ChangePasswordRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """修改密码"""
@@ -112,7 +111,7 @@ async def api_change_password(
 @router.put("/profile", response_model=ApiResponse[dict])
 async def update_profile_api(
     profile_data: ProfileUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """更新当前用户个人资料"""
@@ -121,22 +120,24 @@ async def update_profile_api(
             current_user.email = profile_data.email
         if profile_data.realName is not None:
             current_user.real_name = profile_data.realName
-        if profile_data.company is not None:
+        if profile_data.company is not None and hasattr(current_user, 'company'):
             current_user.company = profile_data.company
-        if profile_data.address is not None:
+        if profile_data.address is not None and hasattr(current_user, 'address'):
             current_user.address = profile_data.address
             
         await db.commit()
         await db.refresh(current_user)
         
+        role_value = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
+        
         return ApiResponse(code=200, message="资料更新成功", data={
             "id": current_user.id,
             "username": current_user.username,
-            "email": current_user.email,
-            "role": current_user.role.value,
-            "realName": current_user.real_name,
-            "company": current_user.company,
-            "address": current_user.address
+            "email": getattr(current_user, 'email', None),
+            "role": role_value,
+            "realName": getattr(current_user, 'real_name', None),
+            "company": getattr(current_user, 'company', None),
+            "address": getattr(current_user, 'address', None)
         })
     except HTTPException:
         raise

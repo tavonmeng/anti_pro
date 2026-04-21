@@ -27,13 +27,15 @@
 
           <div class="media-wrapper">
 
+            <!-- 优化：视频使用 preload="none"，由 JS 控制播放/暂停，避免 4 路同时解码 -->
             <video 
               v-if="item.video" 
               muted 
               loop 
               playsinline
-              autoplay
-              :src="item.video"
+              preload="none"
+              :data-src="item.video"
+              :ref="el => { if (el) videoRefs[index] = el }"
               class="case-video"
             ></video>
             <img 
@@ -62,7 +64,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, nextTick } from 'vue'
 import gsap from 'gsap'
 import ScrollTrigger from 'gsap/ScrollTrigger'
 
@@ -75,20 +77,62 @@ import { cases } from '../data/cases'
 const sectionRef = ref(null)
 const stackRef = ref(null)
 const itemRefs = ref([])
+const videoRefs = ref([])
+
+// 当前处于最顶层（可见）的卡片索引
+const activeCardIndex = ref(0)
 
 let ctx
 
+// ========== 一次一张翻页状态 ==========
+let currentCardIndex = 0
+let isAnimating = false
+let wheelHandler = null
+let touchStartY = 0
+let touchHandler = null
+let touchEndHandler = null
+
+/**
+ * 视频懒加载管理：只加载并播放当前可见卡片的视频，
+ * 其余卡片的视频暂停并释放资源。
+ */
+function updateActiveVideo(index) {
+  if (activeCardIndex.value === index) return
+  activeCardIndex.value = index
+
+  videoRefs.value.forEach((video, i) => {
+    if (!video) return
+    if (i === index) {
+      // 懒加载：首次激活时才设置 src
+      if (!video.src && video.dataset.src) {
+        video.src = video.dataset.src
+      }
+      video.play().catch(() => {})
+    } else {
+      // 暂停非活跃视频，释放解码资源
+      if (!video.paused) {
+        video.pause()
+      }
+    }
+  })
+}
+
 onMounted(() => {
+  // 首帧：只加载并播放第一个视频
+  nextTick(() => {
+    updateActiveVideo(0)
+  })
+
   ctx = gsap.context(() => {
     const cards = gsap.utils.toArray(sectionRef.value.querySelectorAll('.case-item'))
     
     if (cards.length <= 1) return
 
-    const headerHeight = 20; // 恢复堆叠高度为原来小巧的20px
+    const headerHeight = 20
+    const totalCards = cards.length
 
     // 初始化状态，设定顶部中心缩放以便精准叠放
     cards.forEach((card, index) => {
-      // 设定顶部中心缩放
       const media = card.querySelector('.media-wrapper')
       gsap.set(card, { transformOrigin: "top center" })
       if(media) gsap.set(media, { transformOrigin: "top center" })
@@ -107,16 +151,22 @@ onMounted(() => {
         start: 'top 68px',
         end: `+=${cards.length * 100}%`,
         pin: true,
-        scrub: 0.5,
-        snap: {
-          snapTo: 1 / (cards.length - 1),
-          duration: { min: 0.2, max: 0.5 },
-          delay: 0.05,
-          ease: 'power3.inOut'
+        scrub: true,  // 直接追踪，无延迟 — 丝滑感由我们的手动滚动动画提供
+        // 不使用 snap — 由 wheel/touch 拦截器手动控制翻页
+        onUpdate: (self) => {
+          const progress = self.progress
+          const rawIndex = Math.round(progress * (totalCards - 1))
+          const clampedIndex = Math.max(0, Math.min(totalCards - 1, rawIndex))
+          updateActiveVideo(clampedIndex)
+          // 同步卡片索引（用于重新进入 pin 区域时）
+          if (!isAnimating) {
+            currentCardIndex = clampedIndex
+          }
         }
       }
     })
 
+    // 构建卡片堆叠动画
     cards.forEach((card, index) => {
       if (index === 0) return
 
@@ -125,7 +175,7 @@ onMounted(() => {
       // 卡片往上滑，正好压住前一张卡片
       tl.to(card, {
         yPercent: 0,
-        y: index * headerHeight, // 顶部留出之前的标题空间
+        y: index * headerHeight,
         ease: 'none',
         force3D: true
       }, scrollPos)
@@ -151,10 +201,99 @@ onMounted(() => {
       }
     })
 
+    // ========== 一次一张翻页：平滑导航到目标卡片 ==========
+    function navigateToCard(targetIndex) {
+      if (isAnimating) return
+      if (targetIndex < 0 || targetIndex >= totalCards) return
+      if (targetIndex === currentCardIndex) return
+      
+      isAnimating = true
+      currentCardIndex = targetIndex
+
+      const st = ScrollTrigger.getById('casesTrigger')
+      if (!st) { isAnimating = false; return }
+
+      const progress = targetIndex / (totalCards - 1)
+      const targetScroll = st.start + (st.end - st.start) * progress
+
+      // 用自定义对象驱动 scrollTo，无需额外插件
+      const scrollObj = { value: window.scrollY }
+      gsap.to(scrollObj, {
+        value: targetScroll,
+        duration: 1,
+        ease: 'power3.inOut',
+        onUpdate: () => {
+          window.scrollTo(0, scrollObj.value)
+        },
+        onComplete: () => {
+          isAnimating = false
+          updateActiveVideo(targetIndex)
+        }
+      })
+    }
+
+    // ========== Wheel 拦截：一次只翻一张 ==========
+    wheelHandler = (e) => {
+      const st = ScrollTrigger.getById('casesTrigger')
+      if (!st || !st.isActive) return  // 仅在 pin 激活时拦截
+
+      const direction = e.deltaY > 0 ? 1 : -1
+      const nextIndex = currentCardIndex + direction
+
+      // 边界：第一张向上滚 或 最后一张向下滚 → 不拦截，让原生滚动脱离 pin
+      if (nextIndex < 0 || nextIndex >= totalCards) {
+        return
+      }
+
+      // 中间区域：拦截原生滚动，手动翻一张
+      e.preventDefault()
+      e.stopPropagation()
+
+      if (isAnimating) return
+      navigateToCard(nextIndex)
+    }
+
+    // ========== Touch 支持（移动端） ==========
+    touchHandler = (e) => {
+      touchStartY = e.touches[0].clientY
+    }
+
+    touchEndHandler = (e) => {
+      const st = ScrollTrigger.getById('casesTrigger')
+      if (!st || !st.isActive) return
+
+      const touchEndY = e.changedTouches[0].clientY
+      const diff = touchStartY - touchEndY
+
+      if (Math.abs(diff) < 50) return  // 忽略微小滑动
+
+      const direction = diff > 0 ? 1 : -1
+      const nextIndex = currentCardIndex + direction
+
+      if (nextIndex < 0 || nextIndex >= totalCards) return
+
+      e.preventDefault()
+      if (isAnimating) return
+      navigateToCard(nextIndex)
+    }
+
+    // 挂载事件 — 在 window 上监听以确保 pinned 元素也能捕获
+    window.addEventListener('wheel', wheelHandler, { passive: false })
+    window.addEventListener('touchstart', touchHandler, { passive: true })
+    window.addEventListener('touchend', touchEndHandler, { passive: false })
+
   }, sectionRef.value)
 })
 
 onUnmounted(() => {
+  // 清理视频
+  videoRefs.value.forEach(video => {
+    if (video && !video.paused) video.pause()
+  })
+  // 清理事件监听
+  if (wheelHandler) window.removeEventListener('wheel', wheelHandler)
+  if (touchHandler) window.removeEventListener('touchstart', touchHandler)
+  if (touchEndHandler) window.removeEventListener('touchend', touchEndHandler)
   if (ctx) ctx.revert()
 })
 </script>
@@ -199,7 +338,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   background-color: #000 !important;
-  will-change: transform, opacity;
+  /* 优化：移除 will-change，由 GSAP force3D 动态管理合成层 */
 }
 
 .media-wrapper {
@@ -208,7 +347,7 @@ onUnmounted(() => {
   width: 100%;
   overflow: hidden;
   background-color: #000 !important;
-  will-change: transform, opacity;
+  /* 优化：移除 will-change，减少常驻合成层数量 */
   /* Safari edge bleed & subpixel ghosting fix for transformed contents */
   -webkit-mask-image: -webkit-radial-gradient(white, black);
   mask-image: radial-gradient(white, black);
@@ -223,9 +362,8 @@ onUnmounted(() => {
   padding: 0 5%;
   display: flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.4); 
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
+  /* 优化：移除 backdrop-filter blur(15px)，在视频背景上 blur 每帧都要重新计算，极其昂贵 */
+  background: rgba(0, 0, 0, 0.75);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   z-index: 200;
   box-sizing: border-box;
@@ -286,7 +424,6 @@ onUnmounted(() => {
   object-fit: fill; /* 强制填满，避免原图比例不一 */
   transform: scale(1.02); /* 默认轻微放大掩盖边缘瑕疵 */
   transition: transform 1.2s cubic-bezier(0.2, 0, 0.2, 1);
-  will-change: transform;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
@@ -336,9 +473,8 @@ onUnmounted(() => {
   font-size: 14px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-  background: rgba(255,255,255,0.05);
+  /* 优化：移除 backdrop-filter，使用纯色背景减少重绘 */
+  background: rgba(255,255,255,0.1);
 }
 
 .case-item:hover .media-wrapper img,

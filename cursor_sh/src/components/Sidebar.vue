@@ -21,6 +21,11 @@
         <el-icon><User /></el-icon>
         <template #title>负责人管理</template>
       </el-menu-item>
+      
+      <el-menu-item index="announcements">
+        <el-icon><ChatDotRound /></el-icon>
+        <template #title>公告管理</template>
+      </el-menu-item>
     </template>
     
     <!-- 负责人菜单 -->
@@ -72,7 +77,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Grid, Document, User, Setting, SwitchButton, EditPen } from '@element-plus/icons-vue'
+import { Grid, Document, User, Setting, SwitchButton, EditPen, ChatDotRound } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useOrderStore } from '@/stores/order'
 import NotificationBell from './NotificationBell.vue'
@@ -106,6 +111,8 @@ const activeMenu = computed(() => {
     return 'profile'
   } else if (path.includes('/staff') && isAdmin.value) {
     return 'staff'
+  } else if (path.includes('/announcements') && isAdmin.value) {
+    return 'announcements'
   } else if (path.includes('/admin')) {
     return 'orders'
   } else if (path.includes('/staff')) {
@@ -139,6 +146,8 @@ const handleMenuSelect = (index: string) => {
     router.push('/user/drafts')
   } else if (index === 'staff') {
     router.push('/admin/staff')
+  } else if (index === 'announcements') {
+    router.push('/admin/announcements')
   }
 }
 

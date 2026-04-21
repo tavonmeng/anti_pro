@@ -79,6 +79,16 @@ fi
 echo "🐍 将使用 $PYTHON_CMD 构建后端环境"
 # =================================================================
 
+# 安装中文字体（PDF 生成需要）
+echo "📝 安装中文字体（PDF 生成需要）..."
+if [ "$PKG_MGR" = "apt" ]; then
+    apt install -y fonts-wqy-zenhei fonts-wqy-microhei 2>/dev/null || true
+else
+    yum install -y wqy-zenhei-fonts wqy-microhei-fonts 2>/dev/null || \
+    yum install -y google-noto-sans-cjk-ttc-fonts 2>/dev/null || true
+fi
+fc-cache -f 2>/dev/null || true
+
 mkdir -p $WEBSITE_DIR
 mkdir -p $CURSOR_FE_DIR
 
@@ -134,6 +144,11 @@ source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 pip install gunicorn uvicorn
+
+# 创建日志目录（日志系统需要写入权限）
+echo "📝 创建日志目录..."
+mkdir -p logs/{auth,workspace,order,ai,staff,notification,system,error,crash,ai_sessions}
+echo "✅ 日志目录已准备: $(pwd)/logs/"
 
 cat > gunicorn_config.py << 'EOF'
 bind = "127.0.0.1:8000"
