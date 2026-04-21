@@ -35,6 +35,11 @@ if settings.RATE_LIMIT_ENABLED:
 if os.path.exists(settings.UPLOAD_DIR):
     app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
+# 挂载案例视频静态目录
+_cases_static = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "cases")
+os.makedirs(_cases_static, exist_ok=True)
+app.mount("/static/cases", StaticFiles(directory=_cases_static), name="cases_static")
+
 # 注册路由
 app.include_router(auth.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")

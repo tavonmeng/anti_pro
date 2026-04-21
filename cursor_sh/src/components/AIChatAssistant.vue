@@ -87,23 +87,31 @@
               <div class="history-master-divider" v-if="savedHistories && savedHistories.length > 0"></div>
             </div>
           </transition>
-          <!-- Always show initial 3 options if no option selected -->
+          <!-- Welcome + Quick Actions -->
           <div v-if="!selectedMode" class="welcome-section message assistant">
             <div class="assistant-wrapper">
               <div class="assistant-tag"><span class="engine-name">Catalyst Engine</span> <span class="pro-badge">PRO</span></div>
               <div class="message-bubble glass-ai welcome-bubble">
-                <p class="welcome-text">您好！我是您的专属业务助手。请问您今天需要处理什么类型的业务？</p>
+                <p class="welcome-text">你好！我是 Unique Video AI 的智能助手小U 👋</p>
+                <p class="welcome-sub">我们是一家专注于裸眼3D视觉内容和数字艺术创意的技术公司，很高兴为您服务！</p>
                 <div class="options-container stitched-options">
-                  <div class="option-card stitch-card" @click="selectMode('purchase')">
-                    <span class="opt-text">裸眼3D成片购买适配</span>
+                  <div class="option-card stitch-card" @click="selectMode('order_create')">
+                    <span class="opt-icon">🛒</span>
+                    <span class="opt-text">咨询下单</span>
+                    <span class="opt-desc">描述需求，AI帮您创建订单</span>
                   </div>
-                  <div class="option-card stitch-card" @click="selectMode('custom_ai')">
-                    <span class="opt-text">AI裸眼3D内容定制</span>
+                  <div class="option-card stitch-card" @click="selectMode('order_query')">
+                    <span class="opt-icon">📋</span>
+                    <span class="opt-text">查看订单</span>
+                    <span class="opt-desc">查询订单进展和状态</span>
                   </div>
-                  <div class="option-card stitch-card" @click="selectMode('digital_art')">
-                    <span class="opt-text">数字艺术内容定制</span>
+                  <div class="option-card stitch-card" @click="selectMode('business_intro')">
+                    <span class="opt-icon">💡</span>
+                    <span class="opt-text">了解业务</span>
+                    <span class="opt-desc">了解我们的服务和案例</span>
                   </div>
                 </div>
+                <p class="welcome-hint">也可以直接在下方输入您的问题，我会自动识别您的需求 😊</p>
               </div>
             </div>
           </div>
@@ -138,13 +146,85 @@
                       先去浏览
                     </el-button>
                   </div>
-                  <!-- 需求收集完成后的三个操作按钮 -->
-                  <div v-if="msg.isCompletePrompt" class="completion-actions">
-                    <p class="completion-hint">您可以在表单中修改信息、补充细节字段、上传现场实拍图等附件资料</p>
-                    <div class="completion-btns">
-                      <button class="comp-btn comp-btn-ghost" @click="handleStayInChat" :disabled="extractLoading">继续对话</button>
-                      <button class="comp-btn comp-btn-outline" @click="handleSaveDraftFromChat" :disabled="extractLoading">{{ extractLoading ? '正在整理...' : '保存草稿' }}</button>
-                      <button class="comp-btn comp-btn-primary" @click="handleGoToForm" :disabled="extractLoading">{{ extractLoading ? '正在整理...' : '前往确认表单 →' }}</button>
+                  <!-- 需求收集完成后：内嵌可编辑表单 -->
+                  <div v-if="msg.isCompletePrompt && !msg.formHidden" class="inline-form-section">
+                    <div v-if="extractLoading" class="form-loading">
+                      <el-icon class="is-loading"><Loading /></el-icon>
+                      <span>正在为您整理需求信息...</span>
+                    </div>
+                    <template v-else-if="inlineFormData">
+                      <p class="form-intro">以下是我为您整理的需求汇总，您可以直接修改，也可以在对话中告诉我需要调整的内容：</p>
+                      <div class="inline-form">
+                        <div class="form-field" v-for="field in formFields" :key="field.key">
+                          <label class="field-label">{{ field.label }}</label>
+                          <input
+                            v-if="!field.multiline"
+                            type="text"
+                            class="field-input"
+                            v-model="inlineFormData[field.key]"
+                            :placeholder="field.placeholder"
+                          />
+                          <textarea
+                            v-else
+                            class="field-textarea"
+                            v-model="inlineFormData[field.key]"
+                            :placeholder="field.placeholder"
+                            rows="2"
+                          ></textarea>
+                        </div>
+                      </div>
+                      <div class="inline-form-actions">
+                        <button class="comp-btn comp-btn-ghost" @click="handleContinueEditing(msg)">继续对话补充</button>
+                        <button class="comp-btn comp-btn-primary" @click="handleSubmitOrder">确认无误，提交订单</button>
+                      </div>
+                      <p class="auto-draft-notice" v-if="draftSavedOrderId">已自动保存至草稿箱</p>
+                    </template>
+                  </div>
+                  <!-- 订单列表卡片展示 -->
+                  <div v-if="msg.isOrderList && msg.orders" class="inline-form-section">
+                    <div class="order-list-cards">
+                      <div v-for="order in msg.orders" :key="order.id" class="order-card-inline">
+                        <div class="order-card-header">
+                          <span class="order-num">{{ order.order_number }}</span>
+                          <span class="order-status" :class="'status-' + order.status">{{ getStatusText(order.status) }}</span>
+                        </div>
+                        <div class="order-card-body">
+                          <div class="order-info-row"><span class="info-label">类型</span><span class="info-val">{{ getTypeText(order.order_type) }}</span></div>
+                          <div class="order-info-row" v-if="order.brand"><span class="info-label">品牌</span><span class="info-val">{{ order.brand }}</span></div>
+                          <div class="order-info-row"><span class="info-label">创建时间</span><span class="info-val">{{ formatOrderDate(order.created_at) }}</span></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- 案例视频卡片 -->
+                  <div v-if="msg.isCaseList && msg.cases" class="inline-form-section">
+                    <div class="case-video-cards">
+                      <div v-for="c in msg.cases" :key="c.id" class="case-card">
+                        <div class="case-card-video" v-if="c.video_url">
+                          <video
+                            :src="c.video_url"
+                            controls
+                            preload="metadata"
+                            :poster="c.thumbnail_url || ''"
+                            class="case-video-player"
+                          ></video>
+                        </div>
+                        <div class="case-card-info">
+                          <div class="case-title">{{ c.title }}</div>
+                          <div class="case-desc">{{ c.description }}</div>
+                          <div class="case-meta">
+                            <span class="case-tag">{{ getTypeText(c.category) }}</span>
+                            <span class="case-duration" v-if="c.duration">{{ c.duration }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- 引导下单按钮 -->
+                  <div v-if="msg.isGuideToOrder" class="guide-order-section">
+                    <div class="guide-btns">
+                      <button class="comp-btn comp-btn-primary" @click="switchToOrderCreate">开始下单</button>
+                      <button class="comp-btn comp-btn-ghost" @click="goToBrowse('ai_3d_custom')">手动填写表单</button>
                     </div>
                   </div>
                 </div>
@@ -177,12 +257,11 @@
           <textarea
             ref="textareaRef"
             v-model="inputMsg"
-            :placeholder="selectedMode ? '描述您的需求...' : '请先选择上方业务类型'"
+            placeholder="描述您的需求，或直接输入问题..."
             class="chat-native-textarea"
-            :class="{ 'is-locked': !selectedMode }"
             @input="adjustTextareaHeight"
             @keydown.enter.prevent="sendMessage"
-            :disabled="isLoading || isTyping || !selectedMode"
+            :disabled="isLoading || isTyping"
             @focus="handleInputFocus"
             rows="1"
           ></textarea>
@@ -191,7 +270,7 @@
           <div class="right-tools">
             <button
               class="stitch-send-btn"
-              :class="{ disabled: isLoading || isTyping || !inputMsg.trim() || !selectedMode }"
+              :class="{ disabled: isLoading || isTyping || !inputMsg.trim() }"
               @click="sendMessage"
             >
               <span>Send</span>
@@ -201,20 +280,61 @@
         </div>
       </div>
     </div>
+
+    <!-- 确认函弹窗 -->
+    <OrderConfirmationDialog
+      v-model="showConfirmation"
+      :order-number="confirmOrderNumber"
+      :order-type="confirmOrderType"
+      :form-data="inlineFormData || {}"
+      @confirm="handleConfirmationDone"
+      @cancel="showConfirmation = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
-import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Clock, Delete, ArrowUp } from '@element-plus/icons-vue'
+import { ElMessageBox, ElMessage } from 'element-plus'
+import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Clock, Delete, ArrowUp, Loading } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { logger } from '@/utils/logger'
+import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
+import type { OrderType } from '@/types'
 
 const emit = defineEmits(['close', 'mode-change'])
 const router = useRouter()
 const orderStore = useOrderStore()
+
+// auth header helper
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token')
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  return headers
+}
+
+// ===== 内嵌表单相关状态 =====
+const inlineFormData = ref<Record<string, string> | null>(null)
+const draftSavedOrderId = ref<string | null>(null)
+const showConfirmation = ref(false)
+const confirmOrderNumber = ref('')
+const confirmOrderType = ref<OrderType>('ai_3d_custom')
+
+// 表单字段定义
+const formFields = [
+  { key: 'brand', label: '品牌/产品', placeholder: '品牌名称和产品关键词', multiline: false },
+  { key: 'target_group', label: '目标受众', placeholder: '内容面向的人群', multiline: false },
+  { key: 'content', label: '内容需求', placeholder: '期望的创意画面和场景描述', multiline: true },
+  { key: 'city', label: '投放城市/站点', placeholder: '投放地点', multiline: false },
+  { key: 'budget', label: '制作预算', placeholder: '预算范围', multiline: false },
+  { key: 'online_time', label: '预计上刊时间', placeholder: '预期上线日期', multiline: false },
+  { key: 'background', label: '项目背景', placeholder: '选填', multiline: false },
+  { key: 'style', label: '风格偏好', placeholder: '选填，如赛博朋克、极简、写实等', multiline: false },
+  { key: 'media_size', label: '投放媒体及尺寸', placeholder: '选填', multiline: false },
+  { key: 'technology', label: '技术需求', placeholder: '选填，如分辨率、格式等', multiline: false },
+]
 
 const selectedMode = ref<string | null>(null)
 const messages = ref<any[]>([])
@@ -445,32 +565,113 @@ const getCurrentTime = () => {
   return now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
+// ===== 订单展示辅助函数 =====
+const getStatusText = (status: string) => {
+  const map: Record<string, string> = {
+    draft: '草稿', pending_assign: '待分配', in_production: '制作中',
+    pending_review: '待审核', review_rejected: '审核驳回',
+    preview_ready: '初稿就绪', final_preview: '终稿就绪',
+    revision_needed: '需修改', completed: '已完成', cancelled: '已取消'
+  }
+  return map[status] || status
+}
+
+const getTypeText = (type: string) => {
+  const map: Record<string, string> = {
+    video_purchase: '裸眼3D成片购买适配',
+    ai_3d_custom: 'AI裸眼3D内容定制',
+    digital_art: '数字艺术内容定制'
+  }
+  return map[type] || type
+}
+
+const formatOrderDate = (dateStr: string) => {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+// 从业务介绍切换到下单 Agent
+const switchToOrderCreate = () => {
+  selectedMode.value = 'order_create'
+  emit('mode-change', 'order_create')
+  messages.value.push({
+    role: 'assistant',
+    content: '好的，让我们开始梳理您的项目需求！请先告诉我，您是哪个品牌，想做什么样的内容？',
+    timestamp: getCurrentTime()
+  })
+  scrollToBottom()
+}
+
 const selectMode = async (mode: string) => {
   selectedMode.value = mode
   emit('mode-change', mode)
-  if (mode === 'purchase') {
-    messages.value.push({ role: 'assistant', content: '您选择了【裸眼3D成片购买适配】。您可以直接告诉我您的需求，或者点击下方按钮先去浏览我们的案例库：', isPurchasePrompt: true, timestamp: getCurrentTime() })
-  } else if (mode === 'custom_ai') {
+  
+  if (mode === 'order_create') {
+    // 需求收集 Agent 开场白
     isLoading.value = true
     try {
-      // 从后端读取真实设计的开场白
       const response = await fetch(`/ai/start?session_id=${session_id.value}`)
-      if (!response.ok || (response.headers.get('content-type') && response.headers.get('content-type')?.includes('text/html'))) {
-        throw new Error('API not available, fallback to mock')
+      if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
+        throw new Error('API not available')
       }
       const result = await response.json()
-      if (result.reply) {
-        typewriterEffect(result.reply)
-      }
+      if (result.reply) typewriterEffect(result.reply)
     } catch (e) {
-      // 降级兜底
-      const fallbackMsg = `你好！我是您的项目需求AI助手 👋\n\n你可以直接告诉我你的项目想法，不用担心格式——哪怕只是一段随意的描述，比如：\n\n> "我们是一个运动饮料品牌，想在今年夏天做一波地铁广告投放，主要面向年轻白领..."\n\n我会从你的描述里提取需要的信息，然后针对还不清楚的地方，我们会一个个讨论 😊\n\n**所以，先告诉我你的项目是什么吧？**`;
-      typewriterEffect(fallbackMsg)
+      const fallback = '你好！我是小U，很高兴帮您梳理项目需求 👋\n\n请直接告诉我您的项目想法，比如品牌名称、想做什么样的内容、预算和时间节点等。我会逐步帮您整理成完整的需求单 😊\n\n**先告诉我，您的项目是关于什么的？**'
+      typewriterEffect(fallback)
     } finally {
       isLoading.value = false
     }
-  } else if (mode === 'digital_art') {
-    messages.value.push({ role: 'assistant', content: '您选择了【数字艺术内容定制】。请简单描述您的视觉风格倾向和应用场景：', timestamp: getCurrentTime() })
+  } else if (mode === 'order_query') {
+    // 订单查询 Agent
+    isLoading.value = true
+    try {
+      const response = await fetch('/ai/query-orders', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ message: '查看我的订单', history: [] })
+      })
+      if (!response.ok) throw new Error('query failed')
+      const data = await response.json()
+      typewriterEffect(data.message || '正在为您查询订单...')
+      if (data.orders && data.orders.length > 0) {
+        // 延迟展示订单数据以等打字机完成
+        setTimeout(() => {
+          messages.value.push({
+            role: 'assistant',
+            content: '',
+            isOrderList: true,
+            orders: data.orders,
+            timestamp: getCurrentTime()
+          })
+          scrollToBottom()
+        }, (data.message?.length || 30) * 25 + 500)
+      }
+    } catch (e) {
+      typewriterEffect('正在为您查询订单信息，请稍候...\n\n（当前为离线模式，请确保已登录后重试）')
+    } finally {
+      isLoading.value = false
+    }
+  } else if (mode === 'business_intro') {
+    // 业务介绍 Agent
+    isLoading.value = true
+    try {
+      const response = await fetch('/ai/business-intro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: '请介绍一下你们的业务', history: [] })
+      })
+      if (!response.ok) throw new Error('intro failed')
+      const data = await response.json()
+      const cleanMsg = (data.message || '').replace('【引导下单】', '').trim()
+      typewriterEffect(cleanMsg)
+    } catch (e) {
+      const fallback = '感谢您对 Unique Video AI 的关注！我来介绍一下我们的三大业务板块 👇\n\n🎬 **裸眼3D成片购买适配** — 上百款精选模板，5个工作日交付\n🤖 **AI裸眼3D内容定制** — 品牌专属定制，15个工作日交付\n🎨 **数字艺术内容定制** — 沉浸式互动体验，7个工作日交付\n\n想了解哪个板块的详情呢？或者直接告诉我您的需求，我来帮您推荐最合适的方案！'
+      typewriterEffect(fallback)
+    } finally {
+      isLoading.value = false
+    }
   }
 }
 
@@ -489,26 +690,152 @@ const sendMessage = async () => {
   inputMsg.value = ''
   logger.logAction('AI', 'send_message', { mode: selectedMode.value, textLength: userText.length })
   
-  // reset textarea height
   if (textareaRef.value) {
     textareaRef.value.style.height = 'auto'
   }
   
-  if (selectedMode.value === 'custom_ai') {
+  // 如果还没有选择模式，先做意图分类
+  if (!selectedMode.value) {
+    isLoading.value = true
+    try {
+      const classifyRes = await fetch('/ai/classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userText })
+      })
+      if (classifyRes.ok) {
+        const { intent } = await classifyRes.json()
+        selectedMode.value = intent
+        emit('mode-change', intent)
+      } else {
+        selectedMode.value = 'order_create'
+        emit('mode-change', 'order_create')
+      }
+    } catch (e) {
+      // 降级：关键词快速匹配
+      if (/订单|进度|状态|查看|查询/.test(userText)) {
+        selectedMode.value = 'order_query'
+      } else if (/了解|介绍|业务|案例|服务/.test(userText)) {
+        selectedMode.value = 'business_intro'
+      } else {
+        selectedMode.value = 'order_create'
+      }
+      emit('mode-change', selectedMode.value)
+    } finally {
+      isLoading.value = false
+    }
+  }
+  
+  // 根据当前意图路由到对应 handler
+  if (selectedMode.value === 'order_create') {
     await handleCustomAiChat(userText)
-  } else if (selectedMode.value === 'purchase') {
-    isLoading.value = true
-    setTimeout(() => {
-      messages.value.push({ role: 'assistant', content: '好的，我已经了解了您的需求，您可以前往库中挑选相近的模板。', isPurchasePrompt: true, timestamp: getCurrentTime() })
-      isLoading.value = false
-    }, 1000)
+  } else if (selectedMode.value === 'order_query') {
+    await handleOrderQuery(userText)
+  } else if (selectedMode.value === 'business_intro') {
+    await handleBusinessIntro(userText)
   } else {
-    // Dummy response for the other modes
-    isLoading.value = true
-    setTimeout(() => {
-      messages.value.push({ role: 'assistant', content: '好的，我已经记录下您的初步需求，很快会安排对应的服务专家与您对接。', timestamp: getCurrentTime() })
-      isLoading.value = false
-    }, 1000)
+    await handleGeneral(userText)
+  }
+}
+
+// ===== 订单查询 handler =====
+const handleOrderQuery = async (userText: string) => {
+  isLoading.value = true
+  try {
+    const historyMsgs = messages.value
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.content }))
+    const response = await fetch('/ai/query-orders', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ message: userText, history: historyMsgs })
+    })
+    if (!response.ok) throw new Error('query failed')
+    const data = await response.json()
+    typewriterEffect(data.message || '暂无更多信息', () => {
+      if (data.orders && data.orders.length > 0) {
+        messages.value.push({
+          role: 'assistant', content: '', isOrderList: true,
+          orders: data.orders, timestamp: getCurrentTime()
+        })
+        scrollToBottom()
+      }
+    })
+  } catch (e) {
+    messages.value.push({ role: 'assistant', content: '查询遇到问题，请稍后重试。', timestamp: getCurrentTime() })
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// ===== 业务介绍 handler =====
+const handleBusinessIntro = async (userText: string) => {
+  isLoading.value = true
+  try {
+    const historyMsgs = messages.value
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.content }))
+    const response = await fetch('/ai/business-intro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: userText, history: historyMsgs })
+    })
+    if (!response.ok) throw new Error('intro failed')
+    const data = await response.json()
+    const replyContent = data.message || ''
+    const cleanMsg = replyContent.replace('【引导下单】', '').trim()
+    const cases = data.cases || []
+    
+    typewriterEffect(cleanMsg, () => {
+      // 如果有案例数据，展示案例视频卡片
+      if (cases.length > 0) {
+        messages.value.push({
+          role: 'assistant',
+          content: '',
+          isCaseList: true,
+          cases: cases,
+          timestamp: getCurrentTime()
+        })
+        scrollToBottom()
+      }
+      // 如果 AI 建议引导下单
+      if (replyContent.includes('【引导下单】')) {
+        messages.value.push({
+          role: 'assistant',
+          content: '看起来您已经有了初步想法！要不要我帮您直接梳理需求、创建订单？',
+          isGuideToOrder: true,
+          timestamp: getCurrentTime()
+        })
+        scrollToBottom()
+      }
+    })
+  } catch (e) {
+    messages.value.push({ role: 'assistant', content: '获取信息时遇到问题，请稍后重试。', timestamp: getCurrentTime() })
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// ===== 通用问答 handler =====
+const handleGeneral = async (userText: string) => {
+  isLoading.value = true
+  try {
+    const historyMsgs = messages.value
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.content }))
+    const response = await fetch('/ai/general', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: session_id.value, message: userText, history: historyMsgs })
+    })
+    if (!response.ok) throw new Error('general failed')
+    const data = await response.json()
+    typewriterEffect(data.message || '感谢您的提问！')
+  } catch (e) {
+    const fallback = '感谢您的提问！我是 Unique Video AI 的智能助手小U 😊\n\n我可以帮您咨询下单、查看订单或了解我们的业务。请问您想了解哪方面呢？'
+    typewriterEffect(fallback)
+  } finally {
+    isLoading.value = false
   }
 }
 
@@ -538,138 +865,148 @@ const handleCustomAiChat = async (userText: string) => {
 
     const data = await response.json()
     const replyContent = data.message || data.answer || '处理成功';
-    // 隐藏掉触发表单的系统标记串，避免在UI中展示给用户
     const cleanContent = replyContent.replace('【需求收集完成】', '').trim();
     
-    // 使用打字机效果逐字显示
-    typewriterEffect(cleanContent, () => {
-      // 打字完成后，检测是否触发建单
-      if (replyContent.includes('【需求收集完成】')) {
-        // 给最后一条 AI 消息加上操作按钮标记
+    // 前端兜底：至少3轮用户对话才允许触发完成
+    const userMsgCount = messages.value.filter(m => m.role === 'user').length;
+    const shouldComplete = replyContent.includes('【需求收集完成】') && userMsgCount >= 3;
+    
+    typewriterEffect(cleanContent, async () => {
+      if (shouldComplete) {
         const lastMsg = messages.value[messages.value.length - 1]
         if (lastMsg && lastMsg.role === 'assistant') {
           lastMsg.isCompletePrompt = true
         }
+        await autoExtractAndSaveDraft()
       }
     })
 
   } catch (error) {
-    // 降级兜底：前端 Mock 模拟对话收集需求
+    // 降级兜底：前端 Mock 模拟对话收集需求（至少5轮）
     const userMsgCount = messages.value.filter(m => m.role === 'user').length;
     
+    const mockReplies: Record<number, string> = {
+      1: '好的，产品很有意思。为了让最终视觉效果更匹配，您期望这支视频想要打动哪类年轻受众呢？（比如在校学生、或者职场新人等）',
+      2: '明白。在视觉呈现上，您大概有什么特定的风格倾向吗？（比如赛博朋克、极简风，或者写实拟真都可以）',
+      3: '非常清晰。接下来想了解一下，您准备把这支内容具体投放在哪个城市或站点呢？',
+      4: '好的。那制作预算大概在什么范围呢？这样我可以帮您推荐最合适的方案。',
+      5: '最后一个问题：您期望这支内容什么时候上线呢？了解时间节点后我就可以帮您汇总所有信息了。',
+    }
+    
     setTimeout(() => {
-      if (userMsgCount === 1) {
+      if (userMsgCount <= 5 && mockReplies[userMsgCount]) {
         messages.value.push({ 
           role: 'assistant', 
-          content: '好的，产品很有意思。为了让最终视觉效果更匹配，您期望这支视频想要打动哪类年轻受众呢？（比如在校学生、或者职场新人等）', 
-          timestamp: getCurrentTime() 
-        })
-      } else if (userMsgCount === 2) {
-        messages.value.push({ 
-          role: 'assistant', 
-          content: '明白。在视觉呈现上，您大概有什么特定的风格倾向吗？（比如赛博朋克、极简风，或者写实拟真都可以）', 
-          timestamp: getCurrentTime() 
-        })
-      } else if (userMsgCount === 3) {
-        messages.value.push({ 
-          role: 'assistant', 
-          content: '非常清晰。最后了解一下，您准备把这支内容具体投放在哪里？以及大概的预算区间是多少呢？', 
+          content: mockReplies[userMsgCount], 
           timestamp: getCurrentTime() 
         })
       } else {
+        const summaryMsg = '太好了，所有核心信息都已经收集完毕！🎉 以下是我为您整理的需求汇总，请确认或直接修改：'
         messages.value.push({ 
           role: 'assistant', 
-          content: '太好了，所有核心信息都已经收集完毕！我这就为您整理生成标准的专属开发需求单...', 
-          timestamp: getCurrentTime() 
+          content: summaryMsg, 
+          timestamp: getCurrentTime(),
+          isCompletePrompt: true
         })
-        
-        setTimeout(() => {
-          messages.value.push({ role: 'assistant', content: '需求收集完成！正在为您跳转到完整的核对表单...' })
-          // 生成一些假数据作为 Draft 传递给建单页
-          const mockDraftData = {
-            brand: "示例品牌 (AI已提取)",
-            target_group: "年轻群体",
-            style: "科技感设计",
-            budget: "10万以上"
-          }
-          sessionStorage.setItem('ai_draft_order', JSON.stringify(mockDraftData))
-          
-          setTimeout(() => {
-            collapse()
-            router.push('/user/create-order/ai_3d_custom')
-          }, 1500)
-        }, 1000)
+        // mock 数据填充表单
+        inlineFormData.value = {
+          brand: '示例品牌 (Mock)',
+          target_group: '年轻群体',
+          content: '裸眼3D视觉创意内容',
+          city: '北京',
+          budget: '10万以上',
+          online_time: '2026年6月',
+          background: '',
+          style: '科技感设计',
+          media_size: '',
+          technology: ''
+        }
       }
       isLoading.value = false
     }, 1000)
   }
 }
 
-// ===== 需求收集完成后的三个操作按钮处理 =====
-const buildDraftData = async () => {
+// ===== 需求收集完成 -> 自动提取 + 保存草稿 + 内嵌表单 =====
+const autoExtractAndSaveDraft = async () => {
+  extractLoading.value = true
   try {
     const formattedHistory = messages.value
       .filter(m => m.role === 'user' || m.role === 'assistant')
       .map(m => ({ role: m.role, content: m.content }));
-      
-    const response = await fetch('/ai/extract', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ history: formattedHistory })
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      if (Object.keys(data).length > 0) return data
+    let extracted: Record<string, string> = {}
+    try {
+      const response = await fetch('/ai/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ history: formattedHistory })
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (Object.keys(data).length > 0) extracted = data
+      }
+    } catch (e) {
+      console.error('extract failed:', e)
     }
-  } catch (e) {
-    console.error('提取需求字段失败:', e)
-  }
-  
-  // 降级兜底
-  const brandMatch = messages.value.find(m => m.role === 'user')?.content.slice(0, 15) || "未知品牌";
-  return {
-    brand: brandMatch + "... (提取失败降级)",
-    target_group: "基于对话已梳理",
-    style: "基于对话已判定",
-    budget: "基于对话已记录"
-  }
-}
-
-const handleStayInChat = () => {
-  // 移除最后一条消息的完成按钮标记，让用户继续聊天
-  const lastMsg = messages.value[messages.value.length - 1]
-  if (lastMsg) lastMsg.isCompletePrompt = false
-}
-
-const handleSaveDraftFromChat = async () => {
-  try {
-    extractLoading.value = true
-    const draftData = await buildDraftData()
-    await orderStore.createOrder({
-      orderType: selectedMode.value === 'digital_art' ? 'digital_art' : 'ai_3d_custom',
-      ...draftData
-    }, true)
-    saveCurrentToHistory()
-  } catch (e) {
-    console.error('保存草稿失败', e)
+    if (Object.keys(extracted).length === 0) {
+      const brandMatch = messages.value.find(m => m.role === 'user')?.content.slice(0, 15) || '';
+      extracted = { brand: brandMatch, target_group: '', content: '', city: '', budget: '', online_time: '', background: '', style: '', media_size: '', technology: '' }
+    }
+    for (const field of formFields) {
+      if (!extracted[field.key]) extracted[field.key] = ''
+    }
+    inlineFormData.value = extracted
+    try {
+      const orderType = selectedMode.value === 'digital_art' ? 'digital_art' : 'ai_3d_custom'
+      const newOrder = await orderStore.createOrder({ orderType, ...extracted }, true)
+      draftSavedOrderId.value = newOrder.id
+    } catch (e) {
+      console.error('auto save draft failed:', e)
+    }
   } finally {
     extractLoading.value = false
+    scrollToBottom()
   }
 }
 
-const handleGoToForm = async () => {
-  extractLoading.value = true
+const handleContinueEditing = (msg: any) => {
+  msg.formHidden = true
+}
+
+const handleSubmitOrder = () => {
+  if (!inlineFormData.value) return
+  confirmOrderType.value = (selectedMode.value === 'digital_art' ? 'digital_art' : 'ai_3d_custom') as OrderType
+  confirmOrderNumber.value = draftSavedOrderId.value
+    ? 'DRAFT-' + draftSavedOrderId.value.slice(-8).toUpperCase()
+    : 'NEW-' + Date.now().toString(36).toUpperCase()
+  showConfirmation.value = true
+}
+
+const handleConfirmationDone = async (data: { email: string; phone: string }) => {
+  showConfirmation.value = false
   try {
-    const draftData = await buildDraftData()
-    sessionStorage.setItem('ai_draft_order', JSON.stringify(draftData))
+    if (draftSavedOrderId.value) {
+      await orderStore.updateOrder(draftSavedOrderId.value, {
+        orderType: confirmOrderType.value,
+        ...inlineFormData.value
+      })
+      await orderStore.updateOrderStatus(draftSavedOrderId.value, 'pending_assign')
+    } else {
+      await orderStore.createOrder({
+        orderType: confirmOrderType.value,
+        ...inlineFormData.value
+      }, false)
+    }
+    messages.value.push({
+      role: 'assistant',
+      content: '🎉 订单已正式提交成功！我们的团队会尽快开始处理。您可以在"我的订单"中查看进度。',
+      timestamp: getCurrentTime()
+    })
+    scrollToBottom()
     saveCurrentToHistory()
-    emit('close')
-    router.push(selectedMode.value === 'digital_art' ? '/user/create-order/digital_art' : '/user/create-order/ai_3d_custom')
   } catch (e) {
-    console.error('前往表单失败', e)
-  } finally {
-    extractLoading.value = false
+    console.error('submit order failed', e)
+    ElMessage.error('订单提交失败，请稍后重试')
   }
 }
 
@@ -1503,4 +1840,287 @@ const handleGoToForm = async () => {
     padding: 24px 56px;
   }
 }
+
+/* ===== 内嵌可编辑表单样式 ===== */
+.inline-form-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.form-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #0d99ff;
+  font-size: 13px;
+  padding: 12px 0;
+}
+
+.form-intro {
+  font-size: 12px;
+  color: #86868b;
+  line-height: 1.5;
+  margin: 0 0 14px 0;
+}
+
+.inline-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-field:nth-child(3) {
+  grid-column: 1 / -1;
+}
+
+.field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #86868b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.field-input, .field-textarea {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #1a1c1c;
+  background: rgba(255, 255, 255, 0.7);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.field-input:focus, .field-textarea:focus {
+  border-color: #0d99ff;
+  box-shadow: 0 0 0 2px rgba(13, 153, 255, 0.1);
+}
+
+.field-input::placeholder, .field-textarea::placeholder {
+  color: #c0c4cc;
+  font-size: 12px;
+}
+
+.field-textarea {
+  resize: vertical;
+  min-height: 48px;
+}
+
+.inline-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+.auto-draft-notice {
+  font-size: 11px;
+  color: #67c23a;
+  margin: 8px 0 0 0;
+  text-align: right;
+}
+
+/* ===== 新欢迎区样式 ===== */
+.welcome-sub {
+  font-size: 13px;
+  color: #86868b;
+  margin: 4px 0 16px 0;
+  line-height: 1.5;
+}
+
+.welcome-hint {
+  font-size: 12px;
+  color: #a0a0a5;
+  margin: 14px 0 0 0;
+  text-align: center;
+}
+
+.opt-icon {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+.opt-desc {
+  font-size: 11px;
+  color: #86868b;
+  margin-top: 2px;
+}
+
+.option-card.stitch-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 2px;
+  padding: 14px 12px;
+}
+
+/* ===== 订单卡片样式 ===== */
+.order-list-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.order-card-inline {
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.6);
+  transition: box-shadow 0.2s;
+}
+
+.order-card-inline:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.order-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.order-num {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1c1c;
+  font-family: 'SF Mono', monospace;
+}
+
+.order-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.status-draft { background: #f0f0f5; color: #86868b; }
+.status-pending_assign { background: #fff3e0; color: #e65100; }
+.status-in_production { background: #e3f2fd; color: #1565c0; }
+.status-pending_review { background: #fce4ec; color: #c62828; }
+.status-preview_ready { background: #e8f5e9; color: #2e7d32; }
+.status-completed { background: #e8f5e9; color: #1b5e20; }
+.status-cancelled { background: #f5f5f5; color: #9e9e9e; }
+
+.order-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.order-info-row {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.info-label {
+  color: #86868b;
+  min-width: 52px;
+  flex-shrink: 0;
+}
+
+.info-val {
+  color: #1a1c1c;
+}
+
+/* ===== 引导下单区 ===== */
+.guide-order-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.guide-btns {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* ===== 案例视频卡片 ===== */
+.case-video-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.case-card {
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.7);
+  transition: box-shadow 0.2s, transform 0.15s;
+}
+
+.case-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.case-card-video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #0a0a0a;
+  position: relative;
+}
+
+.case-video-player {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.case-card-info {
+  padding: 10px 14px 12px;
+}
+
+.case-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1c1c;
+  margin-bottom: 4px;
+}
+
+.case-desc {
+  font-size: 12px;
+  color: #555;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.case-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.case-tag {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #e3f2fd;
+  color: #1565c0;
+  font-weight: 500;
+}
+
+.case-duration {
+  font-size: 11px;
+  color: #86868b;
+}
 </style>
+
+
+
