@@ -8,8 +8,8 @@ echo "================================================="
 echo "  🚀 本地测试全系统启动脚本"
 echo "================================================="
 
-# 捕获 Ctrl+C 并杀死所有后台进程
-trap 'echo "\n🛑 正在停止所有服务..."; pkill -P $$; exit' SIGINT SIGTERM EXIT
+# 捕获 Ctrl+C 并杀死所有后台进程（包含处理 Uvicorn reload 导致的孤儿进程占用 8000 端口）
+trap 'echo -e "\n🛑 正在停止所有服务..."; pkill -P $$; lsof -t -i:8000 | xargs kill -9 2>/dev/null; lsof -t -i:3000 | xargs kill -9 2>/dev/null; lsof -t -i:5173 | xargs kill -9 2>/dev/null; exit' SIGINT SIGTERM EXIT
 
 # ── 1. 启动项目官网 (website) ───────────────────────────────────
 echo "📦 [1/3] 正在启动官网前端 (website) ..."

@@ -92,26 +92,23 @@
             <div class="assistant-wrapper">
               <div class="assistant-tag"><span class="engine-name">Catalyst Engine</span> <span class="pro-badge">PRO</span></div>
               <div class="message-bubble glass-ai welcome-bubble">
-                <p class="welcome-text">你好！我是 Unique Video AI 的智能助手小U 👋</p>
-                <p class="welcome-sub">我们是一家专注于裸眼3D视觉内容和数字艺术创意的技术公司，很高兴为您服务！</p>
+                <p class="welcome-text">您好，我是 Unique Video AI 的项目顾问。</p>
+                <p class="welcome-sub">我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多一线品牌提供过高品质视觉解决方案。</p>
                 <div class="options-container stitched-options">
                   <div class="option-card stitch-card" @click="selectMode('order_create')">
-                    <span class="opt-icon">🛒</span>
                     <span class="opt-text">咨询下单</span>
-                    <span class="opt-desc">描述需求，AI帮您创建订单</span>
+                    <span class="opt-desc">梳理项目需求，创建订单</span>
                   </div>
                   <div class="option-card stitch-card" @click="selectMode('order_query')">
-                    <span class="opt-icon">📋</span>
                     <span class="opt-text">查看订单</span>
-                    <span class="opt-desc">查询订单进展和状态</span>
+                    <span class="opt-desc">查询订单进展与状态</span>
                   </div>
                   <div class="option-card stitch-card" @click="selectMode('business_intro')">
-                    <span class="opt-icon">💡</span>
                     <span class="opt-text">了解业务</span>
-                    <span class="opt-desc">了解我们的服务和案例</span>
+                    <span class="opt-desc">服务体系与过往案例</span>
                   </div>
                 </div>
-                <p class="welcome-hint">也可以直接在下方输入您的问题，我会自动识别您的需求 😊</p>
+                <p class="welcome-hint">也可以直接在下方输入您的问题，系统将自动识别并路由至对应流程。</p>
               </div>
             </div>
           </div>
@@ -153,7 +150,7 @@
                       <span>正在为您整理需求信息...</span>
                     </div>
                     <template v-else-if="inlineFormData">
-                      <p class="form-intro">以下是我为您整理的需求汇总，您可以直接修改，也可以在对话中告诉我需要调整的内容：</p>
+                      <p class="form-intro">以下各项均可直接修改，也可通过对话补充调整：</p>
                       <div class="inline-form">
                         <div class="form-field" v-for="field in formFields" :key="field.key">
                           <label class="field-label">{{ field.label }}</label>
@@ -183,15 +180,19 @@
                   <!-- 订单列表卡片展示 -->
                   <div v-if="msg.isOrderList && msg.orders" class="inline-form-section">
                     <div class="order-list-cards">
-                      <div v-for="order in msg.orders" :key="order.id" class="order-card-inline">
+                      <div v-for="order in msg.orders" :key="order.id" class="order-card-inline" @click="goToOrderDetail(order.id)">
                         <div class="order-card-header">
-                          <span class="order-num">{{ order.order_number }}</span>
+                          <span class="order-num">{{ order.orderNumber || order.order_number }}</span>
                           <span class="order-status" :class="'status-' + order.status">{{ getStatusText(order.status) }}</span>
                         </div>
                         <div class="order-card-body">
-                          <div class="order-info-row"><span class="info-label">类型</span><span class="info-val">{{ getTypeText(order.order_type) }}</span></div>
+                          <div class="order-info-row"><span class="info-label">类型</span><span class="info-val">{{ getTypeText(order.orderType || order.order_type) }}</span></div>
                           <div class="order-info-row" v-if="order.brand"><span class="info-label">品牌</span><span class="info-val">{{ order.brand }}</span></div>
-                          <div class="order-info-row"><span class="info-label">创建时间</span><span class="info-val">{{ formatOrderDate(order.created_at) }}</span></div>
+                          <div class="order-info-row" v-if="order.city"><span class="info-label">城市</span><span class="info-val">{{ order.city }}</span></div>
+                          <div class="order-info-row"><span class="info-label">时间</span><span class="info-val">{{ formatOrderDate(order.createdAt || order.created_at) }}</span></div>
+                        </div>
+                        <div class="order-card-footer">
+                          <span class="view-detail-link">查看详情 →</span>
                         </div>
                       </div>
                     </div>
@@ -434,7 +435,10 @@ const loadSavedHistory = () => {
     const raw = localStorage.getItem(HISTORY_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      savedHistories.value = Array.isArray(parsed) ? parsed : [parsed]
+      let parsedArr = Array.isArray(parsed) ? parsed : [parsed]
+      // 按照 ID（时间戳）升序排列，最新的记录在最下方（靠近输入框）
+      parsedArr.sort((a, b) => Number(a.id) - Number(b.id))
+      savedHistories.value = parsedArr
     }
   } catch {
     savedHistories.value = []
@@ -471,8 +475,12 @@ const saveCurrentToHistory = () => {
     }
   } catch(e) {}
   
-  histories.unshift(session)
-  if (histories.length > 5) histories = histories.slice(0, 5)
+  histories.push(session)
+  // 按时间升序排序（最新的在最下方，靠近输入框）
+  histories.sort((a, b) => Number(a.id) - Number(b.id))
+  
+  // 如果超过 5 条，保留最新的 5 条
+  if (histories.length > 5) histories = histories.slice(-5)
   
   localStorage.setItem(HISTORY_KEY, JSON.stringify(histories))
   savedHistories.value = histories
@@ -597,7 +605,7 @@ const switchToOrderCreate = () => {
   emit('mode-change', 'order_create')
   messages.value.push({
     role: 'assistant',
-    content: '好的，让我们开始梳理您的项目需求！请先告诉我，您是哪个品牌，想做什么样的内容？',
+    content: '请提供项目的基本信息，我将逐步为您梳理完整的需求。首先，请告知品牌名称和内容方向。',
     timestamp: getCurrentTime()
   })
   scrollToBottom()
@@ -618,7 +626,7 @@ const selectMode = async (mode: string) => {
       const result = await response.json()
       if (result.reply) typewriterEffect(result.reply)
     } catch (e) {
-      const fallback = '你好！我是小U，很高兴帮您梳理项目需求 👋\n\n请直接告诉我您的项目想法，比如品牌名称、想做什么样的内容、预算和时间节点等。我会逐步帮您整理成完整的需求单 😊\n\n**先告诉我，您的项目是关于什么的？**'
+      const fallback = '您好，我是 Unique Video AI 的项目顾问。\n\n请描述您的项目需求，包括品牌名称、内容方向、预算和时间节点等关键信息。我将协助您完成完整的需求梳理。\n\n**首先，请告知您的项目背景。**'
       typewriterEffect(fallback)
     } finally {
       isLoading.value = false
@@ -634,20 +642,18 @@ const selectMode = async (mode: string) => {
       })
       if (!response.ok) throw new Error('query failed')
       const data = await response.json()
-      typewriterEffect(data.message || '正在为您查询订单...')
-      if (data.orders && data.orders.length > 0) {
-        // 延迟展示订单数据以等打字机完成
-        setTimeout(() => {
-          messages.value.push({
-            role: 'assistant',
-            content: '',
-            isOrderList: true,
-            orders: data.orders,
-            timestamp: getCurrentTime()
-          })
+      // 将订单卡片附加到打字机消息完成后的同一条消息上
+      typewriterEffect(data.message || '正在为您查询订单...', () => {
+        if (data.orders && data.orders.length > 0) {
+          // 找到打字机刚刚写入的那条消息，给它挂载订单卡片
+          const lastMsg = messages.value[messages.value.length - 1]
+          if (lastMsg && lastMsg.role === 'assistant') {
+            lastMsg.isOrderList = true
+            lastMsg.orders = data.orders
+          }
           scrollToBottom()
-        }, (data.message?.length || 30) * 25 + 500)
-      }
+        }
+      })
     } catch (e) {
       typewriterEffect('正在为您查询订单信息，请稍候...\n\n（当前为离线模式，请确保已登录后重试）')
     } finally {
@@ -667,7 +673,7 @@ const selectMode = async (mode: string) => {
       const cleanMsg = (data.message || '').replace('【引导下单】', '').trim()
       typewriterEffect(cleanMsg)
     } catch (e) {
-      const fallback = '感谢您对 Unique Video AI 的关注！我来介绍一下我们的三大业务板块 👇\n\n🎬 **裸眼3D成片购买适配** — 上百款精选模板，5个工作日交付\n🤖 **AI裸眼3D内容定制** — 品牌专属定制，15个工作日交付\n🎨 **数字艺术内容定制** — 沉浸式互动体验，7个工作日交付\n\n想了解哪个板块的详情呢？或者直接告诉我您的需求，我来帮您推荐最合适的方案！'
+      const fallback = 'Unique Video AI 提供三大核心业务板块：\n\n**裸眼3D成片购买适配** — 上百款精选模板，5个工作日交付\n**AI裸眼3D内容定制** — 品牌专属定制，15个工作日交付\n**数字艺术内容定制** — 沉浸式互动体验，7个工作日交付\n\n如需了解某个板块的详细信息或过往案例，请直接告知。'
       typewriterEffect(fallback)
     } finally {
       isLoading.value = false
@@ -754,10 +760,12 @@ const handleOrderQuery = async (userText: string) => {
     const data = await response.json()
     typewriterEffect(data.message || '暂无更多信息', () => {
       if (data.orders && data.orders.length > 0) {
-        messages.value.push({
-          role: 'assistant', content: '', isOrderList: true,
-          orders: data.orders, timestamp: getCurrentTime()
-        })
+        // 将卡片挂载到打字机刚刚写入的同一条消息上
+        const lastMsg = messages.value[messages.value.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant') {
+          lastMsg.isOrderList = true
+          lastMsg.orders = data.orders
+        }
         scrollToBottom()
       }
     })
@@ -766,6 +774,12 @@ const handleOrderQuery = async (userText: string) => {
   } finally {
     isLoading.value = false
   }
+}
+
+// 订单卡片点击跳转
+const goToOrderDetail = (orderId: string) => {
+  if (!orderId) return
+  router.push(`/user/orders/${orderId}`)
 }
 
 // ===== 业务介绍 handler =====
@@ -802,7 +816,7 @@ const handleBusinessIntro = async (userText: string) => {
       if (replyContent.includes('【引导下单】')) {
         messages.value.push({
           role: 'assistant',
-          content: '看起来您已经有了初步想法！要不要我帮您直接梳理需求、创建订单？',
+          content: '如您已有初步的项目构想，可以进入需求梳理流程，由我协助您完成订单创建。',
           isGuideToOrder: true,
           timestamp: getCurrentTime()
         })
@@ -832,7 +846,7 @@ const handleGeneral = async (userText: string) => {
     const data = await response.json()
     typewriterEffect(data.message || '感谢您的提问！')
   } catch (e) {
-    const fallback = '感谢您的提问！我是 Unique Video AI 的智能助手小U 😊\n\n我可以帮您咨询下单、查看订单或了解我们的业务。请问您想了解哪方面呢？'
+    const fallback = '我是 Unique Video AI 的项目顾问。\n\n我可以协助您咨询下单、查看订单或了解我们的业务。请问您需要哪方面的支持？'
     typewriterEffect(fallback)
   } finally {
     isLoading.value = false
@@ -901,7 +915,7 @@ const handleCustomAiChat = async (userText: string) => {
           timestamp: getCurrentTime() 
         })
       } else {
-        const summaryMsg = '太好了，所有核心信息都已经收集完毕！🎉 以下是我为您整理的需求汇总，请确认或直接修改：'
+        const summaryMsg = '需求信息收集完毕，正在为您生成项目评估...'
         messages.value.push({ 
           role: 'assistant', 
           content: summaryMsg, 
@@ -927,7 +941,7 @@ const handleCustomAiChat = async (userText: string) => {
   }
 }
 
-// ===== 需求收集完成 -> 自动提取 + 保存草稿 + 内嵌表单 =====
+// ===== 需求收集完成 -> 自动提取 + 专业评估 + 保存草稿 + 内嵌表单 =====
 const autoExtractAndSaveDraft = async () => {
   extractLoading.value = true
   try {
@@ -955,6 +969,39 @@ const autoExtractAndSaveDraft = async () => {
     for (const field of formFields) {
       if (!extracted[field.key]) extracted[field.key] = ''
     }
+    
+    // ===== 专业项目评估 =====
+    let assessmentText = ''
+    try {
+      const assessRes = await fetch('/ai/assess', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extracted })
+      })
+      if (assessRes.ok) {
+        const assessData = await assessRes.json()
+        assessmentText = assessData.assessment || ''
+      }
+    } catch (e) {
+      console.error('assess failed:', e)
+    }
+    
+    // 展示专业评估（在表单之前）
+    if (assessmentText) {
+      // 找到最后一条 isCompletePrompt 的消息，替换其 content
+      const lastCompleteMsg = messages.value.filter(m => m.isCompletePrompt).pop()
+      if (lastCompleteMsg) {
+        lastCompleteMsg.content = assessmentText
+      } else {
+        messages.value.push({
+          role: 'assistant',
+          content: assessmentText,
+          isCompletePrompt: true,
+          timestamp: getCurrentTime()
+        })
+      }
+    }
+    
     inlineFormData.value = extracted
     try {
       const orderType = selectedMode.value === 'digital_art' ? 'digital_art' : 'ai_3d_custom'
@@ -1978,11 +2025,13 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   border-radius: 10px;
   padding: 12px 14px;
   background: rgba(255, 255, 255, 0.6);
-  transition: box-shadow 0.2s;
+  transition: box-shadow 0.2s, transform 0.15s;
+  cursor: pointer;
 }
 
 .order-card-inline:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
 }
 
 .order-card-header {
@@ -2035,6 +2084,27 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 .info-val {
   color: #1a1c1c;
 }
+
+.order-card-footer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  text-align: right;
+}
+
+.view-detail-link {
+  font-size: 12px;
+  color: #1565c0;
+  font-weight: 500;
+}
+
+.order-card-inline:hover .view-detail-link {
+  color: #0d47a1;
+}
+
+.status-revision_needed { background: #fff3e0; color: #e65100; }
+.status-review_rejected { background: #fce4ec; color: #c62828; }
+.status-final_preview { background: #e0f7fa; color: #00695c; }
 
 /* ===== 引导下单区 ===== */
 .guide-order-section {
