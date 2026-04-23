@@ -103,6 +103,7 @@ class Settings(BaseSettings):
     
     # 文件上传配置
     UPLOAD_DIR: str = "./uploads"
+    KNOWLEDGE_DIR: str = ""                   # AI 知识库目录（留空则自动使用 backend/app/knowledge/）
     MAX_FILE_SIZE: int = 52428800  # 50MB
     ALLOWED_FILE_TYPES: str = "image/jpeg,image/png,image/gif,video/mp4,application/zip,application/pdf"
     

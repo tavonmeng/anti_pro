@@ -12,7 +12,7 @@
         <div class="header-center">
           <div class="header-search">
             <el-icon class="search-icon"><Search /></el-icon>
-            <input type="text" placeholder="Search insights and assets..." class="search-input" />
+            <input type="text" v-model="searchQuery" placeholder="搜索当前聊天与历史记录..." class="search-input" @input="onSearchInput" />
           </div>
         </div>
 
@@ -38,12 +38,12 @@
           <!-- 历史聊天记录（内联下压式，保存多条，无卡片底色） -->
           <transition name="collapse-history">
             <div v-if="showHistory" class="history-inline">
-              <div v-if="!savedHistories || savedHistories.length === 0" class="history-empty">
+              <div v-if="!displayedHistories || displayedHistories.length === 0" class="history-empty">
                 <el-icon><Clock /></el-icon>
-                <span>暂无历史记录</span>
+                <span>{{ searchQuery ? '未找到相关历史记录' : '暂无历史记录' }}</span>
               </div>
               <template v-else>
-                <div v-for="(history, hIndex) in savedHistories" :key="history.id || hIndex" class="history-session-item">
+                <div v-for="(history, hIndex) in displayedHistories" :key="history.id || hIndex" class="history-session-item">
                   <div class="history-header">
                     <div class="history-title-group">
                       <el-icon class="history-icon"><Clock /></el-icon>
@@ -75,7 +75,7 @@
                   </div>
                   
                   <div class="history-actions-bottom-right">
-                    <button class="history-clear-btn-icon" @click="deleteHistory(hIndex)" title="删除记录">
+                    <button class="history-clear-btn-icon" @click="deleteHistory(history.id)" title="删除记录">
                       <el-icon><Delete /></el-icon>
                     </button>
                     <button class="stitch-primary-btn history-restore-btn-new" @click="restoreHistory(history)">接着上回聊</button>
@@ -84,7 +84,7 @@
                   <div class="session-divider" v-if="hIndex < savedHistories.length - 1"></div>
                 </div>
               </template>
-              <div class="history-master-divider" v-if="savedHistories && savedHistories.length > 0"></div>
+              <div class="history-master-divider" v-if="displayedHistories && displayedHistories.length > 0"></div>
             </div>
           </transition>
           <!-- Welcome + Quick Actions -->
@@ -92,29 +92,38 @@
             <div class="assistant-wrapper">
               <div class="assistant-tag"><span class="engine-name">Catalyst Engine</span> <span class="pro-badge">PRO</span></div>
               <div class="message-bubble glass-ai welcome-bubble">
-                <p class="welcome-text">您好，我是 Unique Video AI 的项目顾问。</p>
-                <p class="welcome-sub">我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多一线品牌提供过高品质视觉解决方案。</p>
-                <div class="options-container stitched-options">
-                  <div class="option-card stitch-card" @click="selectMode('order_create')">
-                    <span class="opt-text">咨询下单</span>
-                    <span class="opt-desc">梳理项目需求，创建订单</span>
+                <p class="welcome-text">
+                  {{ welcomeTitleText }}<span v-if="!showWelcomeOptions && welcomeTitleText.length < welcomeTitleFull.length" class="typing-cursor">|</span>
+                </p>
+                <p class="welcome-sub" v-if="welcomeTitleText.length === welcomeTitleFull.length || showWelcomeOptions">
+                  {{ welcomeDescText }}<span v-if="!showWelcomeOptions && welcomeDescText.length < welcomeDescFull.length" class="typing-cursor">|</span>
+                </p>
+                
+                <transition name="fade">
+                  <div v-if="showWelcomeOptions">
+                    <div class="options-container stitched-options">
+                      <div class="option-card stitch-card" @click="selectMode('order_create')">
+                        <span class="opt-text">咨询下单</span>
+                        <span class="opt-desc">梳理项目需求，创建订单</span>
+                      </div>
+                      <div class="option-card stitch-card" @click="selectMode('order_query')">
+                        <span class="opt-text">查看订单</span>
+                        <span class="opt-desc">查询订单进展与状态</span>
+                      </div>
+                      <div class="option-card stitch-card" @click="selectMode('business_intro')">
+                        <span class="opt-text">了解业务</span>
+                        <span class="opt-desc">服务体系与过往案例</span>
+                      </div>
+                    </div>
+                    <p class="welcome-hint">也可以直接在下方输入您的问题，系统将自动识别并路由至对应流程。</p>
                   </div>
-                  <div class="option-card stitch-card" @click="selectMode('order_query')">
-                    <span class="opt-text">查看订单</span>
-                    <span class="opt-desc">查询订单进展与状态</span>
-                  </div>
-                  <div class="option-card stitch-card" @click="selectMode('business_intro')">
-                    <span class="opt-text">了解业务</span>
-                    <span class="opt-desc">服务体系与过往案例</span>
-                  </div>
-                </div>
-                <p class="welcome-hint">也可以直接在下方输入您的问题，系统将自动识别并路由至对应流程。</p>
+                </transition>
               </div>
             </div>
           </div>
 
           <!-- Chat History -->
-          <div v-for="(msg, index) in messages" :key="index" :class="['message', msg.role]">
+          <div v-for="(msg, index) in displayedMessages" :key="index" :class="['message', msg.role]" v-show="!msg.isContextCarryOver">
             
             <template v-if="msg.role === 'user'">
               <div class="user-message-container">
@@ -185,6 +194,24 @@
                           <span class="order-num">{{ order.orderNumber || order.order_number }}</span>
                           <span class="order-status" :class="'status-' + order.status">{{ getStatusText(order.status) }}</span>
                         </div>
+                        <!-- 订单状态进度流水线 -->
+                        <div class="order-progress-timeline" v-if="order.status !== 'cancelled'">
+                          <div class="timeline-bg-line"></div>
+                          <div class="timeline-progress-line" :style="{ width: getProgressWidth(order.status) }" :class="{'warning-line': order.status === 'revision_needed' || order.status === 'review_rejected'}"></div>
+                          <div class="timeline-step" v-for="n in 4" :key="n" :class="getStepClass(order.status, n)">
+                            <div class="step-dot">
+                              <div class="pulse-ring" v-if="getStepClass(order.status, n) === 'step-active' || getStepClass(order.status, n) === 'step-warning'"></div>
+                            </div>
+                            <div class="step-label">{{ getStepLabel(n) }}</div>
+                          </div>
+                        </div>
+                        <div class="order-progress-timeline cancelled-timeline" v-else>
+                          <div class="timeline-bg-line"></div>
+                          <div class="timeline-step step-cancelled">
+                            <div class="step-dot"></div>
+                            <div class="step-label">已取消</div>
+                          </div>
+                        </div>
                         <div class="order-card-body">
                           <div class="order-info-row"><span class="info-label">类型</span><span class="info-val">{{ getTypeText(order.orderType || order.order_type) }}</span></div>
                           <div class="order-info-row" v-if="order.brand"><span class="info-label">品牌</span><span class="info-val">{{ order.brand }}</span></div>
@@ -223,9 +250,14 @@
                   </div>
                   <!-- 引导下单按钮 -->
                   <div v-if="msg.isGuideToOrder" class="guide-order-section">
+                    <div class="guide-order-label">您可以选择感兴趣的业务板块开始需求梳理：</div>
                     <div class="guide-btns">
-                      <button class="comp-btn comp-btn-primary" @click="switchToOrderCreate">开始下单</button>
-                      <button class="comp-btn comp-btn-ghost" @click="goToBrowse('ai_3d_custom')">手动填写表单</button>
+                      <button class="comp-btn comp-btn-primary" @click="switchToOrderCreate('ai_3d_custom')">AI裸眼3D内容定制</button>
+                      <button class="comp-btn comp-btn-outline" @click="switchToOrderCreate('video_purchase')">裸眼3D成片购买适配</button>
+                      <button class="comp-btn comp-btn-outline" @click="switchToOrderCreate('digital_art')">数字艺术内容定制</button>
+                    </div>
+                    <div class="guide-btns" style="margin-top: 6px;">
+                      <button class="comp-btn comp-btn-ghost" @click="goToBrowse('ai_3d_custom')">或手动填写表单</button>
                     </div>
                   </div>
                 </div>
@@ -295,8 +327,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
+import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Clock, Delete, ArrowUp, Loading } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
@@ -308,12 +340,55 @@ const emit = defineEmits(['close', 'mode-change'])
 const router = useRouter()
 const orderStore = useOrderStore()
 
+const searchQuery = ref('')
+
+const onSearchInput = () => {
+  if (searchQuery.value && !showHistory.value) {
+    showHistory.value = true
+    loadSavedHistory()
+  }
+}
+
 // auth header helper
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token')
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) headers['Authorization'] = `Bearer ${token}`
   return headers
+}
+
+// ==== 欢迎打字机动画逻辑 ====
+const welcomeTitleFull = '您好，我是 Unique Video AI 的项目顾问。'
+const welcomeDescFull = '我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多一线品牌提供过高品质视觉解决方案。'
+const welcomeTitleText = ref('')
+const welcomeDescText = ref('')
+const showWelcomeOptions = ref(false)
+
+const playWelcomeAnimation = () => {
+  welcomeTitleText.value = ''
+  welcomeDescText.value = ''
+  showWelcomeOptions.value = false
+  
+  let charIndexTitle = 0
+  let charIndexDesc = 0
+  const speed = 25 // 打字速度
+  
+  const typeNext = () => {
+    if (charIndexTitle < welcomeTitleFull.length) {
+      welcomeTitleText.value += welcomeTitleFull.charAt(charIndexTitle)
+      charIndexTitle++
+      setTimeout(typeNext, speed)
+    } else if (charIndexDesc < welcomeDescFull.length) {
+      welcomeDescText.value += welcomeDescFull.charAt(charIndexDesc)
+      charIndexDesc++
+      setTimeout(typeNext, speed)
+    } else {
+      showWelcomeOptions.value = true
+      scrollToBottom()
+    }
+  }
+  
+  setTimeout(typeNext, 300) // 稍作延迟开始
 }
 
 // ===== 内嵌表单相关状态 =====
@@ -338,6 +413,7 @@ const formFields = [
 ]
 
 const selectedMode = ref<string | null>(null)
+const businessType = ref<string>('ai_3d_custom') // ai_3d_custom / video_purchase / digital_art
 const messages = ref<any[]>([])
 const inputMsg = ref('')
 const isLoading = ref(false)
@@ -392,7 +468,7 @@ const collapse = () => {
         }
         sessionStorage.setItem('ai_draft_order', JSON.stringify(mockDraftData))
         emit('close')
-        router.push(selectedMode.value === 'digital_art' ? '/user/create-order/digital_art' : '/user/create-order/ai_3d_custom')
+        router.push(`/user/create-order/${businessType.value}`)
       }).catch(() => {
         // 用户选择继续聊天，面板保持开启，啥都不做
       })
@@ -405,16 +481,36 @@ const collapse = () => {
 }
 
 const startNewSession = () => {
-  // 保存当前会话到历史（只保存最近1个）
-  saveCurrentToHistory()
+  // 如果当前已有对话，保存并将顶部历史面板展开，形成"旧对话被折叠顶上去"的视觉效果
+  if (messages.value.length > 0) {
+    saveCurrentToHistory()
+    loadSavedHistory()
+    showHistory.value = true
+  } else {
+    // 如果当前已经是空白对话，说明用户是单纯想退出历史面板，直接关闭即可
+    showHistory.value = false
+  }
+  
   messages.value = []
   selectedMode.value = null
   session_id.value = Math.random().toString(36).substring(7)
+  playWelcomeAnimation()
 }
 
 // --- 历史聊天记录 ---
 const HISTORY_KEY = 'ai_chat_last_session'
 const showHistory = ref(false)
+
+const displayedMessages = computed(() => {
+  if (!searchQuery.value.trim()) return messages.value
+  const q = searchQuery.value.toLowerCase()
+  return messages.value.filter(m => {
+    // 包含文本，或者是有卡片内容的特殊气泡
+    if (m.content && m.content.toLowerCase().includes(q)) return true
+    if (m.isOrderList || m.isCaseList || m.isGuideToOrder || m.isPurchasePrompt || m.isCompletePrompt) return true
+    return false
+  })
+})
 
 interface SavedSession {
   id: string
@@ -425,6 +521,14 @@ interface SavedSession {
 
 const savedHistories = ref<SavedSession[]>([])
 const expandedHistories = ref<Record<string, boolean>>({})
+
+const displayedHistories = computed(() => {
+  if (!searchQuery.value.trim()) return savedHistories.value
+  const q = searchQuery.value.toLowerCase()
+  return savedHistories.value.filter(session => {
+    return session.messages.some(m => m.content && m.content.toLowerCase().includes(q))
+  })
+})
 
 const toggleExpandHistory = (id: string) => {
   expandedHistories.value[id] = !expandedHistories.value[id]
@@ -446,11 +550,39 @@ const loadSavedHistory = () => {
 }
 
 onMounted(() => {
+  playWelcomeAnimation()
   loadSavedHistory()
+  // 监听浏览器关闭/刷新事件，确保保存聊天记录
+  window.addEventListener('beforeunload', _handleBeforeUnload)
 })
+
+// ── 自动保存聊天记录：确保任何退出方式都会保存 ──
+
+// 1. 组件卸载时保存（父组件切换、v-if 销毁等）
+onBeforeUnmount(() => {
+  saveCurrentToHistory()
+  window.removeEventListener('beforeunload', _handleBeforeUnload)
+})
+
+// 2. 浏览器关闭/刷新时保存
+const _handleBeforeUnload = () => {
+  saveCurrentToHistory()
+}
+
+// 3. 路由切换时保存（用户点击侧边栏导航等）
+onBeforeRouteLeave(() => {
+  saveCurrentToHistory()
+})
+
+let _lastSaveTimestamp = 0
 
 const saveCurrentToHistory = () => {
   if (messages.value.length === 0) return
+  
+  // 防抖：同一秒内不重复保存（避免 collapse + onBeforeUnmount 双重触发）
+  const now = Date.now()
+  if (now - _lastSaveTimestamp < 1000) return
+  _lastSaveTimestamp = now
   
   const session: SavedSession = {
     id: Date.now().toString(),
@@ -500,10 +632,12 @@ const restoreHistory = (history: SavedSession) => {
     emit('mode-change', selectedMode.value)
   }
   showHistory.value = false
-  scrollToBottom()
+  scrollToBottom(true) // 恢复历史时瞬间到底，不要用平滑动画，否则容易卡在最上面
 }
 
-const deleteHistory = (index: number) => {
+const deleteHistory = (id: string) => {
+  const index = savedHistories.value.findIndex(h => h.id === id)
+  if (index === -1) return
   savedHistories.value.splice(index, 1)
   localStorage.setItem(HISTORY_KEY, JSON.stringify(savedHistories.value))
   if (savedHistories.value.length === 0) {
@@ -511,12 +645,12 @@ const deleteHistory = (index: number) => {
   }
 }
 
-const scrollToBottom = async () => {
+const scrollToBottom = async (instant: boolean = false) => {
   await nextTick()
   if (chatContentRef.value) {
     chatContentRef.value.scrollTo({
-      top: chatContentRef.value.scrollHeight + 100,
-      behavior: 'smooth'
+      top: chatContentRef.value.scrollHeight + 1000,
+      behavior: instant ? 'auto' : 'smooth'
     })
   }
 }
@@ -593,6 +727,73 @@ const getTypeText = (type: string) => {
   return map[type] || type
 }
 
+// 从用户文字中检测下单意图，返回对应的 businessType 或 null
+const _detectBusinessTypeFromText = (text: string): string | null => {
+  const lower = text.toLowerCase()
+
+  // 必须有下单意愿信号词
+  const intentWords = [
+    '想做', '想定制', '想下单', '要做', '要定制', '开始', '下单',
+    '定制', '做一个', '做个', '需要', '想要', '来一个', '搞一个',
+    '试试', '选', '就这个', '就选', '可以开始',
+  ]
+  const hasIntent = intentWords.some(w => lower.includes(w))
+
+  // 即使没有明确意愿词，直接说业务名称也算（如"AI裸眼3D内容定制"）
+  const directNames: Record<string, string> = {
+    'ai裸眼3d内容定制': 'ai_3d_custom',
+    '裸眼3d成片购买适配': 'video_purchase',
+    '数字艺术内容定制': 'digital_art',
+    '裸眼3d内容定制': 'ai_3d_custom',
+    '成片购买适配': 'video_purchase',
+  }
+  for (const [name, type] of Object.entries(directNames)) {
+    if (lower.includes(name)) return type
+  }
+
+  if (!hasIntent) return null
+
+  // 业务类型关键词匹配
+  if (/裸眼3d|裸眼3D|3d定制|3D定制|3d内容|3D内容|裸眼.*定制/.test(text)) return 'ai_3d_custom'
+  if (/成片|购买|模板|现成|成品|买/.test(text)) return 'video_purchase'
+  if (/数字艺术|数字.*艺术|沉浸|互动|装置|投影/.test(text)) return 'digital_art'
+
+  return null
+}
+
+const getOrderStep = (status: string) => {
+  if (status === 'cancelled') return -1
+  const map: Record<string, number> = {
+    draft: 1, pending_assign: 1,
+    in_production: 2, pending_review: 2, review_rejected: 2,
+    preview_ready: 3, revision_needed: 3, final_preview: 3,
+    completed: 4
+  }
+  return map[status] || 1
+}
+
+const getStepLabel = (step: number) => {
+  return ['需求确认', '阶段制作', '交付验收', '项目完成'][step - 1] || ''
+}
+
+const getStepClass = (status: string, stepIndex: number) => {
+  if (status === 'cancelled') return 'step-cancelled'
+  const current = getOrderStep(status)
+  if (current > stepIndex) return 'step-done'
+  if (current === stepIndex) {
+    if (status === 'revision_needed' || status === 'review_rejected') return 'step-warning'
+    if (status === 'completed') return 'step-done'
+    return 'step-active'
+  }
+  return 'step-pending'
+}
+
+const getProgressWidth = (status: string) => {
+  if (status === 'cancelled') return '0%'
+  const current = getOrderStep(status)
+  return `${25 * (current - 1)}%`
+}
+
 const formatOrderDate = (dateStr: string) => {
   if (!dateStr) return ''
   const d = new Date(dateStr)
@@ -600,12 +801,41 @@ const formatOrderDate = (dateStr: string) => {
 }
 
 // 从业务介绍切换到下单 Agent
-const switchToOrderCreate = () => {
+const switchToOrderCreate = (type: string = 'ai_3d_custom', requirementSummary: string = '') => {
+  businessType.value = type
   selectedMode.value = 'order_create'
   emit('mode-change', 'order_create')
+
+  const typeLabels: Record<string, string> = {
+    ai_3d_custom: 'AI裸眼3D内容定制',
+    video_purchase: '裸眼3D成片购买适配',
+    digital_art: '数字艺术内容定制',
+  }
+  const label = typeLabels[type] || typeLabels.ai_3d_custom
+
+  let openingMsg = ''
+  if (requirementSummary) {
+    // 有需求摘要：带上客户已描述的信息
+    openingMsg = `好的，根据您的描述，我为您匹配的是「${label}」服务。\n\n您已提到的需求：${requirementSummary}\n\n让我来帮您进一步完善剩余信息。`
+    // 将摘要信息也作为一条用户消息插入，让需求收集 agent 知道上下文
+    messages.value.push({
+      role: 'user',
+      content: `[用户在业务咨询时描述的需求：${requirementSummary}]`,
+      timestamp: getCurrentTime(),
+      isContextCarryOver: true  // 标记为上下文携带，不是用户真正输入
+    })
+  } else {
+    const openings: Record<string, string> = {
+      ai_3d_custom: `好的，我们进入${label}的需求梳理环节。\n\n首先想了解一下：这次项目是哪个品牌的？主要想呈现什么样的裸眼3D创意画面？`,
+      video_purchase: `好的，我们进入${label}的需求梳理环节。\n\n首先想确认一下：您的品牌名称是什么？这样我们可以在成片上做对应的品牌元素适配。`,
+      digital_art: `好的，我们进入${label}的需求梳理环节。\n\n首先想了解一下：这次项目的品牌或活动名称是什么？活动场景大概是什么样的？`,
+    }
+    openingMsg = openings[type] || openings.ai_3d_custom
+  }
+
   messages.value.push({
     role: 'assistant',
-    content: '请提供项目的基本信息，我将逐步为您梳理完整的需求。首先，请告知品牌名称和内容方向。',
+    content: openingMsg,
     timestamp: getCurrentTime()
   })
   scrollToBottom()
@@ -733,12 +963,25 @@ const sendMessage = async () => {
   }
   
   // 根据当前意图路由到对应 handler
-  if (selectedMode.value === 'order_create') {
+  // 跨模式拦截：任何模式下用户问案例，都走 business_intro（它有真实案例库）
+  const _caseKeywords = ['案例', '作品', '看看你们做过', '之前做过', '过往项目', '成功案例', '看看案例', '展示一下']
+  if (_caseKeywords.some(kw => userText.includes(kw))) {
+    // 标记用户的案例请求消息，避免污染需求收集上下文
+    const lastUserMsg = messages.value[messages.value.length - 1]
+    if (lastUserMsg && lastUserMsg.role === 'user') lastUserMsg.isCaseDetour = true
+    await handleBusinessIntro(userText, true)
+  } else if (selectedMode.value === 'order_create') {
     await handleCustomAiChat(userText)
   } else if (selectedMode.value === 'order_query') {
     await handleOrderQuery(userText)
   } else if (selectedMode.value === 'business_intro') {
-    await handleBusinessIntro(userText)
+    // 检测用户是否通过文字表达了下单意图，自动切换到对应业务的需求收集
+    const detectedType = _detectBusinessTypeFromText(userText)
+    if (detectedType) {
+      switchToOrderCreate(detectedType)
+    } else {
+      await handleBusinessIntro(userText)
+    }
   } else {
     await handleGeneral(userText)
   }
@@ -783,7 +1026,7 @@ const goToOrderDetail = (orderId: string) => {
 }
 
 // ===== 业务介绍 handler =====
-const handleBusinessIntro = async (userText: string) => {
+const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = false) => {
   isLoading.value = true
   try {
     const historyMsgs = messages.value
@@ -801,26 +1044,36 @@ const handleBusinessIntro = async (userText: string) => {
     const cases = data.cases || []
     
     typewriterEffect(cleanMsg, () => {
-      // 如果有案例数据，展示案例视频卡片
+      // 标记案例回复，避免污染需求收集上下文
+      if (isCaseDetour) {
+        const lastAssistantMsg = messages.value[messages.value.length - 1]
+        if (lastAssistantMsg && lastAssistantMsg.role === 'assistant') lastAssistantMsg.isCaseDetour = true
+      }
+      // 如果有案例数据，附加到当前消息上（与订单卡片同理）
       if (cases.length > 0) {
-        messages.value.push({
-          role: 'assistant',
-          content: '',
-          isCaseList: true,
-          cases: cases,
-          timestamp: getCurrentTime()
-        })
+        const lastMsg = messages.value[messages.value.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant') {
+          lastMsg.isCaseList = true
+          lastMsg.cases = cases
+        }
         scrollToBottom()
       }
       // 如果 AI 建议引导下单
-      if (replyContent.includes('【引导下单】')) {
-        messages.value.push({
-          role: 'assistant',
-          content: '如您已有初步的项目构想，可以进入需求梳理流程，由我协助您完成订单创建。',
-          isGuideToOrder: true,
-          timestamp: getCurrentTime()
-        })
-        scrollToBottom()
+      const guide = data.guide || {}
+      if (guide.should_guide) {
+        if (guide.business_type && guide.requirement_summary) {
+          // 有明确业务类型和需求摘要：直接跳转并携带上下文
+          switchToOrderCreate(guide.business_type, guide.requirement_summary)
+        } else {
+          // 没有明确业务类型：展示三个快速入口供用户选择
+          messages.value.push({
+            role: 'assistant',
+            content: '如您已有初步的项目构想，可以进入需求梳理流程，由我协助您完成订单创建。',
+            isGuideToOrder: true,
+            timestamp: getCurrentTime()
+          })
+          scrollToBottom()
+        }
       }
     })
   } catch (e) {
@@ -857,9 +1110,10 @@ const handleCustomAiChat = async (userText: string) => {
   isLoading.value = true
   try {
     // 提取所有除当前这句（即最后一条）以外的历史记录
+    // 过滤掉案例浏览的消息，避免污染需求收集上下文
     const historyMessages = messages.value.slice(0, messages.value.length - 1);
     const formattedHistory = historyMessages
-      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.isCaseDetour)
       .map(m => ({ role: m.role, content: m.content }));
 
     const response = await fetch('/ai/chat', {
@@ -868,7 +1122,8 @@ const handleCustomAiChat = async (userText: string) => {
       body: JSON.stringify({ 
         session_id: session_id.value, 
         message: userText,
-        history: formattedHistory
+        history: formattedHistory,
+        business_type: businessType.value
       })
     })
     
@@ -1004,7 +1259,7 @@ const autoExtractAndSaveDraft = async () => {
     
     inlineFormData.value = extracted
     try {
-      const orderType = selectedMode.value === 'digital_art' ? 'digital_art' : 'ai_3d_custom'
+      const orderType = businessType.value
       const newOrder = await orderStore.createOrder({ orderType, ...extracted }, true)
       draftSavedOrderId.value = newOrder.id
     } catch (e) {
@@ -1022,7 +1277,7 @@ const handleContinueEditing = (msg: any) => {
 
 const handleSubmitOrder = () => {
   if (!inlineFormData.value) return
-  confirmOrderType.value = (selectedMode.value === 'digital_art' ? 'digital_art' : 'ai_3d_custom') as OrderType
+  confirmOrderType.value = businessType.value as OrderType
   confirmOrderNumber.value = draftSavedOrderId.value
     ? 'DRAFT-' + draftSavedOrderId.value.slice(-8).toUpperCase()
     : 'NEW-' + Date.now().toString(36).toUpperCase()
@@ -1443,26 +1698,16 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   border-radius: 8px;
 }
 
-/* Collapse animation for history panel push-down */
+/* Collapse animation for history panel */
 .collapse-history-enter-active {
-  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
+  transition: opacity 0.4s ease;
 }
 .collapse-history-leave-active {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
+  transition: opacity 0.2s ease;
 }
 .collapse-history-enter-from,
 .collapse-history-leave-to {
-  max-height: 0;
   opacity: 0;
-  padding-top: 0;
-  margin-top: 0;
-}
-.collapse-history-enter-to,
-.collapse-history-leave-from {
-  max-height: 2000px;
-  opacity: 1;
 }
 
 .icon-toggle {
@@ -1512,6 +1757,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   display: flex;
   flex-direction: column;
   background: #ffffff;
+  scroll-behavior: smooth;
 }
 
 .messages-container {
@@ -1637,6 +1883,31 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   letter-spacing: -0.01em;
   white-space: pre-wrap;
   font-weight: 400;
+  max-width: 100%;
+  position: relative;
+  word-wrap: break-word;
+}
+
+/* 打字机光标闪烁 */
+.typing-cursor {
+  display: inline-block;
+  margin-left: 2px;
+  width: 2px;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
 }
 
 /* User Message: White bubble, bordered */
@@ -2063,6 +2334,149 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 .status-completed { background: #e8f5e9; color: #1b5e20; }
 .status-cancelled { background: #f5f5f5; color: #9e9e9e; }
 
+/* ===== 订单进度条 ===== */
+.order-progress-timeline {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  margin: 16px 8px 24px;
+}
+
+.timeline-bg-line {
+  position: absolute;
+  top: 7px;
+  left: 12.5%;
+  right: 12.5%;
+  height: 2px;
+  background: rgba(0, 0, 0, 0.05);
+  z-index: 0;
+}
+
+.timeline-progress-line {
+  position: absolute;
+  top: 7px;
+  left: 12.5%;
+  height: 2px;
+  background: #3b82f6;
+  z-index: 1;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
+}
+
+.timeline-progress-line.warning-line {
+  background: #f59e0b;
+}
+
+.timeline-step {
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 25%;
+  position: relative;
+}
+
+.step-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(0,0,0,0.1);
+  background: #fff;
+  box-sizing: border-box;
+  transition: all 0.3s;
+  position: relative;
+}
+
+.step-label {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.35);
+  font-weight: 500;
+  transition: color 0.3s ease;
+  white-space: nowrap;
+  position: absolute;
+  top: 20px;
+}
+
+/* 状态类 */
+.step-done .step-dot {
+  border-color: #10b981;
+  background: #10b981;
+}
+.step-done .step-label {
+  color: #10b981;
+}
+
+.step-active .step-dot {
+  border-color: #3b82f6;
+  background: #fff;
+}
+.step-active .step-dot::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3b82f6;
+}
+.step-active .step-label {
+  color: #3b82f6;
+}
+
+.step-warning .step-dot {
+  border-color: #f59e0b;
+  background: #fff;
+}
+.step-warning .step-dot::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+.step-warning .step-label {
+  color: #f59e0b;
+}
+
+.step-cancelled {
+  width: 100%;
+}
+.step-cancelled .step-dot {
+  border-color: #9ca3af;
+  background: #9ca3af;
+}
+.step-cancelled .step-label {
+  color: #9ca3af;
+}
+.cancelled-timeline .timeline-bg-line {
+  left: 0; right: 0; display: none;
+}
+
+.pulse-ring {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 50%;
+  border: 2px solid rgba(59, 130, 246, 0.4);
+  animation: pulse-ring 2s cubic-bezier(0.25, 0.8, 0.25, 1) infinite;
+  pointer-events: none;
+}
+.step-warning .pulse-ring {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+@keyframes pulse-ring {
+  0% { transform: scale(0.6); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
 .order-card-body {
   display: flex;
   flex-direction: column;
@@ -2113,10 +2527,34 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
+.guide-order-label {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
 .guide-btns {
   display: flex;
   gap: 8px;
   justify-content: center;
+  flex-wrap: wrap;
+}
+
+.comp-btn-outline {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  color: #333;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+.comp-btn-outline:hover {
+  border-color: #4f46e5;
+  color: #4f46e5;
+  background: rgba(79, 70, 229, 0.04);
 }
 
 /* ===== 案例视频卡片 ===== */

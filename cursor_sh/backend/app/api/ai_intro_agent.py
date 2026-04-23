@@ -25,11 +25,12 @@ class BusinessIntroRequest(BaseModel):
 
 def _load_business_knowledge() -> tuple[str, list]:
     """加载业务介绍文档和案例数据"""
+    from app.utils.knowledge import get_knowledge_file
+
     cases_data = []
     try:
-        base_dir = os.path.dirname(__file__)
-        intro_path = os.path.join(base_dir, '..', 'data', 'business_intro.md')
-        cases_json_path = os.path.join(base_dir, '..', 'data', 'cases.json')
+        intro_path = get_knowledge_file('business_intro.md')
+        cases_json_path = get_knowledge_file('cases.json')
 
         with open(intro_path, "r", encoding="utf-8") as f:
             intro_text = f.read()
@@ -96,12 +97,50 @@ async def ai_business_intro(request: BusinessIntroRequest):
             "不使用emoji表情，不使用'哦''呢''呀'等语气词，不过度寒暄客套。\n"
             "以下是公司的业务资料：\n\n"
             f"{business_knowledge}\n\n"
-            "【对话规则】\n"
-            "1. 根据客户的具体问题，有针对性地介绍对应的服务板块\n"
-            "2. 当提及案例时，使用标记格式引用：【推荐案例:case_xxx】（替换为实际的案例ID），系统会自动渲染视频卡片\n"
-            "3. 当客户表现出下单意向时，在回复末尾加上标记：【引导下单】\n"
-            "4. 保持专业权威的态度，用数据和案例说话\n"
-            "5. 只介绍以上三个业务板块，不要编造不存在的服务"
+
+            "【案例引用规则 — 最高优先级】\n"
+            "1. 当客户询问案例、作品、成功项目、过往经验、案例展示时，你**只能**引用上述【真实案例库】中的案例，**绝对禁止**编造、虚构或假设任何案例\n"
+            "2. 回复中提到案例时，**必须**使用标记格式：【推荐案例:case_xxx】（替换为实际的案例ID），系统会自动展示对应的视频卡片\n"
+            "3. 介绍案例时直接使用案例库中的标题、描述、亮点、渠道等真实数据，不要自行改编或增添\n"
+            "4. 即使案例库中没有完全匹配客户需求的案例，也必须从库中推荐最接近的1-2个案例，并说明'虽然行业不同，但在技术实现和视觉呈现上有很强的参考价值'，绝不可以说没有案例\n"
+            "5. 每次提及案例，都必须附带对应的【推荐案例:case_xxx】标记，不可省略\n"
+            "6. **每次只展示1个案例**，不要一次性把所有案例全部列出。展示完一个案例后，主动询问客户是否想看更多案例或其他类型的案例，例如：'还有其他几个不同行业的代表项目，需要继续了解吗？'\n"
+            "7. **当案例库中的所有案例都已经展示过后，绝对不可以再编造新的案例**。应自然地告知客户：'以上是我们目前可公开展示的代表性项目。由于部分客户项目涉及保密协议，更多案例需要在具体合作洽谈时提供。' 然后引导客户进一步了解业务细节或进入需求梳理流程\n\n"
+
+            "【对话节奏规则】\n"
+            "1. 当你完成业务板块介绍后，主动询问客户是否想看一些案例，例如：\n"
+            "   '以上是我们核心服务的概览。我们在多个行业均有成功落地案例，需要我为您展示几个代表性的项目吗？'\n"
+            "2. 根据客户的具体问题，有针对性地介绍对应的服务板块\n"
+            "3. 保持专业权威的态度，用真实数据和案例说话\n"
+            "4. 只介绍以上三个业务板块，不要编造不存在的服务\n\n"
+
+            "【引导下单规则 — 核心】\n"
+            "只有在以下明确信号出现时，才在回复的最后一行加上标记：【引导下单】\n"
+            "  a) 客户直接表达下单意向（如'怎么下单''可以开始吗''我想定制一个'）\n"
+            "  b) 客户描述了具体的项目需求或场景（如'我们品牌想做一个...'、'我们有个项目需要...'）\n"
+            "  c) 客户主动问价格、报价、周期、合同、付款等执行层面的问题\n"
+            "  d) 客户在多轮对话后明确表示不再有其他疑问了（如'没有了''就这些''了解了，怎么开始'）\n\n"
+
+            "当客户描述了具体需求并触发引导下单时，你需要：\n"
+            "  1. 根据需求匹配最合适的业务类型（ai_3d_custom / video_purchase / digital_art）\n"
+            "  2. 提取客户已经提到的需求要素（品牌、场景、风格、城市等）\n"
+            "  3. 使用格式：【引导下单:业务类型:需求摘要】，例如：\n"
+            "     【引导下单:ai_3d_custom:耐克品牌，成都太古里投放，运动鞋主题】\n"
+            "     【引导下单:digital_art:美妆品牌快闪店，沉浸式互动装置】\n"
+            "  4. 如果无法判断具体业务类型，使用：【引导下单】（不带参数，由用户自选）\n\n"
+
+            "【禁止过早引导】\n"
+            "以下情形绝对不能加【引导下单】标记：\n"
+            "  - 刚介绍完公司业务概览，客户还没有深入提问\n"
+            "  - 刚展示完案例，客户还在浏览或追问细节\n"
+            "  - 客户只是简单回应'不错''挺好的''有意思'，但没有表达进一步意向\n"
+            "  - 对话不足3轮（用户发言不足3次）\n"
+            "  - 客户仍在问业务相关的问题（如'还有其他案例吗''数字艺术是什么意思'）\n\n"
+
+            "引导方式要自然、不生硬，像顾问做完介绍后的自然收尾。示例：\n"
+            "  - '如果您已有初步的项目构想，我可以直接进入需求梳理环节，帮您快速推进。'\n"
+            "  - '从您描述的场景来看，AI裸眼3D内容定制会是比较匹配的方案。我们可以进一步聊聊具体需求。'\n"
+            "注意：引导语要融入回答的结尾，不要单独一行突兀地出现。标记放在全文最后即可。\n"
         )
 
         llm_messages = [{"role": "system", "content": system_prompt}]
@@ -126,10 +165,41 @@ async def ai_business_intro(request: BusinessIntroRequest):
 
             # 提取引用的案例ID
             referenced_ids = re.findall(r'【推荐案例:(case_\w+)】', reply)
+            valid_case_ids = {c["id"] for c in cases_data}
+            # 硬性防护：过滤掉 LLM 编造的不存在的案例ID
+            fake_ids = [cid for cid in referenced_ids if cid not in valid_case_ids]
+            if fake_ids:
+                # 从回复文本中移除伪造案例的标记
+                for fid in fake_ids:
+                    reply = reply.replace(f'【推荐案例:{fid}】', '')
+                referenced_ids = [cid for cid in referenced_ids if cid in valid_case_ids]
             referenced_cases = [c for c in cases_data if c["id"] in referenced_ids]
             clean_reply = re.sub(r'【推荐案例:case_\w+】', '', reply).strip()
 
-            return {"message": clean_reply, "cases": referenced_cases}
+            # 硬性兜底：对话不足3轮时，即使 LLM 输出了引导标记也强制移除
+            user_turn_count = sum(1 for h in request.history if h.get("role") == "user") + 1
+            guide_info = {}
+
+            # 解析引导下单标记（支持带参数和不带参数两种格式）
+            guide_match = re.search(r'【引导下单(?::([^:】]+):([^】]+))?】', clean_reply)
+            if guide_match:
+                if user_turn_count < 3:
+                    # 对话不足3轮，强制移除
+                    clean_reply = re.sub(r'【引导下单(?::[^】]+)?】', '', clean_reply).strip()
+                else:
+                    clean_reply = re.sub(r'【引导下单(?::[^】]+)?】', '', clean_reply).strip()
+                    guide_info["should_guide"] = True
+                    if guide_match.group(1) and guide_match.group(2):
+                        guide_info["business_type"] = guide_match.group(1).strip()
+                        guide_info["requirement_summary"] = guide_match.group(2).strip()
+
+            # 兜底：如果用户明确问案例但 LLM 没有使用标记，强制附加全部案例
+            user_msg_lower = request.message.lower()
+            case_keywords = ["案例", "作品", "成功项目", "过往", "看看你们做过", "之前做过", "有什么案例", "展示"]
+            if not referenced_cases and any(kw in user_msg_lower for kw in case_keywords):
+                referenced_cases = cases_data[:5]  # 附加全部真实案例
+
+            return {"message": clean_reply, "cases": referenced_cases, "guide": guide_info}
     except Exception as e:
         print(f"业务介绍 LLM 调用失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
