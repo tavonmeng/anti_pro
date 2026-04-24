@@ -40,10 +40,15 @@
         </el-form-item>
         
         <el-form-item>
-          <el-button type="primary" :loading="saving" @click="handleSave">
-            保存修改
-          </el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <div style="display: flex; gap: 12px; width: 100%;">
+            <el-button type="primary" :loading="saving" @click="handleSave">
+              保存修改
+            </el-button>
+            <el-button @click="handleReset">重置</el-button>
+            <el-button type="danger" plain @click="handleLogout" style="margin-left: auto;">
+              退出登录
+            </el-button>
+          </div>
         </el-form-item>
       </el-form>
     </el-card>
@@ -52,9 +57,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { userApi } from '@/utils/api'
+
+const router = useRouter()
 
 const authStore = useAuthStore()
 const saving = ref(false)
@@ -106,6 +114,20 @@ const handleReset = () => {
     profileForm.company = authStore.user.company || ''
     profileForm.address = authStore.user.address || ''
     profileForm.userId = authStore.user.id
+  }
+}
+
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('确定要退出当前账号吗？', '退出登录', {
+      confirmButtonText: '确定退出',
+      cancelButtonText: '暂不退出',
+      type: 'warning',
+    })
+    await authStore.logout()
+    router.push('/login')
+  } catch (error) {
+    // cancelled
   }
 }
 </script>

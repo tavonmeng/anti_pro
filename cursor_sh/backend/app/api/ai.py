@@ -95,7 +95,13 @@ _DIALOG_RULES = (
     "才可以提前结束。此时总结已收集的信息，指出哪些重要项还缺失，然后加上【需求收集完成】标记。"
     "客户正常回答问题时，不要主动结束。\n\n"
 
-    "5. 保持专业节奏，语言干练精准，不要寒暄客套。"
+    "5. 保持专业节奏，语言干练精准，不要寒暄客套。\n\n"
+
+    "6. 【补充信息提醒】在即将触发【需求收集完成】之前，"
+    "主动询问客户是否还有其他需要补充的内容，例如：'以上是核心需求项的梳理，请问还有其他需要补充说明的细节吗？"
+    "如有任何特殊要求或参考素材，都可以一并提供，我会整理到备注中。'\n"
+    "如果客户提供的补充内容无法归入上述任何结构化字段，将其完整记录，"
+    "在最终提取时归入'备注'字段，确保不遗漏任何客户诉求。"
 )
 
 _PROMPT_AI_3D = (
@@ -268,7 +274,8 @@ async def ai_extract(request: ExtractRequest):
             "将提取的信息整理为严格的 JSON 格式返回，只返回 JSON，不要任何其他废话。\n"
             "支持的字段名（如果有对应信息则提取，没有则留空字符串）：\n"
             "brand, background, target_group, brand_tone, content, style, prohibited_content, "
-            "city, media_size, time_number, technology, budget, online_time."
+            "city, media_size, time_number, technology, budget, online_time, remarks.\n"
+            "其中 remarks（备注）用于记录客户提供的任何无法归入上述字段的补充说明、特殊要求或参考素材信息。"
         )
 
         chat_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in request.history])

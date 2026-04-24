@@ -149,6 +149,7 @@ class EmailService:
         """发送订单状态变更通知"""
         status_names = {
             "pending_assign": "待分配",
+            "pending_contract": "合同与付款",
             "in_production": "制作中",
             "pending_review": "待审核",
             "preview_ready": "初稿预览",

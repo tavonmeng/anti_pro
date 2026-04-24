@@ -164,6 +164,7 @@ export const useOrderStore = defineStore('order', () => {
       total: orders.value.length,
       draft: orders.value.filter(o => o.status === 'draft').length,
       pendingAssign: orders.value.filter(o => o.status === 'pending_assign').length,
+      pendingContract: orders.value.filter(o => o.status === 'pending_contract').length,
       inProduction: orders.value.filter(o => o.status === 'in_production').length,
       pendingReview: orders.value.filter(o => o.status === 'pending_review').length,
       reviewRejected: orders.value.filter(o => o.status === 'review_rejected').length,

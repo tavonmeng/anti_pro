@@ -21,7 +21,8 @@ export type NotificationType =
 // 订单状态
 export type OrderStatus = 
   | 'draft'                // 草稿
-  | 'pending_assign'       // 待分配
+  | 'pending_assign'       // 待分配（旧状态）
+  | 'pending_contract'     // 合同与付款
   | 'in_production'        // 制作中
   | 'pending_review'       // 待审核
   | 'preview_ready'        // 初稿预览

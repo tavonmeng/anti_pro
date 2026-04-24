@@ -171,6 +171,12 @@ export const authApi = {
     return request.post('/auth/send-sms', { phone })
   },
   
+  // 验证短信验证码
+  async verifySms(phone: string, code: string): Promise<boolean> {
+    if (ENABLE_MOCK) return true
+    return request.post('/auth/verify-sms', { phone, code })
+  },
+  
   // 重置密码（忘记密码）
   async resetPassword(phone: string, sms_code: string, new_password: string): Promise<any> {
     return request.post('/auth/reset-password', { phone, sms_code, new_password })
@@ -471,7 +477,7 @@ export const orderApi = {
         const baseOrder = {
           id: `order-${Date.now()}`,
           orderNumber: generateOrderNumber(),
-          status: (isDraft ? 'draft' : 'pending_assign') as OrderStatus,
+          status: (isDraft ? 'draft' : 'pending_contract') as OrderStatus,
           userId: user?.id || 'unknown',
           userName: user?.username || 'Unknown',
           assignee: undefined,
@@ -777,6 +783,16 @@ export const orderApi = {
     a.click()
     document.body.removeChild(a)
     window.URL.revokeObjectURL(url)
+  },
+
+  // 推进合同流程（管理员）
+  async advanceContract(orderId: string, data: { contractNumber: string; paymentAmount: number; note?: string }): Promise<Order> {
+    return request.post(`/orders/${orderId}/contract/advance`, data)
+  },
+
+  // 管理员取消订单（需 SMS 验证）
+  async adminCancelOrder(orderId: string, data: { phone: string; smsCode: string; reason?: string }): Promise<Order> {
+    return request.post(`/orders/${orderId}/cancel`, data)
   }
 }
 

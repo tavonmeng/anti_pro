@@ -37,8 +37,9 @@ class OrderStateMachine:
     
     # 允许的状态转换
     ALLOWED_TRANSITIONS = {
-        OrderStatus.DRAFT: [OrderStatus.PENDING_ASSIGN, OrderStatus.CANCELLED],
-        OrderStatus.PENDING_ASSIGN: [OrderStatus.IN_PRODUCTION, OrderStatus.CANCELLED],
+        OrderStatus.DRAFT: [OrderStatus.PENDING_CONTRACT, OrderStatus.CANCELLED],
+        OrderStatus.PENDING_ASSIGN: [OrderStatus.IN_PRODUCTION, OrderStatus.PENDING_CONTRACT, OrderStatus.CANCELLED],  # 旧状态兼容
+        OrderStatus.PENDING_CONTRACT: [OrderStatus.IN_PRODUCTION, OrderStatus.CANCELLED],
         OrderStatus.IN_PRODUCTION: [
             OrderStatus.PENDING_REVIEW,
             OrderStatus.PREVIEW_READY,
@@ -157,7 +158,7 @@ class OrderService:
             id=order_id,
             order_number=order_number,
             order_type=order_type,
-            status=OrderStatus.DRAFT if is_draft else OrderStatus.PENDING_ASSIGN,
+            status=OrderStatus.DRAFT if is_draft else OrderStatus.PENDING_CONTRACT,
             user_id=user.id,
             revision_count=0,
             order_data=order_dict
@@ -409,12 +410,15 @@ class OrderService:
             raise HTTPException(status_code=404, detail="订单不存在")
         
         # 权限检查
-        # 允许订单创建者将自己的草稿提交（draft -> pending_assign）
+        # 允许订单创建者将自己的草稿提交（draft -> pending_contract）
         is_draft_submit = (
             order.status == OrderStatus.DRAFT 
-            and new_status == OrderStatus.PENDING_ASSIGN 
+            and new_status in [OrderStatus.PENDING_CONTRACT, OrderStatus.PENDING_ASSIGN]
             and order.user_id == current_user.id
         )
+        # 兼容：如果前端还传 pending_assign，自动映射到 pending_contract
+        if is_draft_submit and new_status == OrderStatus.PENDING_ASSIGN:
+            new_status = OrderStatus.PENDING_CONTRACT
         
         # 允许订单创建者删除自己的草稿（draft -> cancelled）
         is_draft_delete = (
@@ -423,10 +427,18 @@ class OrderService:
             and order.user_id == current_user.id
         )
         
+        # 签订确认函后（非草稿状态），用户不能取消订单，只有管理员可以
+        if new_status == OrderStatus.CANCELLED and order.status != OrderStatus.DRAFT:
+            if current_user.role != UserRole.ADMIN:
+                raise HTTPException(status_code=403, detail="签订确认函后，只有管理员可以取消订单")
+        
         if not is_draft_submit and not is_draft_delete and current_user.role not in [UserRole.ADMIN, UserRole.STAFF]:
             raise HTTPException(status_code=403, detail="权限不足")
         
         if current_user.role == UserRole.STAFF:
+            # Staff 不能取消订单
+            if new_status == OrderStatus.CANCELLED:
+                raise HTTPException(status_code=403, detail="负责人无权取消订单，请联系管理员")
             # 检查当前用户是否是订单的任一负责人
             assignee_result = await db.execute(
                 select(OrderAssignee).where(
@@ -474,6 +486,7 @@ class OrderService:
         status_map = {
             "draft": "草稿",
             "pending_assign": "待分配",
+            "pending_contract": "合同与付款",
             "in_production": "制作中",
             "pending_review": "待审核",
             "preview_ready": "初稿预览",
@@ -565,7 +578,7 @@ class OrderService:
             )
             db.add(order_assignee)
         
-        # 如果订单是待分配状态，自动转为制作中
+        # 如果订单是旧的待分配状态，自动转为制作中（合同与付款状态下分配负责人不改变订单状态）
         if order.status == OrderStatus.PENDING_ASSIGN:
             order.status = OrderStatus.IN_PRODUCTION
         
@@ -930,6 +943,169 @@ class OrderService:
         }
     
     @staticmethod
+    async def advance_contract(
+        db: AsyncSession,
+        order_id: str,
+        contract_number: str,
+        payment_amount: float,
+        note: Optional[str],
+        current_user: AnyUser
+    ) -> dict:
+        """管理员填写合同信息并推进订单到制作阶段"""
+        if current_user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=403, detail="只有管理员可以推进合同流程")
+        
+        result = await db.execute(select(Order).where(Order.id == order_id))
+        order = result.scalar_one_or_none()
+        
+        if not order:
+            raise HTTPException(status_code=404, detail="订单不存在")
+        
+        if order.status != OrderStatus.PENDING_CONTRACT:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"只有处于'合同与付款'状态的订单才能推进，当前状态：{order.status.value}"
+            )
+        
+        # 验证状态转换
+        OrderStateMachine.validate_transition(order.status, OrderStatus.IN_PRODUCTION)
+        
+        # 保存合同信息到 order_data
+        order_data = order.order_data.copy()
+        utc_now = datetime.now(timezone.utc)
+        order_data["contractInfo"] = {
+            "contractNumber": contract_number,
+            "paymentAmount": payment_amount,
+            "note": note or "",
+            "confirmedAt": utc_now.isoformat(),
+            "confirmedBy": current_user.id,
+            "confirmedByName": current_user.real_name or current_user.username
+        }
+        
+        old_status = order.status
+        order.order_data = order_data
+        order.status = OrderStatus.IN_PRODUCTION
+        
+        await db.commit()
+        await db.refresh(order)
+        
+        # 通知用户：订单已进入制作阶段
+        user_result = await db.execute(select(User).where(User.id == order.user_id))
+        user = user_result.scalar_one_or_none()
+        if user and user.email:
+            await EmailService.send_order_status_notification(
+                user.email,
+                order.order_number,
+                old_status.value,
+                OrderStatus.IN_PRODUCTION.value
+            )
+        
+        await NotificationService.create_notification(
+            db=db,
+            user_id=order.user_id,
+            notification_type=NotificationType.ORDER_STATUS_CHANGED,
+            title="订单已进入制作阶段",
+            content=f"您的订单 {order.order_number} 合同已确认，首付款已收到，订单已正式进入制作流程。",
+            order_id=order.id
+        )
+        
+        # 通知负责人
+        assignee_ids = await _get_order_assignee_ids(db, order.id)
+        if assignee_ids:
+            await NotificationService.create_notification_for_multiple_users(
+                db=db,
+                user_ids=assignee_ids,
+                notification_type=NotificationType.ORDER_STATUS_CHANGED,
+                title="订单进入制作阶段",
+                content=f"订单 {order.order_number} 合同已确认，可以开始制作。",
+                order_id=order.id
+            )
+        
+        return await OrderService._build_order_response(db, order, current_user)
+    
+    @staticmethod
+    async def admin_cancel_order(
+        db: AsyncSession,
+        order_id: str,
+        phone: str,
+        sms_code: str,
+        reason: Optional[str],
+        current_user: AnyUser
+    ) -> dict:
+        """管理员通过 SMS 验证取消订单"""
+        if current_user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=403, detail="只有管理员可以取消订单")
+        
+        # 验证短信验证码
+        from app.services.sms_service import verify_sms_code
+        is_valid = await verify_sms_code(phone, sms_code)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail="验证码错误或已过期")
+        
+        result = await db.execute(select(Order).where(Order.id == order_id))
+        order = result.scalar_one_or_none()
+        
+        if not order:
+            raise HTTPException(status_code=404, detail="订单不存在")
+        
+        if order.status in [OrderStatus.COMPLETED, OrderStatus.CANCELLED]:
+            raise HTTPException(status_code=400, detail="该订单无法取消")
+        
+        old_status = order.status
+        
+        # 保存取消原因到 order_data
+        order_data = order.order_data.copy()
+        utc_now = datetime.now(timezone.utc)
+        order_data["cancelInfo"] = {
+            "reason": reason or "",
+            "cancelledAt": utc_now.isoformat(),
+            "cancelledBy": current_user.id,
+            "cancelledByName": current_user.real_name or current_user.username
+        }
+        
+        order.order_data = order_data
+        order.status = OrderStatus.CANCELLED
+        
+        await db.commit()
+        await db.refresh(order)
+        
+        # 通知用户订单已取消
+        user_result = await db.execute(select(User).where(User.id == order.user_id))
+        user = user_result.scalar_one_or_none()
+        cancel_reason_text = f"取消原因：{reason}" if reason else ""
+        
+        if user and user.email:
+            await EmailService.send_order_status_notification(
+                user.email,
+                order.order_number,
+                old_status.value,
+                OrderStatus.CANCELLED.value
+            )
+        
+        await NotificationService.create_notification(
+            db=db,
+            user_id=order.user_id,
+            notification_type=NotificationType.ORDER_CANCELLED,
+            title="订单已取消",
+            content=f"您的订单 {order.order_number} 已被管理员取消。{cancel_reason_text}",
+            order_id=order.id
+        )
+        
+        # 通知负责人
+        assignee_ids = await _get_order_assignee_ids(db, order.id)
+        if assignee_ids:
+            await NotificationService.create_notification_for_multiple_users(
+                db=db,
+                user_ids=assignee_ids,
+                notification_type=NotificationType.ORDER_CANCELLED,
+                title="订单已取消",
+                content=f"订单 {order.order_number} 已被管理员取消。{cancel_reason_text}",
+                order_id=order.id
+            )
+        
+        return await OrderService._build_order_response(db, order, current_user)
+    
+    @staticmethod
     async def _build_order_response(db: AsyncSession, order: Order, current_user) -> dict:
         """构建订单响应"""
         # 获取用户信息（从 users 表，即客户表）
@@ -999,7 +1175,9 @@ class OrderService:
             "feedbacks": feedback_responses,
             "revisionCount": order.revision_count,
             "previewHistory": order.order_data.get("previewHistory", []),  # 预览历史记录
-            "pendingReviewPreviewIds": order.order_data.get("pendingReviewPreviewIds", [])
+            "pendingReviewPreviewIds": order.order_data.get("pendingReviewPreviewIds", []),
+            "contractInfo": order.order_data.get("contractInfo", None),  # 合同信息
+            "cancelInfo": order.order_data.get("cancelInfo", None)  # 取消信息
         }
         
         # 合并订单特定数据

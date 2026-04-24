@@ -23,6 +23,7 @@
           <el-select v-model="filters.status" placeholder="全部状态" clearable style="width: 200px" @change="handleFilter">
             <el-option label="全部" value="" />
             <el-option label="草稿" value="draft" />
+            <el-option label="合同与付款" value="pending_contract" />
             <el-option label="待分配" value="pending_assign" />
             <el-option label="制作中" value="in_production" />
             <el-option label="初稿预览" value="preview_ready" />

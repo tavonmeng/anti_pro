@@ -158,8 +158,8 @@ onMounted(async () => {
       if (!order.value) {
         ElMessage.error('订单不存在')
         router.push('/user/orders')
-      } else if (order.value.status !== 'pending_assign' && order.value.status !== 'draft') {
-        ElMessage.warning('只有待分配或草稿状态的订单可以修改')
+      } else if (order.value.status !== 'pending_contract' && order.value.status !== 'pending_assign' && order.value.status !== 'draft') {
+        ElMessage.warning('只有待分配、合同与付款或草稿状态的订单可以修改')
         router.push(`/user/orders/${orderId.value}`)
       }
     } catch (error) {
@@ -195,7 +195,7 @@ const handleConfirmOrder = async (confirmData: { email: string; phone: string })
     let resultOrder: Order
     if (isEditMode.value && orderId.value) {
       resultOrder = await orderStore.updateOrder(orderId.value, finalData)
-      await orderStore.updateOrderStatus(orderId.value, 'pending_assign')
+      await orderStore.updateOrderStatus(orderId.value, 'pending_contract')
       submittedOrderId.value = orderId.value
     } else {
       resultOrder = await orderStore.createOrder(finalData)

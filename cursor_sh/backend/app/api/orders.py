@@ -192,6 +192,52 @@ async def submit_feedback(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/{order_id}/contract/advance", response_model=ApiResponse[dict])
+async def advance_contract(
+    order_id: str,
+    contract_data: ContractAdvance,
+    current_user: AnyUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员推进合同流程（填写合同信息后进入制作阶段）"""
+    try:
+        order = await OrderService.advance_contract(
+            db, order_id, 
+            contract_data.contractNumber, 
+            contract_data.paymentAmount, 
+            contract_data.note, 
+            current_user
+        )
+        return ApiResponse(code=200, message="合同确认成功，订单已进入制作阶段", data=order)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{order_id}/cancel", response_model=ApiResponse[dict])
+async def admin_cancel_order(
+    order_id: str,
+    cancel_data: AdminCancelOrder,
+    current_user: AnyUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员取消订单（需 SMS 验证）"""
+    try:
+        order = await OrderService.admin_cancel_order(
+            db, order_id,
+            cancel_data.phone,
+            cancel_data.smsCode,
+            cancel_data.reason,
+            current_user
+        )
+        return ApiResponse(code=200, message="订单已取消", data=order)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{order_id}/pdf/confirmation")
 async def download_confirmation_pdf(
     order_id: str,

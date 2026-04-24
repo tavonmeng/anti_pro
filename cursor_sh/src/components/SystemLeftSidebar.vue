@@ -6,12 +6,7 @@
       </div>
     </div>
     
-    <div class="user-profile-top" @click="navigate('profile')" title="个人设置">
-      <el-avatar :size="32" class="user-avatar" src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png">{{ userInitial }}</el-avatar>
-      <div class="user-info" v-if="!uiStore.isSidebarCollapsed">
-        <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
-      </div>
-    </div>
+
     
     <div class="sidebar-content">
       <div class="nav-section">
@@ -108,9 +103,11 @@
           <el-icon><Help /></el-icon>
           <span v-if="!uiStore.isSidebarCollapsed">Help</span>
         </div>
-        <div class="nav-item logout-nav" @click="handleLogout">
-          <el-icon><SwitchButton /></el-icon>
-          <span v-if="!uiStore.isSidebarCollapsed">Logout</span>
+        <div class="nav-item" @click="navigate('profile')" style="margin-top: 8px;">
+          <div style="width: 16px; display: flex; justify-content: center; align-items: center;">
+            <el-avatar :size="24" class="user-avatar" src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png">{{ userInitial }}</el-avatar>
+          </div>
+          <span v-if="!uiStore.isSidebarCollapsed">{{ authStore.user?.username || '用户' }}</span>
         </div>
       </div>
     </div>
@@ -120,7 +117,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Grid, Bell, Help, House, SwitchButton, EditPen, ChatDotRound } from '@element-plus/icons-vue'
+import { Grid, Bell, Help, House, SwitchButton, EditPen, ChatDotRound, MoreFilled, User } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox } from 'element-plus'
 import NotificationBell from '@/components/NotificationBell.vue'
@@ -264,6 +261,7 @@ const getStatusText = (status: string) => {
   const map: Record<string, string> = {
     'draft': '草稿',
     'pending_assign': '等待接单',
+    'pending_contract': '合同与付款',
     'in_production': '制作生产中',
     'pending_review': '内部待审核',
     'preview_ready': '初稿待您确认',
@@ -363,15 +361,7 @@ const handleLogout = async () => {
   display: none; /* Hide header completely to pull icons up */
 }
 
-.system-sidebar.is-collapsed .user-profile-top {
-  padding: 0;
-  justify-content: center;
-  border-radius: 50%;
-  box-shadow: none;
-  background: transparent;
-  width: 40px;
-  margin: 0 auto 16px auto; /* Reduce bottom margin, auto horizontal */
-}
+
 
 .system-sidebar.is-collapsed .nav-item {
   padding: 0;
@@ -404,24 +394,7 @@ const handleLogout = async () => {
   line-height: 1.4;
 }
 
-.user-profile-top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 12px;
-  margin: 0 16px 20px 16px;
-  border-radius: 20px;
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(27, 27, 28, 0.04);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
 
-.user-profile-top:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(27, 27, 28, 0.08); /* Soft lift on hover to indicate clikability */
-  background: #fdfdfd;
-}
 
 .user-info {
   flex: 1;
@@ -649,17 +622,7 @@ const handleLogout = async () => {
   align-items: center;
 }
 
-.logout-nav {
-  margin-top: 8px;
-  color: #ba1a1a; /* Error color for distinct exit action */
-}
-.logout-nav:hover {
-  background: #ffeeec;
-  color: #ba1a1a;
-}
-.logout-nav .el-icon {
-  color: #ba1a1a !important;
-}
+
 
 .draft-nav-badge {
   margin-left: auto;

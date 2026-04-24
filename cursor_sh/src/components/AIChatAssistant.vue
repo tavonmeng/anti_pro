@@ -710,7 +710,8 @@ const getCurrentTime = () => {
 // ===== 订单展示辅助函数 =====
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
-    draft: '草稿', pending_assign: '待分配', in_production: '制作中',
+    draft: '草稿', pending_assign: '待分配', pending_contract: '合同与付款',
+    in_production: '制作中',
     pending_review: '待审核', review_rejected: '审核驳回',
     preview_ready: '初稿就绪', final_preview: '终稿就绪',
     revision_needed: '需修改', completed: '已完成', cancelled: '已取消'
@@ -764,7 +765,7 @@ const _detectBusinessTypeFromText = (text: string): string | null => {
 const getOrderStep = (status: string) => {
   if (status === 'cancelled') return -1
   const map: Record<string, number> = {
-    draft: 1, pending_assign: 1,
+    draft: 1, pending_assign: 1, pending_contract: 1,
     in_production: 2, pending_review: 2, review_rejected: 2,
     preview_ready: 3, revision_needed: 3, final_preview: 3,
     completed: 4
@@ -1292,7 +1293,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
         orderType: confirmOrderType.value,
         ...inlineFormData.value
       })
-      await orderStore.updateOrderStatus(draftSavedOrderId.value, 'pending_assign')
+      await orderStore.updateOrderStatus(draftSavedOrderId.value, 'pending_contract')
     } else {
       await orderStore.createOrder({
         orderType: confirmOrderType.value,
@@ -2328,6 +2329,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .status-draft { background: #f0f0f5; color: #86868b; }
 .status-pending_assign { background: #fff3e0; color: #e65100; }
+.status-pending_contract { background: #fff8e1; color: #f57f17; }
 .status-in_production { background: #e3f2fd; color: #1565c0; }
 .status-pending_review { background: #fce4ec; color: #c62828; }
 .status-preview_ready { background: #e8f5e9; color: #2e7d32; }

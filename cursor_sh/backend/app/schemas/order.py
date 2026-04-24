@@ -142,3 +142,17 @@ class PreviewReview(BaseModel):
     action: Literal["approve", "reject"]
     note: Optional[str] = None
 
+
+class ContractAdvance(BaseModel):
+    """合同与付款推进请求（管理员操作）"""
+    contractNumber: str  # 合同编号
+    paymentAmount: float  # 首付款金额
+    note: Optional[str] = None  # 备注
+
+
+class AdminCancelOrder(BaseModel):
+    """管理员取消订单请求（需 SMS 验证）"""
+    phone: str
+    smsCode: str
+    reason: Optional[str] = None  # 取消原因
+

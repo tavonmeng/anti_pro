@@ -17,7 +17,8 @@ class OrderType(str, enum.Enum):
 class OrderStatus(str, enum.Enum):
     """订单状态枚举"""
     DRAFT = "draft"                        # 草稿
-    PENDING_ASSIGN = "pending_assign"      # 待分配
+    PENDING_ASSIGN = "pending_assign"      # 待分配（旧状态，保留兼容）
+    PENDING_CONTRACT = "pending_contract"  # 合同与付款
     IN_PRODUCTION = "in_production"        # 制作中
     PENDING_REVIEW = "pending_review"      # 待审核
     PREVIEW_READY = "preview_ready"        # 初稿预览
@@ -54,7 +55,7 @@ class Order(Base):
     id = Column(String(50), primary_key=True, index=True)
     order_number = Column(String(50), unique=True, nullable=False, index=True)
     order_type = Column(Enum(OrderType), nullable=False, index=True)
-    status = Column(Enum(OrderStatus), nullable=False, default=OrderStatus.PENDING_ASSIGN, index=True)
+    status = Column(Enum(OrderStatus), nullable=False, default=OrderStatus.PENDING_CONTRACT, index=True)
     
     # 用户关联（客户 ID，引用 users 表，但不用 FK 以简化三表架构）
     user_id = Column(String(50), nullable=False, index=True)
