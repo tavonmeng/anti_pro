@@ -1,12 +1,18 @@
 """
 业务介绍 Agent — 独立模块
 负责向客户介绍公司业务、服务模式、成功案例等。
+
+案例展示采用"代码选择 + LLM 润色"架构：
+- LLM 只需输出【展示案例】信号，表达"我想在这里展示一个案例"
+- 后端代码负责：选择哪个案例、注入真实数据、去重、附加标记
+- 彻底杜绝 LLM 编造案例、重复推荐等问题
 """
 
 import re
 import os
 import json
 import httpx
+from typing import Tuple, List, Set
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.config import settings
@@ -22,7 +28,6 @@ class BusinessIntroRequest(BaseModel):
 # ───────────────────────────────────────────────────────
 # 数据加载
 # ───────────────────────────────────────────────────────
-from typing import Tuple
 
 def _load_business_knowledge() -> Tuple[str, list]:
     """加载业务介绍文档和案例数据"""
@@ -39,20 +44,85 @@ def _load_business_knowledge() -> Tuple[str, list]:
         try:
             with open(cases_json_path, "r", encoding="utf-8") as f:
                 cases_data = json.load(f)
-            cases_text = "\n\n【真实案例库】\n"
-            for c in cases_data:
-                cases_text += (
-                    f"- 案例ID: {c['id']} | {c['title']}\n"
-                    f"  分类: {c['category']} | 渠道: {c.get('channel', '')} | 周期: {c.get('duration', '')}\n"
-                    f"  亮点: {c.get('highlights', '')}\n"
-                )
         except Exception:
-            cases_text = ""
+            pass
 
-        return f"{intro_text}\n{cases_text}", cases_data
+        return intro_text, cases_data
     except Exception as e:
         print(f"读取业务介绍文件失败: {e}")
         return "暂无法读取详细业务介绍", cases_data
+
+
+def _get_shown_case_ids(history: list) -> Set[str]:
+    """从对话历史中提取已展示过的案例ID"""
+    shown = set()
+    for h in history:
+        if h.get("role") == "assistant" and h.get("content"):
+            shown.update(re.findall(r'【推荐案例:(case_\w+)】', h["content"]))
+    return shown
+
+
+def _pick_next_case(cases_data: list, shown_ids: Set[str], category_hint: str = "") -> dict:
+    """从案例库中选出下一个未展示的案例（代码决定，非 LLM）"""
+    remaining = [c for c in cases_data if c["id"] not in shown_ids]
+    if not remaining:
+        return None
+
+    # 如果有分类偏好，优先匹配
+    if category_hint:
+        preferred = [c for c in remaining if c.get("category", "") == category_hint]
+        if preferred:
+            return preferred[0]
+
+    return remaining[0]
+
+
+def _format_case_text(case: dict) -> str:
+    """将案例数据格式化为展示文本（数据来源于代码，非 LLM）"""
+    return (
+        f"**{case['title']}**\n"
+        f"  描述：{case.get('description', '')}\n"
+        f"  投放渠道：{case.get('channel', '')}\n"
+        f"  技术亮点：{case.get('highlights', '')}\n"
+        f"  交付周期：{case.get('duration', '')}\n"
+        f"【推荐案例:{case['id']}】"
+    )
+
+
+def _inject_case_into_reply(reply: str, cases_data: list, shown_ids: Set[str]) -> Tuple[str, list]:
+    """
+    拦截 LLM 输出中的【展示案例】信号，替换为真实案例数据。
+    支持：
+      【展示案例】          → 自动选下一个未展示的
+      【展示案例:ai_3d_custom】 → 按分类偏好选
+    """
+    injected_cases = []
+
+    def replacer(match):
+        category_hint = match.group(1) or ""
+        case = _pick_next_case(cases_data, shown_ids)
+        if category_hint:
+            # 尝试按分类匹配
+            cat_case = _pick_next_case(cases_data, shown_ids, category_hint.strip())
+            if cat_case:
+                case = cat_case
+
+        if case is None:
+            return "以上是我们目前可公开展示的全部代表性项目。由于部分客户项目涉及保密协议，更多案例需要在具体合作洽谈时提供。"
+
+        injected_cases.append(case)
+        shown_ids.add(case["id"])  # 标记为已展示，防止同一轮多次展示时重复
+        remaining = len([c for c in cases_data if c["id"] not in shown_ids])
+        case_text = _format_case_text(case)
+        if remaining > 0:
+            case_text += f"\n\n还有{remaining}个不同行业的代表项目，需要继续了解吗？"
+        else:
+            case_text += "\n\n以上是我们目前可公开展示的全部代表性项目。由于部分客户项目涉及保密协议，更多案例需要在具体合作洽谈时提供。"
+        return case_text
+
+    # 匹配 【展示案例】 或 【展示案例:分类】
+    processed = re.sub(r'【展示案例(?::([^】]*))?】', replacer, reply)
+    return processed, injected_cases
 
 
 # ───────────────────────────────────────────────────────
@@ -92,6 +162,22 @@ async def ai_business_intro(request: BusinessIntroRequest):
             return {"message": reply, "cases": []}
 
     try:
+        # 从历史中提取已展示的案例
+        shown_ids = _get_shown_case_ids(request.history)
+        remaining_count = len([c for c in cases_data if c["id"] not in shown_ids])
+        all_shown = remaining_count == 0
+
+        # 构建案例状态提示
+        if all_shown:
+            case_status = (
+                "\n案例库中所有案例均已展示完毕，不要再展示案例。"
+                "如果客户继续要求看案例，告知：'以上是我们目前可公开展示的全部代表性项目。"
+                "由于部分客户项目涉及保密协议，更多案例需要在具体合作洽谈时提供。'"
+                "然后引导客户进入需求梳理。\n"
+            )
+        else:
+            case_status = f"\n当前案例库中还有 {remaining_count} 个未展示的案例可用。\n"
+
         system_prompt = (
             "你是 Unique Video AI 公司的资深项目顾问。\n"
             "你代表公司向客户介绍业务，语气应专业、沉稳、自信，体现行业头部服务商的格调。\n"
@@ -99,21 +185,21 @@ async def ai_business_intro(request: BusinessIntroRequest):
             "以下是公司的业务资料：\n\n"
             f"{business_knowledge}\n\n"
 
-            "【案例引用规则 — 最高优先级】\n"
-            "1. 当客户询问案例、作品、成功项目、过往经验、案例展示时，你**只能**引用上述【真实案例库】中的案例，**绝对禁止**编造、虚构或假设任何案例\n"
-            "2. 回复中提到案例时，**必须**使用标记格式：【推荐案例:case_xxx】（替换为实际的案例ID），系统会自动展示对应的视频卡片\n"
-            "3. 介绍案例时直接使用案例库中的标题、描述、亮点、渠道等真实数据，不要自行改编或增添\n"
-            "4. 即使案例库中没有完全匹配客户需求的案例，也必须从库中推荐最接近的1-2个案例，并说明'虽然行业不同，但在技术实现和视觉呈现上有很强的参考价值'，绝不可以说没有案例\n"
-            "5. 每次提及案例，都必须附带对应的【推荐案例:case_xxx】标记，不可省略\n"
-            "6. **每次只展示1个案例**，不要一次性把所有案例全部列出。展示完一个案例后，主动询问客户是否想看更多案例或其他类型的案例，例如：'还有其他几个不同行业的代表项目，需要继续了解吗？'\n"
-            "7. **当案例库中的所有案例都已经展示过后，绝对不可以再编造新的案例**。应自然地告知客户：'以上是我们目前可公开展示的代表性项目。由于部分客户项目涉及保密协议，更多案例需要在具体合作洽谈时提供。' 然后引导客户进一步了解业务细节或进入需求梳理流程\n\n"
+            "【案例展示规则 — 最高优先级】\n"
+            "1. 你**绝对不能自己编写、描述、虚构任何案例内容**。你没有案例的具体信息。\n"
+            "2. 当你需要向客户展示一个案例时，只需在回复中插入信号标记：【展示案例】\n"
+            "   系统会自动将该标记替换为真实的案例数据和视频卡片。\n"
+            "3. 示例回复：'我们在多个行业均有成功落地的项目，以下是一个代表性案例：\n【展示案例】'\n"
+            "4. 如果你想推荐特定类型的案例，可以用：【展示案例:ai_3d_custom】或【展示案例:digital_art】\n"
+            "5. 每次回复中**最多插入1个【展示案例】标记**。\n"
+            "6. **不要在【展示案例】标记前后自行编写案例的标题、描述、数据等，这些由系统自动填充。**\n"
+            f"{case_status}\n"
 
             "【对话节奏规则】\n"
-            "1. 当你完成业务板块介绍后，主动询问客户是否想看一些案例，例如：\n"
+            "1. 当你完成业务板块介绍后，主动询问客户是否想看案例，例如：\n"
             "   '以上是我们核心服务的概览。我们在多个行业均有成功落地案例，需要我为您展示几个代表性的项目吗？'\n"
-            "2. 根据客户的具体问题，有针对性地介绍对应的服务板块\n"
-            "3. 保持专业权威的态度，用真实数据和案例说话\n"
-            "4. 只介绍以上三个业务板块，不要编造不存在的服务\n\n"
+            "2. 客户确认要看案例后，使用【展示案例】标记让系统展示。\n"
+            "3. 只介绍裸眼3D成片购买适配、AI裸眼3D内容定制、数字艺术内容定制三个业务板块，不要编造不存在的服务。\n\n"
 
             "【引导下单规则 — 核心】\n"
             "只有在以下明确信号出现时，才在回复的最后一行加上标记：【引导下单】\n"
@@ -164,43 +250,52 @@ async def ai_business_intro(request: BusinessIntroRequest):
             data = response.json()
             reply = data["choices"][0]["message"]["content"]
 
-            # 提取引用的案例ID
-            referenced_ids = re.findall(r'【推荐案例:(case_\w+)】', reply)
-            valid_case_ids = {c["id"] for c in cases_data}
-            # 硬性防护：过滤掉 LLM 编造的不存在的案例ID
-            fake_ids = [cid for cid in referenced_ids if cid not in valid_case_ids]
-            if fake_ids:
-                # 从回复文本中移除伪造案例的标记
-                for fid in fake_ids:
-                    reply = reply.replace(f'【推荐案例:{fid}】', '')
-                referenced_ids = [cid for cid in referenced_ids if cid in valid_case_ids]
-            referenced_cases = [c for c in cases_data if c["id"] in referenced_ids]
-            clean_reply = re.sub(r'【推荐案例:case_\w+】', '', reply).strip()
+            # ===== 核心：代码拦截【展示案例】信号，注入真实数据 =====
+            reply, injected_cases = _inject_case_into_reply(reply, cases_data, shown_ids)
 
-            # 硬性兜底：对话不足3轮时，即使 LLM 输出了引导标记也强制移除
+            # 同时检查 LLM 是否自己用了旧格式的【推荐案例:xxx】（兼容）
+            old_ids = re.findall(r'【推荐案例:(case_\w+)】', reply)
+            valid_case_ids = {c["id"] for c in cases_data}
+            # 清理伪造的旧标记
+            for oid in old_ids:
+                if oid not in valid_case_ids:
+                    reply = reply.replace(f'【推荐案例:{oid}】', '')
+
+            # 汇总返回的案例
+            old_cases = [c for c in cases_data if c["id"] in old_ids and c["id"] in valid_case_ids]
+            all_referenced_cases = injected_cases + [c for c in old_cases if c not in injected_cases]
+
+            # 处理引导下单
             user_turn_count = sum(1 for h in request.history if h.get("role") == "user") + 1
             guide_info = {}
 
-            # 解析引导下单标记（支持带参数和不带参数两种格式）
-            guide_match = re.search(r'【引导下单(?::([^:】]+):([^】]+))?】', clean_reply)
+            guide_match = re.search(r'【引导下单(?::([^:】]+):([^】]+))?】', reply)
             if guide_match:
                 if user_turn_count < 3:
-                    # 对话不足3轮，强制移除
-                    clean_reply = re.sub(r'【引导下单(?::[^】]+)?】', '', clean_reply).strip()
+                    reply = re.sub(r'【引导下单(?::[^】]+)?】', '', reply).strip()
                 else:
-                    clean_reply = re.sub(r'【引导下单(?::[^】]+)?】', '', clean_reply).strip()
+                    reply = re.sub(r'【引导下单(?::[^】]+)?】', '', reply).strip()
                     guide_info["should_guide"] = True
                     if guide_match.group(1) and guide_match.group(2):
                         guide_info["business_type"] = guide_match.group(1).strip()
                         guide_info["requirement_summary"] = guide_match.group(2).strip()
 
-            # 兜底：如果用户明确问案例但 LLM 没有使用标记，强制附加全部案例
-            user_msg_lower = request.message.lower()
-            case_keywords = ["案例", "作品", "成功项目", "过往", "看看你们做过", "之前做过", "有什么案例", "展示"]
-            if not referenced_cases and any(kw in user_msg_lower for kw in case_keywords):
-                referenced_cases = cases_data[:5]  # 附加全部真实案例
+            # 兜底：用户明确问案例但 LLM 完全没输出任何案例信号
+            if not all_referenced_cases:
+                user_msg_lower = request.message.lower()
+                case_keywords = ["案例", "作品", "成功项目", "过往", "看看你们做过", "之前做过", "有什么案例", "展示"]
+                if any(kw in user_msg_lower for kw in case_keywords):
+                    # 代码主动选一个案例注入
+                    fallback_case = _pick_next_case(cases_data, shown_ids)
+                    if fallback_case:
+                        case_text = "\n\n" + _format_case_text(fallback_case)
+                        remaining = len([c for c in cases_data if c["id"] not in shown_ids and c["id"] != fallback_case["id"]])
+                        if remaining > 0:
+                            case_text += f"\n\n还有{remaining}个不同行业的代表项目，需要继续了解吗？"
+                        reply += case_text
+                        all_referenced_cases = [fallback_case]
 
-            return {"message": clean_reply, "cases": referenced_cases, "guide": guide_info}
+            return {"message": reply, "cases": all_referenced_cases, "guide": guide_info}
     except Exception as e:
         print(f"业务介绍 LLM 调用失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

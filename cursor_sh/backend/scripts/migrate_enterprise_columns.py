@@ -3,6 +3,11 @@
 用途：为 users 表增加企业相关状态和认证字段
 支持环境：SQLite / MySQL
 """
+import sys
+import os
+# 将 backend 根目录强行加入 Python 模块搜索路径，解决找不到 'app' 的报错
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import asyncio
 from sqlalchemy import text
 from app.database import engine

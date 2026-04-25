@@ -115,7 +115,7 @@
                         <span class="opt-desc">服务体系与过往案例</span>
                       </div>
                     </div>
-                    <p class="welcome-hint">也可以直接在下方输入您的问题，系统将自动识别并路由至对应流程。</p>
+                    <p class="welcome-hint">也可以直接在下方输入您的问题</p>
                   </div>
                 </transition>
               </div>
@@ -130,7 +130,7 @@
                 <div class="user-content-row">
                   <div class="user-col">
                     <span class="user-tag">You</span>
-                    <div class="message-bubble user-bubble">{{ msg.content }}</div>
+                    <div class="message-bubble user-bubble" v-html="highlightSearch(msg.content)"></div>
                     <span class="msg-time" v-if="msg.timestamp">{{ msg.timestamp }}</span>
                   </div>
                   <div class="user-avatar">t</div>
@@ -145,7 +145,7 @@
                   <div v-if="index > 0 && msg.role === 'assistant' && !msg.isPurchasePrompt" class="reasoning-mock">
                     <span class="reasoning-text">Reasoning <el-icon><Right /></el-icon></span>
                   </div>
-                  <p class="bubble-text">{{ msg.content }}</p>
+                  <p class="bubble-text" v-html="highlightSearch(displayContent(msg.content))"></p>
                   <!-- Special button for 'purchase' mode in the AI msg -->
                   <div v-if="msg.isPurchasePrompt" class="message-actions">
                     <el-button class="stitch-primary-btn" @click="goToBrowse('video_purchase')">
@@ -304,6 +304,7 @@
           <div class="right-tools">
             <!-- 语音输入按钮 -->
             <button
+              v-if="ENABLE_VOICE_INPUT"
               class="voice-btn"
               :class="{ recording: isRecording }"
               @click="toggleVoiceInput"
@@ -378,6 +379,9 @@ import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
+
+// 语音输入开关，通过 .env 文件配置
+const ENABLE_VOICE_INPUT = import.meta.env.VITE_ENABLE_VOICE_INPUT === 'true'
 import type { OrderType } from '@/types'
 
 const emit = defineEmits(['close', 'mode-change'])
@@ -935,6 +939,25 @@ const deleteHistory = (id: string) => {
   }
 }
 
+const displayContent = (text: string) => {
+  if (!text) return ''
+  return text.replace(/【推荐案例:case_\w+】/g, '').replace(/【引导下单(?::[^】]+)?】/g, '').trim()
+}
+
+// 高亮搜索关键词
+const highlightSearch = (text: string) => {
+  if (!text) return ''
+  // 先转义 HTML 实体防止 XSS
+  const sanitized = text.replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  const q = searchQuery.value.trim()
+  if (!q) return sanitized
+  
+  // 正则转义关键词
+  const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`(${escapedQ})`, 'gi')
+  return sanitized.replace(regex, '<mark class="highlight-text">$1</mark>')
+}
+
 const scrollToBottom = async (instant: boolean = false) => {
   await nextTick()
   if (chatContentRef.value) {
@@ -1331,10 +1354,17 @@ const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = fal
     if (!response.ok) throw new Error('intro failed')
     const data = await response.json()
     const replyContent = data.message || ''
-    const cleanMsg = replyContent.replace('【引导下单】', '').trim()
+    // 显示时清洗掉内部标记
+    const cleanMsg = replyContent.replace(/【推荐案例:case_\w+】/g, '').replace('【引导下单】', '').trim()
     const cases = data.cases || []
     
     typewriterEffect(cleanMsg, () => {
+      // 打字结束后，用原始内容（含案例标记）覆盖 content
+      // 这样下一轮历史发给 LLM 时，它能看到之前推荐过哪些案例
+      const lastMsg = messages.value[messages.value.length - 1]
+      if (lastMsg && lastMsg.role === 'assistant') {
+        lastMsg.content = replyContent
+      }
       // 标记案例回复，避免污染需求收集上下文
       if (isCaseDetour) {
         const lastAssistantMsg = messages.value[messages.value.length - 1]
@@ -1618,6 +1648,13 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 </script>
 
 <style lang="scss" scoped>
+/* 搜索高亮样式 */
+:deep(.highlight-text) {
+  background-color: rgba(255, 215, 0, 0.4);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 2px;
+}
 /* 打字机光标动画 */
 .typing-cursor-indicator {
   display: inline-block;

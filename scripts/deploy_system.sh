@@ -498,6 +498,7 @@ fi
 info "构建业务系统前端..."
 cd "$PROJECT_ROOT/cursor_sh"
 echo "VITE_API_BASE_URL=/api" > .env.production
+echo "VITE_ENABLE_VOICE_INPUT=false" >> .env.production
 npm install --legacy-peer-deps 2>/dev/null || npm install
 
 BUILD_OK=false
