@@ -285,7 +285,24 @@
             <!-- Left icons mock -->
             <div class="left-tools">
               <el-icon class="tool-icon"><CirclePlusFilled /></el-icon>
-              <el-icon class="tool-icon"><PictureRounded /></el-icon>
+              <el-icon class="tool-icon" @click="triggerFileUpload" title="上传现场实拍图或参考文件"><PictureRounded /></el-icon>
+              <input
+                type="file"
+                ref="fileInputRef"
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.zip"
+                style="display: none;"
+                @change="handleFileSelected"
+              />
+            </div>
+            <!-- 已上传文件预览条 -->
+            <div v-if="uploadedFiles.length > 0" class="uploaded-files-strip">
+              <div v-for="(file, idx) in uploadedFiles" :key="idx" class="uploaded-file-chip">
+                <img v-if="file.isImage" :src="file.url" class="file-thumb" />
+                <el-icon v-else class="file-icon-placeholder"><PictureRounded /></el-icon>
+                <span class="file-name">{{ file.name }}</span>
+                <span class="file-remove" @click="removeUploadedFile(idx)">&times;</span>
+              </div>
             </div>
 
           <textarea
@@ -690,6 +707,59 @@ const showConfirmation = ref(false)
 const confirmOrderNumber = ref('')
 const confirmOrderType = ref<OrderType>('ai_3d_custom')
 
+// ===== 文件上传相关 =====
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const uploadedFiles = ref<{name: string, url: string, isImage: boolean}[]>([])
+
+const triggerFileUpload = () => {
+  fileInputRef.value?.click()
+}
+
+const handleFileSelected = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  if (!input.files?.length) return
+
+  for (const file of Array.from(input.files)) {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const token = authStore.token
+      const res = await fetch('/api/upload/site-photo', {
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        body: formData
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const isImage = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.name)
+        uploadedFiles.value.push({
+          name: file.name,
+          url: data.url || data.file_url || '',
+          isImage
+        })
+        // 在聊天中提示已上传
+        messages.value.push({
+          role: 'user',
+          content: `[已上传文件: ${file.name}]`,
+          timestamp: getCurrentTime()
+        })
+        scrollToBottom()
+      } else {
+        ElMessage.error(`上传失败: ${file.name}`)
+      }
+    } catch (err) {
+      ElMessage.error(`上传失败: ${file.name}`)
+    }
+  }
+  // 清空 input 值，允许重复上传同一文件
+  input.value = ''
+}
+
+const removeUploadedFile = (index: number) => {
+  uploadedFiles.value.splice(index, 1)
+}
+
 // 表单字段定义
 const formFields = [
   { key: 'brand', label: '品牌/产品', placeholder: '品牌名称和产品关键词', multiline: false },
@@ -702,6 +772,7 @@ const formFields = [
   { key: 'style', label: '风格偏好', placeholder: '选填，如赛博朋克、极简、写实等', multiline: false },
   { key: 'media_size', label: '投放媒体及尺寸', placeholder: '选填', multiline: false },
   { key: 'technology', label: '技术需求', placeholder: '选填，如分辨率、格式等', multiline: false },
+  { key: 'site_photos', label: '现场实拍图', placeholder: '选填，通过左侧上传按钮上传的文件将自动归入此项', multiline: false },
 ]
 
 const selectedMode = ref<string | null>(null)
@@ -1579,6 +1650,15 @@ const autoExtractAndSaveDraft = async () => {
     }
     
     inlineFormData.value = extracted
+    // 将上传的文件信息自动填入"现场实拍图"字段
+    if (uploadedFiles.value.length > 0) {
+      const fileInfo = uploadedFiles.value.map(f => f.name).join('、')
+      inlineFormData.value.site_photos = (inlineFormData.value.site_photos || '') 
+        ? inlineFormData.value.site_photos + '；' + fileInfo 
+        : fileInfo
+      // 保存文件URL列表供后续使用
+      inlineFormData.value._site_photo_urls = uploadedFiles.value.map(f => f.url).join(',')
+    }
     try {
       const orderType = businessType.value
       const newOrder = await orderStore.createOrder({ orderType, ...extracted }, true)
@@ -2418,6 +2498,59 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .tool-icon:hover {
   color: #000;
+}
+
+/* 已上传文件预览条 */
+.uploaded-files-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+  max-width: 100%;
+}
+
+.uploaded-file-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(13, 153, 255, 0.08);
+  border: 1px solid rgba(13, 153, 255, 0.2);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: #555;
+  max-width: 180px;
+}
+
+.file-thumb {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
+.file-icon-placeholder {
+  font-size: 18px;
+  color: #0d99ff;
+}
+
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100px;
+}
+
+.file-remove {
+  cursor: pointer;
+  color: #999;
+  font-size: 14px;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+.file-remove:hover {
+  color: #f56c6c;
 }
 
 .right-tools {

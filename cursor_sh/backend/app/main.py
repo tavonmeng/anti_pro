@@ -49,6 +49,10 @@ app.include_router(logs.router, prefix="/api")
 app.include_router(announcements.router, prefix="/api")
 app.include_router(enterprise.router, prefix="/api")
 
+# 文件上传路由
+from app.api import upload
+app.include_router(upload.router, prefix="/api")
+
 # ASR 语音识别路由
 app.include_router(asr.router, prefix="/api")
 
