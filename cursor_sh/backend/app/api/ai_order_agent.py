@@ -6,7 +6,7 @@
 import re
 import httpx
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Dict
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from app.config import settings
@@ -339,7 +339,7 @@ def _build_order_list_summary(orders: list) -> str:
 
 def _build_status_overview(orders: list) -> str:
     """生成自然语言的状态概览"""
-    counts: dict[str, int] = {}
+    counts: Dict[str, int] = {}
     for o in orders:
         st = _get_status_text(o)
         counts[st] = counts.get(st, 0) + 1

@@ -22,8 +22,9 @@ class BusinessIntroRequest(BaseModel):
 # ───────────────────────────────────────────────────────
 # 数据加载
 # ───────────────────────────────────────────────────────
+from typing import Tuple
 
-def _load_business_knowledge() -> tuple[str, list]:
+def _load_business_knowledge() -> Tuple[str, list]:
     """加载业务介绍文档和案例数据"""
     from app.utils.knowledge import get_knowledge_file
 
