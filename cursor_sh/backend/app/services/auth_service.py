@@ -102,6 +102,9 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
         real_name=getattr(user, 'real_name', None),
         avatar=getattr(user, 'avatar', None),
         is_active=user.is_active,
+        enterprise_status=(lambda e: e.value if hasattr(e, 'value') else str(e or 'none').lower())(getattr(user, 'enterprise_status', None) or 'none'),
+        enterprise_name=getattr(user, 'enterprise_name', None),
+        enterprise_reject_reason=getattr(user, 'enterprise_reject_reason', None),
         created_at=user.created_at
     )
     

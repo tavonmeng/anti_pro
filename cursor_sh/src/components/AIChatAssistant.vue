@@ -280,12 +280,13 @@
 
       <!-- Input Area — Stitch Style Pill -->
       <div class="input-area-container">
-        <div class="input-area pill-style">
-          <!-- Left icons mock -->
-          <div class="left-tools">
-            <el-icon class="tool-icon"><CirclePlusFilled /></el-icon>
-            <el-icon class="tool-icon"><PictureRounded /></el-icon>
-          </div>
+        <div class="input-area pill-style" :class="{ 'is-voice-recording': isRecording || isTranscribing }">
+          <template v-if="!isRecording && !isTranscribing">
+            <!-- Left icons mock -->
+            <div class="left-tools">
+              <el-icon class="tool-icon"><CirclePlusFilled /></el-icon>
+              <el-icon class="tool-icon"><PictureRounded /></el-icon>
+            </div>
 
           <textarea
             ref="textareaRef"
@@ -294,13 +295,30 @@
             class="chat-native-textarea"
             @input="adjustTextareaHeight"
             @keydown.enter.prevent="sendMessage"
-            :disabled="isLoading || isTyping"
+            :disabled="isLoading || isTyping || isRecording"
             @focus="handleInputFocus"
             rows="1"
           ></textarea>
           
           <!-- Right tools & send -->
           <div class="right-tools">
+            <!-- 语音输入按钮 -->
+            <button
+              class="voice-btn"
+              :class="{ recording: isRecording }"
+              @click="toggleVoiceInput"
+              :title="isRecording ? '停止录音' : '语音输入'"
+            >
+              <span v-if="isRecording" class="rec-pulse"></span>
+              <svg v-if="!isRecording" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5z"/>
+                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2"/>
+              </svg>
+            </button>
+
             <button
               class="stitch-send-btn"
               :class="{ disabled: isLoading || isTyping || !inputMsg.trim() }"
@@ -310,6 +328,31 @@
               <el-icon><Top /></el-icon>
             </button>
           </div>
+          </template>
+
+          <template v-else>
+            <!-- ChatGPT style voice recording overlay -->
+            <div class="left-tools">
+              <el-icon class="tool-icon voice-plus-icon"><Plus /></el-icon>
+            </div>
+            
+            <div class="waveform-container" :style="{ opacity: isTranscribing ? 0.5 : 1 }">
+              <canvas ref="waveformCanvas" class="waveform-canvas"></canvas>
+            </div>
+
+            <div class="right-tools voice-actions">
+              <button class="voice-action-btn cancel" @click="cancelRecording" :disabled="isTranscribing">
+                <el-icon><Close /></el-icon>
+              </button>
+
+              <div v-if="isTranscribing" class="voice-transcribing-indicator">
+                <div class="transcribing-spinner"></div>
+              </div>
+              <button v-else class="voice-action-btn confirm" @click="confirmRecording">
+                <el-icon><Check /></el-icon>
+              </button>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -330,8 +373,9 @@
 import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Clock, Delete, ArrowUp, Loading } from '@element-plus/icons-vue'
+import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Clock, Delete, ArrowUp, Loading, Plus, Check } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
+import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 import type { OrderType } from '@/types'
@@ -339,8 +383,252 @@ import type { OrderType } from '@/types'
 const emit = defineEmits(['close', 'mode-change'])
 const router = useRouter()
 const orderStore = useOrderStore()
+const authStore = useAuthStore()
 
 const searchQuery = ref('')
+
+// ========== 语音输入 ==========
+const isRecording = ref(false)
+const realtimeText = ref('')          // 实时识别中间结果
+const finalTranscripts = ref<string[]>([])  // 已确认的句子
+const recordingDuration = ref(0)
+const waveformCanvas = ref<HTMLCanvasElement | null>(null)
+let waveformHistory: number[] = []
+let mediaStream: MediaStream | null = null
+let audioContext: AudioContext | null = null
+let scriptProcessor: ScriptProcessorNode | null = null
+let audioAnalyser: AnalyserNode | null = null
+let visualizerFrameId = 0
+let durationTimer: ReturnType<typeof setInterval> | null = null
+let audioChunks: Int16Array[] = []        // 本地存储 PCM 音频块
+const isTranscribing = ref(false)          // 识别中的加载状态
+
+const toggleVoiceInput = async () => {
+  if (isRecording.value) {
+    confirmRecording()
+  } else {
+    await startRecording()
+  }
+}
+
+const startRecording = async () => {
+  try {
+    // 获取麦克风权限
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        sampleRate: 16000,
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+      }
+    })
+
+    // 创建 AudioContext
+    audioContext = new AudioContext({ sampleRate: 16000 })
+    const source = audioContext.createMediaStreamSource(mediaStream)
+
+    // ScriptProcessorNode 采集 PCM 数据（4096 buffer）
+    scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1)
+
+    // 分析器节点（用于 ChatGPT 样式的波浪线动效）
+    audioAnalyser = audioContext.createAnalyser()
+    audioAnalyser.fftSize = 256
+    audioAnalyser.smoothingTimeConstant = 0.7
+    source.connect(audioAnalyser)
+
+    // 采集音频数据（本地存储，不实时发送）
+    audioChunks = []
+    scriptProcessor.onaudioprocess = (e) => {
+      if (!isRecording.value) return
+      const float32 = e.inputBuffer.getChannelData(0)
+      const int16 = new Int16Array(float32.length)
+      for (let i = 0; i < float32.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32[i]))
+        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
+      }
+      audioChunks.push(new Int16Array(int16))
+    }
+
+    source.connect(scriptProcessor)
+    scriptProcessor.connect(audioContext.destination)
+
+    // 重置状态
+    isRecording.value = true
+    realtimeText.value = ''
+    finalTranscripts.value = []
+    recordingDuration.value = 0
+    waveformHistory = []
+    durationTimer = setInterval(() => {
+      recordingDuration.value++
+    }, 1000)
+
+    // 等 Vue 渲染出 canvas DOM 后再启动可视化
+    await nextTick()
+    const startVisualizer = () => {
+      if (!isRecording.value || !audioAnalyser) return
+      const dataArray = new Uint8Array(audioAnalyser.frequencyBinCount)
+      let lastPushTime = 0
+      const tick = (timestamp: number) => {
+        if (!isRecording.value || !audioAnalyser) return
+        // 每 ~80ms 推一次数据（约 12fps），匹配 ChatGPT 的速度
+        if (timestamp - lastPushTime > 80) {
+          audioAnalyser.getByteFrequencyData(dataArray)
+          let sum = 0
+          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i] * dataArray[i]
+          let rms = Math.sqrt(sum / dataArray.length) / 255
+          waveformHistory.push(Math.min(1, rms * 2.5))
+          if (waveformHistory.length > 300) waveformHistory.shift()
+          lastPushTime = timestamp
+        }
+        drawWaveform()
+        visualizerFrameId = requestAnimationFrame(tick)
+      }
+      visualizerFrameId = requestAnimationFrame(tick)
+    }
+    startVisualizer()
+
+  } catch (err: any) {
+    console.error('[ASR] Start failed:', err)
+    if (err.name === 'NotAllowedError') {
+      ElMessage.error('请允许浏览器使用麦克风')
+    } else {
+      ElMessage.error('语音输入启动失败: ' + (err.message || '未知错误'))
+    }
+    cleanupRecording()
+  }
+}
+
+/** 清理录音资源（不做识别） */
+const cleanupRecording = () => {
+  isRecording.value = false
+  if (durationTimer) { clearInterval(durationTimer); durationTimer = null }
+  if (visualizerFrameId) { cancelAnimationFrame(visualizerFrameId); visualizerFrameId = 0 }
+  if (scriptProcessor) { scriptProcessor.disconnect(); scriptProcessor = null }
+  if (audioContext) { audioContext.close().catch(() => {}); audioContext = null }
+  if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null }
+  audioAnalyser = null
+}
+
+/** 取消录音 */
+const cancelRecording = () => {
+  cleanupRecording()
+  audioChunks = []
+  realtimeText.value = ''
+  finalTranscripts.value = []
+}
+
+/** 确认录音 → 发送到后端做一次性识别 */
+const confirmRecording = async () => {
+  // 先停掉录音硬件
+  cleanupRecording()
+
+  if (audioChunks.length === 0) return
+
+  // 拼接所有音频块
+  const totalLen = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0)
+  const fullAudio = new Int16Array(totalLen)
+  let offset = 0
+  for (const chunk of audioChunks) {
+    fullAudio.set(chunk, offset)
+    offset += chunk.length
+  }
+  audioChunks = []
+
+  // 发送给后端识别
+  isTranscribing.value = true
+  try {
+    const blob = new Blob([fullAudio.buffer], { type: 'audio/pcm' })
+    const formData = new FormData()
+    formData.append('audio', blob, 'recording.pcm')
+
+    const token = localStorage.getItem('token')
+    const resp = await fetch('/api/asr/recognize', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData,
+    })
+    const result = await resp.json()
+    if (result.text) {
+      // 打字机效果：逐字显示识别结果
+      isTranscribing.value = false
+      const text = result.text
+      const base = inputMsg.value || ''
+      let idx = 0
+      const typeInterval = setInterval(() => {
+        if (idx < text.length) {
+          inputMsg.value = base + text.slice(0, idx + 1)
+          idx++
+          nextTick(() => adjustTextareaHeight())
+        } else {
+          clearInterval(typeInterval)
+        }
+      }, 30)
+      return  // 跳过 finally 中的 isTranscribing = false
+    } else if (result.error) {
+      ElMessage.error('语音识别失败: ' + result.error)
+    }
+  } catch (err: any) {
+    ElMessage.error('语音识别请求失败: ' + (err.message || '网络错误'))
+  } finally {
+    isTranscribing.value = false
+  }
+}
+
+const drawWaveform = () => {
+  const canvas = waveformCanvas.value
+  if (!canvas) return
+  const dpr = window.devicePixelRatio || 1
+  const parent = canvas.parentElement
+  if (!parent) return
+  
+  const rect = parent.getBoundingClientRect()
+  const w = Math.floor(rect.width * dpr)
+  const h = Math.floor(rect.height * dpr)
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w
+    canvas.height = h
+    canvas.style.width = rect.width + 'px'
+    canvas.style.height = rect.height + 'px'
+  }
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  
+  const barW = 2.5 * dpr
+  const gap = 1.5 * dpr
+  const step = barW + gap
+  const midY = canvas.height / 2
+  const totalBars = Math.floor(canvas.width / step)
+  const minH = 2 * dpr  // 静音时的小圆点高度
+  const maxH = canvas.height * 0.85
+  const len = waveformHistory.length
+
+  for (let i = 0; i < totalBars; i++) {
+    // 最新数据在最右边（i=totalBars-1），向左回溯
+    const barIndex = totalBars - 1 - i
+    const dataIdx = len - 1 - i  // 从历史末尾往前取
+
+    let val = 0
+    let hasData = false
+    if (dataIdx >= 0 && dataIdx < len) {
+      val = waveformHistory[dataIdx]
+      hasData = true
+    }
+
+    const barH = Math.max(minH, val * maxH)
+    const x = barIndex * step
+    const y = midY - barH / 2
+
+    // 有数据的条用深色，无数据的用浅灰色小圆点
+    ctx.fillStyle = hasData ? '#2c2c2e' : '#d1d1d6'
+    ctx.beginPath()
+    ctx.roundRect(x, y, barW, barH, barW / 2)
+    ctx.fill()
+  }
+}
+
+
 
 const onSearchInput = () => {
   if (searchQuery.value && !showHistory.value) {
@@ -562,6 +850,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   saveCurrentToHistory()
   window.removeEventListener('beforeunload', _handleBeforeUnload)
+  // 清理语音录制资源
+  if (isRecording.value) cleanupRecording()
 })
 
 // 2. 浏览器关闭/刷新时保存
@@ -1278,6 +1568,18 @@ const handleContinueEditing = (msg: any) => {
 
 const handleSubmitOrder = () => {
   if (!inlineFormData.value) return
+  
+  // 检查企业认证状态
+  if (authStore.user?.enterprise_status !== 'approved') {
+    messages.value.push({
+      role: 'assistant',
+      content: '您尚未完成企业认证，无法正式提交订单。您的需求已自动保存为草稿，请先前往「个人设置」完成企业认证后再提交。',
+      timestamp: getCurrentTime()
+    })
+    scrollToBottom()
+    return
+  }
+  
   confirmOrderType.value = businessType.value as OrderType
   confirmOrderNumber.value = draftSavedOrderId.value
     ? 'DRAFT-' + draftSavedOrderId.value.slice(-8).toUpperCase()
@@ -2025,8 +2327,17 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   transition: all 0.2s ease;
   min-height: 40px; 
   width: 100%;
+  position: relative;
+  overflow: hidden;
   box-sizing: border-box;
   gap: 12px;
+}
+
+.input-area.pill-style.is-voice-recording {
+  background: #ffffff;
+  border-color: #e5e5ea;
+  align-items: center; /* keep waveform visualizer centered */
+  padding: 4px 16px;
 }
 
 .input-area.pill-style:focus-within {
@@ -2630,7 +2941,141 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   font-size: 11px;
   color: #86868b;
 }
+
+/* ========== 语音输入样式 ========== */
+.voice-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: #86868b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #1d1d1f;
+  }
+
+  &.recording {
+    background: #ff3b30;
+    color: #fff;
+    animation: voice-glow 1.5s ease-in-out infinite;
+
+    &:hover {
+      background: #e0332b;
+      color: #fff;
+    }
+  }
+}
+
+.rec-pulse {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid #ff3b30;
+  animation: pulse-ring 1.2s ease-out infinite;
+}
+
+@keyframes voice-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(255, 59, 48, 0); }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+
+
+/* ========== ChatGPT风格波形图 ========== */
+.voice-plus-icon {
+  font-size: 20px !important;
+  color: #888 !important;
+}
+
+.waveform-container {
+  flex: 1;
+  height: 36px;
+  margin: 0 16px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.waveform-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.voice-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.voice-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #333;
+  transition: all 0.2s ease;
+}
+
+.voice-action-btn.cancel:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #ff3b30;
+}
+
+.voice-action-btn.confirm {
+  background: transparent;
+}
+
+.voice-action-btn.confirm:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #34c759;
+}
+
+/* ========== 语音识别中状态 ========== */
+.waveform-container {
+  transition: opacity 0.3s ease;
+}
+
+.voice-transcribing-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.transcribing-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #e5e5ea;
+  border-top-color: #333333;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 </style>
+
 
 
 

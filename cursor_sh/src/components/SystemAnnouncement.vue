@@ -96,9 +96,9 @@ const handleShow = () => {
 const fetchAnnouncements = async () => {
   try {
     const data = await announcementApi.getAnnouncements(true)
-    announcements.value = data
-    if (data.length > 0) {
-      const latestId = data[0].id
+    announcements.value = Array.isArray(data) ? data : []
+    if (announcements.value.length > 0) {
+      const latestId = announcements.value[0].id
       const lastReadId = localStorage.getItem('last_read_announcement_id')
       if (lastReadId !== latestId) {
         hasUnread.value = true

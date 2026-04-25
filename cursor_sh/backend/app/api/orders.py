@@ -46,6 +46,17 @@ async def create_order(
 ):
     """创建订单（支持草稿模式）"""
     try:
+        # 企业认证校验：非草稿订单需要完成企业认证
+        if not is_draft:
+            from app.models.user import User as UserModel, EnterpriseStatus
+            if isinstance(current_user, UserModel):
+                status_val = (lambda e: e.value if hasattr(e, 'value') else str(e or 'none').lower())(current_user.enterprise_status or 'none')
+                if status_val != 'approved':
+                    raise HTTPException(
+                        status_code=403,
+                        detail="请先完成企业认证后再提交订单。您可以先将订单保存为草稿。"
+                    )
+        
         order = await OrderService.create_order(db, order_data, current_user, is_draft=is_draft)
         
         if is_draft:

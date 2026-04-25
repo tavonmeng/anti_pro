@@ -117,6 +117,12 @@ const router = createRouter({
           name: 'AnnouncementManagement',
           component: () => import('../views/admin/AnnouncementManagement.vue'),
           meta: { requiresAuth: true, role: 'admin' }
+        },
+        {
+          path: 'enterprise-review',
+          name: 'EnterpriseReview',
+          component: () => import('../views/admin/EnterpriseReview.vue'),
+          meta: { requiresAuth: true, role: 'admin' }
         }
       ]
     },

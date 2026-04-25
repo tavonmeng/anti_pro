@@ -56,6 +56,10 @@ export interface User {
   orderCount?: number  // 负责的订单数量
   createdAt?: string  // 创建时间
   updatedAt?: string  // 更新时间
+  // 企业认证字段
+  enterprise_status?: 'none' | 'pending' | 'approved' | 'rejected'
+  enterprise_name?: string
+  enterprise_reject_reason?: string
 }
 
 // 上传文件信息

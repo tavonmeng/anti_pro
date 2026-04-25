@@ -83,9 +83,10 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleCheckFilled, Download } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
+import { useAuthStore } from '@/stores/auth'
 import { orderApi } from '@/utils/api'
 import VideoPurchaseForm from '@/components/VideoPurchaseForm.vue'
 import AI3DCustomForm from '@/components/AI3DCustomForm.vue'
@@ -171,8 +172,37 @@ onMounted(async () => {
   }
 })
 
-// 用户点击"确认提交" → 弹出需求告知函
+// 用户点击"确认提交" → 检查企业认证 → 弹出需求告知函
 const handleSubmit = async (formData: any) => {
+  // 检查企业认证状态
+  const authStore = useAuthStore()
+  if (authStore.user?.enterprise_status !== 'approved') {
+    // 先自动保存为草稿
+    try {
+      await orderStore.createOrder({
+        orderType: orderType.value,
+        ...formData
+      }, true)
+      await orderStore.fetchOrders()
+    } catch (e) {
+      console.error('自动保存草稿失败:', e)
+    }
+    
+    // 提示用户去认证
+    await ElMessageBox.alert(
+      '请先完成企业认证后再提交订单。您的订单已自动保存为草稿。',
+      '需要企业认证',
+      {
+        confirmButtonText: '去认证',
+        type: 'warning',
+        callback: () => {
+          router.push('/user/profile')
+        }
+      }
+    )
+    return
+  }
+  
   pendingFormData.value = formData
   if (isEditMode.value && orderId.value) {
     pendingOrderNumber.value = order.value?.orderNumber || ''

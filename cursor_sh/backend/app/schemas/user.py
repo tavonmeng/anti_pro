@@ -48,6 +48,9 @@ class UserResponse(BaseModel):
     real_name: Optional[str] = None
     avatar: Optional[str] = None
     is_active: bool
+    enterprise_status: Optional[str] = "none"
+    enterprise_name: Optional[str] = None
+    enterprise_reject_reason: Optional[str] = None
     created_at: datetime
     
     class Config:

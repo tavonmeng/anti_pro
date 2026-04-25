@@ -150,7 +150,9 @@ async def update_profile_api(
             "role": role_value,
             "realName": getattr(current_user, 'real_name', None),
             "company": getattr(current_user, 'company', None),
-            "address": getattr(current_user, 'address', None)
+            "address": getattr(current_user, 'address', None),
+            "enterprise_status": (lambda e: e.value if hasattr(e, 'value') else str(e or 'none').lower())(getattr(current_user, 'enterprise_status', None) or 'none'),
+            "enterprise_name": getattr(current_user, 'enterprise_name', None)
         })
     except HTTPException:
         raise

@@ -1058,3 +1058,42 @@ export const announcementApi = {
     await request.delete(`/announcements/${id}`)
   }
 }
+
+// 企业认证 API 接口
+export const enterpriseApi = {
+  // 获取当前用户企业认证状态
+  async getStatus(): Promise<any> {
+    return request.get('/enterprise/status')
+  },
+
+  // 提交企业认证（FormData: enterprise_name + business_license file）
+  async submit(formData: FormData): Promise<any> {
+    return request.post('/enterprise/submit', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+
+  // 管理员获取待审核列表
+  async getPending(): Promise<any[]> {
+    return request.get('/enterprise/pending')
+  },
+
+  // 管理员审核认证
+  async review(userId: string, action: string, rejectReason?: string): Promise<any> {
+    const formData = new FormData()
+    formData.append('action', action)
+    if (rejectReason) formData.append('reject_reason', rejectReason)
+    return request.post(`/enterprise/review/${userId}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+
+  // 企业用户修改用户名
+  async updateUsername(username: string): Promise<any> {
+    const formData = new FormData()
+    formData.append('username', username)
+    return request.post('/enterprise/update-username', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  }
+}
