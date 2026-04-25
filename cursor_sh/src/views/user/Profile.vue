@@ -107,13 +107,6 @@
           </el-form>
         </div>
 
-        <!-- 营业执照放大预览 -->
-        <el-dialog v-model="showLicenseDialog" title="营业执照" width="600px" align-center>
-          <div style="display: flex; justify-content: center; padding: 16px;">
-            <el-image :src="enterpriseLicenseUrl" fit="contain" style="max-width: 100%; max-height: 500px;" />
-          </div>
-        </el-dialog>
-
         <!-- 未提交（可填写） -->
         <div v-else class="enterprise-none">
           <p class="enterprise-info-sub" style="margin-bottom: 20px;">完成企业认证后可使用全部功能，包括下单、修改用户名等。</p>
@@ -144,6 +137,13 @@
             </el-form-item>
           </el-form>
         </div>
+
+        <!-- 营业执照放大预览 -->
+        <el-dialog v-model="showLicenseDialog" title="营业执照" width="600px" align-center>
+          <div style="display: flex; justify-content: center; padding: 16px;">
+            <el-image :src="enterpriseLicenseUrl" fit="contain" style="max-width: 100%; max-height: 500px;" />
+          </div>
+        </el-dialog>
       </el-card>
 
       <!-- 右栏：个人信息 -->
