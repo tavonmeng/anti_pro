@@ -6,6 +6,7 @@
 import re
 import httpx
 from datetime import datetime, timedelta
+from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from app.config import settings
@@ -127,7 +128,7 @@ def _extract_search_keyword(user_msg: str) -> str:
 # 匹配策略
 # ───────────────────────────────────────────────────────
 
-def _try_match_order_by_index(user_msg: str, orders: list) -> dict | None:
+def _try_match_order_by_index(user_msg: str, orders: list) -> Optional[dict]:
     """通过序号匹配，如 '第3个'、'第三个'、'3号'"""
     cn_num_map = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
                   "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
@@ -148,7 +149,7 @@ def _try_match_order_by_index(user_msg: str, orders: list) -> dict | None:
     return None
 
 
-def _try_match_order_by_order_number(user_msg: str, orders: list) -> dict | None:
+def _try_match_order_by_order_number(user_msg: str, orders: list) -> Optional[dict]:
     """通过订单号精确匹配，如 'ORD-20260418-TZ3K'"""
     m = re.search(r'(ORD-\d{8}-[A-Z0-9]{4})', user_msg, re.IGNORECASE)
     if m:
@@ -159,7 +160,7 @@ def _try_match_order_by_order_number(user_msg: str, orders: list) -> dict | None
     return None
 
 
-def _try_match_order_by_keyword(user_msg: str, orders: list) -> dict | None:
+def _try_match_order_by_keyword(user_msg: str, orders: list) -> Optional[dict]:
     """通过状态关键词匹配，如 '制作中的'、'最新的那个'"""
     if any(kw in user_msg for kw in ["最新", "最近", "最后一个", "第一个"]):
         return orders[0] if orders else None
@@ -188,7 +189,7 @@ def _score_order_match(keyword: str, o: dict) -> int:
     return score
 
 
-def _try_search_order_by_content(user_msg: str, orders: list) -> dict | None:
+def _try_search_order_by_content(user_msg: str, orders: list) -> Optional[dict]:
     """业务字段搜索，返回单个最佳匹配"""
     keyword = _extract_search_keyword(user_msg)
     if not keyword:
@@ -355,7 +356,7 @@ def _build_status_overview(orders: list) -> str:
 # LLM 智能理解（替代正则意图检测）
 # ───────────────────────────────────────────────────────
 
-async def _llm_understand_query(user_msg: str, history: list, orders_summary: str) -> dict | None:
+async def _llm_understand_query(user_msg: str, history: list, orders_summary: str) -> Optional[dict]:
     """使用 LLM 一次性完成意图分类 + 参数提取，返回结构化 JSON。
 
     返回示例：
