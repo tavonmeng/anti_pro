@@ -228,19 +228,9 @@ def _register_crash_handlers():
 
     atexit.register(_on_exit)
 
-    # 信号处理（SIGTERM 等）
-    def _signal_handler(signum, frame):
-        sig_name = signal.Signals(signum).name if hasattr(signal, "Signals") else str(signum)
-        logger.bind(module="system").critical(f"⚡ 收到终止信号 {sig_name} (signum={signum})，进程即将退出")
-        # 不要调用 sys.exit()，让 gunicorn/uvicorn 自行处理优雅关闭
-
-    # 仅在主线程中注册信号
-    try:
-        signal.signal(signal.SIGTERM, _signal_handler)
-        signal.signal(signal.SIGINT, _signal_handler)
-    except (ValueError, OSError):
-        # 非主线程或不支持的平台
-        pass
+    # 注释掉自定义信号处理，让 Uvicorn/Gunicorn 原生的信号处理器来负责优雅关闭
+    # Uvicorn 内部有自己完善的关闭逻辑，强行覆盖会导致 asyncio.exceptions.CancelledError
+    # 并且 Uvicorn 的 shutting down 日志已经被我们的 InterceptHandler 接管了
 
     # stderr 重定向到 loguru
     sys.stderr = _StderrRedirector()
