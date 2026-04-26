@@ -8,19 +8,32 @@ import gsap from 'gsap'
 
 const cursor = ref(null)
 
+// 将事件处理器提升到模块作用域，确保 onUnmounted 可以正确移除
+let onMouseMove = null
+let onMouseOver = null
+
 onMounted(() => {
   gsap.set(cursor.value, { xPercent: -50, yPercent: -50, opacity: 0 })
 
-  const onMouseMove = (e) => {
-    // Check if mouse is over Header
+  const onHover = () => {
+    document.body.classList.add('no-cursor')
+  }
+
+  const onLeave = () => {
+    document.body.classList.remove('no-cursor')
+  }
+
+  onMouseMove = (e) => {
+    // Check if mouse is over Header or Auth Modal
     const isOverHeader = !!e.target.closest('.header-bar')
+    const isOverAuthModal = !!e.target.closest('.auth-modal-overlay')
     
     let isVisible = false
     
-    if (isOverHeader) {
-      isVisible = false // Do not show cursor effect on header
+    if (isOverHeader || isOverAuthModal) {
+      isVisible = false
     } else {
-      isVisible = true // Always visible globally now
+      isVisible = true
     }
 
     gsap.to(cursor.value, {
@@ -32,19 +45,12 @@ onMounted(() => {
     })
   }
 
-  const onHover = () => {
-    document.body.classList.add('no-cursor') // Hide native cursor when hovering interactive items
-  }
-
-  const onLeave = () => {
-    document.body.classList.remove('no-cursor') // Show native cursor when not hovering interactive items
-  }
-
-  const onMouseOver = (e) => {
-    // If the mouse is over the header, ensure we show the native cursor
+  onMouseOver = (e) => {
+    // If the mouse is over the header or auth modal, ensure normal cursor
     const isOverHeader = !!e.target.closest('.header-bar')
+    const isOverAuthModal = !!e.target.closest('.auth-modal-overlay')
     
-    if (isOverHeader) {
+    if (isOverHeader || isOverAuthModal) {
       onLeave()
       return
     }
@@ -71,8 +77,15 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  window.removeEventListener('mousemove', onMouseMove)
-  window.removeEventListener('mouseover', onMouseOver)
+  // 正确移除事件监听器
+  if (onMouseMove) window.removeEventListener('mousemove', onMouseMove)
+  if (onMouseOver) window.removeEventListener('mouseover', onMouseOver)
+  
+  // 确保清除 body 上的自定义类
+  document.body.classList.remove('no-cursor')
+  
+  // 清理 GSAP 对 cursor 元素的动画
+  if (cursor.value) gsap.killTweensOf(cursor.value)
 })
 </script>
 
