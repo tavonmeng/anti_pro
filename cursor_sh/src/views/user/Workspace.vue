@@ -9,14 +9,9 @@
           <!-- Overview Mode -->
           <div v-if="!uiStore.isAiExpanded && !uiStore.isSecondarySidebarVisible" class="overview-state">
             
-            <!-- Top Search Header (Now inside overview only) -->
-            <div class="top-search-header">
-              <el-icon class="search-icon"><Search /></el-icon>
-              <input type="text" placeholder="Search projects or assets..." class="search-input" />
-            </div>
             <!-- Hero Banner (AI 智能体) -->
             <div class="hero-banner">
-              <h1 class="hero-title">AI智能体帮你理清思路</h1>
+              <h1 class="hero-title">Unique Vision AI智能体 | 咨询·需求·下单，一站式协助</h1>
               <div class="hero-input-area" @click="handleAiExpand(true)">
                 <input type="text" :placeholder="placeholderText" class="hero-input" readonly />
                 <div class="generate-btn">
@@ -124,7 +119,7 @@
 <script setup lang="ts">
 import { onMounted, ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Right } from '@element-plus/icons-vue'
+import { Right } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { useUiStore } from '@/stores/ui'
 import type { OrderType } from '@/types'
@@ -259,7 +254,7 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 }
 
 .overview-state {
-  padding: 0 24px 24px 24px;
+  padding: 32px 24px 24px 24px;
   display: flex;
   flex-direction: column;
   height: 100%;

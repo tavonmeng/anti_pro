@@ -117,8 +117,8 @@ async def register(db: AsyncSession, register_data: RegisterRequest) -> dict:
     注册只允许 user 角色。admin 和 staff 由管理员后台创建。
     """
     try:
-        # 1. 校验短信验证码
-        is_valid = await verify_sms_code(register_data.phone, register_data.sms_code)
+        # 1. 校验短信验证码（立即消耗，每次提交都需要新的验证码）
+        is_valid = await verify_sms_code(register_data.phone, register_data.sms_code, consume=True)
         if not is_valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -163,7 +163,7 @@ async def register(db: AsyncSession, register_data: RegisterRequest) -> dict:
             email=register_data.email,
             phone=register_data.phone,
             password_hash=get_password_hash(register_data.password),
-            role=UserRole.USER,  # 注册只允许 user 角色
+            role=UserRole.USER,
             is_active=True
         )
         

@@ -861,7 +861,11 @@ const startNewSession = () => {
 }
 
 // --- 历史聊天记录 ---
-const HISTORY_KEY = 'ai_chat_last_session'
+// 使用用户 ID 隔离存储，防止不同用户看到彼此的聊天记录
+const getHistoryKey = () => {
+  const userId = authStore.user?.id || 'anonymous'
+  return `ai_chat_session_${userId}`
+}
 const showHistory = ref(false)
 
 const displayedMessages = computed(() => {
@@ -899,7 +903,7 @@ const toggleExpandHistory = (id: string) => {
 
 const loadSavedHistory = () => {
   try {
-    const raw = localStorage.getItem(HISTORY_KEY)
+    const raw = localStorage.getItem(getHistoryKey())
     if (raw) {
       const parsed = JSON.parse(raw)
       let parsedArr = Array.isArray(parsed) ? parsed : [parsed]
@@ -965,7 +969,7 @@ const saveCurrentToHistory = () => {
 
   let histories: SavedSession[] = []
   try {
-    const raw = localStorage.getItem(HISTORY_KEY)
+    const raw = localStorage.getItem(getHistoryKey())
     if (raw) {
        const parsed = JSON.parse(raw)
        histories = Array.isArray(parsed) ? parsed : [parsed]
@@ -979,7 +983,7 @@ const saveCurrentToHistory = () => {
   // 如果超过 5 条，保留最新的 5 条
   if (histories.length > 5) histories = histories.slice(-5)
   
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(histories))
+  localStorage.setItem(getHistoryKey(), JSON.stringify(histories))
   savedHistories.value = histories
 }
 
@@ -1004,7 +1008,7 @@ const deleteHistory = (id: string) => {
   const index = savedHistories.value.findIndex(h => h.id === id)
   if (index === -1) return
   savedHistories.value.splice(index, 1)
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(savedHistories.value))
+  localStorage.setItem(getHistoryKey(), JSON.stringify(savedHistories.value))
   if (savedHistories.value.length === 0) {
     showHistory.value = false
   }

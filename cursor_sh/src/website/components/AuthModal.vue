@@ -81,37 +81,45 @@
             </el-form-item>
             <el-form-item prop="smsCode">
               <div class="sms-row">
-                <el-input v-model="registerForm.smsCode" placeholder="短信验证码" size="large" class="modal-input sms-input" maxlength="6">
+                <el-input v-model="registerForm.smsCode" placeholder="短信验证码" size="large" class="modal-input sms-input" :class="{ 'is-verified': smsPreVerified }" maxlength="6" @input="onSmsCodeInput">
                   <template #prefix><el-icon class="modal-icon"><Key /></el-icon></template>
+                  <template #suffix>
+                    <span v-if="smsPreVerifying" class="sms-status verifying">校验中...</span>
+                    <span v-else-if="smsPreVerified" class="sms-status verified">✅ 已验证</span>
+                  </template>
                 </el-input>
                 <el-button class="sms-send-btn" :disabled="regSmsCooldown > 0 || !isRegPhoneValid" :loading="regSmsSending" @click="openCaptchaDialog('register')">
                   {{ regSmsCooldown > 0 ? `${regSmsCooldown}s` : '发送验证码' }}
                 </el-button>
               </div>
             </el-form-item>
-            <el-form-item prop="username">
-              <el-input v-model="registerForm.username" placeholder="请设置用户名（3-20个字符）" size="large" class="modal-input">
-                <template #prefix><el-icon class="modal-icon"><User /></el-icon></template>
-              </el-input>
-            </el-form-item>
-            <el-form-item prop="email">
-              <el-input v-model="registerForm.email" placeholder="请输入邮箱" size="large" class="modal-input">
-                <template #prefix><el-icon class="modal-icon"><Message /></el-icon></template>
-              </el-input>
-            </el-form-item>
-            <el-form-item prop="password">
-              <el-input v-model="registerForm.password" type="password" placeholder="请设置密码（至少6位）" size="large" class="modal-input" show-password>
-                <template #prefix><el-icon class="modal-icon"><Lock /></el-icon></template>
-              </el-input>
-            </el-form-item>
-            <el-form-item prop="confirmPassword">
-              <el-input v-model="registerForm.confirmPassword" type="password" placeholder="请再次输入密码" size="large" class="modal-input" show-password @keyup.enter="handleRegister">
-                <template #prefix><el-icon class="modal-icon"><Lock /></el-icon></template>
-              </el-input>
-            </el-form-item>
-            <el-button type="primary" size="large" class="modal-submit-btn" :loading="loading" @click="handleRegister">
-              {{ loading ? '注册中...' : '注册' }}
-            </el-button>
+
+            <!-- 验证码通过后显示剩余字段 -->
+            <template v-if="smsPreVerified">
+              <el-form-item prop="username">
+                <el-input v-model="registerForm.username" placeholder="请设置用户名（3-20个字符）" size="large" class="modal-input">
+                  <template #prefix><el-icon class="modal-icon"><User /></el-icon></template>
+                </el-input>
+              </el-form-item>
+              <el-form-item prop="email">
+                <el-input v-model="registerForm.email" placeholder="请输入邮箱" size="large" class="modal-input">
+                  <template #prefix><el-icon class="modal-icon"><Message /></el-icon></template>
+                </el-input>
+              </el-form-item>
+              <el-form-item prop="password">
+                <el-input v-model="registerForm.password" type="password" placeholder="请设置密码（至少6位）" size="large" class="modal-input" show-password>
+                  <template #prefix><el-icon class="modal-icon"><Lock /></el-icon></template>
+                </el-input>
+              </el-form-item>
+              <el-form-item prop="confirmPassword">
+                <el-input v-model="registerForm.confirmPassword" type="password" placeholder="请再次输入密码" size="large" class="modal-input" show-password @keyup.enter="handleRegister">
+                  <template #prefix><el-icon class="modal-icon"><Lock /></el-icon></template>
+                </el-input>
+              </el-form-item>
+              <el-button type="primary" size="large" class="modal-submit-btn" :loading="loading" @click="handleRegister">
+                {{ loading ? '注册中...' : '注册' }}
+              </el-button>
+            </template>
           </el-form>
         </div>
 
@@ -219,6 +227,35 @@ const regSmsSending = ref(false)
 const regSmsCooldown = ref(0)
 const isRegPhoneValid = computed(() => /^1[3-9]\d{9}$/.test(registerForm.phone))
 
+// 验证码预校验状态
+const smsPreVerified = ref(false)
+const smsPreVerifying = ref(false)
+
+const onSmsCodeInput = async (val: string) => {
+  smsPreVerified.value = false
+  // 输入满 6 位时自动预校验
+  if (val.length >= 6 && isRegPhoneValid.value) {
+    smsPreVerifying.value = true
+    try {
+      const resp = await fetch('/api/auth/pre-verify-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: registerForm.phone, code: val })
+      })
+      const data = await resp.json()
+      if (resp.ok && data.code === 200) {
+        smsPreVerified.value = true
+      } else {
+        ElMessage.error(data.detail || '验证码错误')
+      }
+    } catch {
+      ElMessage.error('验证码校验失败，请重试')
+    } finally {
+      smsPreVerifying.value = false
+    }
+  }
+}
+
 const registerForm = reactive({ phone: '', smsCode: '', username: '', email: '', password: '', confirmPassword: '', role: 'user' as UserRole })
 const registerRules: FormRules = {
   phone: [{ validator: (_r: any, v: string, cb: Function) => { if (!v || !/^1[3-9]\d{9}$/.test(v)) cb(new Error('请输入有效的11位手机号')); else cb() }, trigger: 'blur' }],
@@ -247,6 +284,9 @@ const handleRegister = async () => {
           smsForm.phone = registerForm.phone
         }
       } catch (error: any) {
+        // 注册失败后，验证码已被后端消耗，需要重新验证
+        smsPreVerified.value = false
+        registerForm.smsCode = ''
         if (error?.message?.includes('已注册')) {
           ElMessageBox.confirm('该手机号已注册，是否去登录？', '提示', { confirmButtonText: '去登录', cancelButtonText: '取消', type: 'info', center: true })
             .then(() => { activeTab.value = 'login' }).catch(() => {})
@@ -457,6 +497,24 @@ function handleLoginSuccess() {
 }
 .sms-send-btn:hover:not(:disabled) { background: #fff !important; border-color: #0071e3 !important; }
 .sms-send-btn:disabled { color: rgba(0,0,0,0.25) !important; }
+
+/* 验证码预校验状态 */
+.sms-status {
+  font-size: 12px;
+  white-space: nowrap;
+  padding-right: 4px;
+}
+.sms-status.verifying {
+  color: #86868b;
+}
+.sms-status.verified {
+  color: #34c759;
+  font-weight: 500;
+}
+.sms-input.is-verified :deep(.el-input__wrapper) {
+  border-color: #34c759 !important;
+  background: #f0fff4 !important;
+}
 
 /* 提交按钮 */
 .modal-submit-btn {

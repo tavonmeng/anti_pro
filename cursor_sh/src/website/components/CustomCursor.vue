@@ -24,13 +24,13 @@ onMounted(() => {
   }
 
   onMouseMove = (e) => {
-    // Check if mouse is over Header or Auth Modal
+    // Check if mouse is over Header, Auth Modal, or Element Plus dialogs
     const isOverHeader = !!e.target.closest('.header-bar')
-    const isOverAuthModal = !!e.target.closest('.auth-modal-overlay')
+    const isOverModal = !!e.target.closest('.auth-modal-overlay') || !!e.target.closest('.el-overlay')
     
     let isVisible = false
     
-    if (isOverHeader || isOverAuthModal) {
+    if (isOverHeader || isOverModal) {
       isVisible = false
     } else {
       isVisible = true
@@ -46,11 +46,11 @@ onMounted(() => {
   }
 
   onMouseOver = (e) => {
-    // If the mouse is over the header or auth modal, ensure normal cursor
+    // If the mouse is over the header, auth modal, or Element Plus dialog, ensure normal cursor
     const isOverHeader = !!e.target.closest('.header-bar')
-    const isOverAuthModal = !!e.target.closest('.auth-modal-overlay')
+    const isOverModal = !!e.target.closest('.auth-modal-overlay') || !!e.target.closest('.el-overlay')
     
-    if (isOverHeader || isOverAuthModal) {
+    if (isOverHeader || isOverModal) {
       onLeave()
       return
     }

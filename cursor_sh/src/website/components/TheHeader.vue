@@ -64,13 +64,8 @@
       <!-- Auth Buttons -->
       <div class="divider auth-divider"></div>
       <div class="auth-buttons">
-        <template v-if="isLoggedIn">
-          <button class="auth-btn btn-register" @click.prevent="goToWorkspace">进入工作台</button>
-        </template>
-        <template v-else>
-          <button class="auth-btn btn-login" @click.prevent="goToLogin">登录</button>
-          <button class="auth-btn btn-register" @click.prevent="goToRegister">注册</button>
-        </template>
+        <button class="auth-btn btn-login" @click.prevent="goToLogin">登录</button>
+        <button class="auth-btn btn-register" @click.prevent="goToRegister">注册</button>
       </div>
     </div>
 
@@ -165,6 +160,11 @@ const handleClick = (item) => {
 
 // ─── 登录/注册弹窗 ───────────────────────────────────────────
 const goToLogin = () => {
+  // 已登录则直接进入工作台
+  if (isLoggedIn.value) {
+    goToWorkspace()
+    return
+  }
   emit('openLogin')
 }
 

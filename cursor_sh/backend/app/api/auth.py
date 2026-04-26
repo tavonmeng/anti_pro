@@ -49,7 +49,7 @@ async def api_send_sms(
 ):
     """发送短信验证码"""
     try:
-        result = await send_sms_verify_code, verify_sms_code(sms_data.phone)
+        result = await send_sms_verify_code(sms_data.phone)
         return ApiResponse(code=200, message="验证码已发送", data=result)
     except HTTPException as e:
         raise e
@@ -60,11 +60,19 @@ async def api_send_sms(
 
 @router.post("/verify-sms", response_model=ApiResponse[bool])
 async def api_verify_sms(data: VerifySmsRequest):
-    """验证短信验证码"""
-    is_valid = await verify_sms_code(data.phone, data.code)
+    """验证短信验证码（消耗验证码）"""
+    is_valid = await verify_sms_code(data.phone, data.code, consume=True)
     if not is_valid:
         raise HTTPException(status_code=400, detail="验证码错误或已过期")
     return ApiResponse(code=200, message="验证成功", data=True)
+
+@router.post("/pre-verify-sms", response_model=ApiResponse[bool])
+async def api_pre_verify_sms(data: VerifySmsRequest):
+    """预校验短信验证码（不消耗，用于注册表单实时反馈）"""
+    is_valid = await verify_sms_code(data.phone, data.code, consume=False)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+    return ApiResponse(code=200, message="验证码正确", data=True)
 
 @router.post("/register", response_model=ApiResponse[dict])
 async def api_register(
