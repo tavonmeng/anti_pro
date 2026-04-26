@@ -487,3 +487,16 @@ function handleLoginSuccess() {
 .auth-modal-container::-webkit-scrollbar { width: 4px; }
 .auth-modal-container::-webkit-scrollbar-thumb { background: #d2d2d7; border-radius: 2px; }
 </style>
+
+<!-- 全局样式：确保 ElMessage / ElMessageBox 显示在弹窗之上 -->
+<style>
+.el-message {
+  z-index: 6001 !important;
+}
+.el-overlay {
+  z-index: 5500 !important;
+}
+.el-message-box {
+  z-index: 5501 !important;
+}
+</style>

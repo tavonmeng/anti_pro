@@ -79,9 +79,10 @@ request.interceptors.response.use(
       
       switch (status) {
         case 401:
-          // 登录页面的401错误不跳转，只显示错误信息
+          // 登录页面或弹窗中的401错误不跳转，只显示错误信息
           const currentPath = window.location.pathname
-          if (currentPath !== '/login' && currentPath !== '/admin/login' && currentPath !== '/register') {
+          const isAuthModalOpen = !!document.querySelector('.auth-modal-overlay')
+          if (currentPath !== '/login' && currentPath !== '/admin/login' && currentPath !== '/register' && !isAuthModalOpen) {
             ElMessage.error('未授权，请重新登录')
             localStorage.removeItem('token')
             localStorage.removeItem('user')
