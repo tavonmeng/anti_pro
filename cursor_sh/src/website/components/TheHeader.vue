@@ -102,7 +102,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['logoClick', 'menuClick'])
+const emit = defineEmits(['logoClick', 'menuClick', 'openLogin', 'openRegister'])
 
 // ─── 菜单项 ──────────────────────────────────────────────────
 const menuItems = [
@@ -163,13 +163,13 @@ const handleClick = (item) => {
   activeSectionLabel.value = item.label
 }
 
-// ─── 登录/注册导航 ───────────────────────────────────────────
+// ─── 登录/注册弹窗 ───────────────────────────────────────────
 const goToLogin = () => {
-  router.push('/login')
+  emit('openLogin')
 }
 
 const goToRegister = () => {
-  router.push('/register')
+  emit('openRegister')
 }
 
 const goToWorkspace = () => {

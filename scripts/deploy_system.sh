@@ -570,9 +570,17 @@ NGEOF
 
 # 清理旧的双端口配置
 rm -f /etc/nginx/conf.d/cursor-sh.conf 2>/dev/null || true
+rm -f /etc/nginx/conf.d/unique-vision-website.conf 2>/dev/null || true
 
 # 清理默认配置
 rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+
+# 禁用 nginx.conf 中自带的默认 server 块（CentOS/RHEL 默认会监听 80 端口导致冲突）
+if grep -q "listen.*80;" /etc/nginx/nginx.conf 2>/dev/null; then
+    # 注释掉 nginx.conf 中的 server { ... } 块
+    sed -i '/^    server {/,/^    }/s/^/#/' /etc/nginx/nginx.conf 2>/dev/null || true
+    info "已禁用 nginx.conf 中的默认 server 块"
+fi
 
 if nginx -t 2>/dev/null; then
     systemctl restart nginx

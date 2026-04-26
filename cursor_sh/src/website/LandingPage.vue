@@ -1,7 +1,7 @@
 <template>
   <div class="landing-scope">
     <PageLoader v-if="!loaderDestroyed" @complete="handleLoadComplete" />
-    <TheHeader :force-light="isDetailOpen" :force-transparent="isShowcaseOpen && !isDetailOpen" @logoClick="handleGlobalLogoClick" @menuClick="handleGlobalMenuClick" />
+    <TheHeader :force-light="isDetailOpen" :force-transparent="isShowcaseOpen && !isDetailOpen" @logoClick="handleGlobalLogoClick" @menuClick="handleGlobalMenuClick" @openLogin="openAuth('login')" @openRegister="openAuth('register')" />
     <CustomCursor />
     
     <div class="main-page" ref="mainPageRef">
@@ -35,12 +35,16 @@
       v-if="isExperimentOpen" 
       @close="isExperimentOpen = false" 
     />
+
+    <!-- 登录/注册弹窗 -->
+    <AuthModal :visible="authModalVisible" :initial-tab="authModalTab" @close="authModalVisible = false" />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import TheHeader from './components/TheHeader.vue'
+import AuthModal from './components/AuthModal.vue'
 import CaseDetailPage from './components/CaseDetailPage.vue'
 import CaseShowcasePage from './components/CaseShowcasePage.vue'
 import CustomCursor from './components/CustomCursor.vue'
@@ -67,6 +71,15 @@ const isShowcaseOpen = ref(false)
 const activeCaseDetail = ref(null)
 const isDetailOpen = ref(false)
 const isExperimentOpen = ref(false)
+
+// 登录/注册弹窗
+const authModalVisible = ref(false)
+const authModalTab = ref('login')
+
+const openAuth = (tab) => {
+  authModalTab.value = tab
+  authModalVisible.value = true
+}
 
 // 页面加载状态
 const isLoaded = ref(false)
