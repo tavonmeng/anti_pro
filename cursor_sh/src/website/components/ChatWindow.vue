@@ -143,7 +143,7 @@ const sendMessage = async () => {
   isLoading.value = true
 
   try {
-    const response = await fetch('http://localhost:8001/chat', {
+    const response = await fetch('/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -178,7 +178,7 @@ const sendMessage = async () => {
 const submitForm = async () => {
   isSubmitting.value = true
   try {
-    await fetch('http://localhost:8001/submit_requirements', {
+    await fetch('/ai/submit_requirements', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(formData.value)

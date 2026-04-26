@@ -4,8 +4,7 @@
 # 全栈系统 (官网 + 业务前端 + 后端) 阿里云一键部署脚本
 #
 # 架构：
-#   - 官网        → Nginx 80 端口
-#   - 业务系统    → Nginx 8080 端口 (前端 + API 反向代理)
+#   - 官网+管理系统 → Nginx 80 端口 (合并后的单 Vue 应用)
 #   - 后端 API    → 本地 8000 端口 (Gunicorn + Uvicorn)
 #
 # 用法：
@@ -34,9 +33,9 @@ fi
 # ---- 定位项目根目录 ----
 PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." >/dev/null 2>&1 && pwd )"
 
-if [ ! -d "$PROJECT_ROOT/cursor_sh/backend" ] || [ ! -d "$PROJECT_ROOT/website" ]; then
+if [ ! -d "$PROJECT_ROOT/cursor_sh/backend" ] || [ ! -d "$PROJECT_ROOT/cursor_sh/src" ]; then
     echo -e "${RED}❌ 无法定位项目根目录，请确保从项目内运行此脚本${NC}"
-    echo "  期望的目录结构: PROJECT_ROOT/website/ + PROJECT_ROOT/cursor_sh/backend/"
+    echo "  期望的目录结构: PROJECT_ROOT/cursor_sh/backend/ + PROJECT_ROOT/cursor_sh/src/"
     echo "  当前检测到的根目录: $PROJECT_ROOT"
     exit 1
 fi
@@ -465,6 +464,7 @@ fi
 # ==============================================================
 #  步骤 4: 构建前端
 # ==============================================================
+title "步骤 4/6: 构建前端 (官网 + 管理系统)"
 # 自动获取公网 IP
 PUBLIC_IP=$(curl -s --connect-timeout 3 ifconfig.me 2>/dev/null || curl -s --connect-timeout 3 ip.sb 2>/dev/null || echo "")
 [ -n "$PUBLIC_IP" ] && info "检测到公网 IP: $PUBLIC_IP"

@@ -64,8 +64,13 @@
       <!-- Auth Buttons -->
       <div class="divider auth-divider"></div>
       <div class="auth-buttons">
-        <button class="auth-btn btn-login" @click.prevent="goToLogin">登录</button>
-        <button class="auth-btn btn-register" @click.prevent="goToRegister">注册</button>
+        <template v-if="isLoggedIn">
+          <button class="auth-btn btn-register" @click.prevent="goToWorkspace">进入工作台</button>
+        </template>
+        <template v-else>
+          <button class="auth-btn btn-login" @click.prevent="goToLogin">登录</button>
+          <button class="auth-btn btn-register" @click.prevent="goToRegister">注册</button>
+        </template>
       </div>
     </div>
 
@@ -79,8 +84,12 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
+
+const isLoggedIn = computed(() => authStore.isAuthenticated())
 
 const props = defineProps({
   forceLight: {
@@ -161,6 +170,16 @@ const goToLogin = () => {
 
 const goToRegister = () => {
   router.push('/register')
+}
+
+const goToWorkspace = () => {
+  if (authStore.isAdmin()) {
+    router.push('/admin')
+  } else if (authStore.isStaff()) {
+    router.push('/staff')
+  } else {
+    router.push('/user/workspace')
+  }
 }
 
 // ─── 滚动检测 ────────────────────────────────────────────────
