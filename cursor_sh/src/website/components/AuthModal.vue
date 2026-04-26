@@ -94,32 +94,29 @@
               </div>
             </el-form-item>
 
-            <!-- 验证码通过后显示剩余字段 -->
-            <template v-if="smsPreVerified">
-              <el-form-item prop="username">
-                <el-input v-model="registerForm.username" placeholder="请设置用户名（3-20个字符）" size="large" class="modal-input">
-                  <template #prefix><el-icon class="modal-icon"><User /></el-icon></template>
-                </el-input>
-              </el-form-item>
-              <el-form-item prop="email">
-                <el-input v-model="registerForm.email" placeholder="请输入邮箱" size="large" class="modal-input">
-                  <template #prefix><el-icon class="modal-icon"><Message /></el-icon></template>
-                </el-input>
-              </el-form-item>
-              <el-form-item prop="password">
-                <el-input v-model="registerForm.password" type="password" placeholder="请设置密码（至少6位）" size="large" class="modal-input" show-password>
-                  <template #prefix><el-icon class="modal-icon"><Lock /></el-icon></template>
-                </el-input>
-              </el-form-item>
-              <el-form-item prop="confirmPassword">
-                <el-input v-model="registerForm.confirmPassword" type="password" placeholder="请再次输入密码" size="large" class="modal-input" show-password @keyup.enter="handleRegister">
-                  <template #prefix><el-icon class="modal-icon"><Lock /></el-icon></template>
-                </el-input>
-              </el-form-item>
-              <el-button type="primary" size="large" class="modal-submit-btn" :loading="loading" @click="handleRegister">
-                {{ loading ? '注册中...' : '注册' }}
-              </el-button>
-            </template>
+            <el-form-item prop="username">
+              <el-input v-model="registerForm.username" placeholder="请设置用户名（3-20个字符）" size="large" class="modal-input">
+                <template #prefix><el-icon class="modal-icon"><User /></el-icon></template>
+              </el-input>
+            </el-form-item>
+            <el-form-item prop="email">
+              <el-input v-model="registerForm.email" placeholder="请输入邮箱" size="large" class="modal-input">
+                <template #prefix><el-icon class="modal-icon"><Message /></el-icon></template>
+              </el-input>
+            </el-form-item>
+            <el-form-item prop="password">
+              <el-input v-model="registerForm.password" type="password" placeholder="请设置密码（至少6位）" size="large" class="modal-input" show-password>
+                <template #prefix><el-icon class="modal-icon"><Lock /></el-icon></template>
+              </el-input>
+            </el-form-item>
+            <el-form-item prop="confirmPassword">
+              <el-input v-model="registerForm.confirmPassword" type="password" placeholder="请再次输入密码" size="large" class="modal-input" show-password @keyup.enter="handleRegister">
+                <template #prefix><el-icon class="modal-icon"><Lock /></el-icon></template>
+              </el-input>
+            </el-form-item>
+            <el-button type="primary" size="large" class="modal-submit-btn" :loading="loading" @click="handleRegister">
+              {{ loading ? '注册中...' : '注册' }}
+            </el-button>
           </el-form>
         </div>
 
