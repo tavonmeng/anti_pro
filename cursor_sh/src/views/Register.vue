@@ -1,7 +1,7 @@
 <template>
-  <div class="register-container" :class="{ 'is-modal': isModal }">
+  <div class="register-container">
     <!-- 背景 -->
-    <div class="minimal-background" v-if="!isModal"></div>
+    <div class="minimal-background"></div>
 
     <div class="register-wrapper">
       <div>
@@ -192,7 +192,7 @@ const captchaDialogVisible = ref(false)
 const dialogCaptcha = ref('')
 const dialogCaptchaRef = ref<InstanceType<typeof Captcha>>()
 
-const isModal = computed(() => route.query.modal === 'true')
+
 
 const registerForm = reactive({
   phone: '',
@@ -347,11 +347,7 @@ const handleRegister = async () => {
         
         if (success) {
           ElMessage.success('注册成功！请登录')
-          if (isModal.value) {
-            router.push({ path: '/login', query: { modal: 'true' }})
-          } else {
-            router.push('/login')
-          }
+          router.push('/login')
         }
       } catch (error: any) {
         if (error?.message && error.message.includes('该手机号已注册')) {
@@ -378,11 +374,7 @@ const handleRegister = async () => {
 }
 
 const goToLogin = () => {
-  if (isModal.value) {
-    router.push({ path: '/login', query: { modal: 'true' }})
-  } else {
-    router.push('/login')
-  }
+  router.push('/login')
 }
 </script>
 
@@ -401,10 +393,7 @@ const goToLogin = () => {
   box-sizing: border-box;
 }
 
-.login-container.is-modal, .register-container.is-modal {
-  background: #ffffff;
-  padding: 24px 32px;
-}
+
 
 .login-wrapper, .admin-login-wrapper, .register-wrapper {
   position: relative;
@@ -420,13 +409,7 @@ const goToLogin = () => {
   box-sizing: border-box;
 }
 
-.register-container.is-modal .register-wrapper {
-  box-shadow: none;
-  border: none;
-  width: 100%;
-  max-width: 100%;
-  padding: 0;
-}
+
 
 /* 头部重置 */
 .login-header, .admin-login-header, .register-header {

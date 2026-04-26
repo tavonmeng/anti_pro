@@ -45,8 +45,7 @@ info "项目根目录: $PROJECT_ROOT"
 
 # ---- 配置常量 ----
 CMD="${1:-deploy}"
-WEBSITE_DIR="/var/www/unique-vision-website"
-CURSOR_FE_DIR="/var/www/order-management-fe"
+DEPLOY_DIR="/var/www/unique-vision"      # 统一部署目录（官网 + 管理系统合并后）
 SERVICE_NAME="order-api"
 AI_SERVICE_NAME="ai-agent-api"
 BACKEND_DIR="$PROJECT_ROOT/cursor_sh/backend"
@@ -156,11 +155,11 @@ generate_env() {
     [ -n "$PUBLIC_IP" ] && info "检测到公网 IP: $PUBLIC_IP"
     read -p "生产域名 (留空使用 IP 访问): " PROD_DOMAIN
     if [ -n "$PROD_DOMAIN" ]; then
-        CORS_VAL="[\"https://${PROD_DOMAIN}\",\"http://${PROD_DOMAIN}\",\"http://${PROD_DOMAIN}:8080\"]"
+        CORS_VAL="[\"https://${PROD_DOMAIN}\",\"http://${PROD_DOMAIN}\"]"
     elif [ -n "$PUBLIC_IP" ]; then
-        CORS_VAL="[\"http://${PUBLIC_IP}:8080\",\"http://${PUBLIC_IP}\"]"
+        CORS_VAL="[\"http://${PUBLIC_IP}\"]"
     else
-        CORS_VAL="[\"http://localhost:8080\",\"http://localhost\"]"
+        CORS_VAL="[\"http://localhost\"]"
     fi
 
     # 写入
@@ -323,7 +322,7 @@ else
 fi
 fc-cache -f 2>/dev/null || true
 
-mkdir -p "$WEBSITE_DIR" "$CURSOR_FE_DIR"
+mkdir -p "$DEPLOY_DIR"
 
 # ==============================================================
 #  步骤 2: 配置 .env
@@ -466,36 +465,12 @@ fi
 # ==============================================================
 #  步骤 4: 构建前端
 # ==============================================================
-title "步骤 4/6: 构建前端"
-
 # 自动获取公网 IP
 PUBLIC_IP=$(curl -s --connect-timeout 3 ifconfig.me 2>/dev/null || curl -s --connect-timeout 3 ip.sb 2>/dev/null || echo "")
 [ -n "$PUBLIC_IP" ] && info "检测到公网 IP: $PUBLIC_IP"
 
-# ---- 官网 ----
-info "构建官网..."
-cd "$PROJECT_ROOT/website"
-npm install --legacy-peer-deps 2>/dev/null || npm install
-
-if [ -n "$PUBLIC_IP" ]; then
-    DASHBOARD_URL="http://$PUBLIC_IP:8080"
-else
-    DASHBOARD_URL="http://localhost:8080"
-fi
-echo "VITE_DASHBOARD_URL=$DASHBOARD_URL" > .env.production
-info "官网跳转链接: $DASHBOARD_URL"
-
-if npm run build > /tmp/website-build.log 2>&1; then
-    cp -r dist/* "$WEBSITE_DIR/"
-    chown -R www-data:www-data "$WEBSITE_DIR" 2>/dev/null || chown -R root:root "$WEBSITE_DIR"
-    info "官网构建成功"
-else
-    warn "官网构建失败（不影响业务系统）："
-    tail -20 /tmp/website-build.log
-fi
-
-# ---- 业务系统前端 ----
-info "构建业务系统前端..."
+# ---- 统一前端构建 (官网 + 管理系统已合并为单 Vue 应用) ----
+info "构建前端应用（官网 + 管理系统）..."
 cd "$PROJECT_ROOT/cursor_sh"
 echo "VITE_API_BASE_URL=/api" > .env.production
 echo "VITE_ENABLE_VOICE_INPUT=false" >> .env.production
@@ -504,18 +479,18 @@ npm install --legacy-peer-deps 2>/dev/null || npm install
 BUILD_OK=false
 if npm run build > /tmp/cursor-build.log 2>&1; then
     BUILD_OK=true
-    info "业务前端构建成功"
+    info "前端构建成功"
 elif npx vite build > /tmp/cursor-build.log 2>&1; then
     BUILD_OK=true
-    info "业务前端构建成功（跳过类型检查）"
+    info "前端构建成功（跳过类型检查）"
 fi
 
 if [ "$BUILD_OK" = true ] && [ -d "dist" ]; then
-    cp -r dist/* "$CURSOR_FE_DIR/"
-    chown -R www-data:www-data "$CURSOR_FE_DIR" 2>/dev/null || chown -R root:root "$CURSOR_FE_DIR"
-    info "业务前端文件已复制到 $CURSOR_FE_DIR"
+    cp -r dist/* "$DEPLOY_DIR/"
+    chown -R www-data:www-data "$DEPLOY_DIR" 2>/dev/null || chown -R root:root "$DEPLOY_DIR"
+    info "前端文件已部署到 $DEPLOY_DIR"
 else
-    err "业务前端构建失败！日志: tail -30 /tmp/cursor-build.log"
+    err "前端构建失败！日志: tail -30 /tmp/cursor-build.log"
 fi
 
 # ==============================================================
@@ -523,43 +498,18 @@ fi
 # ==============================================================
 title "步骤 5/6: 配置 Nginx"
 
-# ---- 官网 (80) ----
+# ---- 统一 Nginx 配置 (单端口 80) ----
 cat > /etc/nginx/conf.d/unique-vision.conf << 'NGEOF'
 server {
     listen 80;
     server_name _;
-    root /var/www/unique-vision-website;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # 静态资源长缓存
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|mp4|webm)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_types text/plain text/css text/javascript application/javascript application/json;
-}
-NGEOF
-
-# ---- 业务系统 (8080) ----
-cat > /etc/nginx/conf.d/cursor-sh.conf << 'NGEOF'
-server {
-    listen 8080;
-    server_name _;
-    root /var/www/order-management-fe;
+    root /var/www/unique-vision;
     index index.html;
 
     # 上传文件大小限制 (营业执照、初稿等)
     client_max_body_size 50m;
 
-    # Vue Router SPA
+    # Vue Router SPA (官网 + 管理系统所有前端路由)
     location / {
         try_files $uri $uri/ /index.html;
     }
@@ -606,7 +556,7 @@ server {
     }
 
     # 静态资源长缓存
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|mp4|webm)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
@@ -617,6 +567,9 @@ server {
     gzip_types text/plain text/css text/xml text/javascript application/javascript application/json application/xml+rss;
 }
 NGEOF
+
+# 清理旧的双端口配置
+rm -f /etc/nginx/conf.d/cursor-sh.conf 2>/dev/null || true
 
 # 清理默认配置
 rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
@@ -638,15 +591,13 @@ if command -v ufw &>/dev/null; then
     ufw allow 22/tcp > /dev/null 2>&1
     ufw allow 80/tcp > /dev/null 2>&1
     ufw allow 443/tcp > /dev/null 2>&1
-    ufw allow 8080/tcp > /dev/null 2>&1
     ufw --force enable > /dev/null 2>&1
-    info "防火墙已配置 (22/80/443/8080)"
+    info "防火墙已配置 (22/80/443)"
 elif command -v firewall-cmd &>/dev/null; then
     firewall-cmd --permanent --add-port=80/tcp 2>/dev/null || true
     firewall-cmd --permanent --add-port=443/tcp 2>/dev/null || true
-    firewall-cmd --permanent --add-port=8080/tcp 2>/dev/null || true
     firewall-cmd --reload 2>/dev/null || true
-    info "firewalld 已配置 (80/443/8080)"
+    info "firewalld 已配置 (80/443)"
 fi
 
 # SSL
@@ -673,12 +624,12 @@ echo ""
 echo -e "${CYAN}── 访问方式 ──${NC}"
 if [ -n "$PUBLIC_IP" ]; then
     echo "  官网:         http://$PUBLIC_IP"
-    echo "  业务系统:     http://$PUBLIC_IP:8080"
-    echo "  管理后台:     http://$PUBLIC_IP:8080/admin/login"
+    echo "  用户登录:     http://$PUBLIC_IP/login"
+    echo "  管理后台:     http://$PUBLIC_IP/admin/login"
 else
     echo "  官网:         http://服务器IP"
-    echo "  业务系统:     http://服务器IP:8080"
-    echo "  管理后台:     http://服务器IP:8080/admin/login"
+    echo "  用户登录:     http://服务器IP/login"
+    echo "  管理后台:     http://服务器IP/admin/login"
 fi
 echo ""
 
@@ -691,7 +642,7 @@ echo "  申请 SSL:        sudo bash scripts/deploy_system.sh ssl"
 echo ""
 
 echo -e "${YELLOW}⚠️  重要提醒：${NC}"
-echo "  1. 请前往阿里云安全组，放行 TCP 端口: 80, 443, 8080"
+echo "  1. 请前往阿里云安全组，放行 TCP 端口: 80, 443"
 echo "  2. 语音录入需要 HTTPS，请尽快配置 SSL 证书"
 echo "  3. 首次启动会自动建表和创建管理员账户"
 echo ""

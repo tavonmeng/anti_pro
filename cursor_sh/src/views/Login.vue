@@ -1,6 +1,6 @@
 <template>
-  <div class="login-container" :class="{ 'is-modal': isModal }">
-    <div class="minimal-background" v-if="!isModal"></div>
+  <div class="login-container">
+    <div class="minimal-background"></div>
 
     <div class="login-wrapper">
       <div>
@@ -205,7 +205,6 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
-const isModal = computed(() => route.query.modal === 'true')
 const loading = ref(false)
 
 // ========== 视图切换 ==========
@@ -436,12 +435,8 @@ const handleSendSms = async (scene: 'login' | 'reset') => {
 // ========== 公共方法 ==========
 function handleLoginSuccess() {
   if (authStore.isUser()) {
-    if (isModal.value) {
-      window.parent.postMessage({ type: 'LOGIN_SUCCESS' }, '*')
-    } else {
-      const redirect = router.currentRoute.value.query.redirect as string || undefined
-      router.push(redirect || '/user/workspace')
-    }
+    const redirect = router.currentRoute.value.query.redirect as string || undefined
+    router.push(redirect || '/user/workspace')
   } else {
     ElMessage.error('请使用管理员登录入口')
     authStore.logout()
@@ -449,11 +444,7 @@ function handleLoginSuccess() {
 }
 
 const goToRegister = () => {
-  if (isModal.value) {
-    router.push({ path: '/register', query: { modal: 'true' }})
-  } else {
-    router.push('/register')
-  }
+  router.push('/register')
 }
 </script>
 
@@ -472,10 +463,7 @@ const goToRegister = () => {
   box-sizing: border-box;
 }
 
-.login-container.is-modal {
-  background: #ffffff;
-  padding: 24px 32px;
-}
+
 
 .login-wrapper {
   position: relative;
@@ -488,11 +476,6 @@ const goToRegister = () => {
   box-sizing: border-box;
 }
 
-.login-container.is-modal .login-wrapper {
-  width: 100%;
-  max-width: 100%;
-  padding: 0;
-}
 
 .login-header {
   text-align: center;
