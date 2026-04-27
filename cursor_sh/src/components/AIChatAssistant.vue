@@ -311,7 +311,9 @@
             placeholder="描述您的需求，或直接输入问题..."
             class="chat-native-textarea"
             @input="adjustTextareaHeight"
-            @keydown.enter.prevent="sendMessage"
+            @keydown.enter="handleEnterKey"
+            @compositionstart="isComposing = true"
+            @compositionend="isComposing = false"
             :disabled="isLoading || isTyping || isRecording"
             @focus="handleInputFocus"
             rows="1"
@@ -785,12 +787,21 @@ const extractLoading = ref(false) // 信息提取整理中
 const session_id = ref(Math.random().toString(36).substring(7))
 const chatContentRef = ref<any>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const isComposing = ref(false) // 中文输入法组合输入状态
 
 const adjustTextareaHeight = () => {
   const ta = textareaRef.value
   if (!ta) return
   ta.style.height = 'auto'
   ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
+}
+
+/** 处理 Enter 键：IME 组合输入期间不发送消息 */
+const handleEnterKey = (e: KeyboardEvent) => {
+  // 正在使用输入法组合输入时，Enter 用于确认候选词，不发送消息
+  if (e.isComposing || isComposing.value) return
+  e.preventDefault()
+  sendMessage()
 }
 
 const handleInputFocus = () => {
