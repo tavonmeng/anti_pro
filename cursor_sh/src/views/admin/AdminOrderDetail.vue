@@ -20,6 +20,12 @@
           >
             {{ (order.assignees && order.assignees.length > 0) ? '重新分配负责人' : '分配负责人' }}
           </el-button>
+          <el-button
+            @click="showContractorAssignDialog = true"
+            :disabled="order.status === 'completed' || order.status === 'cancelled'"
+          >
+            派单给承包商
+          </el-button>
           <el-button 
             :icon="Upload" 
             type="primary"
@@ -264,6 +270,60 @@
           </div>
         </div>
         
+        <!-- 承包商派单记录 -->
+        <div v-if="contractorAssignments.length > 0" class="contractor-section">
+          <h3>承包商派单记录</h3>
+          <div v-for="assignment in contractorAssignments" :key="assignment.id" class="contractor-assignment-card">
+            <div class="ca-header">
+              <div>
+                <strong>{{ assignment.contractorName }}</strong>
+                <el-tag :type="caStatusType(assignment.status)" size="small" style="margin-left:8px">{{ caStatusLabel(assignment.status) }}</el-tag>
+              </div>
+              <div class="ca-actions">
+                <el-button v-if="['accepted','in_progress'].includes(assignment.status)" size="small" type="primary" @click="handleAdvanceStage(assignment.id)">
+                  推进到下一环节
+                </el-button>
+              </div>
+            </div>
+            <!-- 排期 -->
+            <div class="ca-schedule" v-if="assignment.schedule">
+              <div v-for="(stage, idx) in assignment.schedule" :key="idx" class="ca-stage"
+                :class="{ active: stage.display_order === parseInt(assignment.currentStageOrder || '1'), completed: stage.status === 'completed' }">
+                <span class="ca-stage-name">{{ stage.name }}</span>
+                <span class="ca-stage-days">{{ stage.days }}天</span>
+                <el-tag v-if="stage.status === 'completed'" type="success" size="small">完成</el-tag>
+                <el-tag v-else-if="stage.status === 'active'" type="primary" size="small">当前</el-tag>
+              </div>
+            </div>
+            <!-- 交付物 -->
+            <div v-if="assignment.deliverables && assignment.deliverables.length > 0" class="ca-deliverables">
+              <h4>交付物</h4>
+              <div v-for="d in assignment.deliverables" :key="d.id" class="ca-deliverable-item">
+                <div class="ca-dlv-header">
+                  <span>{{ d.stageName }} V{{ d.version }}</span>
+                  <el-tag :type="dlvStatusType(d.status)" size="small">{{ dlvStatusLabel(d.status) }}</el-tag>
+                </div>
+                <div v-if="d.files && d.files.length" class="ca-dlv-files">
+                  <a v-for="f in d.files" :key="f.url" :href="f.url" target="_blank" class="ca-dlv-file">
+                    {{ f.name || f.filename }}
+                  </a>
+                </div>
+                <p v-if="d.description" class="ca-dlv-desc">{{ d.description }}</p>
+                <!-- 审核操作 -->
+                <div v-if="d.status === 'submitted'" class="ca-dlv-actions">
+                  <el-button size="small" type="success" @click="handleReviewDlv(d.id, true)">审核通过</el-button>
+                  <el-button size="small" type="danger" @click="handleReviewDlv(d.id, false)">驳回</el-button>
+                </div>
+                <!-- 推送操作 -->
+                <div v-if="d.status === 'admin_approved' && !d.isPublishedToUser" class="ca-dlv-actions">
+                  <el-button size="small" type="primary" @click="handlePublishDlv(d.id)">推送给用户</el-button>
+                </div>
+                <div v-if="d.adminReviewNote" class="ca-dlv-note">审核备注：{{ d.adminReviewNote }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 反馈记录 -->
         <div v-if="order.feedbacks.length > 0" class="feedback-section">
           <h3>客户反馈记录</h3>
@@ -359,6 +419,29 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 派单给承包商对话框 -->
+    <el-dialog v-model="showContractorAssignDialog" title="派单给承包商" width="480px" destroy-on-close>
+      <el-form label-position="top">
+        <el-form-item label="选择承包商" required>
+          <el-select v-model="contractorAssignForm.contractorId" placeholder="请选择" filterable style="width:100%">
+            <el-option
+              v-for="c in contractorOptions"
+              :key="c.id"
+              :label="`${c.username}${c.company ? ' (' + c.company + ')' : ''}`"
+              :value="c.id"
+              :disabled="!c.isActive"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showContractorAssignDialog = false">取消</el-button>
+        <el-button type="primary" :loading="contractorAssigning" :disabled="!contractorAssignForm.contractorId" @click="handleContractorAssign">
+          确认派单
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -368,7 +451,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, User, Upload, ArrowDown, Picture, Document as DocumentIcon, VideoPlay, Download } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useOrderStore } from '@/stores/order'
-import { orderApi, authApi } from '@/utils/api'
+import { orderApi, authApi, contractorAdminApi } from '@/utils/api'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import AssigneeDialog from '@/components/AssigneeDialog.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
@@ -388,6 +471,13 @@ const contractLoading = ref(false)
 const cancelLoading = ref(false)
 const smsLoading = ref(false)
 const smsCooldown = ref(0)
+
+// 承包商相关状态
+const showContractorAssignDialog = ref(false)
+const contractorAssigning = ref(false)
+const contractorOptions = ref<any[]>([])
+const contractorAssignments = ref<any[]>([])
+const contractorAssignForm = ref({ contractorId: '' })
 
 const contractForm = ref({
   contractNumber: '',
@@ -451,7 +541,92 @@ onMounted(async () => {
   const orderId = route.params.id as string
   order.value = await orderStore.getOrderDetail(orderId)
   loading.value = false
+  // 加载承包商列表和派单记录
+  loadContractorData(orderId)
 })
+
+const loadContractorData = async (orderId: string) => {
+  try {
+    const [contractorsRes, assignmentsRes] = await Promise.all([
+      contractorAdminApi.getContractors({ page: 1, pageSize: 100 }),
+      contractorAdminApi.getAssignments({ order_id: orderId }),
+    ])
+    contractorOptions.value = contractorsRes?.data || []
+    contractorAssignments.value = assignmentsRes?.data || []
+  } catch {
+    // 非阻断错误，承包商功能可能未启用
+  }
+}
+
+const handleContractorAssign = async () => {
+  if (!order.value || !contractorAssignForm.value.contractorId) return
+  contractorAssigning.value = true
+  try {
+    await contractorAdminApi.assignOrder({
+      order_id: order.value.id,
+      contractor_id: contractorAssignForm.value.contractorId,
+    })
+    ElMessage.success('派单成功')
+    showContractorAssignDialog.value = false
+    contractorAssignForm.value.contractorId = ''
+    loadContractorData(order.value.id)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || e?.message || '派单失败')
+  } finally {
+    contractorAssigning.value = false
+  }
+}
+
+const handleAdvanceStage = async (assignmentId: string) => {
+  try {
+    await ElMessageBox.confirm('确认推进到下一工作流环节？', '确认推进', { type: 'warning' })
+    const res = await contractorAdminApi.advanceStage(assignmentId)
+    ElMessage.success(res?.message || '已推进')
+    if (order.value) loadContractorData(order.value.id)
+  } catch { /* cancelled */ }
+}
+
+const handleReviewDlv = async (deliverableId: string, approved: boolean) => {
+  try {
+    let note = ''
+    if (!approved) {
+      const result = await ElMessageBox.prompt('请输入驳回理由', '驳回交付物', { inputType: 'textarea' })
+      note = result.value
+    } else {
+      await ElMessageBox.confirm('确认通过该交付物？', '审核确认')
+    }
+    await contractorAdminApi.reviewDeliverable(deliverableId, { approved, review_note: note })
+    ElMessage.success(approved ? '已通过' : '已驳回')
+    if (order.value) loadContractorData(order.value.id)
+  } catch { /* cancelled */ }
+}
+
+const handlePublishDlv = async (deliverableId: string) => {
+  try {
+    await ElMessageBox.confirm('推送后用户将看到此交付物内容', '推送给用户')
+    await contractorAdminApi.publishDeliverable(deliverableId)
+    ElMessage.success('已推送给用户')
+    if (order.value) loadContractorData(order.value.id)
+  } catch { /* cancelled */ }
+}
+
+const caStatusLabel = (s: string) => ({
+  pending: '待接单', accepted: '已接单', in_progress: '进行中',
+  completed: '已完成', rejected: '已拒绝', cancelled: '已取消',
+}[s] || s)
+
+const caStatusType = (s: string) => ({
+  pending: 'warning', in_progress: '', accepted: 'success',
+  completed: 'success', rejected: 'danger', cancelled: 'info',
+}[s] || 'info') as '' | 'success' | 'warning' | 'danger' | 'info'
+
+const dlvStatusLabel = (s: string) => ({
+  draft: '草稿', submitted: '待审核', admin_approved: '已通过', admin_rejected: '已驳回',
+}[s] || s)
+
+const dlvStatusType = (s: string) => ({
+  draft: 'info', submitted: 'warning', admin_approved: 'success', admin_rejected: 'danger',
+}[s] || 'info') as '' | 'success' | 'warning' | 'danger' | 'info'
 
 const getIndustryText = () => {
   if (order.value && order.value.orderType === 'video_purchase') {
@@ -920,5 +1095,36 @@ const handleAdminCancel = async () => {
 .assignee-tag {
   margin: 0;
 }
+
+/* 承包商派单区域 */
+.contractor-section {
+  margin-top: 32px;
+  h3 { font-size: 18px; font-weight: 600; color: #1D1D1F; margin: 0 0 16px; }
+}
+.contractor-assignment-card {
+  background: #F9FAFB; border-radius: 10px; padding: 16px; margin-bottom: 12px;
+  border: 1px solid #E5E7EB;
+}
+.ca-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.ca-schedule { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.ca-stage {
+  padding: 6px 12px; border-radius: 6px; background: #fff; border: 1px solid #E5E7EB;
+  font-size: 13px; display: flex; align-items: center; gap: 6px;
+  &.active { border-color: #409eff; background: #F0F9FF; }
+  &.completed { border-color: #67C23A; background: #F6FFED; }
+}
+.ca-stage-name { font-weight: 500; }
+.ca-stage-days { color: #86868B; }
+.ca-deliverables { margin-top: 12px; h4 { font-size: 14px; font-weight: 500; margin: 0 0 8px; color: #515154; } }
+.ca-deliverable-item {
+  background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 8px;
+  border: 1px solid #E5E7EB;
+}
+.ca-dlv-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: 500; }
+.ca-dlv-files { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.ca-dlv-file { font-size: 13px; color: #409eff; text-decoration: none; &:hover { text-decoration: underline; } }
+.ca-dlv-desc { font-size: 13px; color: #515154; margin: 0 0 8px; }
+.ca-dlv-actions { display: flex; gap: 8px; }
+.ca-dlv-note { font-size: 12px; color: #E6A23C; margin-top: 8px; }
 </style>
 

@@ -71,6 +71,11 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.role === 'admin' || user.value?.role === 'staff'
   }
 
+  // 检查是否为承包商
+  const isContractor = () => {
+    return user.value?.role === 'contractor'
+  }
+
   // 检查是否为已通过企业认证的用户
   const isEnterprise = () => {
     return user.value?.enterprise_status === 'approved'
@@ -86,6 +91,7 @@ export const useAuthStore = defineStore('auth', () => {
     isUser,
     isStaff,
     isAdminOrStaff,
+    isContractor,
     isEnterprise
   }
 })

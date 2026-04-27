@@ -9,6 +9,9 @@ from app.config import settings
 from app.database import init_db
 from app.audit_database import init_audit_db
 from app.api import auth, orders, staff, notifications, ai, logs, announcements, enterprise, asr
+from app.api import contractor as contractor_api
+from app.api import contractor_admin as contractor_admin_api
+from app.api import workflow_config as workflow_config_api
 from app.middleware.cors import setup_cors
 from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
 from app.middleware.audit_logger import AuditLoggerMiddleware
@@ -40,14 +43,11 @@ _cases_static = os.path.join(os.path.dirname(__file__), "data", "cases")
 os.makedirs(_cases_static, exist_ok=True)
 app.mount("/static/cases", StaticFiles(directory=_cases_static), name="cases_static")
 
-# 注册路由
+# ========== 根据部署模式注册路由 ==========
+deploy_mode = settings.DEPLOYMENT_MODE  # all / external / internal
+
+# 通用路由（所有模式都需要）
 app.include_router(auth.router, prefix="/api")
-app.include_router(orders.router, prefix="/api")
-app.include_router(staff.router, prefix="/api")
-app.include_router(notifications.router, prefix="/api")
-app.include_router(logs.router, prefix="/api")
-app.include_router(announcements.router, prefix="/api")
-app.include_router(enterprise.router, prefix="/api")
 
 # 文件上传路由
 from app.api import upload
@@ -56,8 +56,24 @@ app.include_router(upload.router, prefix="/api")
 # ASR 语音识别路由
 app.include_router(asr.router, prefix="/api")
 
-# 挂载没有任何 api 前缀的 ai 路由，因为前端直接请求 /ai/start 和 /ai/chat
-app.include_router(ai.router)
+# 订单路由（所有模式都需要，权限由 JWT 控制）
+app.include_router(orders.router, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
+
+if deploy_mode in ("all", "external"):
+    # 用户端专属：AI 聊天（挂载没有 api 前缀）
+    app.include_router(ai.router)
+
+if deploy_mode in ("all", "internal"):
+    # 内部系统专属路由
+    app.include_router(staff.router, prefix="/api")
+    app.include_router(logs.router, prefix="/api")
+    app.include_router(announcements.router, prefix="/api")
+    app.include_router(enterprise.router, prefix="/api")
+    # 承包商相关路由
+    app.include_router(contractor_api.router, prefix="/api")
+    app.include_router(contractor_admin_api.router, prefix="/api")
+    app.include_router(workflow_config_api.router, prefix="/api")
 
 # 挂载审计日志中间件（放在路由注册之后，确保能拦截所有请求）
 if settings.LOG_ENABLED:
@@ -85,11 +101,22 @@ async def startup_event():
     except Exception as e:
         print(f"⚠️  管理员初始化异常（不影响启动）: {e}")
     
+    # 确保工作流环节配置存在（幂等，仅首次初始化）
+    from scripts.init_workflow import ensure_workflow_stages
+    from app.database import async_session_maker
+    try:
+        async with async_session_maker() as session:
+            await ensure_workflow_stages(session)
+    except Exception as e:
+        print(f"⚠️  工作流配置初始化异常（不影响启动）: {e}")
+    
     # 确保上传目录存在
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     print(f"✅ 上传目录已准备: {settings.UPLOAD_DIR}")
     
+    mode_label = {"all": "全量", "external": "外部（用户端）", "internal": "内部系统"}
     print(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} 启动成功")
+    print(f"📋 部署模式: {mode_label.get(deploy_mode, deploy_mode)}")
     print(f"📚 API 文档: http://{settings.HOST}:{settings.PORT}/docs")
 
 
@@ -99,6 +126,7 @@ async def root():
     return {
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
+        "deployment_mode": settings.DEPLOYMENT_MODE,
         "docs": "/docs",
         "redoc": "/redoc"
     }

@@ -144,9 +144,9 @@ class Settings(BaseSettings):
     LOG_COMPRESSION: str = "gz"              # 归档压缩格式：gz / zip / None
     LOG_DB_ENABLED: bool = True              # 是否将审计日志写入数据库
     LOG_DB_METHODS: str = "POST,PUT,DELETE"  # 哪些 HTTP Method 触发数据库记录
-    LOG_SANITIZE_FIELDS: str = "password,oldPassword,newPassword,old_password,new_password,token,secret,sms_code,captcha"
+    LOG_SANITIZE_FIELDS: str = "password,oldPassword,newPassword,old_password,new_password,token,secret,sms_code,captcha,invite_token"
     LOG_MAX_PAYLOAD_SIZE: int = 4096         # payload 字段最大字符数（超出截断）
-    LOG_MODULES: str = "Auth,Workspace,Order,AI,Staff,Notification,System"
+    LOG_MODULES: str = "Auth,Workspace,Order,AI,Staff,Notification,Contractor,System"
     
     # 初始管理员账户
     INIT_ADMIN_USERNAME: str = "admin"
@@ -158,6 +158,12 @@ class Settings(BaseSettings):
     AI_API_KEY: str = ""
     AI_BASE_URL: str = "https://api.openai.com/v1"
     AI_MODEL_NAME: str = "gpt-3.5-turbo"
+    
+    # 部署模式：all = 全量（开发用）, external = 用户端, internal = 内部系统
+    DEPLOYMENT_MODE: str = "all"
+    
+    # 承包商端基础 URL（用于生成邀请链接，填内部系统的 IP/域名）
+    CONTRACTOR_BASE_URL: str = "http://localhost:3000"
     
     class Config:
         env_file = ".env"

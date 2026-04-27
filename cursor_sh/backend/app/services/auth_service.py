@@ -7,6 +7,8 @@ from fastapi import HTTPException, status
 from app.models.user import User, UserRole
 from app.models.admin import Admin
 from app.models.staff_member import StaffMember
+from app.models.contractor import Contractor
+from app.models.contractor_invitation import ContractorInvitation
 from app.schemas.auth import (
     LoginRequest, RegisterRequest, LoginResponse, 
     ChangePasswordRequest, ResetPasswordRequest
@@ -23,6 +25,8 @@ def _get_model_for_role(role: UserRole):
         return Admin
     elif role == UserRole.STAFF:
         return StaffMember
+    elif role == UserRole.CONTRACTOR:
+        return Contractor
     else:
         return User
 
@@ -135,8 +139,8 @@ async def register(db: AsyncSession, register_data: RegisterRequest) -> dict:
                 detail="该手机号已注册"
             )
         
-        # 3. 检查用户名是否已存在（需查三张表）
-        for Model in [User, Admin, StaffMember]:
+        # 3. 检查用户名是否已存在（需查四张表）
+        for Model in [User, Admin, StaffMember, Contractor]:
             result = await db.execute(
                 select(Model).where(Model.username == register_data.username)
             )
@@ -194,9 +198,9 @@ async def reset_password(db: AsyncSession, data: ResetPasswordRequest) -> dict:
             detail="验证码错误或已过期"
         )
     
-    # 2. 在三张表中查找用户
+    # 2. 在四张表中查找用户
     user = None
-    for Model in [User, Admin, StaffMember]:
+    for Model in [User, Admin, StaffMember, Contractor]:
         result = await db.execute(
             select(Model).where(Model.phone == data.phone)
         )
@@ -236,3 +240,132 @@ async def change_password(
     await db.refresh(user)
     
     return {"success": True, "message": "密码修改成功"}
+
+
+async def register_contractor(db: AsyncSession, register_data: dict) -> dict:
+    """承包商通过邀请链接注册
+    
+    Args:
+        register_data: 包含以下字段:
+            - invite_token: 邀请 token
+            - phone: 手机号
+            - sms_code: 短信验证码
+            - username: 用户名
+            - password: 密码
+            - email: 邮箱
+            - company: 公司名称（选填）
+            - address: 地址（选填）
+            - specialty: 专业方向（选填）
+            - expertise: 擅长领域（选填）
+    """
+    from datetime import datetime, timezone
+    
+    try:
+        # 1. 验证邀请 token
+        invite_token = register_data.get('invite_token')
+        if not invite_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="缺少邀请 token"
+            )
+        
+        result = await db.execute(
+            select(ContractorInvitation).where(
+                ContractorInvitation.token == invite_token
+            )
+        )
+        invitation = result.scalar_one_or_none()
+        
+        if not invitation:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="邀请链接无效"
+            )
+        
+        if invitation.is_used:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="邀请链接已被使用"
+            )
+        
+        now = datetime.now(timezone.utc)
+        if invitation.expires_at and invitation.expires_at.replace(tzinfo=timezone.utc) < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="邀请链接已过期"
+            )
+        
+        # 2. 验证短信验证码
+        phone = register_data.get('phone')
+        sms_code = register_data.get('sms_code')
+        if not phone or not sms_code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="请提供手机号和验证码"
+            )
+        
+        is_valid = await verify_sms_code(phone, sms_code, consume=True)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="验证码错误或已过期"
+            )
+        
+        # 3. 检查手机号是否已注册
+        result = await db.execute(
+            select(Contractor).where(Contractor.phone == phone)
+        )
+        if result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="该手机号已注册"
+            )
+        
+        # 4. 检查用户名唯一性（查四张表）
+        username = register_data.get('username')
+        for Model in [User, Admin, StaffMember, Contractor]:
+            result = await db.execute(
+                select(Model).where(Model.username == username)
+            )
+            if result.scalar_one_or_none():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="用户名已存在"
+                )
+        
+        # 5. 创建承包商账户
+        new_contractor = Contractor(
+            id=generate_id("contractor"),
+            username=username,
+            email=register_data.get('email', ''),
+            phone=phone,
+            password_hash=get_password_hash(register_data.get('password', '')),
+            real_name=register_data.get('real_name'),
+            company=register_data.get('company'),
+            address=register_data.get('address'),
+            specialty=register_data.get('specialty'),
+            expertise=register_data.get('expertise'),
+            is_active=True
+        )
+        
+        db.add(new_contractor)
+        
+        # 6. 标记邀请链接已使用
+        invitation.is_used = True
+        invitation.used_by = new_contractor.id
+        
+        await db.commit()
+        await db.refresh(new_contractor)
+        
+        return {"success": True, "contractor_id": new_contractor.id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        print(f"承包商注册错误: {error_detail}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"注册失败: {str(e)}"
+        )

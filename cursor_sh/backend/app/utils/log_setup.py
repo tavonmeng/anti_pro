@@ -26,6 +26,13 @@ MODULE_ROUTE_MAP = {
     "/api/staff": "staff",
     "/api/notifications": "notification",
     "/api/logs": "workspace",
+    "/api/contractor-admin": "contractor",
+    "/api/contractor": "contractor",
+    "/api/workflow-config": "contractor",
+    "/api/upload": "order",
+    "/api/announcements": "system",
+    "/api/enterprise": "system",
+    "/api/asr": "ai",
     "/ai/": "ai",
 }
 

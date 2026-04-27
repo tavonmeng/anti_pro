@@ -10,272 +10,148 @@
     
     <!-- 统计卡片 -->
     <div class="stats-cards">
-      <el-card class="stat-card">
-        <div class="stat-content">
-          <div class="stat-icon" style="background: #E3F2FD;">
-            <el-icon :size="24" color="#2196F3"><Document /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ orderStore.orderStats.total }}</div>
-            <div class="stat-label">总订单数</div>
-          </div>
+      <div class="stat-card" v-for="stat in statItems" :key="stat.label"
+        :class="{ active: filters.status === stat.filterValue }"
+        @click="toggleStatusFilter(stat.filterValue)"
+      >
+        <div class="stat-icon" :style="{ background: stat.iconBg }">
+          <el-icon :size="22" :color="stat.iconColor"><component :is="stat.icon" /></el-icon>
         </div>
-      </el-card>
-      
-      <el-card class="stat-card">
-        <div class="stat-content">
-          <div class="stat-icon" style="background: #FFF3E0;">
-            <el-icon :size="24" color="#FF9800"><Clock /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ orderStore.orderStats.pendingContract }}</div>
-            <div class="stat-label">合同与付款</div>
-          </div>
-        </div>
-      </el-card>
-      
-      <el-card class="stat-card">
-        <div class="stat-content">
-          <div class="stat-icon" style="background: #F3E5F5;">
-            <el-icon :size="24" color="#9C27B0"><Loading /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ orderStore.orderStats.inProduction }}</div>
-            <div class="stat-label">制作中</div>
-          </div>
-        </div>
-      </el-card>
-      
-      <el-card class="stat-card">
-        <div class="stat-content">
-          <div class="stat-icon" style="background: #FFF8E1;">
-            <el-icon :size="24" color="#FFB300"><View /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ orderStore.orderStats.pendingReview }}</div>
-            <div class="stat-label">待审核</div>
-          </div>
-        </div>
-      </el-card>
-
-      <el-card class="stat-card">
-        <div class="stat-content">
-          <div class="stat-icon" style="background: #FFEBEE;">
-            <el-icon :size="24" color="#E53935"><CircleClose /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ orderStore.orderStats.reviewRejected }}</div>
-            <div class="stat-label">审核拒绝</div>
-          </div>
-        </div>
-      </el-card>
-      
-      <el-card class="stat-card">
-        <div class="stat-content">
-          <div class="stat-icon" style="background: #E8F5E9;">
-            <el-icon :size="24" color="#4CAF50"><CircleCheck /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ orderStore.orderStats.completed }}</div>
-            <div class="stat-label">已完成</div>
-          </div>
-        </div>
-      </el-card>
+        <div class="stat-value">{{ stat.value }}</div>
+        <div class="stat-label">{{ stat.label }}</div>
+      </div>
     </div>
     
     <!-- 筛选器 -->
-    <el-card class="filter-card">
-      <el-form :model="filters" inline>
-        <el-form-item label="订单类型">
-          <el-select v-model="filters.orderType" placeholder="全部类型" clearable style="width: 180px" @change="handleFilter">
-            <el-option label="全部" value="" />
-            <el-option label="裸眼3D成片购买" value="video_purchase" />
-            <el-option label="AI裸眼3D定制" value="ai_3d_custom" />
-            <el-option label="数字艺术定制" value="digital_art" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="订单状态">
-          <el-select v-model="filters.status" placeholder="全部状态" clearable style="width: 180px" @change="handleFilter">
-            <el-option label="全部" value="" />
-            <el-option label="合同与付款" value="pending_contract" />
-            <el-option label="待分配" value="pending_assign" />
-            <el-option label="制作中" value="in_production" />
-            <el-option label="待审核" value="pending_review" />
-            <el-option label="初稿预览" value="preview_ready" />
-            <el-option label="审核拒绝" value="review_rejected" />
-            <el-option label="需要修改" value="revision_needed" />
-            <el-option label="终稿预览" value="final_preview" />
-            <el-option label="已完成" value="completed" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="负责人">
-          <el-select v-model="filters.assigneeId" placeholder="全部负责人" clearable style="width: 180px" @change="handleFilter">
-            <el-option label="全部" value="" />
-            <el-option label="未分配" value="unassigned" />
-            <el-option
-              v-for="staff in staffStore.staffList"
-              :key="staff.id"
-              :label="staff.realName || staff.username"
-              :value="staff.id"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <div class="filter-bar">
+      <el-input
+        v-model="searchKeyword"
+        placeholder="搜索订单编号、客户名称..."
+        :prefix-icon="Search"
+        clearable
+        class="search-input"
+      />
+      <el-select v-model="filters.orderType" placeholder="全部类型" clearable class="filter-select">
+        <el-option label="全部类型" value="" />
+        <el-option label="裸眼3D成片购买" value="video_purchase" />
+        <el-option label="AI裸眼3D定制" value="ai_3d_custom" />
+        <el-option label="数字艺术定制" value="digital_art" />
+      </el-select>
+      <el-select v-model="filters.assigneeId" placeholder="全部负责人" clearable class="filter-select">
+        <el-option label="全部负责人" value="" />
+        <el-option label="未分配" value="unassigned" />
+        <el-option
+          v-for="staff in staffStore.staffList"
+          :key="staff.id"
+          :label="staff.realName || staff.username"
+          :value="staff.id"
+        />
+      </el-select>
+    </div>
     
-    <!-- 订单表格 -->
-    <el-card class="table-card">
-      <el-table
-        :data="filteredOrders"
-        :loading="orderStore.loading"
-        stripe
-        style="width: 100%"
+    <!-- 订单列表 -->
+    <div class="order-list" v-loading="orderStore.loading">
+      <div v-if="filteredOrders.length === 0 && !orderStore.loading" class="empty-state">
+        <el-icon :size="48" color="#C0C4CC"><Document /></el-icon>
+        <p>暂无订单</p>
+      </div>
+      
+      <div
+        v-for="order in filteredOrders"
+        :key="order.id"
+        class="order-card"
+        @click="viewDetail(order)"
       >
-        <el-table-column prop="orderNumber" label="项目编号" width="180" fixed />
-        <el-table-column prop="orderType" label="项目分类" width="150">
-          <template #default="{ row }">
-            <el-tag type="info" size="small">{{ getOrderTypeText(row.orderType) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="当前状态" width="120">
-          <template #default="{ row }">
-            <OrderStatusBadge :status="row.status" size="small" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="assignees" label="当前负责人" width="200">
-          <template #default="{ row }">
-            <div v-if="row.assignees && row.assignees.length > 0" class="assignees-list">
-              <el-tag
-                v-for="assignee in row.assignees"
-                :key="assignee.id"
-                size="small"
-                class="assignee-tag"
-              >
-                {{ assignee.name }}
-              </el-tag>
+        <!-- 左侧状态条 -->
+        <div class="order-status-bar" :class="getStatusColorClass(order.status)"></div>
+        
+        <div class="order-card-body">
+          <!-- 第一行：编号 + 类型 + 状态 -->
+          <div class="order-card-header">
+            <div class="order-main-info">
+              <span class="order-number">{{ order.orderNumber }}</span>
+              <el-tag size="small" type="info" effect="plain" class="type-tag">{{ getOrderTypeText(order.orderType) }}</el-tag>
             </div>
-            <el-tag v-else type="info" size="small">未分配</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="userName" label="客户" width="120" />
-        <el-table-column prop="revisionCount" label="修改次数" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="row.revisionCount > 0" type="warning" size="small">
-              {{ row.revisionCount }}次
-            </el-tag>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createdAt" label="创建时间" width="180">
-          <template #default="{ row }">
-            {{ formatTime(row.createdAt) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="feedbacks" label="客户反馈" width="100" align="center">
-          <template #default="{ row }">
-            <el-badge :value="row.feedbacks.length" :hidden="row.feedbacks.length === 0">
-              <el-icon :size="18"><ChatLineSquare /></el-icon>
-            </el-badge>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="360" fixed="right">
-          <template #default="{ row }">
-            <el-button-group>
-              <el-button
-                v-if="row.status === 'pending_review'"
-                size="small"
-                type="success"
-                @click="handleReview(row, 'approve')"
-              >
-                审核通过
-              </el-button>
-              <el-button
-                v-if="row.status === 'pending_review'"
-                size="small"
-                type="danger"
-                @click="handleReview(row, 'reject')"
-              >
-                审核拒绝
-              </el-button>
-              <el-button 
-                size="small" 
-                @click="handleAssign(row)"
-                :disabled="row.status === 'completed' || row.status === 'cancelled'"
-              >
-                {{ (row.assignees && row.assignees.length > 0) ? '重新分配' : '分配' }}
-              </el-button>
-              <el-button 
-                size="small" 
-                type="primary"
-                @click="handleUploadPreview(row)"
-                :disabled="row.status === 'pending_assign' || row.status === 'pending_contract' || row.status === 'completed' || row.status === 'cancelled' || row.status === 'pending_review'"
-              >
-                上传预览
-              </el-button>
-              <el-dropdown trigger="click" @command="(cmd: string) => handlePdfDownload(row, cmd)">
-                <el-button size="small" :icon="Download">
-                  PDF
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="confirmation">需求告知函</el-dropdown-item>
-                    <el-dropdown-item command="detail">订单详情报告</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-              <el-button size="small" @click="viewDetail(row)">
-                详情
-              </el-button>
-            </el-button-group>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-    
-    <!-- 分配负责人对话框 -->
-    <AssigneeDialog
-      v-model="assignDialogVisible"
-      :current-assignee-id="currentOrder?.assignees?.[0]?.id"
-      @confirm="handleAssignConfirm"
-    />
-    
-    <!-- 上传预览对话框 -->
-    <UploadPreviewDialog
-      v-model="uploadDialogVisible"
-      :order="currentOrder"
-      @confirm="handleUploadConfirm"
-    />
+            <div class="order-status-area">
+              <OrderStatusBadge :status="order.status" size="default" />
+              <el-icon class="chevron-icon"><ArrowRight /></el-icon>
+            </div>
+          </div>
+          
+          <!-- 第二行：核心信息 -->
+          <div class="order-card-meta">
+            <div class="meta-item">
+              <el-icon :size="14"><User /></el-icon>
+              <span>{{ order.userName || '未知客户' }}</span>
+            </div>
+            <div class="meta-item">
+              <el-icon :size="14"><Calendar /></el-icon>
+              <span>{{ formatTime(order.createdAt) }}</span>
+            </div>
+            <div class="meta-item" v-if="order.assignees && order.assignees.length > 0">
+              <el-icon :size="14"><UserFilled /></el-icon>
+              <span>{{ order.assignees.map((a: any) => a.name).join('、') }}</span>
+            </div>
+            <div class="meta-item unassigned" v-else>
+              <el-icon :size="14"><UserFilled /></el-icon>
+              <span>未分配负责人</span>
+            </div>
+            <div class="meta-item" v-if="order.revisionCount > 0">
+              <el-icon :size="14"><EditPen /></el-icon>
+              <span>修改 {{ order.revisionCount }} 次</span>
+            </div>
+            <div class="meta-item" v-if="order.feedbacks && order.feedbacks.length > 0">
+              <el-icon :size="14"><ChatLineSquare /></el-icon>
+              <span>{{ order.feedbacks.length }} 条反馈</span>
+            </div>
+          </div>
+
+          <!-- 第三行：品牌/内容摘要 (如有) -->
+          <div class="order-card-summary" v-if="getOrderSummary(order)">
+            {{ getOrderSummary(order) }}
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Refresh, Document, Clock, Loading, CircleCheck, CircleClose, View, ChatLineSquare, Download } from '@element-plus/icons-vue'
-import { ElMessageBox, ElMessage } from 'element-plus'
+import { 
+  Refresh, Document, Clock, Loading, CircleCheck, CircleClose, View, 
+  ChatLineSquare, Search, User, Calendar, UserFilled, ArrowRight, EditPen 
+} from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { useStaffStore } from '@/stores/staff'
-import { orderApi } from '@/utils/api'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
-import AssigneeDialog from '@/components/AssigneeDialog.vue'
-import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
-import type { Order, OrderType, OrderStatus, UploadedFile } from '@/types'
+import type { Order, OrderType, OrderStatus } from '@/types'
 
 const router = useRouter()
 const orderStore = useOrderStore()
 const staffStore = useStaffStore()
 
+const searchKeyword = ref('')
 const filters = ref({
   orderType: '' as OrderType | '',
   status: '' as OrderStatus | '',
   assigneeId: ''
 })
 
-const assignDialogVisible = ref(false)
-const uploadDialogVisible = ref(false)
-const currentOrder = ref<Order | null>(null)
+// 统计卡片数据
+const statItems = computed(() => [
+  { label: '全部订单', value: orderStore.orderStats.total, icon: Document, iconBg: '#EEF2FF', iconColor: '#6366F1', filterValue: '' },
+  { label: '合同与付款', value: orderStore.orderStats.pendingContract, icon: Clock, iconBg: '#FFF7ED', iconColor: '#F59E0B', filterValue: 'pending_contract' },
+  { label: '制作中', value: orderStore.orderStats.inProduction, icon: Loading, iconBg: '#F3E8FF', iconColor: '#8B5CF6', filterValue: 'in_production' },
+  { label: '待审核', value: orderStore.orderStats.pendingReview, icon: View, iconBg: '#FEF9C3', iconColor: '#CA8A04', filterValue: 'pending_review' },
+  { label: '审核拒绝', value: orderStore.orderStats.reviewRejected, icon: CircleClose, iconBg: '#FEE2E2', iconColor: '#EF4444', filterValue: 'review_rejected' },
+  { label: '已完成', value: orderStore.orderStats.completed, icon: CircleCheck, iconBg: '#DCFCE7', iconColor: '#22C55E', filterValue: 'completed' },
+])
+
+const toggleStatusFilter = (val: string) => {
+  filters.value.status = (filters.value.status === val ? '' : val) as OrderStatus | ''
+}
 
 const filteredOrders = computed(() => {
   let result = orderStore.orders
@@ -283,11 +159,9 @@ const filteredOrders = computed(() => {
   if (filters.value.orderType) {
     result = result.filter(o => o.orderType === filters.value.orderType)
   }
-  
   if (filters.value.status) {
     result = result.filter(o => o.status === filters.value.status)
   }
-  
   if (filters.value.assigneeId) {
     if (filters.value.assigneeId === 'unassigned') {
       result = result.filter(o => !o.assignees || o.assignees.length === 0)
@@ -297,7 +171,13 @@ const filteredOrders = computed(() => {
       )
     }
   }
-  
+  if (searchKeyword.value) {
+    const kw = searchKeyword.value.toLowerCase()
+    result = result.filter(o => 
+      (o.orderNumber && o.orderNumber.toLowerCase().includes(kw)) ||
+      (o.userName && o.userName.toLowerCase().includes(kw))
+    )
+  }
   return result
 })
 
@@ -310,122 +190,57 @@ const refreshData = () => {
   staffStore.fetchStaff()
 }
 
-const handleFilter = () => {
-  // 筛选已经通过computed自动完成
-}
-
 const orderTypeMap: Record<OrderType, string> = {
   video_purchase: '裸眼3D成片购买',
   ai_3d_custom: 'AI裸眼3D定制',
   digital_art: '数字艺术定制'
 }
 
-const getOrderTypeText = (type: OrderType) => {
-  return orderTypeMap[type] || type
-}
+const getOrderTypeText = (type: OrderType) => orderTypeMap[type] || type
 
 const formatTime = (timeString: string) => {
   if (!timeString) return '-'
   const date = new Date(timeString)
-  if (isNaN(date.getTime())) {
-    return timeString
-  }
+  if (isNaN(date.getTime())) return timeString
   return date.toLocaleString('zh-CN', {
     timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
   })
 }
 
-const handleAssign = (order: Order) => {
-  currentOrder.value = order
-  assignDialogVisible.value = true
-}
-
-const handleAssignConfirm = async (assignees: Array<{ id: string, name: string }>) => {
-  if (!currentOrder.value) return
-  
-  if (assignees.length > 0) {
-    await orderStore.assignOrder(currentOrder.value.id, assignees)
-    await refreshData()
+const getStatusColorClass = (status: string) => {
+  const map: Record<string, string> = {
+    pending_review: 'status-warning',
+    pending_contract: 'status-orange',
+    pending_assign: 'status-info',
+    in_production: 'status-purple',
+    preview_ready: 'status-blue',
+    review_rejected: 'status-danger',
+    revision_needed: 'status-danger',
+    final_preview: 'status-blue',
+    completed: 'status-success',
+    cancelled: 'status-muted',
   }
+  return map[status] || 'status-info'
 }
 
-const handleUploadPreview = (order: Order) => {
-  currentOrder.value = order
-  uploadDialogVisible.value = true
-}
-
-const handleUploadConfirm = async (files: UploadedFile[], previewType: string, note: string) => {
-  if (!currentOrder.value) return
-  
-  await orderStore.uploadPreview(currentOrder.value.id, files, previewType === 'final' ? 'final' : 'initial', note)
-  await refreshData()
+const getOrderSummary = (order: Order) => {
+  const data = (order as any).orderData || {}
+  const parts = [data.brand, data.content, data.city].filter(Boolean)
+  if (parts.length === 0) return ''
+  return parts.join(' · ')
 }
 
 const viewDetail = (order: Order) => {
   router.push(`/admin/orders/${order.id}`)
-}
-
-// 审核操作（从列表快速操作）
-const handleReview = async (row: Order, action: 'approve' | 'reject') => {
-  try {
-    // 获取最新订单详情，以便拿到 previewHistory
-    const detail = await orderStore.getOrderDetail(row.id)
-    if (!detail) return
-    // 找到最近的待审核预览（按创建时间倒序取第一个 pending）
-    const pending = (detail.previewHistory || [])
-      .filter((p: any) => p.reviewStatus === 'pending')
-      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
-    if (!pending) {
-      ElMessage.warning('未找到待审核的预览记录')
-      return
-    }
-    if (action === 'approve') {
-      await ElMessageBox.confirm('确认通过该预览审核？', '确认审核', { type: 'success' })
-      await orderStore.reviewPreview(row.id, { previewId: pending.id, action: 'approve' })
-      ElMessage.success('审核通过')
-    } else {
-      const { value } = await ElMessageBox.prompt('请输入拒绝原因（可选）', '审核拒绝', {
-        inputType: 'textarea',
-        inputPlaceholder: '请填写审核拒绝原因',
-        inputValidator: (val: string) => val.length <= 500 || '拒绝原因长度不能超过500个字符',
-        confirmButtonText: '确认拒绝',
-        cancelButtonText: '取消'
-      })
-      await orderStore.reviewPreview(row.id, { previewId: pending.id, action: 'reject', note: value })
-      ElMessage.success('已拒绝该预览')
-    }
-    await refreshData()
-  } catch {
-    // 取消或失败
-  }
-}
-
-// PDF 下载
-const handlePdfDownload = async (row: Order, type: string) => {
-  try {
-    if (type === 'confirmation') {
-      await orderApi.downloadConfirmationPdf(row.id)
-    } else {
-      await orderApi.downloadDetailPdf(row.id)
-    }
-    ElMessage.success('PDF 下载成功')
-  } catch (error) {
-    console.error('下载 PDF 失败:', error)
-    ElMessage.error('下载 PDF 失败')
-  }
 }
 </script>
 
 <style lang="scss" scoped>
 .order-management-page {
   padding: 32px;
-  background-color: #f8f9fc;
+  background-color: #f5f6fa;
   min-height: 100vh;
 }
 
@@ -433,193 +248,232 @@ const handlePdfDownload = async (row: Order, type: string) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 32px;
-  background: linear-gradient(135deg, #ffffff 0%, #f0f4f8 100%);
-  padding: 24px 32px;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  margin-bottom: 28px;
 
   h1.page-title {
-    font-size: 32px;
+    font-size: 28px;
     font-weight: 700;
-    background: linear-gradient(90deg, #1d1d1f, #434343);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin: 0 0 8px 0;
+    color: #1D1D1F;
+    margin: 0 0 4px;
     letter-spacing: -0.5px;
   }
 
   p.page-subtitle {
-    font-size: 15px;
+    font-size: 14px;
     color: #86868b;
     margin: 0;
+  }
+}
+
+/* ---- 统计卡片 ---- */
+.stats-cards {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+
+  @media (max-width: 1200px) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.stat-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+  }
+
+  &.active {
+    border-color: #6366F1;
+    background: #F5F3FF;
+  }
+
+  .stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .stat-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1D1D1F;
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 12px;
+    color: #86868b;
     font-weight: 500;
   }
 }
 
-/* 统计卡片高级样式 */
-.stats-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 24px;
-  margin-bottom: 32px;
-}
-
-.stat-card {
-  border-radius: 16px;
-  border: none;
-  background: #ffffff;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.02);
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  overflow: hidden;
-  position: relative;
-  
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 4px;
-    height: 100%;
-    background: linear-gradient(to bottom, transparent, transparent);
-    transition: all 0.3s ease;
-  }
-  
-  &:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-  }
-
-  /* Different hover borders for each card type if desired */
-  &:nth-child(1):hover::before { background: #2196F3; }
-  &:nth-child(2):hover::before { background: #FF9800; }
-  &:nth-child(3):hover::before { background: #9C27B0; }
-  &:nth-child(4):hover::before { background: #FFB300; }
-  &:nth-child(5):hover::before { background: #E53935; }
-  &:nth-child(6):hover::before { background: #4CAF50; }
-  
-  :deep(.el-card__body) {
-    padding: 24px;
-  }
-}
-
-.stat-content {
+/* ---- 筛选栏 ---- */
+.filter-bar {
   display: flex;
-  align-items: center;
-  gap: 20px;
+  gap: 12px;
+  margin-bottom: 20px;
+  
+  .search-input {
+    flex: 1;
+    max-width: 360px;
+    :deep(.el-input__wrapper) {
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+  }
+
+  .filter-select {
+    width: 180px;
+    :deep(.el-input__wrapper) {
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+  }
 }
 
-.stat-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
+/* ---- 订单卡片列表 ---- */
+.order-list {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.3s ease;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.stat-card:hover .stat-icon {
-  transform: scale(1.1);
-}
-
-.stat-info {
-  flex: 1;
-}
-
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #1d1d1f;
-  margin-bottom: 4px;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  letter-spacing: -0.5px;
-}
-
-.stat-label {
-  font-size: 14px;
+.empty-state {
+  text-align: center;
+  padding: 80px 0;
   color: #86868b;
-  font-weight: 500;
+  p { margin: 16px 0 0; font-size: 15px; }
 }
 
-.filter-card {
-  border-radius: 16px;
-  border: none;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
-  margin-bottom: 24px;
-  background: white;
-
-  :deep(.el-card__body) {
-    padding: 24px;
-    padding-bottom: 4px; /* Form items have bottom margin */
-  }
-
-  .el-form-item {
-    margin-bottom: 20px;
-  }
-}
-
-.table-card {
-  border-radius: 16px;
-  border: none;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+.order-card {
+  display: flex;
+  background: #fff;
+  border-radius: 14px;
+  cursor: pointer;
   overflow: hidden;
+  border: 1px solid #F0F0F5;
+  transition: all 0.2s ease;
 
-  /* Customizing Element Plus Table */
-  :deep(.el-table) {
-    border-radius: 12px;
-    overflow: hidden;
-    --el-table-border-color: #f0f0f0;
-    --el-table-header-bg-color: #fafafa;
-    
-    th.el-table__cell {
-      background-color: #fcfcfd;
-      font-weight: 600;
-      color: #1d1d1f;
-      height: 56px;
-    }
-    
-    td.el-table__cell {
-      padding: 16px 0;
-    }
-    
-    .el-table__row {
-      transition: background-color 0.2s ease;
-      &:hover > td.el-table__cell {
-        background-color: #f5f7fa;
-      }
-    }
+  &:hover {
+    border-color: #D0D5DD;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+    transform: translateY(-1px);
   }
 }
 
-.assignees-list {
+/* 左侧状态色条 */
+.order-status-bar {
+  width: 5px;
+  flex-shrink: 0;
+  &.status-warning  { background: #F59E0B; }
+  &.status-orange   { background: #F97316; }
+  &.status-info     { background: #6B7280; }
+  &.status-purple   { background: #8B5CF6; }
+  &.status-blue     { background: #3B82F6; }
+  &.status-danger   { background: #EF4444; }
+  &.status-success  { background: #22C55E; }
+  &.status-muted    { background: #D1D5DB; }
+}
+
+.order-card-body {
+  flex: 1;
+  padding: 18px 24px;
+  min-width: 0;
+}
+
+.order-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.order-main-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.order-number {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1D1D1F;
+  letter-spacing: -0.3px;
+}
+
+.type-tag {
+  font-size: 11px;
+  border-radius: 6px;
+}
+
+.order-status-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .chevron-icon {
+    color: #C0C4CC;
+    font-size: 16px;
+    transition: transform 0.2s;
+  }
+}
+
+.order-card:hover .chevron-icon {
+  transform: translateX(3px);
+  color: #6366F1;
+}
+
+/* 元数据行 */
+.order-card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 16px;
+  font-size: 13px;
+  color: #515154;
 }
 
-.assignee-tag {
-  border-radius: 6px;
-  font-weight: 500;
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  
+  .el-icon { color: #86868b; }
+
+  &.unassigned {
+    color: #E6A23C;
+    .el-icon { color: #E6A23C; }
+  }
 }
 
-/* Premium Buttons */
+/* 订单摘要 */
+.order-card-summary {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #86868b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 按钮 */
 :deep(.el-button) {
   border-radius: 8px;
   font-weight: 500;
-  transition: all 0.2s;
-  
-  &:active {
-    transform: scale(0.96);
-  }
-}
-
-:deep(.el-tag) {
-  border-radius: 6px;
-  padding: 0 10px;
-  font-weight: 600;
 }
 </style>
-

@@ -1097,3 +1097,86 @@ export const enterpriseApi = {
     })
   }
 }
+
+// ========== 承包商管理 API（管理端）==========
+
+export const contractorAdminApi = {
+  // 生成邀请链接
+  async createInvitation(data: { note?: string; expires_days?: number }): Promise<any> {
+    return request.post('/contractor-admin/invitations', data)
+  },
+
+  // 获取邀请链接列表
+  async getInvitations(): Promise<any[]> {
+    return request.get('/contractor-admin/invitations')
+  },
+
+  // 撤销邀请链接
+  async revokeInvitation(id: string): Promise<void> {
+    return request.delete(`/contractor-admin/invitations/${id}`)
+  },
+
+  // 获取承包商列表
+  async getContractors(params?: { page?: number; pageSize?: number; keyword?: string }): Promise<{ data: any[]; total: number }> {
+    return request.get('/contractor-admin/list', { params })
+  },
+
+  // 编辑承包商
+  async updateContractor(id: string, data: any): Promise<any> {
+    return request.put(`/contractor-admin/${id}`, data)
+  },
+
+  // 派单
+  async assignOrder(data: { order_id: string; contractor_id: string; schedule_adjustments?: any[] }): Promise<any> {
+    return request.post('/contractor-admin/assign', data)
+  },
+
+  // 获取派单列表
+  async getAssignments(params?: { order_id?: string; status?: string; page?: number; pageSize?: number }): Promise<{ data: any[]; total: number }> {
+    return request.get('/contractor-admin/assignments', { params })
+  },
+
+  // 审核交付物
+  async reviewDeliverable(id: string, data: { approved: boolean; review_note?: string }): Promise<any> {
+    return request.put(`/contractor-admin/deliverables/${id}/review`, data)
+  },
+
+  // 推送交付物给用户
+  async publishDeliverable(id: string, data?: { published_note?: string }): Promise<any> {
+    return request.put(`/contractor-admin/deliverables/${id}/publish`, data || {})
+  },
+
+  // 推进到下一环节
+  async advanceStage(assignmentId: string): Promise<any> {
+    return request.put(`/contractor-admin/assignments/${assignmentId}/advance`)
+  },
+}
+
+// ========== 工作流配置 API ==========
+
+export const workflowApi = {
+  // 获取环节列表
+  async getStages(): Promise<any[]> {
+    return request.get('/workflow-config')
+  },
+
+  // 创建环节
+  async createStage(data: { name: string; default_days: number; review_items?: string[] }): Promise<any> {
+    return request.post('/workflow-config', data)
+  },
+
+  // 更新环节
+  async updateStage(id: string, data: any): Promise<any> {
+    return request.put(`/workflow-config/${id}`, data)
+  },
+
+  // 删除环节
+  async deleteStage(id: string): Promise<void> {
+    return request.delete(`/workflow-config/${id}`)
+  },
+
+  // 排序
+  async reorderStages(stageIds: string[]): Promise<void> {
+    return request.post('/workflow-config/reorder', { stage_ids: stageIds })
+  },
+}

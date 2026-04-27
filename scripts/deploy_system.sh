@@ -161,6 +161,33 @@ generate_env() {
         CORS_VAL="[\"http://localhost\"]"
     fi
 
+    # --- 部署模式 ---
+    echo ""
+    echo -e "${CYAN}── 部署模式 ──${NC}"
+    echo "  1. all     - 全量部署（开发测试，含所有功能）"
+    echo "  2. external - 用户端（仅对外服务）"
+    echo "  3. internal - 内部系统（管理员+负责人+承包商）"
+    read -p "请选择 (1/2/3，默认 1): " MODE_CHOICE
+    case "$MODE_CHOICE" in
+        2) DEPLOY_MODE="external" ;;
+        3) DEPLOY_MODE="internal" ;;
+        *) DEPLOY_MODE="all" ;;
+    esac
+    info "部署模式: $DEPLOY_MODE"
+
+    # 承包商邀请链接 URL（仅 internal/all 模式需要）
+    CONTRACTOR_URL="http://localhost:3000"
+    if [ "$DEPLOY_MODE" != "external" ]; then
+        if [ -n "$PUBLIC_IP" ]; then
+            CONTRACTOR_URL="http://${PUBLIC_IP}"
+        fi
+        if [ -n "$PROD_DOMAIN" ]; then
+            CONTRACTOR_URL="https://${PROD_DOMAIN}"
+        fi
+        read -p "承包商邀请链接基础URL (默认 $CONTRACTOR_URL): " inp
+        CONTRACTOR_URL="${inp:-$CONTRACTOR_URL}"
+    fi
+
     # 写入
     cat > "$ENV_FILE" << ENVEOF
 # ===== 自动生成于 $(date) =====
@@ -198,6 +225,12 @@ SMS_ACCESS_KEY_ID=${SMS_AK_ID}
 SMS_ACCESS_KEY_SECRET=${SMS_AK_SECRET}
 SMS_SIGN_NAME=${SMS_SIGN}
 SMS_TEMPLATE_CODE=${SMS_TPL}
+
+# 部署模式: all=全量(开发), external=用户端, internal=内部系统
+DEPLOYMENT_MODE=${DEPLOY_MODE}
+
+# 承包商邀请链接基础URL
+CONTRACTOR_BASE_URL=${CONTRACTOR_URL}
 
 # 日志 & 限流
 LOG_ENABLED=true
@@ -367,7 +400,7 @@ pip install gunicorn uvicorn -q
 info "Python 依赖安装完成"
 
 # 日志目录
-mkdir -p logs/{auth,workspace,order,ai,staff,notification,system,error,crash,ai_sessions}
+mkdir -p logs/{auth,workspace,order,ai,staff,notification,contractor,system,error,crash,ai_sessions}
 # 上传目录
 mkdir -p uploads
 info "日志和上传目录已准备"
@@ -634,10 +667,12 @@ if [ -n "$PUBLIC_IP" ]; then
     echo "  官网:         http://$PUBLIC_IP"
     echo "  用户登录:     http://$PUBLIC_IP/login"
     echo "  管理后台:     http://$PUBLIC_IP/admin/login"
+    echo "  承包商注册:   通过管理后台生成邀请链接"
 else
     echo "  官网:         http://服务器IP"
     echo "  用户登录:     http://服务器IP/login"
     echo "  管理后台:     http://服务器IP/admin/login"
+    echo "  承包商注册:   通过管理后台生成邀请链接"
 fi
 echo ""
 
@@ -652,5 +687,6 @@ echo ""
 echo -e "${YELLOW}⚠️  重要提醒：${NC}"
 echo "  1. 请前往阿里云安全组，放行 TCP 端口: 80, 443"
 echo "  2. 语音录入需要 HTTPS，请尽快配置 SSL 证书"
-echo "  3. 首次启动会自动建表和创建管理员账户"
+echo "  3. 首次启动会自动建表、创建管理员账户、初始化工作流配置"
+echo "  4. 承包商管理入口：管理后台 → 承包商管理 → 生成邀请链接"
 echo ""

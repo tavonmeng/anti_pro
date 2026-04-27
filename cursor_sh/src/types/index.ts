@@ -1,5 +1,5 @@
 // 用户角色类型
-export type UserRole = 'admin' | 'user' | 'staff'
+export type UserRole = 'admin' | 'user' | 'staff' | 'contractor'
 
 // 订单类型
 export type OrderType = 'video_purchase' | 'ai_3d_custom' | 'digital_art'

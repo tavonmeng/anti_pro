@@ -125,6 +125,18 @@ const router = createRouter({
           name: 'EnterpriseReview',
           component: () => import('../views/admin/EnterpriseReview.vue'),
           meta: { requiresAuth: true, role: 'admin' }
+        },
+        {
+          path: 'contractors',
+          name: 'ContractorManagement',
+          component: () => import('../views/admin/ContractorManagement.vue'),
+          meta: { requiresAuth: true, role: 'admin' }
+        },
+        {
+          path: 'workflow-config',
+          name: 'WorkflowConfig',
+          component: () => import('../views/admin/WorkflowConfig.vue'),
+          meta: { requiresAuth: true, role: 'admin' }
         }
       ]
     },
@@ -151,6 +163,47 @@ const router = createRouter({
           name: 'StaffProfile',
           component: () => import('../views/staff/Profile.vue'),
           meta: { requiresAuth: true, role: 'staff' }
+        }
+      ]
+    },
+    // Contractor 承包商注册页（公开，无需登录）
+    {
+      path: '/contractor/register',
+      name: 'ContractorRegister',
+      component: () => import('../views/contractor/ContractorRegister.vue'),
+      meta: { requiresAuth: false }
+    },
+    // Contractor 登录页（公开）
+    {
+      path: '/contractor/login',
+      name: 'ContractorLogin',
+      component: () => import('../views/ContractorLogin.vue'),
+      meta: { requiresAuth: false }
+    },
+    // Contractor 工作台
+    {
+      path: '/contractor',
+      component: () => import('../views/ContractorDashboard.vue'),
+      meta: { requiresAuth: true, role: 'contractor' },
+      redirect: '/contractor/assignments',
+      children: [
+        {
+          path: 'assignments',
+          name: 'ContractorAssignments',
+          component: () => import('../views/contractor/AssignmentList.vue'),
+          meta: { requiresAuth: true, role: 'contractor' }
+        },
+        {
+          path: 'assignments/:id',
+          name: 'ContractorAssignmentDetail',
+          component: () => import('../views/contractor/AssignmentDetail.vue'),
+          meta: { requiresAuth: true, role: 'contractor' }
+        },
+        {
+          path: 'profile',
+          name: 'ContractorProfile',
+          component: () => import('../views/contractor/ContractorProfile.vue'),
+          meta: { requiresAuth: true, role: 'contractor' }
         }
       ]
     },
@@ -198,6 +251,19 @@ router.beforeEach((to, from, next) => {
         next('/admin')
       } else if (authStore.isStaff()) {
         next('/staff')
+      } else if (authStore.isContractor()) {
+        next('/contractor')
+      } else {
+        next('/login')
+      }
+      return
+    }
+    if (requiredRole === 'contractor' && !authStore.isContractor()) {
+      ElMessage.error('您没有权限访问此页面')
+      if (authStore.isAdmin()) {
+        next('/admin')
+      } else if (authStore.isStaff()) {
+        next('/staff')
       } else {
         next('/login')
       }
@@ -213,17 +279,21 @@ router.beforeEach((to, from, next) => {
         next('/admin')
       } else if (authStore.isStaff()) {
         next('/staff')
+      } else if (authStore.isContractor()) {
+        next('/contractor')
       } else {
         next('/user/workspace')
       }
       return
     }
-    if (to.name === 'AdminLogin') {
-      // 管理员/负责人登录页 -> 根据角色跳转
+    if (to.name === 'AdminLogin' || to.name === 'ContractorLogin') {
+      // 管理员/承包商登录页 -> 根据角色跳转
       if (authStore.isAdmin()) {
         next('/admin')
       } else if (authStore.isStaff()) {
         next('/staff')
+      } else if (authStore.isContractor()) {
+        next('/contractor')
       } else {
         next('/user/workspace')
       }
