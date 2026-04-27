@@ -10,9 +10,13 @@ from app.schemas.auth import (
 )
 from app.schemas.response import ApiResponse
 from app.services.auth_service import login, register, change_password, reset_password
-from app.services.sms_service import send_sms_verify_code
+from app.services.sms_service import send_sms_verify_code, verify_sms_code
 from app.utils.dependencies import get_current_user, AnyUser
 from pydantic import BaseModel, EmailStr
+
+class VerifySmsRequest(BaseModel):
+    phone: str
+    code: str
 from typing import Optional
 
 class ProfileUpdate(BaseModel):
@@ -52,6 +56,23 @@ async def api_send_sms(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+@router.post("/verify-sms", response_model=ApiResponse[bool])
+async def api_verify_sms(data: VerifySmsRequest):
+    """验证短信验证码（消耗验证码）"""
+    is_valid = await verify_sms_code(data.phone, data.code, consume=True)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+    return ApiResponse(code=200, message="验证成功", data=True)
+
+@router.post("/pre-verify-sms", response_model=ApiResponse[bool])
+async def api_pre_verify_sms(data: VerifySmsRequest):
+    """预校验短信验证码（不消耗，用于注册表单实时反馈）"""
+    is_valid = await verify_sms_code(data.phone, data.code, consume=False)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+    return ApiResponse(code=200, message="验证码正确", data=True)
 
 @router.post("/register", response_model=ApiResponse[dict])
 async def api_register(
@@ -137,7 +158,9 @@ async def update_profile_api(
             "role": role_value,
             "realName": getattr(current_user, 'real_name', None),
             "company": getattr(current_user, 'company', None),
-            "address": getattr(current_user, 'address', None)
+            "address": getattr(current_user, 'address', None),
+            "enterprise_status": (lambda e: e.value if hasattr(e, 'value') else str(e or 'none').lower())(getattr(current_user, 'enterprise_status', None) or 'none'),
+            "enterprise_name": getattr(current_user, 'enterprise_name', None)
         })
     except HTTPException:
         raise

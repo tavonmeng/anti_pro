@@ -1,0 +1,64 @@
+# ============================================================
+# Docker Compose 全栈部署
+# 
+# 用法：
+#   docker compose up -d          # 启动
+#   docker compose down           # 停止
+#   docker compose up -d --build  # 重新构建并启动
+#   docker compose logs -f        # 查看日志
+# ============================================================
+
+services:
+
+  # ---- 后端 API ----
+  backend:
+    build: ./cursor_sh/backend
+    container_name: anti-pro-backend
+    restart: always
+    env_file:
+      - ./cursor_sh/backend/.env
+    volumes:
+      # 数据持久化：数据库和上传文件挂载到宿主机，容器销毁数据不丢
+      - backend-data:/app/data_persist
+      - backend-uploads:/app/uploads
+      - backend-logs:/app/logs
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ---- 业务系统前端 ----
+  frontend:
+    build:
+      context: ./cursor_sh
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_ENABLE_VOICE_INPUT: "false"
+    container_name: anti-pro-frontend
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  # ---- 官网（可选，如果有的话） ----
+  # website:
+  #   build: ./website
+  #   container_name: anti-pro-website
+  #   restart: always
+  #   ports:
+  #     - "80:80"
+
+volumes:
+  backend-data:
+  backend-uploads:
+  backend-logs:
+
+networks:
+  app-network:
+    driver: bridge

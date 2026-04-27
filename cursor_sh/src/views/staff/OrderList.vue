@@ -98,6 +98,7 @@
         <el-form-item label="订单状态">
           <el-select v-model="filters.status" placeholder="全部状态" clearable style="width: 180px" @change="handleFilter">
             <el-option label="全部" value="" />
+            <el-option label="合同与付款" value="pending_contract" />
             <el-option label="制作中" value="in_production" />
             <el-option label="待审核" value="pending_review" />
             <el-option label="初稿预览" value="preview_ready" />
@@ -157,7 +158,7 @@
                 size="small" 
                 type="primary"
                 @click="handleUploadPreview(row)"
-                :disabled="row.status === 'pending_assign' || row.status === 'completed' || row.status === 'cancelled' || row.status === 'pending_review'"
+                :disabled="row.status === 'pending_assign' || row.status === 'pending_contract' || row.status === 'completed' || row.status === 'cancelled' || row.status === 'pending_review'"
               >
                 上传预览
               </el-button>

@@ -21,7 +21,8 @@ export type NotificationType =
 // 订单状态
 export type OrderStatus = 
   | 'draft'                // 草稿
-  | 'pending_assign'       // 待分配
+  | 'pending_assign'       // 待分配（旧状态）
+  | 'pending_contract'     // 合同与付款
   | 'in_production'        // 制作中
   | 'pending_review'       // 待审核
   | 'preview_ready'        // 初稿预览
@@ -55,6 +56,10 @@ export interface User {
   orderCount?: number  // 负责的订单数量
   createdAt?: string  // 创建时间
   updatedAt?: string  // 更新时间
+  // 企业认证字段
+  enterprise_status?: 'none' | 'pending' | 'approved' | 'rejected'
+  enterprise_name?: string
+  enterprise_reject_reason?: string
 }
 
 // 上传文件信息

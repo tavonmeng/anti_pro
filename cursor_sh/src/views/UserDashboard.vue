@@ -3,9 +3,9 @@
     <SystemLeftSidebar />
     <SecondaryBusinessSidebar v-if="uiStore.isSecondarySidebarVisible" />
     <div class="dashboard-content">
-      <router-view v-slot="{ Component }">
+      <router-view v-slot="{ Component, route: childRoute }">
         <transition name="page-fade" mode="out-in">
-          <component :is="Component" />
+          <component :is="Component" :key="childRoute.fullPath" />
         </transition>
       </router-view>
     </div>

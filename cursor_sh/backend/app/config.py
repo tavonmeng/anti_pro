@@ -103,6 +103,7 @@ class Settings(BaseSettings):
     
     # 文件上传配置
     UPLOAD_DIR: str = "./uploads"
+    KNOWLEDGE_DIR: str = ""                   # AI 知识库目录（留空则自动使用 backend/app/knowledge/）
     MAX_FILE_SIZE: int = 52428800  # 50MB
     ALLOWED_FILE_TYPES: str = "image/jpeg,image/png,image/gif,video/mp4,application/zip,application/pdf"
     
@@ -120,7 +121,7 @@ class Settings(BaseSettings):
     SMS_SIGN_NAME: str = ""          # 短信签名 (如: "速通互联验证码")
     SMS_TEMPLATE_CODE: str = ""      # 模板CODE (如: "100001")
     SMS_CODE_LENGTH: int = 6         # 验证码长度
-    SMS_VALID_TIME: int = 300        # 验证码有效期（秒）
+    SMS_VALID_TIME: int = 300        # 验证码有效期（秒）5分钟
     
     # 邮件配置
     SMTP_HOST: str = "smtp.qq.com"

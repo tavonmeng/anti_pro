@@ -140,7 +140,7 @@ const handleConfirmOrder = async (confirmData: { email: string; phone: string })
       ...finalData
     })
     
-    await orderStore.updateOrderStatus(selectedOrder.value.id, 'pending_assign')
+    await orderStore.updateOrderStatus(selectedOrder.value.id, 'pending_contract')
     ElMessage.success('订单已提交')
     showConfirmation.value = false
     selectedOrder.value = null

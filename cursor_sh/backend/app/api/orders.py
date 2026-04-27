@@ -46,6 +46,17 @@ async def create_order(
 ):
     """创建订单（支持草稿模式）"""
     try:
+        # 企业认证校验：非草稿订单需要完成企业认证
+        if not is_draft:
+            from app.models.user import User as UserModel, EnterpriseStatus
+            if isinstance(current_user, UserModel):
+                status_val = (lambda e: e.value if hasattr(e, 'value') else str(e or 'none').lower())(current_user.enterprise_status or 'none')
+                if status_val != 'approved':
+                    raise HTTPException(
+                        status_code=403,
+                        detail="请先完成企业认证后再提交订单。您可以先将订单保存为草稿。"
+                    )
+        
         order = await OrderService.create_order(db, order_data, current_user, is_draft=is_draft)
         
         if is_draft:
@@ -186,6 +197,52 @@ async def submit_feedback(
             db, order_id, feedback_data, current_user
         )
         return ApiResponse(code=200, message="反馈提交成功", data=feedback)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{order_id}/contract/advance", response_model=ApiResponse[dict])
+async def advance_contract(
+    order_id: str,
+    contract_data: ContractAdvance,
+    current_user: AnyUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员推进合同流程（填写合同信息后进入制作阶段）"""
+    try:
+        order = await OrderService.advance_contract(
+            db, order_id, 
+            contract_data.contractNumber, 
+            contract_data.paymentAmount, 
+            contract_data.note, 
+            current_user
+        )
+        return ApiResponse(code=200, message="合同确认成功，订单已进入制作阶段", data=order)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{order_id}/cancel", response_model=ApiResponse[dict])
+async def admin_cancel_order(
+    order_id: str,
+    cancel_data: AdminCancelOrder,
+    current_user: AnyUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员取消订单（需 SMS 验证）"""
+    try:
+        order = await OrderService.admin_cancel_order(
+            db, order_id,
+            cancel_data.phone,
+            cancel_data.smsCode,
+            cancel_data.reason,
+            current_user
+        )
+        return ApiResponse(code=200, message="订单已取消", data=order)
     except HTTPException as e:
         raise e
     except Exception as e:

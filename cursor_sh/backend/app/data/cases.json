@@ -1,0 +1,35 @@
+[
+  {
+    "id": "case_001",
+    "title": "某知名运动品牌新品发布",
+    "category": "ai_3d_custom",
+    "description": "结合最新AI生成物理模拟特效，展示运动鞋的回弹感，视觉极具冲击力。",
+    "channel": "一线城市地铁站核心换乘通道裸眼3D大屏",
+    "highlights": "AI物理模拟 + 品牌定制3D内容，实际投放后社交媒体自然传播量超百万",
+    "duration": "约15个工作日",
+    "video_url": "/static/cases/case_001.mp4",
+    "thumbnail_url": "/static/cases/case_001_thumb.jpg"
+  },
+  {
+    "id": "case_002",
+    "title": "头部新能源汽车新车型上市裸眼3D秀",
+    "category": "ai_3d_custom",
+    "description": "车辆从屏幕中'驶出'，极强的三维穿透效果。该案例在各大短视频平台获得数百万自然播放量。",
+    "channel": "成都太古里/重庆观音桥裸眼3D大屏",
+    "highlights": "三维穿透效果 + 多城联动投放，短视频平台自然播放量数百万",
+    "duration": "约20个工作日",
+    "video_url": "/static/cases/case_002.mp4",
+    "thumbnail_url": "/static/cases/case_002_thumb.jpg"
+  },
+  {
+    "id": "case_003",
+    "title": "顶级美妆品牌年度快闪店数字空间",
+    "category": "digital_art",
+    "description": "全沉浸式视觉体验结合现场观众停留互动（如花瓣随人的走动而绽放），大幅提升了品牌打卡率。",
+    "channel": "线下商场中庭沉浸式艺术装置",
+    "highlights": "互动装置 + 沉浸式空间，活动期间品牌打卡率提升300%",
+    "duration": "约10个工作日",
+    "video_url": "/static/cases/case_003.mp4",
+    "thumbnail_url": "/static/cases/case_003_thumb.jpg"
+  }
+]

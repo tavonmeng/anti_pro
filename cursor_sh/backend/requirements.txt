@@ -48,3 +48,7 @@ loguru
 pytest
 pytest-asyncio
 httpx
+
+# AI语音实时识别
+websockets
+python-socks[asyncio]

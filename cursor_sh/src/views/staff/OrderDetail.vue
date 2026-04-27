@@ -17,7 +17,7 @@
             :icon="Upload" 
             type="primary"
             @click="handleUploadPreview"
-            :disabled="order.status === 'pending_assign' || order.status === 'completed' || order.status === 'cancelled' || order.status === 'pending_review'"
+            :disabled="order.status === 'pending_assign' || order.status === 'pending_contract' || order.status === 'completed' || order.status === 'cancelled' || order.status === 'pending_review'"
           >
             上传预览文件
           </el-button>
@@ -39,7 +39,8 @@
         <!-- 订单进度条 -->
         <div class="order-progress" style="margin-bottom: 30px; padding: 20px 10px; background: #fafafa; border-radius: 8px;">
           <el-steps :active="activeStep" :process-status="order.status === 'cancelled' ? 'error' : 'process'" finish-status="success" align-center>
-            <el-step title="需求确认" description="收到订单，待分配" />
+            <el-step title="需求确认" description="收到订单" />
+            <el-step title="合同与付款" description="签订合同、收取首付款" />
             <el-step title="内容制作" description="开发与设计环节" />
             <el-step title="初稿交付" description="内部审核与客户反馈" />
             <el-step title="终稿交付" description="内部审核与定稿" />
@@ -57,7 +58,7 @@
               <OrderStatusBadge :status="order.status" size="large" />
               <el-dropdown 
                 @command="handleStatusChange" 
-                v-if="order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'pending_review'"
+                v-if="order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'pending_review' && order.status !== 'pending_contract'"
               >
                 <el-button>
                   更改状态
@@ -314,15 +315,16 @@ const activeStep = computed(() => {
   switch(status) {
     case 'draft': return 0
     case 'pending_assign': return 0
-    case 'in_production': return 1
+    case 'pending_contract': return 1
+    case 'in_production': return 2
     case 'pending_review': 
     case 'review_rejected':
     case 'preview_ready':
     case 'revision_needed':
       const isFinal = timelineItems.value.some(item => item.type === 'preview' && item.data.previewType === 'final')
-      return isFinal ? 3 : 2
-    case 'final_preview': return 3
-    case 'completed': return 5
+      return isFinal ? 4 : 3
+    case 'final_preview': return 4
+    case 'completed': return 6
     case 'cancelled': return 0
     default: return 0
   }
@@ -445,6 +447,7 @@ const handleStatusChange = async (status: OrderStatus) => {
 const getStatusText = (status: OrderStatus): string => {
   const map: Record<OrderStatus, string> = {
     pending_assign: '待分配',
+    pending_contract: '合同与付款',
     in_production: '制作中',
     pending_review: '待审核',
     preview_ready: '初稿预览',

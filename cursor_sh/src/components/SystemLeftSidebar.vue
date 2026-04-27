@@ -6,12 +6,7 @@
       </div>
     </div>
     
-    <div class="user-profile-top" @click="navigate('profile')" title="个人设置">
-      <el-avatar :size="32" class="user-avatar" src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png">{{ userInitial }}</el-avatar>
-      <div class="user-info" v-if="!uiStore.isSidebarCollapsed">
-        <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
-      </div>
-    </div>
+
     
     <div class="sidebar-content">
       <div class="nav-section">
@@ -81,6 +76,25 @@
 
     <div class="sidebar-footer">
       <div class="bottom-nav">
+        <!-- 企业认证提示模块（已认证后消失） -->
+        <div class="auth-prompt-card" v-if="!uiStore.isSidebarCollapsed && authStore.user?.enterprise_status !== 'approved'">
+          <div class="auth-icon-wrap">
+            <el-icon><Top /></el-icon>
+          </div>
+          <div class="auth-text" v-if="!authStore.user?.enterprise_status || authStore.user?.enterprise_status === 'none'">
+            完成企业认证，解锁更多功能。
+          </div>
+          <div class="auth-text" v-else-if="authStore.user?.enterprise_status === 'pending'">
+            企业认证审核中，请耐心等待。
+          </div>
+          <div class="auth-text" v-else-if="authStore.user?.enterprise_status === 'rejected'">
+            认证被退回，请修正后重新提交。
+          </div>
+          <button class="auth-btn" @click="handleAuthClick">
+            {{ authStore.user?.enterprise_status === 'pending' ? '查看进度' : '去认证' }}
+          </button>
+        </div>
+
         <!-- 公告 -->
         <SystemAnnouncement :show-text="!uiStore.isSidebarCollapsed">
           <template #reference="{ hasUnread }">
@@ -108,9 +122,12 @@
           <el-icon><Help /></el-icon>
           <span v-if="!uiStore.isSidebarCollapsed">Help</span>
         </div>
-        <div class="nav-item logout-nav" @click="handleLogout">
-          <el-icon><SwitchButton /></el-icon>
-          <span v-if="!uiStore.isSidebarCollapsed">Logout</span>
+        <div class="nav-item" @click="navigate('profile')" style="margin-top: 8px;">
+          <div class="avatar-wrap" style="width: 16px; display: flex; justify-content: center; align-items: center; position: relative;">
+            <el-avatar :size="24" class="user-avatar" src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png">{{ userInitial }}</el-avatar>
+            <span v-if="authStore.isEnterprise()" class="enterprise-star">★</span>
+          </div>
+          <span v-if="!uiStore.isSidebarCollapsed">{{ authStore.user?.username || '用户' }}</span>
         </div>
       </div>
     </div>
@@ -120,7 +137,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Grid, Bell, Help, House, SwitchButton, EditPen, ChatDotRound } from '@element-plus/icons-vue'
+import { Grid, Bell, Help, House, SwitchButton, EditPen, ChatDotRound, MoreFilled, User, Top } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox } from 'element-plus'
 import NotificationBell from '@/components/NotificationBell.vue'
@@ -264,6 +281,7 @@ const getStatusText = (status: string) => {
   const map: Record<string, string> = {
     'draft': '草稿',
     'pending_assign': '等待接单',
+    'pending_contract': '合同与付款',
     'in_production': '制作生产中',
     'pending_review': '内部待审核',
     'preview_ready': '初稿待您确认',
@@ -321,6 +339,11 @@ const showHelp = () => {
   )
 }
 
+const handleAuthClick = () => {
+  // Enterprise authentication logic can be implemented here
+  router.push('/user/profile') // Navigate to profile or specific auth page
+}
+
 const handleLogout = async () => {
   try {
     await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
@@ -363,15 +386,7 @@ const handleLogout = async () => {
   display: none; /* Hide header completely to pull icons up */
 }
 
-.system-sidebar.is-collapsed .user-profile-top {
-  padding: 0;
-  justify-content: center;
-  border-radius: 50%;
-  box-shadow: none;
-  background: transparent;
-  width: 40px;
-  margin: 0 auto 16px auto; /* Reduce bottom margin, auto horizontal */
-}
+
 
 .system-sidebar.is-collapsed .nav-item {
   padding: 0;
@@ -404,24 +419,7 @@ const handleLogout = async () => {
   line-height: 1.4;
 }
 
-.user-profile-top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 12px;
-  margin: 0 16px 20px 16px;
-  border-radius: 20px;
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(27, 27, 28, 0.04);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
 
-.user-profile-top:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(27, 27, 28, 0.08); /* Soft lift on hover to indicate clikability */
-  background: #fdfdfd;
-}
 
 .user-info {
   flex: 1;
@@ -634,6 +632,58 @@ const handleLogout = async () => {
   gap: 4px; /* Compressed */
 }
 
+/* Auth Prompt Card */
+.auth-prompt-card {
+  background: #f4f4f5;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.auth-icon-wrap {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid #1a1a1a;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.auth-icon-wrap .el-icon {
+  font-size: 14px;
+  color: #1a1a1a;
+}
+
+.auth-text {
+  font-size: 13px;
+  color: #1a1a1a;
+  line-height: 1.4;
+  margin-bottom: 16px;
+}
+
+.auth-btn {
+  width: 100%;
+  background: #0d99ff; /* Bright blue */
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.auth-btn:hover {
+  opacity: 0.9;
+}
+
 .bottom-nav .nav-item .el-icon {
   /* color: #414754; */
   /* Remove explicit color override so it inherits from base/active rules above */
@@ -649,17 +699,7 @@ const handleLogout = async () => {
   align-items: center;
 }
 
-.logout-nav {
-  margin-top: 8px;
-  color: #ba1a1a; /* Error color for distinct exit action */
-}
-.logout-nav:hover {
-  background: #ffeeec;
-  color: #ba1a1a;
-}
-.logout-nav .el-icon {
-  color: #ba1a1a !important;
-}
+
 
 .draft-nav-badge {
   margin-left: auto;
@@ -693,5 +733,15 @@ const handleLogout = async () => {
   30% { transform: scale(1.15); }
   40% { transform: scale(1); }
   100% { transform: scale(1); }
+}
+
+.enterprise-star {
+  position: absolute;
+  bottom: -2px;
+  right: -6px;
+  font-size: 10px;
+  color: #f5a623;
+  text-shadow: 0 0 2px rgba(0,0,0,0.2);
+  line-height: 1;
 }
 </style>

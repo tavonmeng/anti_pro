@@ -133,9 +133,14 @@ def _send_local(phone: str) -> dict:
     return {"success": True, "message": "验证码已发送（测试模式）"}
 
 
-async def verify_sms_code(phone: str, code: str) -> bool:
+async def verify_sms_code(phone: str, code: str, consume: bool = True) -> bool:
     """
     校验短信验证码。
+    
+    Args:
+        phone: 手机号
+        code: 验证码
+        consume: 是否消耗验证码（预校验时传 False，正式注册时传 True）
     
     云端模式：调用阿里云 CheckSmsVerifyCode（阿里云端存储和校验）
     本地模式：校验内存缓存
@@ -143,7 +148,7 @@ async def verify_sms_code(phone: str, code: str) -> bool:
     if _can_use_cloud():
         return await _verify_via_dypnsapi(phone, code)
     else:
-        return _verify_local(phone, code)
+        return _verify_local(phone, code, consume=consume)
 
 
 async def _verify_via_dypnsapi(phone: str, code: str) -> bool:
@@ -183,7 +188,7 @@ async def _verify_via_dypnsapi(phone: str, code: str) -> bool:
         return _verify_local(phone, code)
 
 
-def _verify_local(phone: str, code: str) -> bool:
+def _verify_local(phone: str, code: str, consume: bool = True) -> bool:
     """本地校验"""
     cached = _sms_code_cache.get(phone)
     if not cached:
@@ -193,6 +198,7 @@ def _verify_local(phone: str, code: str) -> bool:
         del _sms_code_cache[phone]
         return False
     if stored_code == code:
-        del _sms_code_cache[phone]
+        if consume:
+            del _sms_code_cache[phone]
         return True
     return False

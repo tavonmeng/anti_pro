@@ -102,6 +102,9 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
         real_name=getattr(user, 'real_name', None),
         avatar=getattr(user, 'avatar', None),
         is_active=user.is_active,
+        enterprise_status=(lambda e: e.value if hasattr(e, 'value') else str(e or 'none').lower())(getattr(user, 'enterprise_status', None) or 'none'),
+        enterprise_name=getattr(user, 'enterprise_name', None),
+        enterprise_reject_reason=getattr(user, 'enterprise_reject_reason', None),
         created_at=user.created_at
     )
     
@@ -114,8 +117,8 @@ async def register(db: AsyncSession, register_data: RegisterRequest) -> dict:
     注册只允许 user 角色。admin 和 staff 由管理员后台创建。
     """
     try:
-        # 1. 校验短信验证码
-        is_valid = await verify_sms_code(register_data.phone, register_data.sms_code)
+        # 1. 校验短信验证码（立即消耗，每次提交都需要新的验证码）
+        is_valid = await verify_sms_code(register_data.phone, register_data.sms_code, consume=True)
         if not is_valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -160,7 +163,7 @@ async def register(db: AsyncSession, register_data: RegisterRequest) -> dict:
             email=register_data.email,
             phone=register_data.phone,
             password_hash=get_password_hash(register_data.password),
-            role=UserRole.USER,  # 注册只允许 user 角色
+            role=UserRole.USER,
             is_active=True
         )
         

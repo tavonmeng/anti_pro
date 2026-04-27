@@ -83,9 +83,10 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleCheckFilled, Download } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
+import { useAuthStore } from '@/stores/auth'
 import { orderApi } from '@/utils/api'
 import VideoPurchaseForm from '@/components/VideoPurchaseForm.vue'
 import AI3DCustomForm from '@/components/AI3DCustomForm.vue'
@@ -158,8 +159,8 @@ onMounted(async () => {
       if (!order.value) {
         ElMessage.error('订单不存在')
         router.push('/user/orders')
-      } else if (order.value.status !== 'pending_assign' && order.value.status !== 'draft') {
-        ElMessage.warning('只有待分配或草稿状态的订单可以修改')
+      } else if (order.value.status !== 'pending_contract' && order.value.status !== 'pending_assign' && order.value.status !== 'draft') {
+        ElMessage.warning('只有待分配、合同与付款或草稿状态的订单可以修改')
         router.push(`/user/orders/${orderId.value}`)
       }
     } catch (error) {
@@ -171,8 +172,37 @@ onMounted(async () => {
   }
 })
 
-// 用户点击"确认提交" → 弹出需求告知函
+// 用户点击"确认提交" → 检查企业认证 → 弹出需求告知函
 const handleSubmit = async (formData: any) => {
+  // 检查企业认证状态
+  const authStore = useAuthStore()
+  if (authStore.user?.enterprise_status !== 'approved') {
+    // 先自动保存为草稿
+    try {
+      await orderStore.createOrder({
+        orderType: orderType.value,
+        ...formData
+      }, true)
+      await orderStore.fetchOrders()
+    } catch (e) {
+      console.error('自动保存草稿失败:', e)
+    }
+    
+    // 提示用户去认证
+    await ElMessageBox.alert(
+      '请先完成企业认证后再提交订单。您的订单已自动保存为草稿。',
+      '需要企业认证',
+      {
+        confirmButtonText: '去认证',
+        type: 'warning',
+        callback: () => {
+          router.push('/user/profile')
+        }
+      }
+    )
+    return
+  }
+  
   pendingFormData.value = formData
   if (isEditMode.value && orderId.value) {
     pendingOrderNumber.value = order.value?.orderNumber || ''
@@ -195,7 +225,7 @@ const handleConfirmOrder = async (confirmData: { email: string; phone: string })
     let resultOrder: Order
     if (isEditMode.value && orderId.value) {
       resultOrder = await orderStore.updateOrder(orderId.value, finalData)
-      await orderStore.updateOrderStatus(orderId.value, 'pending_assign')
+      await orderStore.updateOrderStatus(orderId.value, 'pending_contract')
       submittedOrderId.value = orderId.value
     } else {
       resultOrder = await orderStore.createOrder(finalData)

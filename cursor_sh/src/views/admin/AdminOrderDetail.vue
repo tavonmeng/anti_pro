@@ -24,7 +24,7 @@
             :icon="Upload" 
             type="primary"
             @click="handleUploadPreview"
-            :disabled="order.status === 'pending_assign' || order.status === 'completed' || order.status === 'cancelled' || order.status === 'pending_review'"
+            :disabled="order.status === 'pending_assign' || order.status === 'pending_contract' || order.status === 'completed' || order.status === 'cancelled' || order.status === 'pending_review'"
           >
             上传预览文件
           </el-button>
@@ -46,7 +46,8 @@
         <!-- 订单进度条 -->
         <div class="order-progress" style="margin-bottom: 30px; padding: 20px 10px; background: #fafafa; border-radius: 8px;">
           <el-steps :active="activeStep" :process-status="order.status === 'cancelled' ? 'error' : 'process'" finish-status="success" align-center>
-            <el-step title="需求确认" description="收到订单，待分配" />
+            <el-step title="需求确认" description="收到订单" />
+            <el-step title="合同与付款" description="签订合同、收取首付款" />
             <el-step title="内容制作" description="开发与设计环节" />
             <el-step title="初稿交付" description="内部审核与客户反馈" />
             <el-step title="终稿交付" description="内部审核与定稿" />
@@ -64,7 +65,7 @@
               <OrderStatusBadge :status="order.status" size="large" />
               <el-dropdown 
                 @command="handleStatusChange" 
-                v-if="order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'pending_review'"
+                v-if="order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'pending_review' && order.status !== 'pending_contract'"
               >
                 <el-button>
                   更改状态
@@ -84,12 +85,24 @@
                     <el-dropdown-item command="completed">
                       已完成
                     </el-dropdown-item>
-                    <el-dropdown-item command="cancelled" divided>
-                      取消订单
-                    </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
+              <el-button 
+                v-if="order.status === 'pending_contract'" 
+                type="success" 
+                @click="showContractDialog = true"
+              >
+                确认合同与付款
+              </el-button>
+              <el-button 
+                v-if="order.status !== 'completed' && order.status !== 'cancelled'" 
+                type="danger" 
+                plain 
+                @click="showCancelDialog = true"
+              >
+                取消订单
+              </el-button>
             </div>
           </div>
         </template>
@@ -289,6 +302,63 @@
       :order="order"
       @confirm="handleUploadConfirm"
     />
+    
+    <!-- 合同与付款确认对话框 -->
+    <el-dialog v-model="showContractDialog" title="确认合同与付款" width="520px" destroy-on-close>
+      <el-form :model="contractForm" label-width="100px" label-position="top">
+        <el-form-item label="合同编号" required>
+          <el-input v-model="contractForm.contractNumber" placeholder="请输入合同编号" />
+        </el-form-item>
+        <el-form-item label="首付款金额（元）" required>
+          <el-input-number v-model="contractForm.paymentAmount" :min="0" :precision="2" :step="1000" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="contractForm.note" type="textarea" :rows="3" placeholder="选填，如合同签订日期、付款方式等" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showContractDialog = false">取消</el-button>
+        <el-button type="success" @click="handleContractAdvance" :loading="contractLoading"
+          :disabled="!contractForm.contractNumber || !contractForm.paymentAmount">
+          确认并推进到制作阶段
+        </el-button>
+      </template>
+    </el-dialog>
+    
+    <!-- 管理员取消订单对话框（SMS验证） -->
+    <el-dialog v-model="showCancelDialog" title="取消订单" width="480px" destroy-on-close>
+      <el-alert type="warning" :closable="false" style="margin-bottom: 16px">
+        取消订单需要进行手机验证码确认，此操作不可撤回。
+      </el-alert>
+      <el-form :model="cancelForm" label-width="100px" label-position="top">
+        <el-form-item label="手机号">
+          <el-input v-model="cancelForm.phone" placeholder="管理员手机号">
+            <template #append>
+              <el-button 
+                :disabled="smsCooldown > 0" 
+                @click="sendCancelSms"
+                :loading="smsLoading"
+              >
+                {{ smsCooldown > 0 ? `${smsCooldown}s 后重试` : '发送验证码' }}
+              </el-button>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="验证码">
+          <el-input v-model="cancelForm.smsCode" placeholder="请输入短信验证码" maxlength="6" />
+        </el-form-item>
+        <el-form-item label="取消原因">
+          <el-input v-model="cancelForm.reason" type="textarea" :rows="3" placeholder="选填，取消原因将通知客户" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCancelDialog = false">返回</el-button>
+        <el-button type="danger" @click="handleAdminCancel" :loading="cancelLoading"
+          :disabled="!cancelForm.phone || !cancelForm.smsCode">
+          确认取消订单
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -298,7 +368,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, User, Upload, ArrowDown, Picture, Document as DocumentIcon, VideoPlay, Download } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useOrderStore } from '@/stores/order'
-import { orderApi } from '@/utils/api'
+import { orderApi, authApi } from '@/utils/api'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import AssigneeDialog from '@/components/AssigneeDialog.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
@@ -312,6 +382,24 @@ const order = ref<Order | null>(null)
 const loading = ref(true)
 const assignDialogVisible = ref(false)
 const uploadDialogVisible = ref(false)
+const showContractDialog = ref(false)
+const showCancelDialog = ref(false)
+const contractLoading = ref(false)
+const cancelLoading = ref(false)
+const smsLoading = ref(false)
+const smsCooldown = ref(0)
+
+const contractForm = ref({
+  contractNumber: '',
+  paymentAmount: 0,
+  note: ''
+})
+
+const cancelForm = ref({
+  phone: '',
+  smsCode: '',
+  reason: ''
+})
 
 const orderTypeMap: Record<string, string> = {
   video_purchase: '裸眼3D成片购买适配',
@@ -344,15 +432,16 @@ const activeStep = computed(() => {
   switch(status) {
     case 'draft': return 0
     case 'pending_assign': return 0
-    case 'in_production': return 1
+    case 'pending_contract': return 1
+    case 'in_production': return 2
     case 'pending_review': 
     case 'review_rejected':
     case 'preview_ready':
     case 'revision_needed':
       const isFinal = previewHistoryList.value.some(h => h.previewType === 'final')
-      return isFinal ? 3 : 2
-    case 'final_preview': return 3
-    case 'completed': return 5
+      return isFinal ? 4 : 3
+    case 'final_preview': return 4
+    case 'completed': return 6
     case 'cancelled': return 0
     default: return 0
   }
@@ -513,6 +602,7 @@ const handleStatusChange = async (status: OrderStatus) => {
 const getStatusText = (status: OrderStatus): string => {
   const map: Record<OrderStatus, string> = {
     pending_assign: '待分配',
+    pending_contract: '合同与付款',
     in_production: '制作中',
     pending_review: '待审核',
     preview_ready: '初稿预览',
@@ -560,6 +650,68 @@ const handlePdfDownload = async (type: string) => {
 
 const goBack = () => {
   router.push('/admin')
+}
+
+// 合同推进
+const handleContractAdvance = async () => {
+  if (!order.value) return
+  contractLoading.value = true
+  try {
+    await orderApi.advanceContract(order.value.id, {
+      contractNumber: contractForm.value.contractNumber,
+      paymentAmount: contractForm.value.paymentAmount,
+      note: contractForm.value.note
+    })
+    ElMessage.success('合同确认成功，订单已进入制作阶段')
+    showContractDialog.value = false
+    order.value = await orderStore.getOrderDetail(order.value.id)
+  } catch (error: any) {
+    ElMessage.error(error?.message || '操作失败')
+  } finally {
+    contractLoading.value = false
+  }
+}
+
+// 发送取消验证码
+const sendCancelSms = async () => {
+  if (!cancelForm.value.phone) {
+    ElMessage.warning('请先输入手机号')
+    return
+  }
+  smsLoading.value = true
+  try {
+    await authApi.sendSms(cancelForm.value.phone)
+    ElMessage.success('验证码已发送')
+    smsCooldown.value = 60
+    const timer = setInterval(() => {
+      smsCooldown.value--
+      if (smsCooldown.value <= 0) clearInterval(timer)
+    }, 1000)
+  } catch (error: any) {
+    ElMessage.error(error?.message || '发送失败')
+  } finally {
+    smsLoading.value = false
+  }
+}
+
+// 管理员取消订单
+const handleAdminCancel = async () => {
+  if (!order.value) return
+  cancelLoading.value = true
+  try {
+    await orderApi.adminCancelOrder(order.value.id, {
+      phone: cancelForm.value.phone,
+      smsCode: cancelForm.value.smsCode,
+      reason: cancelForm.value.reason
+    })
+    ElMessage.success('订单已取消')
+    showCancelDialog.value = false
+    order.value = await orderStore.getOrderDetail(order.value.id)
+  } catch (error: any) {
+    ElMessage.error(error?.message || '取消失败')
+  } finally {
+    cancelLoading.value = false
+  }
 }
 </script>
 

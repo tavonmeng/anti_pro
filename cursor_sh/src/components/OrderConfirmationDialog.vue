@@ -91,12 +91,12 @@
           <el-form-item label="签名确认" prop="signature">
             <el-input
               v-model="confirmForm.signature"
-              placeholder="请手动输入「我已知晓」以确认"
+              placeholder="请手动输入「确认同意制作」以确认"
               class="signature-input"
             />
             <div class="signature-hint">
               <el-icon><WarningFilled /></el-icon>
-              请在上方输入框中手动输入"<strong>我已知晓</strong>"完成签名确认
+              请在上方输入框中手动输入"<strong>确认同意制作</strong>"完成签名确认
             </div>
           </el-form-item>
 
@@ -123,7 +123,7 @@
                 class="sms-input"
               />
               <el-button
-                :disabled="smsCooldown > 0 || !confirmForm.phone || confirmForm.phone.length !== 11 || confirmForm.signature !== '我已知晓'"
+                :disabled="smsCooldown > 0 || !confirmForm.phone || confirmForm.phone.length !== 11 || confirmForm.signature !== '确认同意制作'"
                 @click="handleSendSms"
                 class="sms-btn"
               >
@@ -194,8 +194,8 @@ const confirmForm = ref({
 
 // --- 验证规则 ---
 const validateSignature = (_rule: any, value: string, callback: Function) => {
-  if (value !== '我已知晓') {
-    callback(new Error('请输入「我已知晓」完成签名确认'))
+  if (value !== '确认同意制作') {
+    callback(new Error('请输入「确认同意制作」完成签名确认'))
   } else {
     callback()
   }
@@ -221,7 +221,7 @@ const confirmRules: FormRules = {
 const isFormValid = computed(() => {
   return (
     confirmForm.value.smsCode?.length === 6 &&
-    confirmForm.value.signature === '我已知晓'
+    confirmForm.value.signature === '确认同意制作'
   )
 })
 
@@ -352,10 +352,15 @@ const handleConfirm = async () => {
     if (valid) {
       confirming.value = true
       try {
+        // 请求后端校验验证码
+        await authApi.verifySms(confirmForm.value.phone, confirmForm.value.smsCode)
+        
         emit('confirm', {
           email: confirmForm.value.email,
           phone: confirmForm.value.phone
         })
+      } catch (error: any) {
+        ElMessage.error(error.message || '验证码错误或已过期')
       } finally {
         confirming.value = false
       }
