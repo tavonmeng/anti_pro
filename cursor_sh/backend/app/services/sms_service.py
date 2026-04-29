@@ -144,8 +144,16 @@ async def verify_sms_code(phone: str, code: str, consume: bool = True) -> bool:
     
     云端模式：调用阿里云 CheckSmsVerifyCode（阿里云端存储和校验）
     本地模式：校验内存缓存
+    
+    注意：阿里云 CheckSmsVerifyCode 每次调用都会消耗验证码，
+    因此预校验（consume=False）时仅做格式检查，不调用云端接口，
+    避免验证码在注册前就被消耗掉。
     """
     if _can_use_cloud():
+        if not consume:
+            # 预校验模式：不调用阿里云（会消耗验证码），只做基本格式检查
+            # 真正的校验在 register 时 consume=True 才执行
+            return bool(code and len(code) == settings.SMS_CODE_LENGTH and code.isdigit())
         return await _verify_via_dypnsapi(phone, code)
     else:
         return _verify_local(phone, code, consume=consume)
