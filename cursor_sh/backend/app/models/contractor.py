@@ -1,6 +1,6 @@
 """承包商模型"""
 
-from sqlalchemy import Column, String, Boolean, DateTime
+from sqlalchemy import Column, String, Boolean, DateTime, JSON
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -19,6 +19,7 @@ class Contractor(Base):
     address = Column(String(255))           # 地址
     specialty = Column(String(200))         # 专业方向（选填）
     expertise = Column(String(200))         # 擅长领域（选填）
+    showcase_cases = Column(JSON, default=list)  # 优秀案例（最多2个视频）
     avatar = Column(String(255))
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

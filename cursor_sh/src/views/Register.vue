@@ -130,6 +130,11 @@
             </div>
           </el-form-item>
           
+          <!-- 蜜罐字段（对真人隐藏，机器人会填写） -->
+          <div style="position:absolute;left:-9999px;opacity:0;height:0;overflow:hidden" aria-hidden="true">
+            <input v-model="honeypot" type="text" name="website" tabindex="-1" autocomplete="off" />
+          </div>
+
           <el-form-item>
             <el-button
               type="primary"
@@ -172,7 +177,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { User, Lock, Message, Right, Iphone, Key } from '@element-plus/icons-vue'
@@ -202,6 +207,62 @@ const registerForm = reactive({
   password: '',
   confirmPassword: '',
   role: 'user' as UserRole,
+})
+
+// ========== 反注册机行为追踪 ==========
+const honeypot = ref('')  // 蜜罐字段
+const behaviorData = reactive({
+  pageLoadedAt: Date.now(),
+  phoneFirstInputAt: null as number | null,
+  smsSentAt: null as number | null,
+  smsInputAt: null as number | null,
+  usernameFirstInputAt: null as number | null,
+  emailFirstInputAt: null as number | null,
+  passwordFirstInputAt: null as number | null,
+  fieldFocusCount: 0,
+  keyPressCount: 0,
+})
+
+// 字段首次输入追踪
+const trackFirstInput = (field: string) => {
+  const key = `${field}FirstInputAt` as keyof typeof behaviorData
+  if (!behaviorData[key]) {
+    (behaviorData as any)[key] = Date.now()
+  }
+}
+
+// 全局键盘事件（仅在注册页面内计数）
+const handleGlobalKeyPress = () => {
+  behaviorData.keyPressCount++
+}
+
+// 字段聚焦计数
+const handleFieldFocus = (field: string) => {
+  behaviorData.fieldFocusCount++
+  trackFirstInput(field)
+}
+
+// 监听各字段输入，记录首次输入时间
+watch(() => registerForm.phone, (v) => { if (v) trackFirstInput('phone') })
+watch(() => registerForm.smsCode, (v) => { if (v) trackFirstInput('sms') })
+watch(() => registerForm.username, (v) => { if (v) trackFirstInput('username') })
+watch(() => registerForm.email, (v) => { if (v) trackFirstInput('email') })
+watch(() => registerForm.password, (v) => { if (v) trackFirstInput('password') })
+
+onMounted(() => {
+  behaviorData.pageLoadedAt = Date.now()
+  document.addEventListener('keydown', handleGlobalKeyPress)
+  // 给所有输入框绑定 focus 事件
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('.register-form input')
+    inputs.forEach(input => {
+      input.addEventListener('focus', () => behaviorData.fieldFocusCount++)
+    })
+  }, 200)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleGlobalKeyPress)
 })
 
 const openCaptchaDialog = () => {
@@ -311,6 +372,7 @@ const handleSendSms = async () => {
   try {
     await authApi.sendSms(registerForm.phone)
     ElMessage.success('验证码已发送，请注意查收短信')
+    behaviorData.smsSentAt = Date.now()
     
     // 开始倒计时
     smsCooldown.value = 60
@@ -342,7 +404,21 @@ const handleRegister = async () => {
           username: registerForm.username,
           email: registerForm.email,
           password: registerForm.password,
-          role: registerForm.role
+          role: registerForm.role,
+          // 反注册机行为数据
+          behavior: {
+            page_loaded_at: behaviorData.pageLoadedAt,
+            phone_first_input_at: behaviorData.phoneFirstInputAt,
+            sms_sent_at: behaviorData.smsSentAt,
+            sms_input_at: behaviorData.smsInputAt,
+            username_first_input_at: behaviorData.usernameFirstInputAt,
+            email_first_input_at: behaviorData.emailFirstInputAt,
+            password_first_input_at: behaviorData.passwordFirstInputAt,
+            submit_clicked_at: Date.now(),
+            field_focus_count: behaviorData.fieldFocusCount,
+            key_press_count: behaviorData.keyPressCount,
+          },
+          website: honeypot.value || undefined,
         })
         
         if (success) {

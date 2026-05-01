@@ -167,18 +167,24 @@ const copyGeneratedLink = async () => {
 
 const fetchInvitations = async () => {
   try {
-    const res = await request.get('/api/contractor-admin/invitations')
-    invitations.value = res.data || []
+    const res: any = await request.get('/contractor-admin/invitations')
+    invitations.value = Array.isArray(res) ? res : (res?.data || [])
   } catch { /* ignore */ }
 }
 
 const fetchContractors = async () => {
   try {
-    const res = await request.get('/api/contractor-admin/list', {
+    const res: any = await request.get('/contractor-admin/list', {
       params: { page: currentPage.value, pageSize, keyword: keyword.value || undefined },
     })
-    contractors.value = res.data?.data || []
-    total.value = res.data?.total || 0
+    // res is already the inner data object from ApiResponse
+    if (Array.isArray(res)) {
+      contractors.value = res
+      total.value = res.length
+    } else {
+      contractors.value = res?.data || res?.items || []
+      total.value = res?.total || contractors.value.length
+    }
   } catch { /* ignore */ }
 }
 
@@ -191,12 +197,14 @@ const generateInvite = () => {
 const confirmGenerate = async () => {
   generating.value = true
   try {
-    const res = await request.post('/api/contractor-admin/invitations', {
+    const res: any = await request.post('/contractor-admin/invitations', {
       note: inviteNote.value,
       expires_days: inviteDays.value,
     })
     inviteDialogVisible.value = false
-    generatedUrl.value = res.data?.inviteUrl || ''
+    // res is already the inner data from ApiResponse
+    const token = res?.token || ''
+    generatedUrl.value = res?.inviteUrl || (token ? getInviteUrl(token) : '')
     resultDialogVisible.value = true
     fetchInvitations()
   } catch (e: any) {
@@ -209,7 +217,7 @@ const confirmGenerate = async () => {
 const revokeInvite = async (id: string) => {
   try {
     await ElMessageBox.confirm('撤销后该邀请链接将无法使用', '确认撤销')
-    await request.delete(`/api/contractor-admin/invitations/${id}`)
+    await request.delete(`/contractor-admin/invitations/${id}`)
     ElMessage.success('已撤销')
     fetchInvitations()
   } catch { /* cancelled */ }
@@ -219,7 +227,7 @@ const toggleActive = async (row: any) => {
   try {
     const action = row.isActive ? '禁用' : '启用'
     await ElMessageBox.confirm(`确认${action}该承包商？`, '确认操作')
-    await request.put(`/api/contractor-admin/${row.id}`, { isActive: !row.isActive })
+    await request.put(`/contractor-admin/${row.id}`, { isActive: !row.isActive })
     ElMessage.success(`已${action}`)
     fetchContractors()
   } catch { /* cancelled */ }

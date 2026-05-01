@@ -52,17 +52,37 @@ class FileService:
     
     @staticmethod
     async def save_file_oss(file: UploadFile, order_id: str) -> FileResponse:
-        """保存文件到阿里云 OSS（预留）"""
-        if not settings.OSS_ENABLED:
-            raise HTTPException(status_code=400, detail="OSS 未启用")
-        
-        # TODO: 实现阿里云 OSS 上传
-        # 1. 初始化 OSS 客户端
-        # 2. 生成文件路径
-        # 3. 上传文件
-        # 4. 返回文件 URL
-        
-        raise NotImplementedError("阿里云 OSS 上传功能待实现")
+        """保存文件到阿里云 OSS（私有 Bucket + 签名 URL）"""
+        from app.services.oss_service import upload_and_sign
+
+        # 验证文件
+        file_content = await file.read()
+        file_size = len(file_content)
+
+        validate_file_size(file_size)
+        validate_file_type(file.content_type)
+
+        file_id = generate_id("file")
+        file_extension = os.path.splitext(file.filename)[1]
+        filename = "%s%s" % (file_id, file_extension)
+
+        result = upload_and_sign(
+            data=file_content,
+            prefix="orders/%s" % order_id,
+            user_id="",  # 订单附件不按用户分目录
+            filename=filename,
+            content_type=file.content_type or "",
+        )
+
+        return FileResponse(
+            id=file_id,
+            name=file.filename,
+            size=file_size,
+            type=file.content_type,
+            uploadTime=datetime.utcnow().isoformat() + "Z",
+            url=result["url"],
+            object_key=result.get("object_key", ""),
+        )
     
     @staticmethod
     async def save_files(files: List[UploadFile], order_id: str) -> List[FileResponse]:
@@ -92,6 +112,9 @@ class FileService:
             file_size = file_upload.get('size')
             file_type = file_upload.get('type')
             upload_time = file_upload.get('uploadTime')
+            # 优先使用前端传入的 URL（可能是 OSS 签名 URL 或本地路径）
+            existing_url = file_upload.get('url') or file_upload.get('file_url')
+            object_key = file_upload.get('object_key')
         else:
             # 如果是 FileUpload 对象
             file_id = file_upload.id
@@ -99,6 +122,11 @@ class FileService:
             file_size = file_upload.size
             file_type = file_upload.type
             upload_time = file_upload.uploadTime
+            existing_url = None
+            object_key = None
+        
+        # 使用已有的 URL（来自之前的上传接口），否则生成本地路径
+        file_url = existing_url or "/uploads/%s/%s" % (order_id, file_name)
         
         return FileResponse(
             id=file_id,
@@ -106,6 +134,7 @@ class FileService:
             size=file_size,
             type=file_type,
             uploadTime=upload_time,
-            url=f"/uploads/{order_id}/{file_name}"  # 模拟 URL
+            url=file_url,
+            object_key=object_key,
         )
 

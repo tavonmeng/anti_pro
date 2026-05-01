@@ -13,6 +13,7 @@ from app.models.file import File
 from app.models.feedback import Feedback
 from app.models.notification import Notification
 from app.models.announcement import Announcement
+from app.models.security_event import SecurityEvent, SecurityEventType
 
 __all__ = [
     "User", "UserRole",
@@ -24,5 +25,6 @@ __all__ = [
     "WorkflowStageConfig",
     "Order", "OrderAssignee",
     "File", "Feedback", "Notification",
-    "Announcement"
+    "Announcement",
+    "SecurityEvent", "SecurityEventType",
 ]

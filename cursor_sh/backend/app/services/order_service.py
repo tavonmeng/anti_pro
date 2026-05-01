@@ -22,6 +22,7 @@ from app.services.file_service import FileService
 from app.services.email_service import EmailService
 from app.services.notification_service import NotificationService
 from app.services.pdf_service import PDFService
+from app.config import settings
 
 
 async def _get_order_assignee_ids(db: AsyncSession, order_id: str) -> List[str]:
@@ -1183,5 +1184,46 @@ class OrderService:
         # 合并订单特定数据
         base_response.update(order.order_data)
         
+        # OSS 模式下：为所有文件 URL 字段生成签名 URL
+        if settings.OSS_ENABLED:
+            _sign_file_urls_in_response(base_response)
+        
         return base_response
 
+
+def _sign_file_urls_in_response(data: dict):
+    """为订单响应中所有文件 URL 生成 OSS 签名 URL。
+
+    处理字段：
+    - scenePhotos[].url
+    - scenePhotos[].file_url
+    - previewFiles[].url
+    - previewHistory[].files[].url
+    - site_photos[].url / site_photos[].file_url
+    """
+    from app.services.oss_service import maybe_sign_url
+
+    # 签名单个文件对象的 url 字段
+    def _sign_file_item(item):
+        if isinstance(item, dict):
+            if "url" in item and item["url"]:
+                item["url"] = maybe_sign_url(item["url"])
+            if "file_url" in item and item["file_url"]:
+                item["file_url"] = maybe_sign_url(item["file_url"])
+
+    # scenePhotos
+    for photo in data.get("scenePhotos", []) or []:
+        _sign_file_item(photo)
+
+    # site_photos（承包商端脱敏后的字段名）
+    for photo in data.get("site_photos", []) or []:
+        _sign_file_item(photo)
+
+    # previewFiles
+    for f in data.get("previewFiles", []) or []:
+        _sign_file_item(f)
+
+    # previewHistory -> files
+    for entry in data.get("previewHistory", []) or []:
+        for f in entry.get("files", []) or []:
+            _sign_file_item(f)

@@ -5,6 +5,13 @@
       <p class="page-desc">查看和管理您收到的项目派单</p>
     </div>
 
+    <!-- 资料未完善提示 -->
+    <div v-if="profileIncomplete" class="profile-alert" @click="router.push('/contractor/profile')">
+      <span class="alert-icon">⚠️</span>
+      <span class="alert-text">您的资料尚未完善，请前往<strong>个人设置</strong>补充公司信息和专业方向，以便接收派单</span>
+      <span class="alert-arrow">→</span>
+    </div>
+
     <!-- 状态筛选 Tabs -->
     <el-tabs v-model="activeTab" class="status-tabs" @tab-change="fetchAssignments">
       <el-tab-pane label="全部" name="all" />
@@ -47,9 +54,9 @@
             <span class="label">城市</span>
             <span class="value">{{ item.order?.city || '—' }}</span>
           </div>
-          <div class="info-row">
-            <span class="label">预算</span>
-            <span class="value">{{ item.order?.budget || '—' }}</span>
+          <div class="info-row" v-if="item.order?.orderType">
+            <span class="label">类型</span>
+            <span class="value">{{ item.order?.orderType || '—' }}</span>
           </div>
           <div class="info-row" v-if="item.schedule">
             <span class="label">总排期</span>
@@ -100,6 +107,15 @@ const rejectDialogVisible = ref(false)
 const rejectReason = ref('')
 const rejectingId = ref('')
 const rejecting = ref(false)
+const profileIncomplete = ref(false)
+
+const checkProfile = async () => {
+  try {
+    const d: any = await request.get('/contractor/profile')
+    const missing = !d?.realName && !d?.real_name || !d?.company || !d?.specialty || !d?.expertise
+    profileIncomplete.value = !!missing
+  } catch { /* ignore */ }
+}
 
 const statusLabel = (s: string) => ({
   pending: '待处理', accepted: '已接单', in_progress: '进行中',
@@ -123,8 +139,8 @@ const fetchAssignments = async () => {
   try {
     const params: any = {}
     if (activeTab.value !== 'all') params.status = activeTab.value
-    const res = await request.get('/api/contractor/assignments', { params })
-    assignments.value = res.data || []
+    const res: any = await request.get('/contractor/assignments', { params })
+    assignments.value = Array.isArray(res) ? res : (res?.data || res?.items || [])
   } catch (e: any) {
     ElMessage.error('加载失败')
   } finally {
@@ -138,7 +154,7 @@ const goToDetail = (id: string) => {
 
 const handleAccept = async (id: string) => {
   try {
-    await request.put(`/api/contractor/assignments/${id}/accept`)
+    await request.put(`/contractor/assignments/${id}/accept`)
     ElMessage.success('接单成功')
     fetchAssignments()
   } catch (e: any) {
@@ -155,7 +171,7 @@ const showRejectDialog = (id: string) => {
 const handleReject = async () => {
   rejecting.value = true
   try {
-    await request.put(`/api/contractor/assignments/${rejectingId.value}/reject`, {
+    await request.put(`/contractor/assignments/${rejectingId.value}/reject`, {
       reject_reason: rejectReason.value,
     })
     ElMessage.success('已拒绝')
@@ -168,7 +184,10 @@ const handleReject = async () => {
   }
 }
 
-onMounted(fetchAssignments)
+onMounted(() => {
+  fetchAssignments()
+  checkProfile()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -184,6 +203,18 @@ onMounted(fetchAssignments)
 @keyframes spin { to { transform: rotate(360deg); } }
 .empty-state { padding: 60px 0; }
 .assignment-cards { display: flex; flex-direction: column; gap: 16px; }
+.profile-alert {
+  display: flex; align-items: center; gap: 10px;
+  background: #FFF8E6; border: 1px solid #FFD666;
+  border-radius: 10px; padding: 12px 16px; margin-bottom: 16px;
+  cursor: pointer; transition: all 0.2s;
+  &:hover { background: #FFF3CC; transform: translateY(-1px); }
+}
+.alert-icon { font-size: 18px; flex-shrink: 0; }
+.alert-text { flex: 1; font-size: 13px; color: #1D1D1F; line-height: 1.5;
+  strong { color: #E6770F; }
+}
+.alert-arrow { font-size: 16px; color: #E6770F; font-weight: 600; }
 .assignment-card {
   background: #fff; border-radius: 12px; padding: 20px;
   border: 1px solid #E5E7EB; cursor: pointer;

@@ -46,6 +46,12 @@ class User(Base):
     enterprise_submitted_at = Column(DateTime(timezone=True))   # 提交认证时间
     enterprise_reviewed_at = Column(DateTime(timezone=True))    # 审核时间
     
+    # 安全追踪字段
+    register_ip = Column(String(50))                           # 注册时 IP
+    register_user_agent = Column(String(500))                  # 注册时 User-Agent
+    last_login_at = Column(DateTime(timezone=True))            # 最近登录时间
+    last_login_ip = Column(String(50))                         # 最近登录 IP
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     

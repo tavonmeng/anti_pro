@@ -32,7 +32,11 @@ class InvitationCreate(BaseModel):
 class AssignOrderRequest(BaseModel):
     order_id: str
     contractor_id: str
-    schedule_adjustments: Optional[list[dict]] = None   # 可选的天数调整
+    workflow_type: str = "traditional"  # "traditional" | "ai"
+    schedule_adjustments: Optional[list[dict]] = None   # 传统流程的天数调整
+    # AI流程专用
+    demo_deadline: Optional[str] = None     # demo 上传期限 (ISO date)
+    final_deadline: Optional[str] = None    # 最终稿上传期限 (ISO date)
 
 class ReviewDeliverableRequest(BaseModel):
     approved: bool
@@ -44,6 +48,12 @@ class PublishDeliverableRequest(BaseModel):
 class AdvanceStageRequest(BaseModel):
     """手动推进到下一环节"""
     pass
+
+class DesignPlanUpdate(BaseModel):
+    """AI方案设计更新"""
+    content: Optional[str] = None
+    files: Optional[list] = None
+    status: Optional[str] = "draft"  # draft | completed
 
 
 # ========== 邀请链接管理 ==========
@@ -266,11 +276,60 @@ async def update_contractor(
             "id": contractor.id,
             "username": contractor.username,
             "isActive": contractor.is_active,
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
         })
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ========== AI方案设计 ==========
+
+@router.get("/orders/{order_id}/design-plan")
+async def get_design_plan(
+    order_id: str,
+    current_user: AnyUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取订单的AI设计方案"""
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    return ApiResponse(code=200, message="获取成功", data=order.design_plan or {})
+
+
+@router.put("/orders/{order_id}/design-plan")
+async def save_design_plan(
+    order_id: str,
+    data: DesignPlanUpdate,
+    current_user: AnyUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """保存/更新订单的AI设计方案"""
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    plan = order.design_plan or {}
+    if data.content is not None:
+        plan["content"] = data.content
+    if data.files is not None:
+        plan["files"] = data.files
+    if data.status is not None:
+        plan["status"] = data.status
+    plan["updatedAt"] = now
+    if "createdAt" not in plan:
+        plan["createdAt"] = now
+    
+    order.design_plan = plan
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(order, "design_plan")
+    
+    await db.commit()
+    return ApiResponse(code=200, message="保存成功", data=plan)
 
 
 # ========== 派单管理 ==========
@@ -316,34 +375,75 @@ async def assign_order_to_contractor(
         if existing:
             raise HTTPException(status_code=400, detail="该订单已有进行中的派单记录")
         
-        # 4. 获取工作流环节配置，生成排期
-        stages_result = await db.execute(
-            select(WorkflowStageConfig)
-            .where(WorkflowStageConfig.is_active == True)
-            .order_by(WorkflowStageConfig.display_order)
-        )
-        stages = stages_result.scalars().all()
-        
-        if not stages:
-            raise HTTPException(status_code=400, detail="尚未配置工作流环节，请先在工作流配置中添加环节")
-        
-        # 生成排期（从今天开始，逐个环节排列）
+        # 4. 根据工作流类型生成排期
         schedule = []
-        current_date = datetime.now(timezone.utc).date()
-        adjustments = {adj['stage_config_id']: adj['days'] for adj in (data.schedule_adjustments or [])}
         
-        for stage in stages:
-            days = adjustments.get(stage.id, stage.default_days)
-            deadline = current_date + timedelta(days=days)
-            schedule.append({
-                "stage_config_id": stage.id,
-                "name": stage.name,
-                "days": days,
-                "deadline": deadline.isoformat(),
-                "status": "pending",
-                "display_order": stage.display_order,
-            })
-            current_date = deadline  # 下一个环节从上一个截止日开始
+        if data.workflow_type == "ai":
+            # AI制作流程：两个阶段（Demo + 终稿）
+            today = datetime.now(timezone.utc).date()
+            
+            if data.demo_deadline:
+                demo_date = datetime.fromisoformat(data.demo_deadline).date() if isinstance(data.demo_deadline, str) else data.demo_deadline
+            else:
+                demo_date = today + timedelta(days=7)
+            
+            if data.final_deadline:
+                final_date = datetime.fromisoformat(data.final_deadline).date() if isinstance(data.final_deadline, str) else data.final_deadline
+            else:
+                final_date = demo_date + timedelta(days=7)
+            
+            schedule = [
+                {
+                    "stage_config_id": "ai_demo",
+                    "name": "Demo上传",
+                    "days": (demo_date - today).days,
+                    "deadline": demo_date.isoformat(),
+                    "status": "pending",
+                    "display_order": 1,
+                },
+                {
+                    "stage_config_id": "ai_final",
+                    "name": "最终稿交付",
+                    "days": (final_date - demo_date).days,
+                    "deadline": final_date.isoformat(),
+                    "status": "pending",
+                    "display_order": 2,
+                },
+            ]
+        else:
+            # 传统制作流程：从工作流配置中读取环节
+            stages_result = await db.execute(
+                select(WorkflowStageConfig)
+                .where(WorkflowStageConfig.is_active == True)
+                .order_by(WorkflowStageConfig.display_order)
+            )
+            stages = stages_result.scalars().all()
+            
+            if not stages:
+                raise HTTPException(status_code=400, detail="尚未配置工作流环节，请先在工作流配置中添加环节")
+            
+            current_date = datetime.now(timezone.utc).date()
+            adjustments = {adj['stage_config_id']: adj for adj in (data.schedule_adjustments or [])}
+            
+            for stage in stages:
+                adj = adjustments.get(stage.id, {})
+                days = adj.get('days', stage.default_days)
+                # 如果提供了具体截止日期
+                if adj.get('deadline'):
+                    deadline = datetime.fromisoformat(adj['deadline']).date()
+                    days = (deadline - current_date).days
+                else:
+                    deadline = current_date + timedelta(days=days)
+                
+                schedule.append({
+                    "stage_config_id": stage.id,
+                    "name": stage.name,
+                    "days": max(days, 1),
+                    "deadline": deadline.isoformat(),
+                    "status": "pending",
+                    "display_order": stage.display_order,
+                })
+                current_date = deadline
         
         # 5. 创建派单记录
         assignment = ContractorAssignment(
@@ -357,8 +457,56 @@ async def assign_order_to_contractor(
         )
         
         db.add(assignment)
+        
+        # 6. 更新订单状态为「制作中」
+        from app.models.order import OrderStatus
+        if order.status in (
+            OrderStatus.DRAFT,
+            OrderStatus.PENDING_ASSIGN,
+            OrderStatus.PENDING_CONTRACT,
+        ):
+            order.status = OrderStatus.IN_PRODUCTION
+        
         await db.commit()
         await db.refresh(assignment)
+        
+        # ====== 发送通知 ======
+        notification_status = {"email": "skipped", "inApp": "sent"}
+        
+        # 1. 站内信
+        from app.models.notification import Notification, NotificationType
+        notification = Notification(
+            user_id=contractor.id,
+            order_id=data.order_id,
+            type=NotificationType.CONTRACTOR_ASSIGNMENT,
+            title=f"新派单通知 - {order.order_number}",
+            content=f"您收到一个新的项目派单（订单 {order.order_number}），请尽快查看并确认接单。",
+        )
+        db.add(notification)
+        await db.commit()
+        
+        # 2. 邮件通知
+        if contractor.email:
+            try:
+                from app.services.email_service import EmailService
+                design_summary = ""
+                if order.design_plan and order.design_plan.get("content"):
+                    design_summary = order.design_plan["content"]
+                
+                login_url = getattr(settings, 'CONTRACTOR_BASE_URL', '') or 'http://localhost:3000'
+                login_url += '/contractor/login'
+                
+                email_sent = await EmailService.send_assignment_notification(
+                    contractor_email=contractor.email,
+                    contractor_name=contractor.real_name or contractor.username,
+                    order_number=order.order_number,
+                    design_summary=design_summary,
+                    login_url=login_url,
+                )
+                notification_status["email"] = "sent" if email_sent else "failed"
+            except Exception as e:
+                print(f"派单邮件发送失败: {e}")
+                notification_status["email"] = "failed"
         
         return ApiResponse(code=201, message="派单成功", data={
             "id": assignment.id,
@@ -368,6 +516,7 @@ async def assign_order_to_contractor(
             "status": assignment.status.value,
             "schedule": assignment.schedule,
             "assignedAt": assignment.assigned_at.isoformat() if assignment.assigned_at else None,
+            "notificationStatus": notification_status,
         })
     except HTTPException:
         raise
@@ -419,6 +568,14 @@ async def get_all_assignments(
             )
             order = o_result.scalar_one_or_none()
             
+            # 查交付物统计
+            from app.models.contractor_deliverable import ContractorDeliverable, DeliverableStatus
+            dlv_result = await db.execute(
+                select(ContractorDeliverable).where(ContractorDeliverable.assignment_id == a.id)
+            )
+            deliverables = dlv_result.scalars().all()
+            pending_review = sum(1 for d in deliverables if d.status == DeliverableStatus.SUBMITTED)
+            
             items.append({
                 "id": a.id,
                 "orderId": a.order_id,
@@ -429,6 +586,8 @@ async def get_all_assignments(
                 "rejectReason": a.reject_reason,
                 "schedule": a.schedule,
                 "currentStageOrder": a.current_stage_order,
+                "pendingReviewCount": pending_review,
+                "totalDeliverables": len(deliverables),
                 "assignedAt": a.assigned_at.isoformat() if a.assigned_at else None,
                 "respondedAt": a.responded_at.isoformat() if a.responded_at else None,
                 "completedAt": a.completed_at.isoformat() if a.completed_at else None,
@@ -439,7 +598,59 @@ async def get_all_assignments(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ========== 交付物审核 ==========
+# ========== 交付物管理 ==========
+
+@router.get("/assignments/{assignment_id}/deliverables")
+async def get_assignment_deliverables(
+    assignment_id: str,
+    current_user: AnyUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员获取某个派单的所有交付物"""
+    try:
+        result = await db.execute(
+            select(ContractorDeliverable)
+            .where(ContractorDeliverable.assignment_id == assignment_id)
+            .order_by(ContractorDeliverable.stage_order, ContractorDeliverable.version.desc())
+        )
+        deliverables = result.scalars().all()
+        
+        items = []
+        for d in deliverables:
+            files = d.files or []
+            # OSS 签名
+            if settings.OSS_ENABLED and files:
+                from app.services.oss_service import maybe_sign_url
+                for f in files:
+                    if isinstance(f, dict) and f.get("url"):
+                        f["url"] = maybe_sign_url(f["url"])
+            
+            items.append({
+                "id": d.id,
+                "assignmentId": d.assignment_id,
+                "stageConfigId": d.stage_config_id,
+                "stageName": d.stage_name,
+                "stageOrder": d.stage_order,
+                "version": d.version,
+                "parentId": d.parent_id,
+                "files": files,
+                "description": d.description,
+                "selfReviewChecks": d.self_review_checks or {},
+                "status": d.status.value,
+                "adminReviewNote": d.admin_review_note,
+                "adminReviewedBy": d.admin_reviewed_by,
+                "adminReviewedAt": d.admin_reviewed_at.isoformat() if d.admin_reviewed_at else None,
+                "isPublishedToUser": d.is_published_to_user,
+                "publishedNote": d.published_note,
+                "publishedBy": d.published_by,
+                "publishedAt": d.published_at.isoformat() if d.published_at else None,
+                "createdAt": d.created_at.isoformat() if d.created_at else None,
+            })
+        
+        return ApiResponse(code=200, message="获取成功", data=items)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.put("/deliverables/{deliverable_id}/review")
 async def review_deliverable(
@@ -475,11 +686,49 @@ async def review_deliverable(
         await db.commit()
         await db.refresh(deliverable)
         
+        # 通知承包商审核结果
+        try:
+            from app.models.notification import Notification, NotificationType
+            from app.models.order import Order
+            
+            # 获取订单编号
+            assignment_result = await db.execute(
+                select(ContractorAssignment).where(ContractorAssignment.id == deliverable.assignment_id)
+            )
+            assignment = assignment_result.scalar_one_or_none()
+            
+            if assignment:
+                order_result = await db.execute(
+                    select(Order).where(Order.id == assignment.order_id)
+                )
+                order = order_result.scalar_one_or_none()
+                order_number = order.order_number if order else "未知订单"
+                
+                # 创建通知
+                stage_name = deliverable.stage_name or '未知环节'
+                status_str = "已通过" if data.approved else "被驳回"
+                notif_type = NotificationType.PREVIEW_REVIEW_APPROVED if data.approved else NotificationType.PREVIEW_REVIEW_REJECTED
+                
+                notif = Notification(
+                    user_id=assignment.contractor_id,
+                    order_id=assignment.order_id,
+                    type=notif_type,
+                    title=f"交付物审核{status_str} - {order_number}",
+                    content=f"您提交的「{stage_name}」环节交付物（V{deliverable.version}）审核{status_str}。{f'备注：{data.review_note}' if data.review_note else ''}"
+                )
+                db.add(notif)
+                await db.commit()
+        except Exception as notify_err:
+            import logging
+            logging.getLogger(__name__).warning(f"发送审核结果通知失败: {notify_err}")
+        
         status_text = "审核通过" if data.approved else "审核驳回"
         return ApiResponse(code=200, message=f"交付物{status_text}", data={
             "id": deliverable.id,
             "status": deliverable.status.value,
             "adminReviewNote": deliverable.admin_review_note,
+            "adminReviewedBy": current_user.id,
+            "adminReviewedAt": deliverable.admin_reviewed_at.isoformat() if deliverable.admin_reviewed_at else now.isoformat(),
         })
     except HTTPException:
         raise
@@ -522,6 +771,8 @@ async def publish_deliverable_to_user(
             "id": deliverable.id,
             "isPublishedToUser": True,
             "publishedNote": deliverable.published_note,
+            "publishedBy": current_user.id,
+            "publishedAt": deliverable.published_at.isoformat() if deliverable.published_at else now.isoformat(),
         })
     except HTTPException:
         raise
@@ -573,6 +824,16 @@ async def advance_to_next_stage(
             assignment.status = AssignmentStatus.COMPLETED
             assignment.completed_at = datetime.now(timezone.utc)
             message = "所有环节已完成"
+            
+            # 同步推进订单状态：制作中 → 初稿交付
+            from app.models.order import Order, OrderStatus
+            order_result = await db.execute(
+                select(Order).where(Order.id == assignment.order_id)
+            )
+            order = order_result.scalar_one_or_none()
+            if order and order.status == OrderStatus.IN_PRODUCTION:
+                order.status = OrderStatus.PREVIEW_READY
+                message += "，订单已推进到「初稿交付」"
         
         assignment.schedule = schedule  # 更新 JSON 字段
         
@@ -584,6 +845,8 @@ async def advance_to_next_stage(
             "status": assignment.status.value,
             "currentStageOrder": assignment.current_stage_order,
             "schedule": assignment.schedule,
+            "advancedAt": datetime.now(timezone.utc).isoformat(),
+            "completedAt": assignment.completed_at.isoformat() if assignment.completed_at else None,
         })
     except HTTPException:
         raise

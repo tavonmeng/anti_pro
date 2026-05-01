@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr
 from datetime import datetime, timezone
 
 from app.database import get_db
+from app.config import settings
 from app.models.contractor import Contractor
 from app.models.contractor_invitation import ContractorInvitation
 from app.models.contractor_assignment import ContractorAssignment, AssignmentStatus
@@ -27,7 +28,7 @@ class ContractorRegisterRequest(BaseModel):
     invite_token: str
     phone: str
     sms_code: str
-    username: str
+    username: Optional[str] = None
     password: str
     email: EmailStr
     real_name: Optional[str] = None
@@ -60,6 +61,7 @@ class ProfileUpdate(BaseModel):
     address: Optional[str] = None
     specialty: Optional[str] = None
     expertise: Optional[str] = None
+    showcase_cases: Optional[list] = None
 
 
 # ========== 注册与邀请验证（公开接口） ==========
@@ -154,7 +156,6 @@ async def get_my_assignments(
                     "city": order_data.get("city"),
                     "media_size": order_data.get("media_size"),
                     "technology": order_data.get("technology"),
-                    "budget": order_data.get("budget"),
                     "online_time": order_data.get("online_time"),
                     "target_group": order_data.get("target_group"),
                     "background": order_data.get("background"),
@@ -212,18 +213,36 @@ async def get_assignment_detail(
                 "orderType": order.order_type.value if hasattr(order.order_type, 'value') else order.order_type,
                 "status": order.status.value if hasattr(order.status, 'value') else order.status,
                 "brand": order_data.get("brand"),
+                "brand_tone": order_data.get("brand_tone"),
                 "content": order_data.get("content"),
                 "style": order_data.get("style"),
                 "city": order_data.get("city"),
                 "media_size": order_data.get("media_size"),
+                "time_number": order_data.get("time_number"),
                 "technology": order_data.get("technology"),
-                "budget": order_data.get("budget"),
                 "online_time": order_data.get("online_time"),
                 "target_group": order_data.get("target_group"),
                 "background": order_data.get("background"),
-                "site_photos": order_data.get("site_photos"),
+                "prohibited_content": order_data.get("prohibited_content"),
+                "site_photos": order_data.get("site_photos") or order_data.get("scenePhotos"),
                 "createdAt": order.created_at.isoformat() if order.created_at else None,
             }
+            # 附加 AI 设计方案（管理员编写的方案，contractor 可见）
+            if order.design_plan:
+                order_info["designPlan"] = {
+                    "content": order.design_plan.get("content", ""),
+                    "files": order.design_plan.get("files", []),
+                    "status": order.design_plan.get("status", "draft"),
+                }
+            # OSS 模式下签名 site_photos 中的文件 URL
+            if settings.OSS_ENABLED and order_info.get("site_photos"):
+                from app.services.oss_service import maybe_sign_url
+                for photo in order_info["site_photos"]:
+                    if isinstance(photo, dict):
+                        if photo.get("url"):
+                            photo["url"] = maybe_sign_url(photo["url"])
+                        if photo.get("file_url"):
+                            photo["file_url"] = maybe_sign_url(photo["file_url"])
         
         # 获取所有交付物
         d_result = await db.execute(
@@ -233,24 +252,30 @@ async def get_assignment_detail(
         )
         deliverables = d_result.scalars().all()
         
-        deliverables_data = [
-            {
+        deliverables_data = []
+        for d in deliverables:
+            files = d.files or []
+            # OSS 模式下签名交付物文件 URL
+            if settings.OSS_ENABLED and files:
+                from app.services.oss_service import maybe_sign_url
+                for f in files:
+                    if isinstance(f, dict) and f.get("url"):
+                        f["url"] = maybe_sign_url(f["url"])
+            deliverables_data.append({
                 "id": d.id,
                 "stageConfigId": d.stage_config_id,
                 "stageName": d.stage_name,
                 "stageOrder": d.stage_order,
                 "version": d.version,
                 "parentId": d.parent_id,
-                "files": d.files or [],
+                "files": files,
                 "description": d.description,
                 "selfReviewChecks": d.self_review_checks or {},
                 "status": d.status.value,
                 "adminReviewNote": d.admin_review_note,
                 "adminReviewedAt": d.admin_reviewed_at.isoformat() if d.admin_reviewed_at else None,
                 "createdAt": d.created_at.isoformat() if d.created_at else None,
-            }
-            for d in deliverables
-        ]
+            })
         
         return ApiResponse(code=200, message="获取成功", data={
             "id": assignment.id,
@@ -307,6 +332,7 @@ async def accept_assignment(
         return ApiResponse(code=200, message="接单成功", data={
             "id": assignment.id,
             "status": assignment.status.value,
+            "respondedAt": assignment.responded_at.isoformat() if assignment.responded_at else now.isoformat(),
         })
     except HTTPException:
         raise
@@ -349,6 +375,7 @@ async def reject_assignment(
             "id": assignment.id,
             "status": assignment.status.value,
             "rejectReason": assignment.reject_reason,
+            "respondedAt": assignment.responded_at.isoformat() if assignment.responded_at else now.isoformat(),
         })
     except HTTPException:
         raise
@@ -413,6 +440,7 @@ async def create_deliverable(
             "id": deliverable.id,
             "version": deliverable.version,
             "status": deliverable.status.value,
+            "createdAt": deliverable.created_at.isoformat() if deliverable.created_at else datetime.now(timezone.utc).isoformat(),
         })
     except HTTPException:
         raise
@@ -463,6 +491,7 @@ async def update_deliverable(
         return ApiResponse(code=200, message="更新成功", data={
             "id": deliverable.id,
             "status": deliverable.status.value,
+            "updatedAt": deliverable.updated_at.isoformat() if deliverable.updated_at else datetime.now(timezone.utc).isoformat(),
         })
     except HTTPException:
         raise
@@ -520,11 +549,54 @@ async def submit_deliverable(
         await db.commit()
         await db.refresh(deliverable)
         
-        # TODO: 通知管理员有新交付物待审核
+        # 通知管理员有新交付物待审核
+        try:
+            from app.models.notification import Notification, NotificationType
+            from app.models.admin import Admin
+            
+            # 获取订单信息
+            assignment_result = await db.execute(
+                select(ContractorAssignment).where(ContractorAssignment.id == deliverable.assignment_id)
+            )
+            assignment = assignment_result.scalar_one_or_none()
+            
+            order_number = "未知订单"
+            if assignment:
+                from app.models.order import Order
+                order_result = await db.execute(
+                    select(Order).where(Order.id == assignment.order_id)
+                )
+                order = order_result.scalar_one_or_none()
+                if order:
+                    order_number = order.order_number
+            
+            # 给所有活跃管理员发站内信
+            admins_result = await db.execute(
+                select(Admin).where(Admin.is_active == True)
+            )
+            admins = admins_result.scalars().all()
+            
+            contractor_name = current_user.username if hasattr(current_user, 'username') else '承包商'
+            stage_name = deliverable.stage_name or '未知环节'
+            
+            for admin in admins:
+                notif = Notification(
+                    user_id=admin.id,
+                    order_id=assignment.order_id if assignment else None,
+                    type=NotificationType.DELIVERABLE_SUBMITTED,
+                    title=f"交付物待审核 - {order_number}",
+                    content=f"承包商 {contractor_name} 提交了「{stage_name}」环节的交付物（V{deliverable.version}），请及时审核。",
+                )
+                db.add(notif)
+            await db.commit()
+        except Exception as notify_err:
+            import logging
+            logging.getLogger(__name__).warning(f"发送交付物通知失败: {notify_err}")
         
         return ApiResponse(code=200, message="交付物已提交审核", data={
             "id": deliverable.id,
             "status": deliverable.status.value,
+            "submittedAt": datetime.now(timezone.utc).isoformat(),
         })
     except HTTPException:
         raise
@@ -550,6 +622,7 @@ async def get_contractor_profile(
         "address": current_user.address,
         "specialty": current_user.specialty,
         "expertise": current_user.expertise,
+        "showcaseCases": current_user.showcase_cases or [],
         "createdAt": current_user.created_at.isoformat() if current_user.created_at else None,
     })
 
@@ -574,6 +647,8 @@ async def update_contractor_profile(
             current_user.specialty = data.specialty
         if data.expertise is not None:
             current_user.expertise = data.expertise
+        if data.showcase_cases is not None:
+            current_user.showcase_cases = data.showcase_cases
         
         await db.commit()
         await db.refresh(current_user)

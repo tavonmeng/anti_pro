@@ -1037,20 +1037,20 @@ export const notificationApi = {
 export const announcementApi = {
   // 获取公告列表 (activeOnly 为 true 时仅获取展示中的)
   async getAnnouncements(activeOnly: boolean = true): Promise<Announcement[]> {
-    const res = await request.get('/announcements', { params: { active_only: activeOnly } })
-    return res.data
+    const res: any = await request.get('/announcements', { params: { active_only: activeOnly } })
+    return res
   },
   
   // 创建公告
   async createAnnouncement(data: { title: string; content: string; is_active: boolean }): Promise<Announcement> {
-    const res = await request.post('/announcements', data)
-    return res.data
+    const res: any = await request.post('/announcements', data)
+    return res
   },
   
   // 更新公告
   async updateAnnouncement(id: string, data: Partial<{ title: string; content: string; is_active: boolean }>): Promise<Announcement> {
-    const res = await request.put(`/announcements/${id}`, data)
-    return res.data
+    const res: any = await request.put(`/announcements/${id}`, data)
+    return res
   },
   
   // 删除公告
@@ -1149,6 +1149,21 @@ export const contractorAdminApi = {
   // 推进到下一环节
   async advanceStage(assignmentId: string): Promise<any> {
     return request.put(`/contractor-admin/assignments/${assignmentId}/advance`)
+  },
+
+  // 获取设计方案
+  async getDesignPlan(orderId: string): Promise<any> {
+    return request.get(`/contractor-admin/orders/${orderId}/design-plan`)
+  },
+
+  // 保存设计方案
+  async saveDesignPlan(orderId: string, data: { content?: string; files?: any[]; status?: string }): Promise<any> {
+    return request.put(`/contractor-admin/orders/${orderId}/design-plan`, data)
+  },
+
+  // 获取派单交付物列表
+  async getAssignmentDeliverables(assignmentId: string): Promise<any[]> {
+    return request.get(`/contractor-admin/assignments/${assignmentId}/deliverables`)
   },
 }
 

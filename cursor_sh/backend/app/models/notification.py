@@ -22,6 +22,8 @@ class NotificationType(str, Enum):
     PREVIEW_REVIEW_REQUIRED = "preview_review_required"  # 预览待审核
     PREVIEW_REVIEW_APPROVED = "preview_review_approved"  # 预览审核通过
     PREVIEW_REVIEW_REJECTED = "preview_review_rejected"  # 预览审核拒绝
+    CONTRACTOR_ASSIGNMENT = "contractor_assignment"  # 承包商派单通知
+    DELIVERABLE_SUBMITTED = "deliverable_submitted"  # 交付物已提交待审核
 
 
 class Notification(Base):

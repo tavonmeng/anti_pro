@@ -111,8 +111,8 @@ const stageForm = reactive({
 const fetchStages = async () => {
   loading.value = true
   try {
-    const res = await request.get('/api/workflow-config')
-    stages.value = res.data || []
+    const res: any = await request.get('/workflow-config')
+    stages.value = Array.isArray(res) ? res : (res?.data || [])
   } catch { /* ignore */ }
   finally { loading.value = false }
 }
@@ -142,14 +142,14 @@ const saveStage = async () => {
   try {
     const cleanItems = stageForm.reviewItems.filter(i => i.trim())
     if (editingStage.value) {
-      await request.put(`/api/workflow-config/${editingStage.value.id}`, {
+      await request.put(`/workflow-config/${editingStage.value.id}`, {
         name: stageForm.name,
         default_days: stageForm.defaultDays,
         review_items: cleanItems,
       })
       ElMessage.success('更新成功')
     } else {
-      await request.post('/api/workflow-config', {
+      await request.post('/workflow-config', {
         name: stageForm.name,
         default_days: stageForm.defaultDays,
         review_items: cleanItems,
@@ -168,7 +168,7 @@ const saveStage = async () => {
 const deleteStage = async (stage: any) => {
   try {
     await ElMessageBox.confirm(`确认删除环节"${stage.name}"？`, '确认操作', { type: 'warning' })
-    await request.delete(`/api/workflow-config/${stage.id}`)
+    await request.delete(`/workflow-config/${stage.id}`)
     ElMessage.success('已删除')
     fetchStages()
   } catch { /* cancelled */ }
@@ -183,7 +183,7 @@ const moveStage = async (idx: number, direction: number) => {
 
   // 发送排序请求
   try {
-    await request.post('/api/workflow-config/reorder', {
+    await request.post('/workflow-config/reorder', {
       stage_ids: arr.map(s => s.id),
     })
   } catch {

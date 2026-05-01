@@ -34,8 +34,8 @@ if settings.RATE_LIMIT_ENABLED:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
-# 挂载静态文件目录（用于访问上传的文件）
-if os.path.exists(settings.UPLOAD_DIR):
+# 挂载静态文件目录（仅本地存储模式；OSS 模式下文件通过签名 URL 直接从云端加载）
+if not settings.OSS_ENABLED and os.path.exists(settings.UPLOAD_DIR):
     app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
 # 挂载案例视频/封面图静态目录（统一放在 app/data/cases/ 下）
@@ -110,9 +110,12 @@ async def startup_event():
     except Exception as e:
         print(f"⚠️  工作流配置初始化异常（不影响启动）: {e}")
     
-    # 确保上传目录存在
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    print(f"✅ 上传目录已准备: {settings.UPLOAD_DIR}")
+    # 确保上传目录存在（仅本地存储模式）
+    if not settings.OSS_ENABLED:
+        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+        print(f"✅ 上传目录已准备: {settings.UPLOAD_DIR}")
+    else:
+        print(f"✅ 文件存储: 阿里云 OSS ({settings.OSS_BUCKET_NAME} @ {settings.OSS_ENDPOINT})")
     
     mode_label = {"all": "全量", "external": "外部（用户端）", "internal": "内部系统"}
     print(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} 启动成功")

@@ -123,7 +123,7 @@ const sendSmsCode = async () => {
     return
   }
   try {
-    await request.post('/api/auth/sms/send', { phone: loginForm.phone })
+    await request.post('/auth/send-sms', { phone: loginForm.phone })
     ElMessage.success('验证码已发送')
     smsCooldown.value = 60
     smsTimer = setInterval(() => {

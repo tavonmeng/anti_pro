@@ -212,6 +212,20 @@ export interface LoginRequest {
   captcha?: string
 }
 
+// 注册行为时序数据（反注册机）
+export interface RegisterBehavior {
+  page_loaded_at: number
+  phone_first_input_at?: number | null
+  sms_sent_at?: number | null
+  sms_input_at?: number | null
+  username_first_input_at?: number | null
+  email_first_input_at?: number | null
+  password_first_input_at?: number | null
+  submit_clicked_at: number
+  field_focus_count: number
+  key_press_count: number
+}
+
 // 注册请求接口
 export interface RegisterRequest {
   phone: string
@@ -220,6 +234,8 @@ export interface RegisterRequest {
   email: string
   password: string
   role: UserRole
+  behavior?: RegisterBehavior
+  website?: string               // 蜜罐字段
 }
 
 // 登录响应接口

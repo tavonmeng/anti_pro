@@ -176,6 +176,8 @@ const handleMenuSelect = (index: string) => {
   } else if (index === 'profile') {
     if (authStore.isStaff()) {
       router.push('/staff/profile')
+    } else if (authStore.isContractor()) {
+      router.push('/contractor/profile')
     } else {
       router.push('/user/profile')
     }

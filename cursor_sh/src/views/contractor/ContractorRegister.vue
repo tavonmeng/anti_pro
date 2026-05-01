@@ -23,7 +23,7 @@
             <el-icon :size="32"><Suitcase /></el-icon>
           </div>
           <h1 class="admin-title">承包商注册</h1>
-          <p class="admin-subtitle">请填写您的信息以完成注册</p>
+          <p class="admin-subtitle">请填写基本信息完成注册，其他资料可在登录后补充</p>
         </div>
 
         <el-form
@@ -35,7 +35,7 @@
         >
           <el-form-item prop="phone" label="手机号">
             <div class="sms-row">
-              <el-input v-model="form.phone" placeholder="手机号" class="admin-input sms-input" />
+              <el-input v-model="form.phone" placeholder="手机号" class="admin-input sms-input" maxlength="11" />
               <el-button :disabled="smsCooldown > 0" class="sms-btn" @click="sendSms">
                 {{ smsCooldown > 0 ? `${smsCooldown}s` : '获取验证码' }}
               </el-button>
@@ -43,35 +43,19 @@
           </el-form-item>
 
           <el-form-item prop="sms_code" label="验证码">
-            <el-input v-model="form.sms_code" placeholder="短信验证码" class="admin-input" />
-          </el-form-item>
-
-          <el-form-item prop="username" label="用户名">
-            <el-input v-model="form.username" placeholder="用于登录的用户名" class="admin-input" />
+            <el-input v-model="form.sms_code" placeholder="短信验证码" class="admin-input" maxlength="6" />
           </el-form-item>
 
           <el-form-item prop="password" label="密码">
-            <el-input v-model="form.password" type="password" placeholder="登录密码" class="admin-input" show-password />
+            <el-input v-model="form.password" type="password" placeholder="请设置登录密码（至少6位）" class="admin-input" show-password />
+          </el-form-item>
+
+          <el-form-item prop="confirmPassword" label="确认密码">
+            <el-input v-model="form.confirmPassword" type="password" placeholder="请再次输入密码" class="admin-input" show-password />
           </el-form-item>
 
           <el-form-item prop="email" label="邮箱">
             <el-input v-model="form.email" placeholder="联系邮箱" class="admin-input" />
-          </el-form-item>
-
-          <el-form-item label="公司名称（选填）">
-            <el-input v-model="form.company" placeholder="公司名称" class="admin-input" />
-          </el-form-item>
-
-          <el-form-item label="地址（选填）">
-            <el-input v-model="form.address" placeholder="联系地址" class="admin-input" />
-          </el-form-item>
-
-          <el-form-item label="专业方向（选填）">
-            <el-input v-model="form.specialty" placeholder="如：3D建模、视频后期" class="admin-input" />
-          </el-form-item>
-
-          <el-form-item label="擅长领域（选填）">
-            <el-input v-model="form.expertise" placeholder="如：裸眼3D广告、产品展示" class="admin-input" />
           </el-form-item>
 
           <el-form-item>
@@ -86,6 +70,10 @@
             </el-button>
           </el-form-item>
         </el-form>
+
+        <div class="login-link">
+          已有账号？<el-link type="primary" @click="$router.push('/contractor/login')">去登录</el-link>
+        </div>
       </div>
     </div>
   </div>
@@ -114,21 +102,40 @@ const inviteToken = ref('')
 const form = reactive({
   phone: '',
   sms_code: '',
-  username: '',
   password: '',
+  confirmPassword: '',
   email: '',
-  company: '',
-  address: '',
-  specialty: '',
-  expertise: '',
 })
 
+const validateConfirmPassword = (_rule: any, value: string, callback: Function) => {
+  if (!value) {
+    callback(new Error('请再次输入密码'))
+  } else if (value !== form.password) {
+    callback(new Error('两次输入的密码不一致'))
+  } else {
+    callback()
+  }
+}
+
 const rules: FormRules = {
-  phone: [{ required: true, message: '请输入手机号', trigger: 'blur' }, { len: 11, message: '手机号必须11位', trigger: 'blur' }],
-  sms_code: [{ required: true, message: '请输入验证码', trigger: 'blur' }],
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }, { min: 2, max: 20, message: '2-20个字符', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, message: '至少6位', trigger: 'blur' }],
-  email: [{ required: true, message: '请输入邮箱', trigger: 'blur' }, { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }],
+  phone: [
+    { required: true, message: '请输入手机号', trigger: 'blur' },
+    { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的11位手机号', trigger: 'blur' }
+  ],
+  sms_code: [
+    { required: true, message: '请输入验证码', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, message: '密码至少6位', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    { required: true, validator: validateConfirmPassword, trigger: 'blur' }
+  ],
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }
+  ],
 }
 
 onMounted(async () => {
@@ -141,12 +148,12 @@ onMounted(async () => {
   }
   inviteToken.value = token
   try {
-    const res = await request.get(`/api/contractor/validate-invite/${token}`)
-    if (res.data?.valid) {
+    const res: any = await request.get(`/contractor/validate-invite/${token}`)
+    if (res?.valid) {
       isValid.value = true
     } else {
       isValid.value = false
-      const reason = res.data?.reason
+      const reason = res?.reason
       invalidReason.value = reason === 'used' ? '该链接已被使用' : reason === 'expired' ? '该链接已过期' : '链接无效'
     }
   } catch {
@@ -158,12 +165,12 @@ onMounted(async () => {
 })
 
 const sendSms = async () => {
-  if (!form.phone || form.phone.length !== 11) {
+  if (!form.phone || !/^1[3-9]\d{9}$/.test(form.phone)) {
     ElMessage.warning('请输入正确的手机号')
     return
   }
   try {
-    await request.post('/api/auth/sms/send', { phone: form.phone })
+    await request.post('/auth/send-sms', { phone: form.phone })
     ElMessage.success('验证码已发送')
     smsCooldown.value = 60
     smsTimer = setInterval(() => {
@@ -181,12 +188,15 @@ const handleRegister = async () => {
     if (!valid) return
     submitting.value = true
     try {
-      await request.post('/api/contractor/register', {
+      await request.post('/contractor/register', {
         invite_token: inviteToken.value,
-        ...form,
+        phone: form.phone,
+        sms_code: form.sms_code,
+        password: form.password,
+        email: form.email,
       })
-      ElMessage.success('注册成功，请使用手机号登录')
-      router.push('/admin/login')
+      ElMessage.success('注册成功，请登录')
+      router.push('/contractor/login')
     } catch (e: any) {
       ElMessage.error(e?.response?.data?.detail || '注册失败')
     } finally {
@@ -244,6 +254,10 @@ const handleRegister = async () => {
   background: #fff !important; border: none !important; border-radius: 60px !important;
   color: #000 !important; margin-top: 8px;
   &:hover { background: #e0e0e0 !important; transform: translateY(-2px); }
+}
+.login-link {
+  text-align: center; margin-top: 20px; font-size: 13px; color: rgba(255,255,255,0.5);
+  :deep(.el-link) { color: #fff !important; font-weight: 600; &:hover { text-decoration: underline; } }
 }
 .validating-state, .invalid-state {
   text-align: center; padding: 40px 0;

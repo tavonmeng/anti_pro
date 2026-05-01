@@ -112,7 +112,8 @@ class Settings(BaseSettings):
     OSS_ACCESS_KEY_ID: str = ""
     OSS_ACCESS_KEY_SECRET: str = ""
     OSS_BUCKET_NAME: str = ""
-    OSS_ENDPOINT: str = ""
+    OSS_ENDPOINT: str = ""               # 如: oss-cn-hangzhou.aliyuncs.com
+    OSS_SIGNED_URL_EXPIRES: int = 3600   # 签名 URL 有效期（秒），默认 1 小时
     
     # 阿里云号码认证服务（Dypnsapi - 短信验证码）配置
     SMS_ENABLED: bool = True

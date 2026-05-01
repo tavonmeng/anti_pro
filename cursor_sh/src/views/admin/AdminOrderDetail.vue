@@ -22,7 +22,8 @@
           </el-button>
           <el-button
             @click="showContractorAssignDialog = true"
-            :disabled="order.status === 'completed' || order.status === 'cancelled'"
+            :disabled="order.status === 'completed' || order.status === 'cancelled' || !isDesignPlanCompleted"
+            :title="!isDesignPlanCompleted ? '请先完成AI方案设计' : ''"
           >
             派单给承包商
           </el-button>
@@ -71,7 +72,7 @@
               <OrderStatusBadge :status="order.status" size="large" />
               <el-dropdown 
                 @command="handleStatusChange" 
-                v-if="order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'pending_review' && order.status !== 'pending_contract'"
+                v-if="availableTransitions.length > 0"
               >
                 <el-button>
                   更改状态
@@ -79,17 +80,12 @@
                 </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="in_production" :disabled="order.status === 'in_production'">
-                      制作中
-                    </el-dropdown-item>
-                    <el-dropdown-item command="preview_ready" :disabled="order.status === 'preview_ready'">
-                      初稿预览
-                    </el-dropdown-item>
-                    <el-dropdown-item command="final_preview" :disabled="order.status === 'final_preview'">
-                      终稿预览
-                    </el-dropdown-item>
-                    <el-dropdown-item command="completed">
-                      已完成
+                    <el-dropdown-item 
+                      v-for="t in availableTransitions" 
+                      :key="t.value" 
+                      :command="t.value"
+                    >
+                      {{ t.label }}
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -270,6 +266,67 @@
           </div>
         </div>
         
+        <!-- AI方案设计 -->
+        <div class="design-plan-section">
+          <div class="dp-card">
+            <div class="dp-header">
+              <div class="dp-title-row">
+                <span class="dp-icon">📐</span>
+                <h3>AI方案设计</h3>
+              </div>
+              <el-tag v-if="designPlan.status === 'completed'" type="success" size="small" effect="dark">✓ 方案已完成</el-tag>
+              <el-tag v-else type="warning" size="small" effect="plain">● 草稿编辑中</el-tag>
+            </div>
+
+            <el-divider style="margin: 0 0 16px" />
+
+            <el-form label-position="top">
+              <el-form-item label="方案描述">
+                <el-input
+                  v-model="designPlan.content"
+                  type="textarea"
+                  :rows="6"
+                  placeholder="请输入AI设计方案的详细描述，包括创意方向、技术要求、交付规格等..."
+                />
+              </el-form-item>
+
+              <el-form-item label="相关文件（图片/文档/参考资料）">
+                <div class="dp-files">
+                  <div v-for="(file, idx) in designPlan.files" :key="idx" class="dp-file-item">
+                    <el-icon v-if="isImage(file.filename)" size="18"><Picture /></el-icon>
+                    <el-icon v-else size="18"><DocumentIcon /></el-icon>
+                    <a v-if="file.url" :href="file.url" target="_blank" class="dp-file-name">{{ file.filename }}</a>
+                    <span v-else class="dp-file-name">{{ file.filename }}</span>
+                    <span class="dp-file-size">{{ formatFileSize(file.size || 0) }}</span>
+                    <el-button type="danger" link size="small" @click="removePlanFile(idx)">删除</el-button>
+                  </div>
+                </div>
+                <el-upload
+                  :action="'/api/upload/file'"
+                  :headers="uploadHeaders"
+                  :on-success="handlePlanUploadSuccess"
+                  :on-error="() => ElMessage.error('文件上传失败')"
+                  :show-file-list="false"
+                  :before-upload="beforePlanUpload"
+                  class="dp-upload"
+                >
+                  <el-button size="small">上传文件</el-button>
+                </el-upload>
+              </el-form-item>
+            </el-form>
+
+            <div class="dp-footer">
+              <span class="dp-footer-label">方案操作：</span>
+              <div class="dp-footer-btns">
+                <el-button :loading="savingPlan" @click="saveDesignPlan('draft')">保存方案草稿</el-button>
+                <el-button type="success" :loading="savingPlan" @click="saveDesignPlan('completed')">
+                  ✓ 完成方案（可派单）
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 承包商派单记录 -->
         <div v-if="contractorAssignments.length > 0" class="contractor-section">
           <h3>承包商派单记录</h3>
@@ -278,11 +335,30 @@
               <div>
                 <strong>{{ assignment.contractorName }}</strong>
                 <el-tag :type="caStatusType(assignment.status)" size="small" style="margin-left:8px">{{ caStatusLabel(assignment.status) }}</el-tag>
+                <!-- 待审核提示 -->
+                <el-badge v-if="assignment.pendingReviewCount > 0" :value="assignment.pendingReviewCount" type="danger" style="margin-left:8px">
+                  <el-tag type="warning" size="small" effect="dark">📋 待审核交付物</el-tag>
+                </el-badge>
+                <!-- 通知状态 -->
+                <template v-if="assignment.notificationStatus">
+                  <el-tag v-if="assignment.notificationStatus.email === 'sent'" type="success" size="small" style="margin-left:4px">✉ 邮件已发送</el-tag>
+                  <el-tag v-else-if="assignment.notificationStatus.email === 'failed'" type="danger" size="small" style="margin-left:4px">✉ 邮件发送失败</el-tag>
+                  <el-tag v-if="assignment.notificationStatus.inApp === 'sent'" type="success" size="small" style="margin-left:4px">📨 站内信已发</el-tag>
+                </template>
               </div>
               <div class="ca-actions">
-                <el-button v-if="['accepted','in_progress'].includes(assignment.status)" size="small" type="primary" @click="handleAdvanceStage(assignment.id)">
-                  推进到下一环节
-                </el-button>
+                <el-tooltip :content="canAdvanceStage(assignment) ? '进入下一环节' : '需先审批通过当前环节的交付物'" placement="top">
+                  <span>
+                    <el-button 
+                      v-if="['accepted','in_progress'].includes(assignment.status)" 
+                      size="small" 
+                      type="primary" 
+                      :disabled="!canAdvanceStage(assignment)"
+                      @click="handleAdvanceStage(assignment.id)">
+                      推进到下一环节
+                    </el-button>
+                  </span>
+                </el-tooltip>
               </div>
             </div>
             <!-- 排期 -->
@@ -300,8 +376,12 @@
               <h4>交付物</h4>
               <div v-for="d in assignment.deliverables" :key="d.id" class="ca-deliverable-item">
                 <div class="ca-dlv-header">
-                  <span>{{ d.stageName }} V{{ d.version }}</span>
-                  <el-tag :type="dlvStatusType(d.status)" size="small">{{ dlvStatusLabel(d.status) }}</el-tag>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span>{{ d.stageName }} V{{ d.version }}</span>
+                    <el-tag :type="dlvStatusType(d.status)" size="small">{{ dlvStatusLabel(d.status) }}</el-tag>
+                    <el-tag v-if="d.isPublishedToUser" type="success" effect="dark" size="small">已推送给用户</el-tag>
+                  </div>
+                  <span v-if="d.createdAt" style="font-size: 12px; color: #86868B;">{{ formatTime(d.createdAt) }}</span>
                 </div>
                 <div v-if="d.files && d.files.length" class="ca-dlv-files">
                   <a v-for="f in d.files" :key="f.url" :href="f.url" target="_blank" class="ca-dlv-file">
@@ -318,7 +398,10 @@
                 <div v-if="d.status === 'admin_approved' && !d.isPublishedToUser" class="ca-dlv-actions">
                   <el-button size="small" type="primary" @click="handlePublishDlv(d.id)">推送给用户</el-button>
                 </div>
-                <div v-if="d.adminReviewNote" class="ca-dlv-note">审核备注：{{ d.adminReviewNote }}</div>
+                <div v-if="d.adminReviewNote" class="ca-dlv-note">
+                  <strong>审核备注 ({{ formatTime(d.adminReviewedAt) || '暂无时间' }})：</strong>
+                  {{ d.adminReviewNote }}
+                </div>
               </div>
             </div>
           </div>
@@ -421,7 +504,7 @@
     </el-dialog>
 
     <!-- 派单给承包商对话框 -->
-    <el-dialog v-model="showContractorAssignDialog" title="派单给承包商" width="480px" destroy-on-close>
+    <el-dialog v-model="showContractorAssignDialog" title="派单给承包商" width="600px" destroy-on-close>
       <el-form label-position="top">
         <el-form-item label="选择承包商" required>
           <el-select v-model="contractorAssignForm.contractorId" placeholder="请选择" filterable style="width:100%">
@@ -434,10 +517,77 @@
             />
           </el-select>
         </el-form-item>
+
+        <el-form-item label="制作流程类型" required>
+          <el-radio-group v-model="contractorAssignForm.workflowType" @change="onWorkflowTypeChange">
+            <el-radio-button value="traditional">
+              <el-icon style="margin-right:4px"><Setting /></el-icon>传统制作流程
+            </el-radio-button>
+            <el-radio-button value="ai">
+              <el-icon style="margin-right:4px"><MagicStick /></el-icon>AI制作流程
+            </el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <!-- 传统流程：按环节排期 -->
+        <div v-if="contractorAssignForm.workflowType === 'traditional'" class="workflow-schedule">
+          <div class="schedule-title">传统流程排期 — 按环节设定时间窗口</div>
+          <div v-if="workflowStages.length === 0" class="schedule-empty">
+            <el-alert type="warning" :closable="false">暂无工作流环节配置，请先到「工作流配置」中添加</el-alert>
+          </div>
+          <div v-for="(stage, idx) in workflowStages" :key="stage.id" class="schedule-stage">
+            <div class="schedule-stage-header">
+              <span class="schedule-stage-order">{{ idx + 1 }}</span>
+              <span class="schedule-stage-name">{{ stage.name }}</span>
+              <el-tag size="small" type="info">默认 {{ stage.defaultDays }} 天</el-tag>
+            </div>
+            <div class="schedule-stage-picker">
+              <span class="picker-label">截止日期：</span>
+              <el-date-picker
+                v-model="stageDeadlines[stage.id]"
+                type="date"
+                placeholder="选择截止日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                size="small"
+                style="width: 180px"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- AI流程：Demo + 终稿期限 -->
+        <div v-if="contractorAssignForm.workflowType === 'ai'" class="workflow-schedule">
+          <div class="schedule-title">AI制作流程排期</div>
+          <div class="ai-schedule-row">
+            <div class="ai-schedule-item">
+              <div class="ai-schedule-label">📋 Demo上传期限</div>
+              <el-date-picker
+                v-model="contractorAssignForm.demoDeadline"
+                type="date"
+                placeholder="选择Demo截止日"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                style="width: 100%"
+              />
+            </div>
+            <div class="ai-schedule-item">
+              <div class="ai-schedule-label">🎯 最终稿交付期限</div>
+              <el-date-picker
+                v-model="contractorAssignForm.finalDeadline"
+                type="date"
+                placeholder="选择终稿截止日"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                style="width: 100%"
+              />
+            </div>
+          </div>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="showContractorAssignDialog = false">取消</el-button>
-        <el-button type="primary" :loading="contractorAssigning" :disabled="!contractorAssignForm.contractorId" @click="handleContractorAssign">
+        <el-button type="primary" :loading="contractorAssigning" :disabled="!canAssign" @click="handleContractorAssign">
           确认派单
         </el-button>
       </template>
@@ -448,10 +598,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ArrowLeft, User, Upload, ArrowDown, Picture, Document as DocumentIcon, VideoPlay, Download } from '@element-plus/icons-vue'
+import { ArrowLeft, User, Upload, ArrowDown, Picture, Document as DocumentIcon, VideoPlay, Download, Setting, MagicStick } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useOrderStore } from '@/stores/order'
 import { orderApi, authApi, contractorAdminApi } from '@/utils/api'
+import request from '@/utils/request'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import AssigneeDialog from '@/components/AssigneeDialog.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
@@ -477,7 +628,33 @@ const showContractorAssignDialog = ref(false)
 const contractorAssigning = ref(false)
 const contractorOptions = ref<any[]>([])
 const contractorAssignments = ref<any[]>([])
-const contractorAssignForm = ref({ contractorId: '' })
+const contractorAssignForm = ref({ contractorId: '', workflowType: 'traditional', demoDeadline: '', finalDeadline: '' })
+const workflowStages = ref<any[]>([])
+const stageDeadlines = ref<Record<string, string>>({})
+
+const canAssign = computed(() => {
+  if (!contractorAssignForm.value.contractorId) return false
+  if (contractorAssignForm.value.workflowType === 'ai') {
+    return !!contractorAssignForm.value.demoDeadline && !!contractorAssignForm.value.finalDeadline
+  }
+  return true
+})
+
+const onWorkflowTypeChange = () => {
+  // reset
+  stageDeadlines.value = {}
+  contractorAssignForm.value.demoDeadline = ''
+  contractorAssignForm.value.finalDeadline = ''
+}
+
+// AI方案设计
+const designPlan = ref<any>({ content: '', files: [], status: 'draft' })
+const savingPlan = ref(false)
+const isDesignPlanCompleted = computed(() => designPlan.value.status === 'completed')
+const uploadHeaders = computed(() => {
+  const token = localStorage.getItem('token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+})
 
 const contractForm = ref({
   contractNumber: '',
@@ -543,7 +720,74 @@ onMounted(async () => {
   loading.value = false
   // 加载承包商列表和派单记录
   loadContractorData(orderId)
+  loadDesignPlan(orderId)
+  loadWorkflowStages()
 })
+
+const loadWorkflowStages = async () => {
+  try {
+    const res: any = await request.get('/workflow-config')
+    workflowStages.value = Array.isArray(res) ? res : (res?.data || [])
+  } catch { /* ignore */ }
+}
+
+const loadDesignPlan = async (orderId: string) => {
+  try {
+    const res: any = await contractorAdminApi.getDesignPlan(orderId)
+    if (res && Object.keys(res).length > 0) {
+      designPlan.value = { content: res.content || '', files: res.files || [], status: res.status || 'draft' }
+    }
+  } catch { /* 方案尚未创建 */ }
+}
+
+const isImage = (filename: string) => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(filename || '')
+
+const beforePlanUpload = (file: File) => {
+  if (file.size > 50 * 1024 * 1024) {
+    ElMessage.error('文件大小不能超过 50MB')
+    return false
+  }
+  return true
+}
+
+const handlePlanUploadSuccess = (response: any) => {
+  const data = response?.data || response
+  if (data?.url) {
+    designPlan.value.files.push({
+      url: data.url,
+      objectKey: data.object_key || '',
+      filename: data.filename || 'file',
+      size: data.size || 0,
+    })
+    ElMessage.success('文件上传成功')
+  }
+}
+
+const removePlanFile = (idx: number) => {
+  designPlan.value.files.splice(idx, 1)
+}
+
+const saveDesignPlan = async (status: string) => {
+  if (!order.value) return
+  if (status === 'completed' && !designPlan.value.content?.trim()) {
+    ElMessage.warning('请先填写方案描述')
+    return
+  }
+  savingPlan.value = true
+  try {
+    const res: any = await contractorAdminApi.saveDesignPlan(order.value.id, {
+      content: designPlan.value.content,
+      files: designPlan.value.files,
+      status,
+    })
+    designPlan.value.status = res?.status || status
+    ElMessage.success(status === 'completed' ? '方案已标记为完成' : '草稿已保存')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '保存失败')
+  } finally {
+    savingPlan.value = false
+  }
+}
 
 const loadContractorData = async (orderId: string) => {
   try {
@@ -552,7 +796,19 @@ const loadContractorData = async (orderId: string) => {
       contractorAdminApi.getAssignments({ order_id: orderId }),
     ])
     contractorOptions.value = contractorsRes?.data || []
-    contractorAssignments.value = assignmentsRes?.data || []
+    const assignments = assignmentsRes?.data || []
+    
+    // 为每个派单加载交付物
+    for (const assignment of assignments) {
+      try {
+        const dlvRes: any = await contractorAdminApi.getAssignmentDeliverables(assignment.id)
+        assignment.deliverables = Array.isArray(dlvRes) ? dlvRes : (dlvRes?.data || [])
+      } catch {
+        assignment.deliverables = []
+      }
+    }
+    
+    contractorAssignments.value = assignments
   } catch {
     // 非阻断错误，承包商功能可能未启用
   }
@@ -562,14 +818,41 @@ const handleContractorAssign = async () => {
   if (!order.value || !contractorAssignForm.value.contractorId) return
   contractorAssigning.value = true
   try {
-    await contractorAdminApi.assignOrder({
+    // 构建派单请求
+    const payload: any = {
       order_id: order.value.id,
       contractor_id: contractorAssignForm.value.contractorId,
-    })
+      workflow_type: contractorAssignForm.value.workflowType,
+    }
+    if (contractorAssignForm.value.workflowType === 'ai') {
+      payload.demo_deadline = contractorAssignForm.value.demoDeadline
+      payload.final_deadline = contractorAssignForm.value.finalDeadline
+    } else {
+      // 传统流程：发送每个环节的截止日期
+      const adjustments = Object.entries(stageDeadlines.value)
+        .filter(([_, v]) => v)
+        .map(([stageId, deadline]) => ({ stage_config_id: stageId, deadline }))
+      if (adjustments.length > 0) {
+        payload.schedule_adjustments = adjustments
+      }
+    }
+    const res: any = await contractorAdminApi.assignOrder(payload)
     ElMessage.success('派单成功')
+    // 显示通知状态
+    const ns = res?.notificationStatus
+    if (ns) {
+      const parts: string[] = []
+      if (ns.inApp === 'sent') parts.push('站内信已发送')
+      if (ns.email === 'sent') parts.push('邮件已发送')
+      else if (ns.email === 'failed') parts.push('邮件发送失败')
+      else if (ns.email === 'skipped') parts.push('承包商未配置邮箱，邮件未发送')
+      ElMessage.info('通知状态: ' + parts.join('，'))
+    }
     showContractorAssignDialog.value = false
     contractorAssignForm.value.contractorId = ''
     loadContractorData(order.value.id)
+    // 刷新订单详情以更新状态
+    order.value = await orderStore.getOrderDetail(order.value.id)
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || e?.message || '派单失败')
   } finally {
@@ -608,6 +891,13 @@ const handlePublishDlv = async (deliverableId: string) => {
     ElMessage.success('已推送给用户')
     if (order.value) loadContractorData(order.value.id)
   } catch { /* cancelled */ }
+}
+
+const canAdvanceStage = (assignment: any) => {
+  if (!['accepted', 'in_progress'].includes(assignment.status)) return false
+  const currentStageOrder = parseInt(assignment.currentStageOrder || '1')
+  const dlvs = assignment.deliverables || []
+  return dlvs.some((d: any) => d.stageOrder === currentStageOrder && d.status === 'admin_approved')
 }
 
 const caStatusLabel = (s: string) => ({
@@ -774,21 +1064,48 @@ const handleStatusChange = async (status: OrderStatus) => {
   }
 }
 
+// 与后端 OrderStateMachine.ALLOWED_TRANSITIONS 完全对齐
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  draft: ['pending_contract', 'cancelled'],
+  pending_assign: ['in_production', 'pending_contract', 'cancelled'],
+  pending_contract: ['in_production', 'cancelled'],
+  in_production: ['pending_review', 'preview_ready', 'final_preview', 'cancelled'],
+  pending_review: ['preview_ready', 'final_preview', 'review_rejected', 'cancelled'],
+  preview_ready: ['revision_needed', 'in_production', 'pending_review', 'cancelled'],
+  review_rejected: ['in_production', 'pending_review', 'cancelled'],
+  revision_needed: ['in_production', 'pending_review', 'preview_ready', 'final_preview', 'cancelled'],
+  final_preview: ['revision_needed', 'pending_review', 'completed', 'cancelled'],
+  completed: [],
+  cancelled: [],
+}
+
+// 状态标签（与流程步骤条对齐）
 const getStatusText = (status: OrderStatus): string => {
   const map: Record<OrderStatus, string> = {
+    draft: '草稿',
     pending_assign: '待分配',
     pending_contract: '合同与付款',
-    in_production: '制作中',
-    pending_review: '待审核',
-    preview_ready: '初稿预览',
-    review_rejected: '审核拒绝',
+    in_production: '内容制作',
+    pending_review: '内部审核',
+    preview_ready: '初稿交付',
+    review_rejected: '审核驳回',
     revision_needed: '需要修改',
-    final_preview: '终稿预览',
-    completed: '已完成',
+    final_preview: '终稿交付',
+    completed: '项目完成',
     cancelled: '已取消'
   }
   return map[status] || status
 }
+
+// 动态计算当前状态下可用的转换选项（排除 cancelled，因为有独立的取消按钮）
+const availableTransitions = computed(() => {
+  if (!order.value) return []
+  const current = order.value.status
+  const allowed = ALLOWED_TRANSITIONS[current] || []
+  return allowed
+    .filter(s => s !== 'cancelled')  // 取消按钮已独立
+    .map(s => ({ value: s, label: getStatusText(s as OrderStatus) }))
+})
 
 const reviewStatusText = (status: 'pending' | 'approved' | 'rejected') => {
   const map: Record<typeof status, string> = {
@@ -1125,6 +1442,61 @@ const handleAdminCancel = async () => {
 .ca-dlv-file { font-size: 13px; color: #409eff; text-decoration: none; &:hover { text-decoration: underline; } }
 .ca-dlv-desc { font-size: 13px; color: #515154; margin: 0 0 8px; }
 .ca-dlv-actions { display: flex; gap: 8px; }
-.ca-dlv-note { font-size: 12px; color: #E6A23C; margin-top: 8px; }
+.ca-dlv-note { font-size: 13px; color: #E6A23C; margin-top: 8px; line-height: 1.5; }
+
+/* AI方案设计 */
+.design-plan-section {
+  margin-top: 32px;
+}
+.dp-card {
+  background: #fff; border-radius: 12px; padding: 24px;
+  border: 2px solid #D0D5DD; position: relative;
+  &:has(.el-tag--success) { border-color: #67C23A; }
+}
+.dp-header {
+  display: flex; justify-content: space-between; align-items: center;
+}
+.dp-title-row {
+  display: flex; align-items: center; gap: 8px;
+  h3 { font-size: 18px; font-weight: 600; color: #1D1D1F; margin: 0; }
+}
+.dp-icon { font-size: 20px; }
+.dp-files { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.dp-file-item {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  background: #F9FAFB; border-radius: 6px; border: 1px solid #E5E7EB; font-size: 13px;
+}
+.dp-file-name { flex: 1; color: #409eff; text-decoration: none; &:hover { text-decoration: underline; } }
+.dp-file-size { color: #86868B; font-size: 12px; }
+.dp-upload { margin-top: 4px; }
+.dp-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid #E5E7EB;
+}
+.dp-footer-label { font-size: 13px; color: #86868B; font-weight: 500; }
+.dp-footer-btns { display: flex; gap: 8px; }
+
+/* 排期管理 */
+.workflow-schedule {
+  background: #F9FAFB; border-radius: 10px; padding: 16px; border: 1px solid #E5E7EB; margin-top: 4px;
+}
+.schedule-title { font-size: 14px; font-weight: 600; color: #1D1D1F; margin-bottom: 12px; }
+.schedule-empty { margin-top: 8px; }
+.schedule-stage {
+  padding: 10px 12px; background: #fff; border-radius: 8px; border: 1px solid #E5E7EB; margin-bottom: 8px;
+}
+.schedule-stage-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.schedule-stage-order {
+  width: 22px; height: 22px; border-radius: 50%; background: #409eff; color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+}
+.schedule-stage-name { font-size: 14px; font-weight: 500; color: #1D1D1F; flex: 1; }
+.schedule-stage-picker { display: flex; align-items: center; gap: 8px; }
+.picker-label { font-size: 13px; color: #86868B; }
+.ai-schedule-row { display: flex; gap: 16px; }
+.ai-schedule-item { flex: 1; }
+.ai-schedule-label { font-size: 13px; font-weight: 500; color: #1D1D1F; margin-bottom: 6px; }
 </style>
 

@@ -242,3 +242,53 @@ class EmailService:
         
         await EmailService.send_email([user_email], subject, html_content)
 
+    @staticmethod
+    async def send_assignment_notification(
+        contractor_email: str,
+        contractor_name: str,
+        order_number: str,
+        design_summary: str = "",
+        login_url: str = ""
+    ):
+        """发送承包商派单通知邮件"""
+        subject = f"新派单通知 - 订单 {order_number}"
+        
+        design_section = ""
+        if design_summary:
+            design_section = f"""
+                <div style="background-color: #f0f7ff; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #3498db;">
+                    <p style="margin: 0 0 8px; font-weight: bold; color: #2c3e50;">设计方案概要：</p>
+                    <p style="margin: 0; color: #555;">{design_summary[:500]}{'...' if len(design_summary) > 500 else ''}</p>
+                </div>
+            """
+        
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+                <h2 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px;">
+                    新项目派单通知
+                </h2>
+                <p>{contractor_name}，您好：</p>
+                <p>您有一个新的项目派单，订单编号 <strong>{order_number}</strong>，请尽快登录系统查看详情并确认接单。</p>
+                {design_section}
+                <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p style="margin: 0; color: #e67e22; font-weight: bold;">⏰ 请及时登录系统查看并确认接单</p>
+                </div>
+                {f'<p><a href="{login_url}" style="color: #3498db;">点击此处登录系统</a></p>' if login_url else ''}
+                <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+                <p style="color: #7f8c8d; font-size: 12px;">
+                    此邮件由系统自动发送，请勿回复。<br>
+                    AI设计任务管理系统
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        try:
+            await EmailService.send_email([contractor_email], subject, html_content)
+            return True
+        except Exception as e:
+            print(f"派单通知邮件发送失败: {e}")
+            return False
