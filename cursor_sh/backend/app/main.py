@@ -75,6 +75,10 @@ if deploy_mode in ("all", "internal"):
     app.include_router(contractor_admin_api.router, prefix="/api")
     app.include_router(workflow_config_api.router, prefix="/api")
 
+# 用户画像 Memory 管理（管理员端）
+from app.api import admin_memory
+app.include_router(admin_memory.router, prefix="/api")
+
 # 挂载审计日志中间件（放在路由注册之后，确保能拦截所有请求）
 if settings.LOG_ENABLED:
     app.add_middleware(AuditLoggerMiddleware)

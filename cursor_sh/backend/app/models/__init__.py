@@ -14,6 +14,7 @@ from app.models.feedback import Feedback
 from app.models.notification import Notification
 from app.models.announcement import Announcement
 from app.models.security_event import SecurityEvent, SecurityEventType
+from app.models.user_memory import UserMemory
 
 __all__ = [
     "User", "UserRole",
@@ -27,4 +28,5 @@ __all__ = [
     "File", "Feedback", "Notification",
     "Announcement",
     "SecurityEvent", "SecurityEventType",
+    "UserMemory",
 ]

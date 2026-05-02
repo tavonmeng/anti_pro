@@ -25,8 +25,9 @@ class VideoPurchaseOrderCreate(BaseModel):
 
 
 class AI3DCustomOrderCreate(BaseModel):
-    """AI裸眼3D定制订单创建"""
+    """AI裸眼3D定制订单创建（兼容品牌方 & 媒体方字段）"""
     orderType: str = Field(default="ai_3d_custom")
+    # ── 品牌方字段 ──
     brand: Optional[str] = None
     background: Optional[str] = None
     target_group: Optional[str] = None
@@ -42,6 +43,21 @@ class AI3DCustomOrderCreate(BaseModel):
     online_time: Optional[str] = None
     sales_contact: Optional[str] = None
     scenePhotos: Optional[List[FileUpload]] = []
+    # ── 媒体方字段 ──
+    project_name: Optional[str] = None
+    resource_background: Optional[str] = None
+    audience_scene: Optional[str] = None
+    media_positioning: Optional[str] = None
+    city_location: Optional[str] = None
+    viewing_path: Optional[str] = None
+    art_direction: Optional[str] = None
+    theme_concept: Optional[str] = None
+    media_specs: Optional[str] = None
+    timing_number: Optional[str] = None
+    tech_delivery: Optional[str] = None
+    content_review: Optional[str] = None
+    special_requirements: Optional[str] = None
+    remarks: Optional[str] = None
 
 
 class DigitalArtOrderCreate(BaseModel):
@@ -88,7 +104,8 @@ class VideoPurchaseOrderResponse(BaseOrderResponse):
 
 
 class AI3DCustomOrderResponse(BaseOrderResponse):
-    """AI裸眼3D定制订单响应"""
+    """AI裸眼3D定制订单响应（兼容品牌方 & 媒体方字段）"""
+    # ── 品牌方字段 ──
     brand: Optional[str] = None
     background: Optional[str] = None
     target_group: Optional[str] = None
@@ -105,6 +122,21 @@ class AI3DCustomOrderResponse(BaseOrderResponse):
     sales_contact: Optional[str] = None
     scenePhotos: List[FileResponse] = []
     previewFiles: Optional[List[FileResponse]] = []
+    # ── 媒体方字段 ──
+    project_name: Optional[str] = None
+    resource_background: Optional[str] = None
+    audience_scene: Optional[str] = None
+    media_positioning: Optional[str] = None
+    city_location: Optional[str] = None
+    viewing_path: Optional[str] = None
+    art_direction: Optional[str] = None
+    theme_concept: Optional[str] = None
+    media_specs: Optional[str] = None
+    timing_number: Optional[str] = None
+    tech_delivery: Optional[str] = None
+    content_review: Optional[str] = None
+    special_requirements: Optional[str] = None
+    remarks: Optional[str] = None
 
 
 class DigitalArtOrderResponse(BaseOrderResponse):

@@ -7,91 +7,196 @@
       label-width="140px"
       label-position="top"
     >
-      <el-row :gutter="24">
-        <el-col :span="12">
-          <el-form-item label="品牌与产品关键词" prop="brand">
-            <el-input v-model="formData.brand" placeholder="例如：蒙牛；酸酸乳..." />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item label="目标受众" prop="target_group">
-            <el-input v-model="formData.target_group" placeholder="例如：18-25岁年轻女性" />
-          </el-form-item>
-        </el-col>
-      </el-row>
+      <!-- ===== 媒体方表单 ===== -->
+      <template v-if="isMediaMode">
+        <!-- ■ 基础信息 -->
+        <div class="form-stage-label">基础信息</div>
 
-      <el-form-item label="项目背景" prop="background">
-        <el-input v-model="formData.background" type="textarea" :rows="2" placeholder="填写项目启动背景、核心目的等" />
-      </el-form-item>
+        <el-form-item label="项目名称" prop="project_name">
+          <el-input v-model="formData.project_name" placeholder="例如：上海首位中心大屏矩阵裸眼3D OOH项目" />
+        </el-form-item>
 
-      <el-row :gutter="24">
-        <el-col :span="12">
-          <el-form-item label="品牌调性" prop="brand_tone">
-            <el-input v-model="formData.brand_tone" placeholder="例如：高端、简约、科技感" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item label="风格偏好" prop="style">
-            <el-input v-model="formData.style" placeholder="例如：赛博朋克、写实、水墨" />
-          </el-form-item>
-        </el-col>
-      </el-row>
+        <el-form-item label="项目背景 & 媒体简介" prop="resource_background">
+          <el-input v-model="formData.resource_background" type="textarea" :rows="3" placeholder="媒体资源的背景介绍，位置特点、日均客流、目标客群等" />
+        </el-form-item>
 
-      <el-form-item label="内容需求 (方案必备要素)" prop="content">
-        <el-input v-model="formData.content" type="textarea" :rows="3" placeholder="详细描述所需的创意场景、画面元素要求等" />
-      </el-form-item>
+        <el-form-item label="目标受众 & 场景特点" prop="audience_scene">
+          <el-input v-model="formData.audience_scene" type="textarea" :rows="2" placeholder="受众画像和场景特征" />
+        </el-form-item>
 
-      <el-form-item label="品牌禁忌内容" prop="prohibited_content">
-        <el-input v-model="formData.prohibited_content" placeholder="填写不可出现的元素（如：避免红色、避免涉及某竞品）" />
-      </el-form-item>
+        <el-row :gutter="24">
+          <el-col :span="12">
+            <el-form-item label="投放城市 & 媒体位置" prop="city_location">
+              <el-input v-model="formData.city_location" placeholder="例如：成都市锦江区春熙路步行街" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="媒体定位 & 品牌调性" prop="media_positioning">
+              <el-input v-model="formData.media_positioning" placeholder="选填，适配的品牌类型" />
+            </el-form-item>
+          </el-col>
+        </el-row>
 
-      <el-row :gutter="24">
-        <el-col :span="12">
-          <el-form-item label="投放城市或站点" prop="city">
-            <el-input v-model="formData.city" placeholder="例如：上海、北京各大商圈" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item label="投放媒体及尺寸" prop="media_size">
-            <el-input v-model="formData.media_size" placeholder="例如：转角LED屏 1920x1080" />
-          </el-form-item>
-        </el-col>
-      </el-row>
+        <!-- ■ 创意方向 -->
+        <div class="form-stage-label">创意方向</div>
 
-      <el-row :gutter="24">
-        <el-col :span="8">
-          <el-form-item label="投放时长与数量" prop="time_number">
-            <el-input v-model="formData.time_number" placeholder="例如：15秒x10个" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="技术需求" prop="technology">
-            <el-input v-model="formData.technology" placeholder="例如：4K, MP4, H264" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="制作预算" prop="budget">
-            <el-input v-model="formData.budget" placeholder="例如：5万元" />
-          </el-form-item>
-        </el-col>
-      </el-row>
+        <el-form-item label="观看动线说明" prop="viewing_path">
+          <el-input v-model="formData.viewing_path" type="textarea" :rows="2" placeholder="观众主要视角、人流方向、最佳观看点" />
+        </el-form-item>
 
-      <el-row :gutter="24">
-        <el-col :span="24">
-          <el-form-item label="预计上刊时间" prop="online_time">
-            <el-input v-model="formData.online_time" placeholder="例如：2024年10月1日" />
-          </el-form-item>
-        </el-col>
-      </el-row>
+        <el-row :gutter="24">
+          <el-col :span="12">
+            <el-form-item label="艺术方向 & 风格偏好" prop="art_direction">
+              <el-input v-model="formData.art_direction" placeholder="未来科技/自然生态/城市文化/抽象艺术等" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="内容主题 & 核心表达" prop="theme_concept">
+              <el-input v-model="formData.theme_concept" placeholder="核心概念、IP形象、品牌露出等" />
+            </el-form-item>
+          </el-col>
+        </el-row>
 
-      <el-form-item label="现场实拍图" prop="scenePhotos">
-        <FileUpload 
-          v-model="formData.scenePhotos"
-          accept="image/*"
-          :limit="10"
-          tip-text="支持上传现场照片，最多10张，支持 JPG、PNG 格式"
-        />
-      </el-form-item>
+        <!-- ■ 技术与交付 -->
+        <div class="form-stage-label">技术与交付</div>
+
+        <el-row :gutter="24">
+          <el-col :span="12">
+            <el-form-item label="媒体尺寸 & 物理规格" prop="media_specs">
+              <el-input v-model="formData.media_specs" placeholder="屏幕分辨率、物理尺寸" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="技术需求" prop="tech_delivery">
+              <el-input v-model="formData.tech_delivery" placeholder="分辨率、格式、帧率、色彩空间等" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="素材审核规范 & 周期" prop="content_review">
+          <el-input v-model="formData.content_review" type="textarea" :rows="2" placeholder="审核要求、周期、需规避的内容等" />
+        </el-form-item>
+
+        <el-row :gutter="24">
+          <el-col :span="8">
+            <el-form-item label="投放时长 & 数量" prop="timing_number">
+              <el-input v-model="formData.timing_number" placeholder="选填，如15秒x3支" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="项目制作预算" prop="budget">
+              <el-input v-model="formData.budget" placeholder="选填" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="预计上刊时间" prop="online_time">
+              <el-input v-model="formData.online_time" placeholder="最迟报审时间" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="其他特殊合作要求" prop="special_requirements">
+          <el-input v-model="formData.special_requirements" type="textarea" :rows="2" placeholder="选填，特殊定制效果等" />
+        </el-form-item>
+
+        <el-form-item label="现场实拍图" prop="scenePhotos">
+          <FileUpload 
+            v-model="formData.scenePhotos"
+            accept="image/*"
+            :limit="10"
+            tip-text="支持上传现场照片，最多10张，支持 JPG、PNG 格式"
+          />
+        </el-form-item>
+      </template>
+
+      <!-- ===== 品牌方表单（原版） ===== -->
+      <template v-else>
+        <el-row :gutter="24">
+          <el-col :span="12">
+            <el-form-item label="品牌与产品关键词" prop="brand">
+              <el-input v-model="formData.brand" placeholder="例如：蒙牛；酸酸乳..." />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="目标受众" prop="target_group">
+              <el-input v-model="formData.target_group" placeholder="例如：18-25岁年轻女性" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="项目背景" prop="background">
+          <el-input v-model="formData.background" type="textarea" :rows="2" placeholder="填写项目启动背景、核心目的等" />
+        </el-form-item>
+
+        <el-row :gutter="24">
+          <el-col :span="12">
+            <el-form-item label="品牌调性" prop="brand_tone">
+              <el-input v-model="formData.brand_tone" placeholder="例如：高端、简约、科技感" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="风格偏好" prop="style">
+              <el-input v-model="formData.style" placeholder="例如：赛博朋克、写实、水墨" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="内容需求 (方案必备要素)" prop="content">
+          <el-input v-model="formData.content" type="textarea" :rows="3" placeholder="详细描述所需的创意场景、画面元素要求等" />
+        </el-form-item>
+
+        <el-form-item label="品牌禁忌内容" prop="prohibited_content">
+          <el-input v-model="formData.prohibited_content" placeholder="填写不可出现的元素（如：避免红色、避免涉及某竞品）" />
+        </el-form-item>
+
+        <el-row :gutter="24">
+          <el-col :span="12">
+            <el-form-item label="投放城市或站点" prop="city">
+              <el-input v-model="formData.city" placeholder="例如：上海、北京各大商圈" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="投放媒体及尺寸" prop="media_size">
+              <el-input v-model="formData.media_size" placeholder="例如：转角LED屏 1920x1080" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="24">
+          <el-col :span="8">
+            <el-form-item label="投放时长与数量" prop="time_number">
+              <el-input v-model="formData.time_number" placeholder="例如：15秒x10个" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="技术需求" prop="technology">
+              <el-input v-model="formData.technology" placeholder="例如：4K, MP4, H264" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="制作预算" prop="budget">
+              <el-input v-model="formData.budget" placeholder="例如：5万元" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="24">
+          <el-col :span="24">
+            <el-form-item label="预计上刊时间" prop="online_time">
+              <el-input v-model="formData.online_time" placeholder="例如：2024年10月1日" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="现场实拍图" prop="scenePhotos">
+          <FileUpload 
+            v-model="formData.scenePhotos"
+            accept="image/*"
+            :limit="10"
+            tip-text="支持上传现场照片，最多10张，支持 JPG、PNG 格式"
+          />
+        </el-form-item>
+      </template>
     </el-form>
     
     <div class="production-notice">
@@ -101,7 +206,7 @@
         :closable="false"
       >
         <template #default>
-          <p>AI裸眼3D内容定制服务预计制作周期为 <strong>5-7个工作日</strong>。</p>
+          <p>AI裸眼3D内容定制服务预计制作周期为 <strong>15个工作日</strong>。</p>
           <p>制作完成后，我们将上传初版预览供您确认。您可以提出修改意见，我们将根据反馈进行调整。</p>
         </template>
       </el-alert>
@@ -121,6 +226,8 @@ import { ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import FileUpload from './FileUpload.vue'
 import type { UploadedFile, Order } from '@/types'
 
+const isMediaMode = (import.meta.env.VITE_AGENT_MODE || 'brand') === 'media'
+
 const props = defineProps<{
   order?: Order
 }>()
@@ -134,6 +241,7 @@ const emit = defineEmits<{
 const formRef = ref<FormInstance>()
 
 const formData = reactive({
+  // 品牌方字段
   brand: '',
   background: '',
   target_group: '',
@@ -147,27 +255,34 @@ const formData = reactive({
   technology: '',
   budget: '',
   online_time: '',
-  scenePhotos: [] as UploadedFile[]
+  scenePhotos: [] as UploadedFile[],
+  // 媒体方字段
+  project_name: '',
+  resource_background: '',
+  audience_scene: '',
+  media_positioning: '',
+  city_location: '',
+  viewing_path: '',
+  art_direction: '',
+  theme_concept: '',
+  media_specs: '',
+  timing_number: '',
+  tech_delivery: '',
+  content_review: '',
+  special_requirements: '',
+  remarks: '',
 })
 
 // 编辑模式：填充表单数据
 onMounted(() => {
   if (props.order && props.order.orderType === 'ai_3d_custom') {
     const order = props.order as any
-    formData.brand = order.brand || ''
-    formData.background = order.background || ''
-    formData.target_group = order.target_group || ''
-    formData.brand_tone = order.brand_tone || ''
-    formData.content = order.content || ''
-    formData.style = order.style || ''
-    formData.prohibited_content = order.prohibited_content || ''
-    formData.city = order.city || ''
-    formData.media_size = order.media_size || ''
-    formData.time_number = order.time_number || ''
-    formData.technology = order.technology || ''
-    formData.budget = order.budget || ''
-    formData.online_time = order.online_time || ''
-    formData.scenePhotos = order.scenePhotos || []
+    // 通用填充：遍历 formData 的 key，从 order 中取值
+    Object.keys(formData).forEach(key => {
+      if (key in order && order[key] !== undefined && order[key] !== null) {
+        (formData as any)[key] = order[key]
+      }
+    })
   } else {
     // 检查是否有 AI 助手传过来的草稿数据
     const draftStr = sessionStorage.getItem('ai_draft_order')
@@ -188,7 +303,14 @@ onMounted(() => {
   }
 })
 
-const formRules: FormRules = {
+const formRules: FormRules = isMediaMode ? {
+  project_name: [
+    { required: true, message: '请填写项目名称', trigger: 'blur' }
+  ],
+  city_location: [
+    { required: true, message: '请填写投放城市和媒体位置', trigger: 'blur' }
+  ],
+} : {
   brand: [
     { required: true, message: '请填写品牌关键词', trigger: 'blur' }
   ],
@@ -210,14 +332,19 @@ const handleSubmit = async () => {
     if (valid) {
       try {
         const isEdit = !!props.order
+        const confirmItems = isMediaMode
+          ? `<li>项目名称及媒体位置已明确</li>
+             <li>已上传 ${formData.scenePhotos.length} 张现场实拍图</li>
+             <li>预计制作周期：15个工作日</li>`
+          : `<li>品牌与内容要求已明确</li>
+             <li>已上传 ${formData.scenePhotos.length} 张现场实拍图</li>
+             <li>预计制作周期：15个工作日</li>`
         await ElMessageBox.confirm(
           `
             <div style="text-align: left;">
               <p>${isEdit ? '请确认您已核对所有修改信息：' : '请确认您已核对所有信息：'}</p>
               <ul style="margin: 12px 0; padding-left: 20px;">
-                <li>品牌与内容要求已明确</li>
-                <li>已上传 ${formData.scenePhotos.length} 张现场实拍图</li>
-                <li>预计制作周期：5-7个工作日</li>
+                ${confirmItems}
               </ul>
               <p>${isEdit ? '提交后，订单将被更新。' : '提交后，我们将立即开始制作。'}</p>
             </div>
@@ -251,6 +378,22 @@ const handleSaveDraft = () => {
 <style lang="scss" scoped>
 .ai-3d-custom-form {
   padding: 0; /* No internal card padding */
+}
+
+.form-stage-label {
+  font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: #0071e3;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 28px 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 113, 227, 0.12);
+
+  &:first-child {
+    margin-top: 0;
+  }
 }
 
 .production-notice {

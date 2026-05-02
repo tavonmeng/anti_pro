@@ -300,16 +300,32 @@ const summaryItems = computed(() => {
     if (d.size) items.push({ label: '屏幕尺寸', value: d.size })
     if (d.curvature) items.push({ label: '曲率', value: d.curvature })
   } else if (props.orderType === 'ai_3d_custom') {
-    if (d.brand) items.push({ label: '品牌关键词', value: d.brand })
-    if (d.target_group) items.push({ label: '目标受众', value: d.target_group })
-    if (d.brand_tone) items.push({ label: '品牌调性', value: d.brand_tone })
-    if (d.style) items.push({ label: '风格偏好', value: d.style })
-    if (d.content) items.push({ label: '内容需求', value: d.content.length > 60 ? d.content.slice(0, 60) + '...' : d.content })
-    if (d.city) items.push({ label: '投放城市', value: d.city })
-    if (d.media_size) items.push({ label: '投放媒体尺寸', value: d.media_size })
-    if (d.budget) items.push({ label: '制作预算', value: d.budget })
-    if (d.online_time) items.push({ label: '预计上刊时间', value: d.online_time })
-    if (d.scenePhotos?.length) items.push({ label: '现场实拍图', value: `${d.scenePhotos.length} 张` })
+    // 检测媒体方订单
+    if (d.project_name) {
+      if (d.project_name) items.push({ label: '项目名称', value: d.project_name })
+      if (d.resource_background) items.push({ label: '项目背景 & 媒体简介', value: d.resource_background.length > 60 ? d.resource_background.slice(0, 60) + '...' : d.resource_background })
+      if (d.audience_scene) items.push({ label: '目标受众 & 场景特点', value: d.audience_scene.length > 60 ? d.audience_scene.slice(0, 60) + '...' : d.audience_scene })
+      if (d.city_location) items.push({ label: '投放城市 & 媒体位置', value: d.city_location })
+      if (d.viewing_path) items.push({ label: '观看动线', value: d.viewing_path.length > 60 ? d.viewing_path.slice(0, 60) + '...' : d.viewing_path })
+      if (d.art_direction) items.push({ label: '艺术方向', value: d.art_direction })
+      if (d.theme_concept) items.push({ label: '内容主题', value: d.theme_concept.length > 60 ? d.theme_concept.slice(0, 60) + '...' : d.theme_concept })
+      if (d.media_specs) items.push({ label: '媒体尺寸', value: d.media_specs })
+      if (d.tech_delivery) items.push({ label: '技术需求', value: d.tech_delivery })
+      if (d.budget) items.push({ label: '项目预算', value: d.budget })
+      if (d.online_time) items.push({ label: '预计上刊时间', value: d.online_time })
+      if (d.scenePhotos?.length) items.push({ label: '现场实拍图', value: `${d.scenePhotos.length} 张` })
+    } else {
+      if (d.brand) items.push({ label: '品牌关键词', value: d.brand })
+      if (d.target_group) items.push({ label: '目标受众', value: d.target_group })
+      if (d.brand_tone) items.push({ label: '品牌调性', value: d.brand_tone })
+      if (d.style) items.push({ label: '风格偏好', value: d.style })
+      if (d.content) items.push({ label: '内容需求', value: d.content.length > 60 ? d.content.slice(0, 60) + '...' : d.content })
+      if (d.city) items.push({ label: '投放城市', value: d.city })
+      if (d.media_size) items.push({ label: '投放媒体尺寸', value: d.media_size })
+      if (d.budget) items.push({ label: '制作预算', value: d.budget })
+      if (d.online_time) items.push({ label: '预计上刊时间', value: d.online_time })
+      if (d.scenePhotos?.length) items.push({ label: '现场实拍图', value: `${d.scenePhotos.length} 张` })
+    }
   } else if (props.orderType === 'digital_art') {
     const artMap: Record<string, string> = { abstract: '抽象', realistic: '写实', installation: '装置', dynamic: '动态艺术', custom: d.customDirection || '自定义' }
     items.push({ label: '艺术方向', value: artMap[d.artDirection] || d.artDirection })

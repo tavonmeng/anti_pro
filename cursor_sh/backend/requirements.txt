@@ -49,6 +49,10 @@ pytest
 pytest-asyncio
 httpx
 
+# 公司官网爬取（Agent Memory）
+beautifulsoup4
+lxml
+
 # AI语音实时识别
 websockets
 python-socks[asyncio]

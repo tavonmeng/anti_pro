@@ -166,6 +166,9 @@ class Settings(BaseSettings):
     # 承包商端基础 URL（用于生成邀请链接，填内部系统的 IP/域名）
     CONTRACTOR_BASE_URL: str = "http://localhost:3000"
     
+    # Agent 模式切换：brand（品牌方需求收集）/ media（媒体方需求收集）
+    AGENT_MODE: str = "brand"
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

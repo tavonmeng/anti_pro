@@ -135,9 +135,10 @@ export interface VideoPurchaseOrder extends BaseOrder {
   curvature?: string
 }
 
-// AI裸眼3D内容定制订单
+// AI裸眼3D内容定制订单（兼容品牌方 & 媒体方）
 export interface AI3DCustomOrder extends BaseOrder {
   orderType: 'ai_3d_custom'
+  // ── 品牌方字段 ──
   brand?: string               // 品牌与产品关键词
   background?: string          // 项目背景
   target_group?: string        // 目标受众
@@ -155,6 +156,21 @@ export interface AI3DCustomOrder extends BaseOrder {
   scenePhotos?: UploadedFile[] // 现场实拍图
   previewFiles?: UploadedFile[] // 预览文件
   previewNote?: string         // 预览备注说明
+  // ── 媒体方字段 ──
+  project_name?: string        // 项目名称
+  resource_background?: string // 项目背景 & 媒体简介
+  audience_scene?: string      // 目标受众 & 场景特点
+  media_positioning?: string   // 媒体定位 & 品牌调性
+  city_location?: string       // 投放城市 & 媒体位置
+  viewing_path?: string        // 观看动线说明
+  art_direction?: string       // 艺术方向 & 风格偏好
+  theme_concept?: string       // 内容主题 & 核心表达
+  media_specs?: string         // 媒体尺寸 & 物理规格
+  timing_number?: string       // 投放时长 & 数量
+  tech_delivery?: string       // 技术需求
+  content_review?: string      // 素材审核规范 & 周期
+  special_requirements?: string // 其他特殊合作要求
+  remarks?: string             // 备注
 }
 
 // 数字艺术内容定制订单

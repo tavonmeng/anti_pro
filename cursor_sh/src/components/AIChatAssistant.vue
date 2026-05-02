@@ -214,6 +214,8 @@
                         </div>
                         <div class="order-card-body">
                           <div class="order-info-row"><span class="info-label">类型</span><span class="info-val">{{ getTypeText(order.orderType || order.order_type) }}</span></div>
+                          <div class="order-info-row" v-if="order.project_name"><span class="info-label">项目</span><span class="info-val">{{ order.project_name }}</span></div>
+                          <div class="order-info-row" v-if="order.city_location"><span class="info-label">城市</span><span class="info-val">{{ order.city_location }}</span></div>
                           <div class="order-info-row" v-if="order.brand"><span class="info-label">品牌</span><span class="info-val">{{ order.brand }}</span></div>
                           <div class="order-info-row" v-if="order.city"><span class="info-label">城市</span><span class="info-val">{{ order.city }}</span></div>
                           <div class="order-info-row"><span class="info-label">时间</span><span class="info-val">{{ formatOrderDate(order.createdAt || order.created_at) }}</span></div>
@@ -669,8 +671,14 @@ const getAuthHeaders = () => {
 }
 
 // ==== 欢迎打字机动画逻辑 ====
+// Agent 模式：brand（品牌方）/ media（媒体方），通过 .env 配置
+const agentMode = import.meta.env.VITE_AGENT_MODE || 'brand'
+const isMediaMode = agentMode === 'media'
+
 const welcomeTitleFull = '您好，我是 Unique Video AI 的项目顾问。'
-const welcomeDescFull = '我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多一线品牌提供过高品质视觉解决方案。'
+const welcomeDescFull = isMediaMode
+  ? '我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多媒体方客户提供过高品质的裸眼3D视觉内容解决方案。'
+  : '我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多一线品牌提供过高品质视觉解决方案。'
 const welcomeTitleText = ref('')
 const welcomeDescText = ref('')
 const showWelcomeOptions = ref(false)
@@ -763,7 +771,8 @@ const removeUploadedFile = (index: number) => {
 }
 
 // 表单字段定义
-const formFields = [
+// ===== 品牌方表单字段 =====
+const _brandFormFields = [
   { key: 'brand', label: '品牌/产品', placeholder: '品牌名称和产品关键词', multiline: false },
   { key: 'target_group', label: '目标受众', placeholder: '内容面向的人群', multiline: false },
   { key: 'content', label: '内容需求', placeholder: '期望的创意画面和场景描述', multiline: true },
@@ -776,6 +785,28 @@ const formFields = [
   { key: 'technology', label: '技术需求', placeholder: '选填，如分辨率、格式等', multiline: false },
   { key: 'site_photos', label: '现场实拍图', placeholder: '选填，通过左侧上传按钮上传的文件将自动归入此项', multiline: false },
 ]
+
+// ===== 媒体方表单字段 =====
+const _mediaFormFields = [
+  { key: 'project_name', label: '项目名称', placeholder: '例如：上海首位中心大屏矩阵裸眼3D OOH项目', multiline: false },
+  { key: 'resource_background', label: '项目背景 & 媒体简介', placeholder: '媒体资源背景介绍，位置特点、日均客流等', multiline: true },
+  { key: 'audience_scene', label: '目标受众 & 场景特点', placeholder: '受众画像和场景特征', multiline: true },
+  { key: 'city_location', label: '投放城市 & 媒体位置', placeholder: '城市、区域、具体位置', multiline: false },
+  { key: 'viewing_path', label: '观看动线说明', placeholder: '观众主要视角、人流方向、最佳观看点', multiline: true },
+  { key: 'art_direction', label: '艺术方向 & 风格偏好', placeholder: '未来科技/自然生态/城市文化/抽象艺术等', multiline: false },
+  { key: 'theme_concept', label: '内容主题 & 核心表达', placeholder: '核心概念、IP形象、品牌露出等', multiline: true },
+  { key: 'media_specs', label: '媒体尺寸 & 物理规格', placeholder: '屏幕分辨率、物理尺寸', multiline: false },
+  { key: 'tech_delivery', label: '技术需求', placeholder: '分辨率、格式、帧率、色彩空间等', multiline: false },
+  { key: 'content_review', label: '素材审核规范 & 周期', placeholder: '审核要求、周期、规避内容等', multiline: true },
+  { key: 'timing_number', label: '投放时长 & 数量', placeholder: '选填，几支内容、每支多少秒', multiline: false },
+  { key: 'budget', label: '项目制作预算', placeholder: '选填，预算范围', multiline: false },
+  { key: 'online_time', label: '预计上刊时间', placeholder: '以最迟提交报审时间为准', multiline: false },
+  { key: 'media_positioning', label: '媒体定位 & 品牌调性', placeholder: '选填，适配的品牌类型', multiline: false },
+  { key: 'special_requirements', label: '其他特殊合作要求', placeholder: '选填，特殊定制效果等', multiline: true },
+  { key: 'site_photos', label: '现场实拍图', placeholder: '选填，通过左侧上传按钮上传', multiline: false },
+]
+
+const formFields = isMediaMode ? _mediaFormFields : _brandFormFields
 
 const selectedMode = ref<string | null>(null)
 const businessType = ref<string>('ai_3d_custom') // ai_3d_custom / video_purchase / digital_art
@@ -1226,7 +1257,9 @@ const switchToOrderCreate = (type: string = 'ai_3d_custom', requirementSummary: 
     })
   } else {
     const openings: Record<string, string> = {
-      ai_3d_custom: `好的，我们进入${label}的需求梳理环节。\n\n首先想了解一下：这次项目是哪个品牌的？主要想呈现什么样的裸眼3D创意画面？`,
+      ai_3d_custom: isMediaMode
+        ? `好的，我来协助您完成这次项目的需求梳理。\n\n我在裸眼3D户外媒体内容领域有多年的项目经验，接下来会通过几个问题了解您的项目全貌，大约需要5分钟。如果某个问题暂时不清楚或不方便回答，可以直接跳过，后续在表单里补充也完全没问题。\n\n我们先从基础信息开始——请问本次项目的名称是什么？`
+        : `好的，我们进入${label}的需求梳理环节。\n\n首先想了解一下：这次项目是哪个品牌的？主要想呈现什么样的裸眼3D创意画面？`,
       video_purchase: `好的，我们进入${label}的需求梳理环节。\n\n首先想确认一下：您的品牌名称是什么？这样我们可以在成片上做对应的品牌元素适配。`,
       digital_art: `好的，我们进入${label}的需求梳理环节。\n\n首先想了解一下：这次项目的品牌或活动名称是什么？活动场景大概是什么样的？`,
     }
@@ -1561,7 +1594,13 @@ const handleCustomAiChat = async (userText: string) => {
     // 降级兜底：前端 Mock 模拟对话收集需求（至少5轮）
     const userMsgCount = messages.value.filter(m => m.role === 'user').length;
     
-    const mockReplies: Record<number, string> = {
+    const mockReplies: Record<number, string> = isMediaMode ? {
+      1: '收到。接下来想了解一下这个媒体的基本情况——屏幕日均客流量大概是多少？主要面向什么样的受众群体？',
+      2: '了解。那观众主要从哪个方向观看？最佳观看点在什么位置？',
+      3: '明白。在视觉方向上，您期望什么样的艺术风格？（比如未来科技、自然生态、城市文化等）',
+      4: '清楚了。屏幕的分辨率和物理尺寸是多少？对交付格式有什么技术要求？',
+      5: '最后确认一下：预计什么时候需要上刊？是否有特殊的内容审核规范？',
+    } : {
       1: '好的，产品很有意思。为了让最终视觉效果更匹配，您期望这支视频想要打动哪类年轻受众呢？（比如在校学生、或者职场新人等）',
       2: '明白。在视觉呈现上，您大概有什么特定的风格倾向吗？（比如赛博朋克、极简风，或者写实拟真都可以）',
       3: '非常清晰。接下来想了解一下，您准备把这支内容具体投放在哪个城市或站点呢？',
@@ -1585,17 +1624,35 @@ const handleCustomAiChat = async (userText: string) => {
           isCompletePrompt: true
         })
         // mock 数据填充表单
-        inlineFormData.value = {
-          brand: '示例品牌 (Mock)',
-          target_group: '年轻群体',
-          content: '裸眼3D视觉创意内容',
-          city: '北京',
-          budget: '10万以上',
-          online_time: '2026年6月',
-          background: '',
-          style: '科技感设计',
-          media_size: '',
-          technology: ''
+        if (isMediaMode) {
+          inlineFormData.value = {
+            project_name: '示例媒体项目 (Mock)',
+            resource_background: '',
+            audience_scene: '',
+            city_location: '成都春熙路',
+            viewing_path: '',
+            art_direction: '未来科技',
+            theme_concept: '',
+            media_specs: '',
+            tech_delivery: '',
+            content_review: '',
+            budget: '60万',
+            online_time: '2026年6月',
+            special_requirements: ''
+          }
+        } else {
+          inlineFormData.value = {
+            brand: '示例品牌 (Mock)',
+            target_group: '年轻群体',
+            content: '裸眼3D视觉创意内容',
+            city: '北京',
+            budget: '10万以上',
+            online_time: '2026年6月',
+            background: '',
+            style: '科技感设计',
+            media_size: '',
+            technology: ''
+          }
         }
       }
       isLoading.value = false

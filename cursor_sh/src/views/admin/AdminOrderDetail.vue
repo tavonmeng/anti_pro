@@ -150,25 +150,56 @@
             </el-row>
           </div>
           <div v-else-if="order.orderType === 'ai_3d_custom'">
-            <el-descriptions :column="2" border size="small" style="margin-bottom: 20px;">
-              <el-descriptions-item label="品牌与产品关键词">{{ order.brand || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="目标受众">{{ order.target_group || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="品牌调性">{{ order.brand_tone || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="风格偏好">{{ order.style || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="投放城市/站点">{{ order.city || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="投放媒体尺寸">{{ order.media_size || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="投放时长数量">{{ order.time_number || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="技术需求">{{ order.technology || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="制作预算">{{ order.budget || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="预计上刊时间">{{ order.online_time || '-' }}</el-descriptions-item>
-            </el-descriptions>
-            
-            <p><strong>项目背景：</strong></p>
-            <p class="description-text">{{ order.background || '-' }}</p>
-            <p><strong>内容需求：</strong></p>
-            <p class="description-text">{{ order.content || '-' }}</p>
-            <p><strong>品牌禁忌内容：</strong></p>
-            <p class="description-text">{{ order.prohibited_content || '-' }}</p>
+            <!-- 媒体方订单详情 -->
+            <template v-if="order.project_name">
+              <el-descriptions :column="2" border size="small" style="margin-bottom: 20px;">
+                <el-descriptions-item label="项目名称">{{ order.project_name || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="投放城市 & 媒体位置">{{ order.city_location || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="媒体定位 & 品牌调性">{{ order.media_positioning || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="艺术方向 & 风格偏好">{{ order.art_direction || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="内容主题 & 核心表达">{{ order.theme_concept || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="媒体尺寸 & 物理规格">{{ order.media_specs || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="技术需求">{{ order.tech_delivery || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="投放时长 & 数量">{{ order.timing_number || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="项目制作预算">{{ order.budget || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="预计上刊时间">{{ order.online_time || '-' }}</el-descriptions-item>
+              </el-descriptions>
+              
+              <p><strong>项目背景 & 媒体简介：</strong></p>
+              <p class="description-text">{{ order.resource_background || '-' }}</p>
+              <p><strong>目标受众 & 场景特点：</strong></p>
+              <p class="description-text">{{ order.audience_scene || '-' }}</p>
+              <p><strong>观看动线说明：</strong></p>
+              <p class="description-text">{{ order.viewing_path || '-' }}</p>
+              <p v-if="order.content_review"><strong>素材审核规范 & 周期：</strong></p>
+              <p v-if="order.content_review" class="description-text">{{ order.content_review }}</p>
+              <p v-if="order.special_requirements"><strong>其他特殊合作要求：</strong></p>
+              <p v-if="order.special_requirements" class="description-text">{{ order.special_requirements }}</p>
+              <p v-if="order.remarks"><strong>备注：</strong></p>
+              <p v-if="order.remarks" class="description-text">{{ order.remarks }}</p>
+            </template>
+            <!-- 品牌方订单详情（原版） -->
+            <template v-else>
+              <el-descriptions :column="2" border size="small" style="margin-bottom: 20px;">
+                <el-descriptions-item label="品牌与产品关键词">{{ order.brand || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="目标受众">{{ order.target_group || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="品牌调性">{{ order.brand_tone || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="风格偏好">{{ order.style || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="投放城市/站点">{{ order.city || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="投放媒体尺寸">{{ order.media_size || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="投放时长数量">{{ order.time_number || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="技术需求">{{ order.technology || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="制作预算">{{ order.budget || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="预计上刊时间">{{ order.online_time || '-' }}</el-descriptions-item>
+              </el-descriptions>
+              
+              <p><strong>项目背景：</strong></p>
+              <p class="description-text">{{ order.background || '-' }}</p>
+              <p><strong>内容需求：</strong></p>
+              <p class="description-text">{{ order.content || '-' }}</p>
+              <p><strong>品牌禁忌内容：</strong></p>
+              <p class="description-text">{{ order.prohibited_content || '-' }}</p>
+            </template>
             <div v-if="order.scenePhotos && order.scenePhotos.length > 0">
               <p><strong>现场实拍图（{{ order.scenePhotos.length }}张）：</strong></p>
               <div class="file-list">
@@ -430,6 +461,124 @@
           </el-timeline>
         </div>
       </el-card>
+
+      <!-- 客户画像 Memory -->
+      <el-card class="detail-card memory-card" style="margin-top: 20px;">
+        <template #header>
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-icon><User /></el-icon>
+              <h3 style="margin: 0;">客户画像</h3>
+              <el-tag v-if="memoryData?.company_info?.crawl_status === 'success'" type="success" size="small">已分析</el-tag>
+              <el-tag v-else-if="memoryData?.company_info?.crawl_status === 'pending'" type="warning" size="small">分析中</el-tag>
+              <el-tag v-else-if="memoryData?.company_info?.crawl_status === 'failed'" type="danger" size="small">分析失败</el-tag>
+              <el-tag v-else type="info" size="small">未分析</el-tag>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <el-button size="small" @click="handleTriggerCrawl" :loading="crawlLoading">
+                {{ memoryData?.company_info?.crawl_status === 'success' ? '重新分析' : '分析官网' }}
+              </el-button>
+              <el-button size="small" @click="showMemory = !showMemory">
+                {{ showMemory ? '收起' : '展开' }}
+              </el-button>
+            </div>
+          </div>
+        </template>
+
+        <div v-show="showMemory">
+          <!-- 公司信息 -->
+          <div v-if="memoryData?.company_info?.description" class="memory-section">
+            <h4>公司信息</h4>
+            <el-descriptions :column="1" border size="small">
+              <el-descriptions-item label="公司名称">{{ memoryData.company_info.name || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="官网">
+                <a v-if="memoryData.company_info.website" :href="memoryData.company_info.website" target="_blank" style="color: #409eff;">
+                  {{ memoryData.company_info.website }}
+                </a>
+                <span v-else>-</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="简介">{{ memoryData.company_info.description }}</el-descriptions-item>
+              <el-descriptions-item label="核心优势" v-if="memoryData.company_info.advantages?.length">
+                <el-tag v-for="adv in memoryData.company_info.advantages" :key="adv" size="small" style="margin-right: 4px;">{{ adv }}</el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="分析时间">{{ memoryData.company_info.crawled_at || '-' }}</el-descriptions-item>
+            </el-descriptions>
+          </div>
+
+          <!-- 屏幕资源 -->
+          <div v-if="memoryData?.screen_resources?.length" class="memory-section">
+            <h4>屏幕资源（{{ memoryData.screen_resources.length }} 块）</h4>
+            <el-table :data="memoryData.screen_resources" size="small" border stripe>
+              <el-table-column prop="city" label="城市" width="80" />
+              <el-table-column prop="location" label="位置" min-width="120" />
+              <el-table-column prop="type" label="类型" width="120" />
+              <el-table-column prop="size" label="尺寸" width="80" />
+              <el-table-column prop="resolution" label="分辨率" width="100" />
+              <el-table-column prop="daily_traffic" label="日均客流" width="100" />
+            </el-table>
+          </div>
+
+          <!-- 项目偏好 -->
+          <div v-if="memoryData?.project_preferences && hasPreferences" class="memory-section">
+            <h4>
+              项目偏好
+              <span v-if="memoryData.project_preferences.last_updated" style="font-weight: normal; font-size: 12px; color: #909399; margin-left: 8px;">
+                更新于 {{ formatShortTime(memoryData.project_preferences.last_updated) }}
+              </span>
+            </h4>
+            <el-descriptions :column="2" border size="small">
+              <el-descriptions-item label="常用城市">{{ memoryData.project_preferences.common_cities?.join('、') || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="偏好风格">{{ memoryData.project_preferences.preferred_styles?.join('、') || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="预算范围">{{ memoryData.project_preferences.budget_range || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="典型时长">{{ memoryData.project_preferences.typical_duration || '-' }}</el-descriptions-item>
+              <el-descriptions-item v-if="memoryData.project_preferences.notes" label="备注" :span="2">{{ memoryData.project_preferences.notes }}</el-descriptions-item>
+            </el-descriptions>
+          </div>
+
+          <!-- 历史项目 -->
+          <div v-if="memoryData?.past_projects?.length" class="memory-section">
+            <h4>历史项目（{{ memoryData.past_projects.length }} 个）</h4>
+            <el-table :data="memoryData.past_projects" size="small" border stripe>
+              <el-table-column prop="order_number" label="订单号" width="160" />
+              <el-table-column prop="project_name" label="项目名称" min-width="120" />
+              <el-table-column prop="city" label="城市" width="80" />
+              <el-table-column prop="status" label="状态" width="80" />
+              <el-table-column label="更新时间" width="110">
+                <template #default="{ row }">{{ formatShortTime(row.updated_at) }}</template>
+              </el-table-column>
+            </el-table>
+          </div>
+
+          <!-- 交互统计 -->
+          <div v-if="memoryData?.interaction_stats?.total_sessions" class="memory-section">
+            <h4>交互统计</h4>
+            <el-descriptions :column="3" border size="small">
+              <el-descriptions-item label="对话次数">{{ memoryData.interaction_stats.total_sessions }}</el-descriptions-item>
+              <el-descriptions-item label="首次接触">{{ formatShortTime(memoryData.interaction_stats.first_contact) }}</el-descriptions-item>
+              <el-descriptions-item label="最近接触">{{ formatShortTime(memoryData.interaction_stats.last_contact) }}</el-descriptions-item>
+            </el-descriptions>
+          </div>
+
+          <!-- Agent 备忘 -->
+          <div class="memory-section">
+            <h4>Agent 备忘录</h4>
+            <el-input
+              v-model="agentNotes"
+              type="textarea"
+              :rows="3"
+              placeholder="管理员可在此添加关于该客户的备注信息..."
+            />
+            <el-button size="small" type="primary" style="margin-top: 8px;" @click="handleSaveNotes" :loading="notesLoading">
+              保存备忘
+            </el-button>
+          </div>
+
+          <!-- 空状态 -->
+          <div v-if="!memoryData?.company_info?.description && !memoryData?.screen_resources?.length && !memoryData?.past_projects?.length" style="text-align: center; padding: 20px; color: #999;">
+            暂无画像数据。点击「分析官网」可自动爬取客户公司信息。
+          </div>
+        </div>
+      </el-card>
     </div>
     
     <!-- 分配负责人对话框 -->
@@ -656,6 +805,36 @@ const uploadHeaders = computed(() => {
   return token ? { Authorization: `Bearer ${token}` } : {}
 })
 
+// Memory 相关状态
+const memoryData = ref<any>(null)
+const showMemory = ref(false)
+const agentNotes = ref('')
+const crawlLoading = ref(false)
+const notesLoading = ref(false)
+
+// 判断偏好是否有实质内容（排除内部时间戳字段）
+const hasPreferences = computed(() => {
+  const pp = memoryData.value?.project_preferences
+  if (!pp) return false
+  const dataKeys = Object.keys(pp).filter(k => !k.startsWith('_') && k !== 'last_updated')
+  return dataKeys.length > 0
+})
+
+// ISO 时间格式化为简短显示
+const formatShortTime = (iso: string | undefined) => {
+  if (!iso) return '-'
+  try {
+    const d = new Date(iso)
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const hour = String(d.getHours()).padStart(2, '0')
+    const min = String(d.getMinutes()).padStart(2, '0')
+    return `${d.getFullYear()}-${month}-${day} ${hour}:${min}`
+  } catch {
+    return iso.slice(0, 16).replace('T', ' ')
+  }
+}
+
 const contractForm = ref({
   contractNumber: '',
   paymentAmount: 0,
@@ -722,6 +901,11 @@ onMounted(async () => {
   loadContractorData(orderId)
   loadDesignPlan(orderId)
   loadWorkflowStages()
+
+  // 加载用户 Memory
+  if (order.value?.userId) {
+    await loadMemory(order.value.userId)
+  }
 })
 
 const loadWorkflowStages = async () => {
@@ -917,6 +1101,80 @@ const dlvStatusLabel = (s: string) => ({
 const dlvStatusType = (s: string) => ({
   draft: 'info', submitted: 'warning', admin_approved: 'success', admin_rejected: 'danger',
 }[s] || 'info') as '' | 'success' | 'warning' | 'danger' | 'info'
+
+const loadMemory = async (userId: string) => {
+  try {
+    const token = localStorage.getItem('admin_token')
+    const resp = await fetch(`/api/admin/memory/${userId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    if (resp.ok) {
+      memoryData.value = await resp.json()
+      agentNotes.value = memoryData.value?.agent_notes || ''
+    }
+  } catch (e) {
+    console.error('Memory 加载失败:', e)
+  }
+}
+
+const handleTriggerCrawl = async () => {
+  if (!order.value?.userId) return
+  // 使用 memory 返回的 user_company，或发送空字符串让后端自动获取
+  const companyName = memoryData.value?.user_company || ''
+  crawlLoading.value = true
+  try {
+    const token = localStorage.getItem('admin_token')
+    const resp = await fetch(`/api/admin/memory/${order.value.userId}/crawl`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ company_name: companyName })
+    })
+    if (resp.ok) {
+      ElMessage.success('已触发官网分析，请稍后刷新查看结果')
+      // 5 秒后自动刷新 memory
+      setTimeout(async () => {
+        if (order.value?.userId) {
+          await loadMemory(order.value.userId)
+        }
+        crawlLoading.value = false
+      }, 8000)
+    } else {
+      ElMessage.error('触发分析失败')
+      crawlLoading.value = false
+    }
+  } catch (e) {
+    ElMessage.error('触发分析失败')
+    crawlLoading.value = false
+  }
+}
+
+const handleSaveNotes = async () => {
+  if (!order.value?.userId) return
+  notesLoading.value = true
+  try {
+    const token = localStorage.getItem('admin_token')
+    const resp = await fetch(`/api/admin/memory/${order.value.userId}/notes`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ agent_notes: agentNotes.value })
+    })
+    if (resp.ok) {
+      ElMessage.success('备忘已保存')
+    } else {
+      ElMessage.error('保存失败')
+    }
+  } catch (e) {
+    ElMessage.error('保存失败')
+  } finally {
+    notesLoading.value = false
+  }
+}
 
 const getIndustryText = () => {
   if (order.value && order.value.orderType === 'video_purchase') {
@@ -1498,5 +1756,22 @@ const handleAdminCancel = async () => {
 .ai-schedule-row { display: flex; gap: 16px; }
 .ai-schedule-item { flex: 1; }
 .ai-schedule-label { font-size: 13px; font-weight: 500; color: #1D1D1F; margin-bottom: 6px; }
+/* Memory 面板样式 */
+.memory-section {
+  margin-bottom: 24px;
+}
+
+.memory-section h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.memory-card .el-descriptions {
+  margin-bottom: 0;
+}
 </style>
 
