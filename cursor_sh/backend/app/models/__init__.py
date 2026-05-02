@@ -8,6 +8,7 @@ from app.models.file import File
 from app.models.feedback import Feedback
 from app.models.notification import Notification
 from app.models.announcement import Announcement
+from app.models.user_memory import UserMemory
 
 __all__ = [
     "User", "UserRole",
@@ -15,5 +16,7 @@ __all__ = [
     "StaffMember",
     "Order", "OrderAssignee",
     "File", "Feedback", "Notification",
-    "Announcement"
+    "Announcement",
+    "UserMemory",
 ]
+

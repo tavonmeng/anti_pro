@@ -59,6 +59,10 @@ app.include_router(asr.router, prefix="/api")
 # 挂载没有任何 api 前缀的 ai 路由，因为前端直接请求 /ai/start 和 /ai/chat
 app.include_router(ai.router)
 
+# 用户画像 Memory 管理（管理员端）
+from app.api import admin_memory
+app.include_router(admin_memory.router, prefix="/api")
+
 # 挂载审计日志中间件（放在路由注册之后，确保能拦截所有请求）
 if settings.LOG_ENABLED:
     app.add_middleware(AuditLoggerMiddleware)

@@ -145,7 +145,7 @@ const pageTitle = computed(() => {
 const pageSubtitle = computed(() => {
   const subtitles: Record<OrderType, string> = {
     video_purchase: '填写屏幕参数，获取适配的专业裸眼3D视频内容',
-    ai_3d_custom: '基于AI技术的定制化3D内容创作，5-7天交付',
+    ai_3d_custom: '基于AI技术的定制化3D内容创作，15个工作日交付',
     digital_art: '专业数字艺术创作服务，3天内提供初稿'
   }
   return subtitles[orderType.value] || ''

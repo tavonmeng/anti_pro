@@ -159,6 +159,9 @@ class Settings(BaseSettings):
     AI_BASE_URL: str = "https://api.openai.com/v1"
     AI_MODEL_NAME: str = "gpt-3.5-turbo"
     
+    # Agent 模式切换：brand（品牌方需求收集）/ media（媒体方需求收集）
+    AGENT_MODE: str = "brand"
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

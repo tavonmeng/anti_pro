@@ -8,6 +8,7 @@ AI 智能体 — 主路由入口
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 import httpx
+import asyncio
 import json
 import os
 from datetime import datetime
@@ -50,7 +51,20 @@ class ChatRequest(BaseModel):
 @router.get("/start")
 async def ai_start(session_id: str):
     """获取对话的初始欢迎语"""
-    reply = """您好，我是 Unique Video AI 的项目顾问。
+    if settings.AGENT_MODE == "media":
+        reply = """您好，我是 Unique Video AI 的项目顾问。
+
+我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，核心团队深耕行业多年，已为众多媒体方客户提供过高品质的裸眼3D视觉内容解决方案。
+
+您可以通过以下方式开始：
+
+**咨询下单** — 描述您的媒体资源与项目需求，由我协助梳理并生成完整需求单
+**查看订单** — 查询您名下的订单进展与状态
+**了解业务** — 了解我们的服务体系与过往案例
+
+请直接告知您的需求，或通过下方快捷入口进入对应流程。"""
+    else:
+        reply = """您好，我是 Unique Video AI 的项目顾问。
 
 我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，核心团队深耕行业多年，已为众多一线品牌提供过高品质的视觉解决方案。
 
@@ -61,7 +75,7 @@ async def ai_start(session_id: str):
 **了解业务** — 了解我们的服务体系与过往案例
 
 请直接告知您的需求，或通过下方快捷入口进入对应流程。"""
-    return {"reply": reply}
+    return {"reply": reply, "agent_mode": settings.AGENT_MODE}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -178,14 +192,115 @@ _PROMPT_DIGITAL_ART = (
 )
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 媒体方需求收集 Prompt（AGENT_MODE=media 时使用）
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+_MEDIA_TONE_RULES = (
+    "【语气要求】\n"
+    "- 专业且有温度，像一位经验丰富且真诚的行业顾问在与客户面对面沟通\n"
+    "- 不使用emoji表情符号\n"
+    "- 用行业术语体现专业度，但不堆砌术语\n"
+    "- 允许使用简短的正面回应（如'好的''明白''了解'），但不要每句话都回应，"
+    "大约每2-3轮自然地回应一次即可，避免机械感\n"
+    "- 避免过度客套（如'非常感谢您的配合''您太棒了'等），保持自然\n"
+    "- 过渡要自然：根据客户上一轮回答的内容自然引出下一个问题，"
+    "而不是机械地按列表顺序逐项询问\n\n"
+)
+
+_MEDIA_DIALOG_RULES = (
+    "【对话规则 — 严格遵守！】\n"
+    "1. 每次回复只问一个问题。不要一次性问两三个。"
+    "客户回答包含多个信息时，先简要确认，再追问下一个缺失项。"
+    "切勿重复问已经问过的问题。\n\n"
+
+    "2. 【提问顺序灵活调整】不需要严格按照字段编号顺序提问。"
+    "根据客户的回答自然衔接下一个相关问题。"
+    "例如客户提到了城市位置，可以顺势问观看动线；"
+    "客户聊到内容主题，可以接着聊艺术方向。"
+    "让对话像自然交流，而不是填表。\n\n"
+
+    "3. 【预算放在最后】项目制作预算是敏感话题，"
+    "尽量在其他核心信息都已收集之后再询问。"
+    "询问时语气要自然委婉，例如：'关于项目预算这块，目前有一个大致的范围吗？"
+    "这样我可以帮您匹配最合适的制作方案。'\n\n"
+
+    "4. 【客户可以跳过】如果客户表示某个问题暂时不清楚或不方便回答，"
+    "不要追问，自然跳过并进入下一个话题。\n\n"
+
+    "5. 【阶段过渡】对话分为三个阶段，每进入新阶段时用一句话自然过渡：\n"
+    "   - 基础信息阶段（项目名称、背景、位置、受众等）\n"
+    "   - 创意方向阶段（艺术风格、内容主题、观看动线等）\n"
+    "   - 技术与交付阶段（媒体规格、技术需求、审核规范、上刊时间等）\n"
+    "过渡示例：'基础信息差不多了，接下来我们聊聊创意方向。'\n\n"
+
+    "6. 【触发完成的严格条件】在输出【需求收集完成】之前，"
+    "逐项检查核心必问项的收集情况。"
+    "只有当至少8项有了客户的实质性回答后，才可以输出【需求收集完成】标记。"
+    "不足8项时必须继续追问。\n\n"
+
+    "7. 满足条件后，简要总结已收集的信息，"
+    "在回复的最末尾加上标记：【需求收集完成】。\n\n"
+
+    "8. 【被动结束情况】只有当客户明确表达不想继续时（比如'算了''就这样吧''先这样''回头再说''直接填表吧'），"
+    "才可以提前结束。此时总结已收集的信息，指出哪些重要项还缺失，然后加上【需求收集完成】标记。"
+    "客户正常回答问题时，不要主动结束。\n\n"
+
+    "9. 【补充信息提醒】在即将触发【需求收集完成】之前，"
+    "主动提醒客户：'如果您有现场实拍图、屏幕照片或其他参考素材，可以通过输入框左侧的上传按钮直接上传，"
+    "我会一并整理到需求文档中。'\n"
+    "同时询问是否还有其他需要补充的内容。"
+    "如果客户提供的补充内容无法归入任何结构化字段，将其完整记录到'备注'字段。"
+)
+
+_PROMPT_MEDIA_3D = (
+    "你是 Unique Video AI 的资深项目顾问，在裸眼3D户外媒体内容定制领域有多年的项目经验。"
+    "你的任务是通过自然、专业的对话，高效地收集媒体方客户的裸眼3D项目需求信息。\n\n"
+    "【业务背景】\n"
+    "媒体方客户通常拥有户外大屏、交通枢纽屏幕等媒体资源，需要我们为其定制裸眼3D视觉内容，"
+    "以吸引品牌方投放或提升媒体自身的视觉影响力。\n\n"
+    + _MEDIA_TONE_RULES +
+    "【你需要收集的字段清单】\n"
+    "以下字段按三个阶段组织，但实际提问顺序应根据客户回答灵活调整：\n\n"
+    "■ 基础信息阶段：\n"
+    "1. 项目名称 — 本次项目的名称\n"
+    "2. 项目背景 & 媒体简介 — 媒体资源的背景介绍，位置特点、日均客流、目标客群等\n"
+    "3. 目标受众 & 场景特点 — 媒体所在场景的受众画像和场景特征\n"
+    "4. 投放城市 & 媒体具体位置 — 城市、区域、具体位置，是否位于核心地标/交通枢纽/商圈\n\n"
+    "■ 创意方向阶段：\n"
+    "5. 观看动线说明 — 观众主要视角、人流方向、最佳观看点\n"
+    "6. 整体艺术方向 & 风格偏好 — 未来科技/自然生态/城市文化/抽象艺术/萌系治愈等\n"
+    "7. 内容主题 & 核心表达 — 核心概念、内容主题，是否有需要展示的IP形象和品牌露出等\n\n"
+    "■ 技术与交付阶段：\n"
+    "8. 媒体尺寸 & 物理规格 — 屏幕分辨率、物理尺寸\n"
+    "9. 技术需求 — 分辨率最低要求、格式（MP4/无压缩MOV）、帧率/色彩空间/安全区规范\n"
+    "10. 素材内容审核规范 & 周期 — 是否有需要规避的内容、是否需提前提交样片审核、审核周期\n"
+    "11. 预计上刊时间 — 以项目上刊媒体的最迟提交报审时间为准\n"
+    "12. 其他特殊合作要求 — 如需特殊裸眼3D定制效果，需额外沟通制作规范等\n\n"
+    "■ 自然追问项（对话中涉及就记录，不必刻意追问）：\n"
+    "13. 媒体定位 & 品牌调性 — 高端商圈媒体/交通干线枢纽媒体，适配的品牌类型\n"
+    "14. 投放时长 & 数量 — 几支内容、每支多少秒\n"
+    "15. 项目制作预算 — 预算范围（放在最后询问）\n\n"
+    + _MEDIA_DIALOG_RULES
+)
+
+
 def _get_requirement_prompt(business_type: str) -> str:
     """根据业务类型返回对应的需求收集 prompt"""
-    prompts = {
-        "ai_3d_custom": _PROMPT_AI_3D,
-        "video_purchase": _PROMPT_VIDEO_PURCHASE,
-        "digital_art": _PROMPT_DIGITAL_ART,
-    }
-    return prompts.get(business_type, _PROMPT_AI_3D)
+    if settings.AGENT_MODE == "media":
+        prompts = {
+            "ai_3d_custom": _PROMPT_MEDIA_3D,
+            "video_purchase": _PROMPT_VIDEO_PURCHASE,
+            "digital_art": _PROMPT_DIGITAL_ART,
+        }
+        return prompts.get(business_type, _PROMPT_MEDIA_3D)
+    else:
+        prompts = {
+            "ai_3d_custom": _PROMPT_AI_3D,
+            "video_purchase": _PROMPT_VIDEO_PURCHASE,
+            "digital_art": _PROMPT_DIGITAL_ART,
+        }
+        return prompts.get(business_type, _PROMPT_AI_3D)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -194,15 +309,55 @@ def _get_requirement_prompt(business_type: str) -> str:
 
 @router.post("/chat")
 async def ai_chat(request: ChatRequest, raw_request: Request):
-    """核心聊天接口 — 需求收集对话"""
+    """核心聊天接口 — 需求收集对话（含 Memory 注入）"""
     user_id = "anonymous"
     username = "anonymous"
+    company_name = ""
     auth_header = raw_request.headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
         payload = decode_access_token(auth_header[7:])
         if payload:
             user_id = payload.get("user_id", "anonymous")
             username = payload.get("username", "anonymous")
+
+    # ── 加载用户 Memory ──
+    memory = None
+    memory_context = ""
+    if user_id != "anonymous":
+        try:
+            from app.services.memory_service import (
+                get_or_create_memory, build_memory_context,
+                trigger_crawl, update_interaction_stats,
+            )
+            memory = await get_or_create_memory(user_id)
+            memory_context = build_memory_context(memory)
+
+            # 首次接触 + 有公司名 → 触发后台爬取
+            ci = memory.company_info or {}
+            if not ci.get("crawl_status") and not company_name:
+                # 从 DB 获取用户的公司名
+                try:
+                    from app.database import async_session_maker
+                    from app.models.user import User
+                    from sqlalchemy import select
+                    async with async_session_maker() as session:
+                        result = await session.execute(
+                            select(User.company, User.enterprise_name).where(User.id == user_id)
+                        )
+                        row = result.first()
+                        if row:
+                            company_name = row.enterprise_name or row.company or ""
+                except Exception:
+                    pass
+
+                if company_name:
+                    await trigger_crawl(user_id, company_name)
+
+            # 更新交互统计（后台，不阻塞）
+            import asyncio
+            asyncio.create_task(update_interaction_stats(user_id))
+        except Exception as e:
+            print(f"[AI Chat] Memory 加载失败（不影响对话）: {e}")
 
     if not settings.AI_API_KEY:
         mock_reply = "【真实后端接口调试中】"
@@ -221,6 +376,10 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
 
     try:
         system_prompt = _get_requirement_prompt(request.business_type)
+
+        # 将 Memory 上下文追加到 system prompt
+        if memory_context:
+            system_prompt += memory_context
 
         llm_messages = [{"role": "system", "content": system_prompt}]
         for h in request.history:
@@ -246,6 +405,21 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
                 session_id=request.session_id, user_id=user_id, username=username,
                 history=request.history, user_msg=request.message, assistant_msg=reply,
             )
+
+            # 后台对话学习 — 从对话中提取偏好写回 Memory
+            if user_id != "anonymous":
+                try:
+                    from app.services.memory_service import learn_from_conversation
+                    full_conversation = []
+                    for h in request.history:
+                        if h.get("role") in ["user", "assistant"] and h.get("content"):
+                            full_conversation.append({"role": h["role"], "content": h["content"]})
+                    full_conversation.append({"role": "user", "content": request.message})
+                    full_conversation.append({"role": "assistant", "content": reply})
+                    asyncio.create_task(learn_from_conversation(user_id, full_conversation))
+                except Exception:
+                    pass
+
             return {"message": reply}
 
     except Exception as e:
@@ -264,6 +438,13 @@ class ExtractRequest(BaseModel):
 async def ai_extract(request: ExtractRequest):
     """从对话历史中提取结构化信息"""
     if not settings.AI_API_KEY:
+        if settings.AGENT_MODE == "media":
+            return {
+                "project_name": "示例项目 (Mock)",
+                "city_location": "成都春熙路",
+                "art_direction": "未来科技",
+                "budget": "60万"
+            }
         return {
             "brand": "示例品牌 (Mock)",
             "target_group": "年轻群体",
@@ -272,15 +453,28 @@ async def ai_extract(request: ExtractRequest):
         }
 
     try:
-        system_prompt = (
-            "你是一个数据提取专家。请阅读以下对话记录，提取客户的项目需求信息。\n"
-            "将提取的信息整理为严格的 JSON 格式返回，只返回 JSON，不要任何其他废话。\n"
-            "支持的字段名（如果有对应信息则提取，没有则留空字符串）：\n"
-            "brand, background, target_group, brand_tone, content, style, prohibited_content, "
-            "city, media_size, time_number, technology, budget, online_time, site_photos, remarks.\n"
-            "其中 site_photos（现场实拍图）记录客户是否提供了现场照片或参考文件，如有则记录描述信息。\n"
-            "其中 remarks（备注）用于记录客户提供的任何无法归入上述字段的补充说明、特殊要求或参考素材信息。"
-        )
+        if settings.AGENT_MODE == "media":
+            system_prompt = (
+                "你是一个数据提取专家。请阅读以下对话记录，提取媒体方客户的项目需求信息。\n"
+                "将提取的信息整理为严格的 JSON 格式返回，只返回 JSON，不要任何其他废话。\n"
+                "支持的字段名（如果有对应信息则提取，没有则留空字符串）：\n"
+                "project_name, resource_background, audience_scene, media_positioning, "
+                "city_location, viewing_path, art_direction, theme_concept, "
+                "media_specs, timing_number, tech_delivery, content_review, "
+                "budget, online_time, special_requirements, site_photos, remarks.\n"
+                "其中 site_photos（现场实拍图）记录客户是否提供了现场照片或参考文件，如有则记录描述信息。\n"
+                "其中 remarks（备注）用于记录客户提供的任何无法归入上述字段的补充说明。"
+            )
+        else:
+            system_prompt = (
+                "你是一个数据提取专家。请阅读以下对话记录，提取客户的项目需求信息。\n"
+                "将提取的信息整理为严格的 JSON 格式返回，只返回 JSON，不要任何其他废话。\n"
+                "支持的字段名（如果有对应信息则提取，没有则留空字符串）：\n"
+                "brand, background, target_group, brand_tone, content, style, prohibited_content, "
+                "city, media_size, time_number, technology, budget, online_time, site_photos, remarks.\n"
+                "其中 site_photos（现场实拍图）记录客户是否提供了现场照片或参考文件，如有则记录描述信息。\n"
+                "其中 remarks（备注）用于记录客户提供的任何无法归入上述字段的补充说明、特殊要求或参考素材信息。"
+            )
 
         chat_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in request.history])
 
@@ -328,6 +522,45 @@ class AssessRequest(BaseModel):
 @router.post("/assess")
 async def ai_assess(request: AssessRequest):
     """根据提取的需求数据生成专业项目评估"""
+    # ── 媒体方模式：从 media_assess_logic.md 读取评估逻辑 ──
+    if settings.AGENT_MODE == "media":
+        try:
+            from app.utils.knowledge import get_knowledge_file
+            logic_path = get_knowledge_file('media_assess_logic.md')
+            with open(logic_path, 'r', encoding='utf-8') as f:
+                assess_logic = f.read().strip()
+            if not assess_logic:
+                # 评估逻辑文件为空，跳过评估，直接显示表单
+                return {"assessment": ""}
+            # 有评估逻辑内容，调用 LLM 生成评估
+            if settings.AI_API_KEY:
+                info = "\n".join([f"{k}: {v}" for k, v in request.extracted.items() if v])
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{settings.AI_BASE_URL}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {settings.AI_API_KEY}",
+                            "Content-Type": "application/json"
+                        },
+                        json={
+                            "model": settings.AI_MODEL_NAME,
+                            "messages": [
+                                {"role": "system", "content": assess_logic},
+                                {"role": "user", "content": f"客户需求信息：\n{info}"}
+                            ]
+                        },
+                        timeout=30.0
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    assessment = data["choices"][0]["message"]["content"]
+                    return {"assessment": assessment}
+            return {"assessment": ""}
+        except Exception as e:
+            print(f"媒体方项目评估失败: {e}")
+            return {"assessment": ""}
+
+    # ── 品牌方原逻辑 ──
     d = request.extracted
     brand = d.get("brand", "")
     content_desc = d.get("content", "")

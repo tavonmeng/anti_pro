@@ -274,30 +274,53 @@ def _build_summary_rows(order_data: dict, order_type: str) -> list:
             rows.append(("曲率", order_data["curvature"]))
     
     elif order_type == "ai_3d_custom":
-        field_map = [
-            ("brand", "品牌与产品关键词"),
-            ("target_group", "目标受众"),
-            ("brand_tone", "品牌调性"),
-            ("style", "风格偏好"),
-            ("city", "投放城市/站点"),
-            ("media_size", "投放媒体尺寸"),
-            ("time_number", "投放时长数量"),
-            ("technology", "技术需求"),
-            ("budget", "制作预算"),
-            ("online_time", "预计上刊时间"),
-            ("sales_contact", "销售对接人"),
-        ]
+        # 检测是否为媒体方订单（通过 project_name 字段判断）
+        is_media = bool(order_data.get("project_name"))
+        if is_media:
+            field_map = [
+                ("project_name", "项目名称"),
+                ("resource_background", "项目背景 & 媒体简介"),
+                ("audience_scene", "目标受众 & 场景特点"),
+                ("city_location", "投放城市 & 媒体位置"),
+                ("viewing_path", "观看动线说明"),
+                ("art_direction", "艺术方向 & 风格偏好"),
+                ("theme_concept", "内容主题 & 核心表达"),
+                ("media_specs", "媒体尺寸 & 物理规格"),
+                ("tech_delivery", "技术需求"),
+                ("content_review", "素材审核规范 & 周期"),
+                ("media_positioning", "媒体定位 & 品牌调性"),
+                ("timing_number", "投放时长 & 数量"),
+                ("budget", "项目制作预算"),
+                ("online_time", "预计上刊时间"),
+                ("special_requirements", "其他特殊合作要求"),
+                ("remarks", "备注"),
+            ]
+        else:
+            field_map = [
+                ("brand", "品牌与产品关键词"),
+                ("target_group", "目标受众"),
+                ("brand_tone", "品牌调性"),
+                ("style", "风格偏好"),
+                ("city", "投放城市/站点"),
+                ("media_size", "投放媒体尺寸"),
+                ("time_number", "投放时长数量"),
+                ("technology", "技术需求"),
+                ("budget", "制作预算"),
+                ("online_time", "预计上刊时间"),
+                ("sales_contact", "销售对接人"),
+            ]
         for key, label in field_map:
             val = order_data.get(key)
             if val:
-                rows.append((label, str(val)))
+                rows.append((label, str(val)[:100]))
         
-        if order_data.get("background"):
-            rows.append(("项目背景", order_data["background"][:100]))
-        if order_data.get("content"):
-            rows.append(("内容需求", order_data["content"][:100]))
-        if order_data.get("prohibited_content"):
-            rows.append(("品牌禁忌", order_data["prohibited_content"][:100]))
+        if not is_media:
+            if order_data.get("background"):
+                rows.append(("项目背景", order_data["background"][:100]))
+            if order_data.get("content"):
+                rows.append(("内容需求", order_data["content"][:100]))
+            if order_data.get("prohibited_content"):
+                rows.append(("品牌禁忌", order_data["prohibited_content"][:100]))
         photos = order_data.get("scenePhotos", [])
         if photos:
             rows.append(("现场实拍图", f"{len(photos)} 张"))
@@ -314,6 +337,44 @@ def _build_summary_rows(order_data: dict, order_type: str) -> list:
     return rows
 
 
+def _build_screen_description(order_type: str, order_data: dict) -> str:
+    """根据订单数据构建投放屏幕描述
+
+    优先使用 media_specs（媒体方订单）中的信息，
+    回退到 media_size、size 等字段。
+    
+    Returns:
+        如 "长虹P5户外全彩LED显示屏" 或 "户外大屏"
+    """
+    media_specs = order_data.get("media_specs", "")
+    tech_delivery = order_data.get("tech_delivery", "")
+    
+    if order_type == "ai_3d_custom":
+        # 媒体方订单：尝试从 media_specs 提取屏幕名称
+        if media_specs:
+            # media_specs 通常包含完整的屏幕描述，直接使用
+            # 截取前 50 字符作为简称
+            return media_specs[:50]
+        
+        # 品牌方订单：使用 media_size
+        media_size = order_data.get("media_size", "")
+        if media_size:
+            return media_size[:50]
+        
+        return "户外大屏"
+    
+    elif order_type == "video_purchase":
+        size = order_data.get("size", "")
+        if size:
+            return f"{size}户外屏"
+        return "户外大屏"
+    
+    elif order_type == "digital_art":
+        return "数字艺术展示屏"
+    
+    return ""
+
+
 # ========== 核心 PDF 生成方法 ==========
 
 class PDFService:
@@ -322,7 +383,13 @@ class PDFService:
     @staticmethod
     def generate_order_confirmation_pdf(order_dict: dict) -> bytes:
         """
-        生成需求告知函 PDF。
+        生成内容制作确认函 PDF。
+        
+        根据订单类型和用户注册信息，自动填充：
+        - 企业名称（来自用户注册信息）
+        - 投放屏幕/媒体信息（来自订单数据）
+        - 预算、时长、尺寸、分辨率（来自订单数据）
+        - 制作周期和交付日期（自动计算）
         
         参数:
             order_dict: 与 _build_order_response 返回格式一致的订单字典
@@ -345,105 +412,222 @@ class PDFService:
         
         order_number = order_dict.get("orderNumber", "N/A")
         order_type = order_dict.get("orderType", "")
-        order_type_text = ORDER_TYPE_MAP.get(order_type, order_type)
-        order_data = order_dict.get("orderData", {})
-        status = order_dict.get("status", "")
-        status_text = STATUS_MAP.get(status, status)
-        user_name = order_dict.get("userName", "-")
-        created_at = _format_time(order_dict.get("createdAt", ""))
+        # 注意: _build_order_response 将 order.order_data 合并到了顶层
+        # 所以 project_name, media_specs 等字段直接在 order_dict 上
+        order_data = order_dict
+        created_at_str = order_dict.get("createdAt", "")
+        
+        # 用户信息
+        enterprise_name = order_dict.get("userEnterprise") or order_dict.get("userName", "-")
+        
+        # 根据订单类型生成标题
+        title_map = {
+            "ai_3d_custom": "户外大屏裸眼3D内容制作确认函",
+            "video_purchase": "裸眼3D成片购买适配确认函",
+            "digital_art": "数字艺术内容定制确认函",
+        }
+        doc_title = title_map.get(order_type, "内容制作确认函")
+        
+        # 制作周期
+        prod_days_map = {"video_purchase": 5, "ai_3d_custom": 15, "digital_art": 7}
+        prod_days = prod_days_map.get(order_type, 15)
+        
+        # 计算关键日期
+        try:
+            start_dt = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+            start_dt = start_dt.astimezone(timezone(timedelta(hours=8)))
+        except Exception:
+            start_dt = datetime.now(timezone(timedelta(hours=8)))
+        
+        start_date_str = start_dt.strftime("%Y年%m月%d日")
+        
+        # 计算交付日期（跳过周末的简化计算：工作日 ≈ 自然日 * 1.4）
+        delivery_delta = timedelta(days=int(prod_days * 1.4))
+        delivery_dt = start_dt + delivery_delta
+        delivery_date_str = delivery_dt.strftime("%Y年%m月%d日")
+        
+        # ========== 从订单数据中提取关键信息 ==========
+        
+        # 媒体方订单（ai_3d_custom）的字段
+        project_name = order_data.get("project_name", "")
+        media_specs = order_data.get("media_specs", "")         # 媒体尺寸 & 物理规格
+        tech_delivery = order_data.get("tech_delivery", "")     # 技术需求
+        budget = order_data.get("budget", "")                   # 预算
+        timing_number = order_data.get("timing_number", "")     # 投放时长 & 数量
+        city_location = order_data.get("city_location", "")     # 投放城市 & 媒体位置
+        online_time = order_data.get("online_time", "")         # 预计上刊时间
+        art_direction = order_data.get("art_direction", "")     # 艺术方向
+        theme_concept = order_data.get("theme_concept", "")     # 主题 & 核心表达
+        resource_bg = order_data.get("resource_background", "") # 项目背景
+        
+        # 品牌方订单（旧 ai_3d_custom）
+        brand = order_data.get("brand", "")
+        media_size = order_data.get("media_size", "")
+        city = order_data.get("city", "")
+        
+        # video_purchase 字段
+        duration = order_data.get("duration", "")
+        resolution = order_data.get("resolution", "")
+        size = order_data.get("size", "")
+        
+        # 构建「投放屏幕」描述
+        screen_desc = _build_screen_description(order_type, order_data)
+        
+        # ========== 开始构建 PDF ==========
         
         # ---- 标题 ----
-        elements.append(Paragraph("需 求 告 知 函", styles["DocTitle"]))
+        elements.append(Paragraph(doc_title, styles["DocTitle"]))
         elements.append(Paragraph(f"编号：{order_number}", styles["DocSubtitle"]))
         elements.append(HRFlowable(
             width="100%",
             thickness=0.5,
             color=colors.HexColor("#e0e0e0"),
-            spaceAfter=12,
+            spaceAfter=14,
         ))
         
         # ---- 致辞 ----
-        elements.append(Paragraph("尊敬的客户：", styles["BodyCN"]))
-        elements.append(Spacer(1, 4))
-        greeting = (
-            f"&nbsp;&nbsp;&nbsp;&nbsp;感谢您选择 <b>Unique Video AI 设计平台</b>。"
-            f"以下是您提交的需求确认摘要，经您签名确认后即视为需求确认完成，我们将立即进入制作流程。"
+        salutation = f"致<b>{enterprise_name}</b>："
+        elements.append(Paragraph(salutation, styles["BodyCNBold"]))
+        elements.append(Spacer(1, 6))
+        
+        # ---- 开场段 ----
+        opening = (
+            f"&nbsp;&nbsp;&nbsp;&nbsp;贵司与我司（Unique Video科技有限公司）就"
         )
-        elements.append(Paragraph(greeting, styles["BodyCN"]))
-        elements.append(Spacer(1, 8))
+        # 根据订单类型拼接合作描述
+        if order_type == "ai_3d_custom":
+            if screen_desc:
+                opening += f"<b>{screen_desc}</b>裸眼3D视频制作事宜，"
+            else:
+                opening += "户外大屏裸眼3D视频制作事宜，"
+        elif order_type == "video_purchase":
+            opening += "裸眼3D成片购买适配事宜，"
+        elif order_type == "digital_art":
+            opening += "数字艺术内容定制事宜，"
+        else:
+            opening += "内容制作事宜，"
+        opening += "经过初步协商，双方达成如下合作："
+        elements.append(Paragraph(opening, styles["BodyCN"]))
+        elements.append(Spacer(1, 10))
         
-        # ---- 一、基本信息 ----
-        elements.append(Paragraph("一、基本信息", styles["SectionTitle"]))
+        # ---- 一、项目基本情况 ----
+        elements.append(Paragraph("一、项目基本情况", styles["SectionTitle"]))
         
-        basic_data = [
-            ["订单编号", order_number],
-            ["订单类型", order_type_text],
-            ["订单状态", status_text],
-            ["提交用户", user_name],
-            ["创建时间", created_at],
-        ]
+        project_rows = []
         
-        # 负责人
-        assignees = order_dict.get("assignees", [])
-        if assignees:
-            names = ", ".join([a.get("name", "") for a in assignees])
-            basic_data.append(["负责人", names])
+        # 项目名称
+        if project_name:
+            project_rows.append(("项目名称", project_name))
+        elif brand:
+            project_rows.append(("品牌/产品", brand))
         
-        basic_table = Table(basic_data, colWidths=[120, 340])
-        basic_table.setStyle(TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), _FONT),
-            ("FONTSIZE", (0, 0), (-1, -1), 10),
-            ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#86868b")),
-            ("TEXTCOLOR", (1, 0), (1, -1), colors.HexColor("#1a1c1c")),
-            ("FONTNAME", (1, 0), (1, -1), _FONT_BOLD),
-            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#fafafa")),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e8e8e8")),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING", (0, 0), (-1, -1), 7),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-            ("LEFTPADDING", (0, 0), (-1, -1), 10),
-        ]))
-        elements.append(basic_table)
-        elements.append(Spacer(1, 12))
+        # 全片时长
+        if timing_number:
+            project_rows.append(("投放时长/数量", timing_number))
+        elif duration:
+            project_rows.append(("全片时长", f"{duration}秒"))
         
-        # ---- 二、需求摘要 ----
-        elements.append(Paragraph("二、需求摘要", styles["SectionTitle"]))
+        # 投放屏幕
+        if screen_desc:
+            project_rows.append(("投放屏幕", screen_desc))
         
-        summary_rows = _build_summary_rows(order_data, order_type)
+        # 执行预算
+        if budget:
+            project_rows.append(("执行预算", budget))
         
-        if summary_rows:
-            summary_table = Table(summary_rows, colWidths=[120, 340])
-            summary_table.setStyle(TableStyle([
-                ("FONTNAME", (0, 0), (-1, -1), _FONT),
-                ("FONTSIZE", (0, 0), (-1, -1), 10),
-                ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#86868b")),
-                ("TEXTCOLOR", (1, 0), (1, -1), colors.HexColor("#1a1c1c")),
+        # 屏幕尺寸 & 物理规格
+        if media_specs:
+            project_rows.append(("媒体尺寸/物理规格", media_specs))
+        elif size:
+            project_rows.append(("屏幕尺寸", size))
+        
+        # 技术需求（分辨率等）
+        if tech_delivery:
+            project_rows.append(("技术需求", tech_delivery))
+        elif resolution:
+            project_rows.append(("屏幕分辨率", resolution))
+        
+        # 投放城市
+        if city_location:
+            project_rows.append(("投放城市/位置", city_location))
+        elif city:
+            project_rows.append(("投放城市", city))
+        
+        # 艺术方向
+        if art_direction:
+            project_rows.append(("艺术方向/风格", art_direction))
+        
+        # 主题
+        if theme_concept:
+            project_rows.append(("内容主题", theme_concept))
+        
+        if project_rows:
+            # 使用 Paragraph 包裹长文本，避免表格溢出
+            wrapped_rows = []
+            for label, value in project_rows:
+                label_p = Paragraph(str(label), ParagraphStyle(
+                    "CellLabel", fontName=_FONT, fontSize=10, leading=14,
+                    textColor=colors.HexColor("#86868b"),
+                ))
+                value_p = Paragraph(str(value)[:200], ParagraphStyle(
+                    "CellValue", fontName=_FONT_BOLD, fontSize=10, leading=14,
+                    textColor=colors.HexColor("#1a1c1c"),
+                ))
+                wrapped_rows.append([label_p, value_p])
+            
+            project_table = Table(wrapped_rows, colWidths=[120, 340])
+            project_table.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#fafafa")),
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e8e8e8")),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("TOPPADDING", (0, 0), (-1, -1), 7),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
                 ("LEFTPADDING", (0, 0), (-1, -1), 10),
             ]))
-            elements.append(summary_table)
-        else:
-            elements.append(Paragraph("暂无详细需求数据。", styles["BodyCN"]))
+            elements.append(project_table)
         
-        elements.append(Spacer(1, 12))
-        
-        # ---- 三、制作排期 ----
-        elements.append(Paragraph("三、制作排期", styles["SectionTitle"]))
-        
-        prod_days_map = {"video_purchase": 5, "ai_3d_custom": 15, "digital_art": 7}
-        prod_days = prod_days_map.get(order_type, 15)
-        
-        elements.append(Paragraph(
-            f"预计制作周期：<b>{prod_days} 个工作日</b>",
-            styles["BodyCN"]
-        ))
         elements.append(Spacer(1, 8))
         
-        # ---- 四、确认声明 ----
+        # 合作确认语句
+        cooperation_stmt = (
+            f"&nbsp;&nbsp;&nbsp;&nbsp;双方展开商务合作，确认于"
+            f"<b>{start_date_str}</b>进入三维制作阶段。"
+        )
+        elements.append(Paragraph(cooperation_stmt, styles["BodyCN"]))
+        elements.append(Spacer(1, 10))
+        
+        # ---- 二、制作周期与交付 ----
+        elements.append(Paragraph("二、制作周期与交付", styles["SectionTitle"]))
+        
+        delivery_text = (
+            f"&nbsp;&nbsp;&nbsp;&nbsp;因制作周期紧张，乙方需于"
+            f"<b>{delivery_date_str}</b>前（{prod_days}个工作日内）"
+            f"输出项目成片且同步给甲方，双方合同于项目开工后同步推进并于项目交付前签署。"
+            f"故双方就本次合作形成如上约定。"
+        )
+        elements.append(Paragraph(delivery_text, styles["BodyCN"]))
+        elements.append(Spacer(1, 10))
+        
+        # ---- 三、补充说明 ----
+        elements.append(Paragraph("三、补充说明", styles["SectionTitle"]))
+        
+        supplement = (
+            "&nbsp;&nbsp;&nbsp;&nbsp;具体合作细则以双方的正式合同为准。"
+        )
+        elements.append(Paragraph(supplement, styles["BodyCN"]))
+        elements.append(Spacer(1, 6))
+        elements.append(Paragraph(
+            f"&nbsp;&nbsp;&nbsp;&nbsp;甲方：<b>{enterprise_name}</b>",
+            styles["BodyCN"]
+        ))
+        elements.append(Paragraph(
+            "&nbsp;&nbsp;&nbsp;&nbsp;乙方：<b>Unique Video科技有限公司</b>",
+            styles["BodyCN"]
+        ))
+        
+        elements.append(Spacer(1, 16))
+        
+        # ---- 分隔线 ----
         elements.append(HRFlowable(
             width="100%",
             thickness=0.5,
@@ -452,39 +636,17 @@ class PDFService:
             spaceAfter=12,
         ))
         
-        elements.append(Paragraph("四、确认声明", styles["SectionTitle"]))
-        declaration = (
-            "&nbsp;&nbsp;&nbsp;&nbsp;本人已仔细阅读并确认以上需求内容及制作排期安排，"
-            "同意按照上述内容进入制作流程。确认后，需求内容不可修改。"
-        )
-        elements.append(Paragraph(declaration, styles["BodyCN"]))
         elements.append(Spacer(1, 20))
         
-        # 签名区域
-        confirm_info = order_data.get("confirmEmail", "") or order_data.get("confirmPhone", "")
-        sign_data = [
-            ["确认人", user_name, "确认方式", "线上签名确认"],
-            ["联系方式", confirm_info or "-", "确认时间", created_at],
-        ]
-        sign_table = Table(sign_data, colWidths=[80, 150, 80, 150])
-        sign_table.setStyle(TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), _FONT),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#86868b")),
-            ("TEXTCOLOR", (2, 0), (2, -1), colors.HexColor("#86868b")),
-            ("TEXTCOLOR", (1, 0), (1, -1), colors.HexColor("#1a1c1c")),
-            ("TEXTCOLOR", (3, 0), (3, -1), colors.HexColor("#1a1c1c")),
-            ("FONTNAME", (1, 0), (1, -1), _FONT_BOLD),
-            ("FONTNAME", (3, 0), (3, -1), _FONT_BOLD),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e8e8e8")),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING", (0, 0), (-1, -1), 8),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-            ("LEFTPADDING", (0, 0), (-1, -1), 10),
-        ]))
-        elements.append(sign_table)
+        # ---- 右下角：公司名 + 日期 ----
+        right_style = ParagraphStyle(
+            "RightAlign", fontName=_FONT_BOLD, fontSize=10, leading=16,
+            alignment=TA_RIGHT, textColor=colors.HexColor("#1a1c1c"),
+        )
+        elements.append(Paragraph("Unique Video科技有限公司", right_style))
+        elements.append(Paragraph(start_date_str, right_style))
         
-        elements.append(Spacer(1, 30))
+        elements.append(Spacer(1, 20))
         
         # ---- 页脚 ----
         elements.append(HRFlowable(
@@ -496,7 +658,7 @@ class PDFService:
         
         now_beijing = datetime.now(timezone(timedelta(hours=8)))
         elements.append(Paragraph(
-            f"Unique Video AI 设计平台 · 本文件由系统自动生成 · {now_beijing.strftime('%Y-%m-%d %H:%M')}",
+            f"Unique Video科技有限公司 · 本文件由系统自动生成 · {now_beijing.strftime('%Y-%m-%d %H:%M')}",
             styles["Footer"]
         ))
         

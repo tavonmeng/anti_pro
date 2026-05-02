@@ -32,7 +32,53 @@
         <div class="form-area" v-else>
           <h4 class="form-title">已为您整理的需求详情，请核对并编辑后提交：</h4>
           <form @submit.prevent="submitForm">
-            <div class="form-grid">
+            <div class="form-grid" v-if="isMediaMode">
+              <div class="form-group">
+                <label>项目名称</label>
+                <input v-model="formData.project_name" type="text" placeholder="例：上海首位中心大屏矩阵裸眼3D OOH项目">
+              </div>
+              <div class="form-group full-width">
+                <label>项目背景 & 媒体简介</label>
+                <textarea v-model="formData.resource_background" rows="2" placeholder="媒体资源的背景介绍、位置特点等"></textarea>
+              </div>
+              <div class="form-group">
+                <label>目标受众 & 场景特点</label>
+                <input v-model="formData.audience_scene" type="text">
+              </div>
+              <div class="form-group">
+                <label>投放城市 & 媒体位置</label>
+                <input v-model="formData.city_location" type="text">
+              </div>
+              <div class="form-group">
+                <label>观看动线说明</label>
+                <input v-model="formData.viewing_path" type="text">
+              </div>
+              <div class="form-group">
+                <label>艺术方向 & 风格偏好</label>
+                <input v-model="formData.art_direction" type="text" placeholder="例：未来科技/自然生态">
+              </div>
+              <div class="form-group full-width">
+                <label>内容主题 & 核心表达</label>
+                <textarea v-model="formData.theme_concept" rows="2" placeholder="核心概念、IP形象、品牌露出等"></textarea>
+              </div>
+              <div class="form-group">
+                <label>媒体尺寸 & 物理规格</label>
+                <input v-model="formData.media_specs" type="text">
+              </div>
+              <div class="form-group">
+                <label>技术需求</label>
+                <input v-model="formData.tech_delivery" type="text" placeholder="例：4K、MP4">
+              </div>
+              <div class="form-group">
+                <label>项目预算</label>
+                <input v-model="formData.budget" type="text">
+              </div>
+              <div class="form-group">
+                <label>预计上刊时间</label>
+                <input v-model="formData.online_time" type="text">
+              </div>
+            </div>
+            <div class="form-grid" v-else>
               <div class="form-group">
                 <label>品牌与产品关键词</label>
                 <input v-model="formData.brand" type="text" placeholder="例：蒙牛；酸酸乳；酸甜好滋味">
@@ -111,6 +157,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['close'])
 
+const isMediaMode = (import.meta.env.VITE_AGENT_MODE || 'brand') === 'media'
 const session_id = ref(Math.random().toString(36).substring(7))
 const messages = ref([
   { role: 'assistant', content: '您好！我是您的项目需求收集助手。我们将通过对话为您梳理出准确的投放需求表单，请问您的品牌和产品是什么呢？' }

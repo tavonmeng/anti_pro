@@ -65,10 +65,28 @@ async def create_order(
             # 根据订单类型返回不同的提示消息
             messages = {
                 "video_purchase": "订单创建成功",
-                "ai_3d_custom": "订单创建成功，预计5-7个工作日完成制作",
+                "ai_3d_custom": "订单创建成功，预计15个工作日完成制作",
                 "digital_art": "订单创建成功，预计3个工作日交付初稿"
             }
             message = messages.get(order_data.orderType, "订单创建成功")
+
+            # 同步到用户 Memory（后台，不阻塞）
+            try:
+                import asyncio
+                from app.services.memory_service import sync_past_project
+                user_id = current_user.id if hasattr(current_user, 'id') else ""
+                if user_id:
+                    order_dict = order_data.dict() if hasattr(order_data, 'dict') else {}
+                    project_info = {
+                        "order_number": order.get("orderNumber", ""),
+                        "project_name": order_dict.get("project_name", order_dict.get("brand", "")),
+                        "city": order_dict.get("city_location", order_dict.get("city", "")),
+                        "status": "pending_assign",
+                        "created_at": order.get("createdAt", ""),
+                    }
+                    asyncio.create_task(sync_past_project(user_id, project_info))
+            except Exception:
+                pass  # Memory 同步失败不影响订单创建
         
         return ApiResponse(code=201, message=message, data=order)
     except HTTPException as e:
