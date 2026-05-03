@@ -38,10 +38,11 @@ if settings.RATE_LIMIT_ENABLED:
 if not settings.OSS_ENABLED and os.path.exists(settings.UPLOAD_DIR):
     app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
-# 挂载案例视频/封面图静态目录（统一放在 app/data/cases/ 下）
-_cases_static = os.path.join(os.path.dirname(__file__), "data", "cases")
-os.makedirs(_cases_static, exist_ok=True)
-app.mount("/static/cases", StaticFiles(directory=_cases_static), name="cases_static")
+# 挂载案例视频/封面图静态目录（仅用户端需要，官网 Landing Page 使用）
+if settings.DEPLOYMENT_MODE in ("all", "external"):
+    _cases_static = os.path.join(os.path.dirname(__file__), "data", "cases")
+    os.makedirs(_cases_static, exist_ok=True)
+    app.mount("/static/cases", StaticFiles(directory=_cases_static), name="cases_static")
 
 # ========== 根据部署模式注册路由 ==========
 deploy_mode = settings.DEPLOYMENT_MODE  # all / external / internal
@@ -53,8 +54,9 @@ app.include_router(auth.router, prefix="/api")
 from app.api import upload
 app.include_router(upload.router, prefix="/api")
 
-# ASR 语音识别路由
-app.include_router(asr.router, prefix="/api")
+# ASR 语音识别路由（仅用户端 AI 聊天使用）
+if deploy_mode in ("all", "external"):
+    app.include_router(asr.router, prefix="/api")
 
 # 订单路由（所有模式都需要，权限由 JWT 控制）
 app.include_router(orders.router, prefix="/api")
@@ -74,10 +76,9 @@ if deploy_mode in ("all", "internal"):
     app.include_router(contractor_api.router, prefix="/api")
     app.include_router(contractor_admin_api.router, prefix="/api")
     app.include_router(workflow_config_api.router, prefix="/api")
-
-# 用户画像 Memory 管理（管理员端）
-from app.api import admin_memory
-app.include_router(admin_memory.router, prefix="/api")
+    # 用户画像 Memory 管理（管理员端）
+    from app.api import admin_memory
+    app.include_router(admin_memory.router, prefix="/api")
 
 # 挂载审计日志中间件（放在路由注册之后，确保能拦截所有请求）
 if settings.LOG_ENABLED:
@@ -98,21 +99,23 @@ async def startup_event():
     await init_audit_db()
     print(f"✅ 审计日志数据库初始化完成 (audit.db)")
     
-    # 确保管理员账户存在（幂等，从 .env 读取配置）
-    from scripts.init_admin import ensure_admin
-    try:
-        await ensure_admin()
-    except Exception as e:
-        print(f"⚠️  管理员初始化异常（不影响启动）: {e}")
-    
-    # 确保工作流环节配置存在（幂等，仅首次初始化）
-    from scripts.init_workflow import ensure_workflow_stages
-    from app.database import async_session_maker
-    try:
-        async with async_session_maker() as session:
-            await ensure_workflow_stages(session)
-    except Exception as e:
-        print(f"⚠️  工作流配置初始化异常（不影响启动）: {e}")
+    # 内部系统专属初始化（用户端不需要管理员账户和工作流配置）
+    if deploy_mode in ("all", "internal"):
+        # 确保管理员账户存在（幂等，从 .env 读取配置）
+        from scripts.init_admin import ensure_admin
+        try:
+            await ensure_admin()
+        except Exception as e:
+            print(f"⚠️  管理员初始化异常（不影响启动）: {e}")
+        
+        # 确保工作流环节配置存在（幂等，仅首次初始化）
+        from scripts.init_workflow import ensure_workflow_stages
+        from app.database import async_session_maker
+        try:
+            async with async_session_maker() as session:
+                await ensure_workflow_stages(session)
+        except Exception as e:
+            print(f"⚠️  工作流配置初始化异常（不影响启动）: {e}")
     
     # 确保上传目录存在（仅本地存储模式）
     if not settings.OSS_ENABLED:
