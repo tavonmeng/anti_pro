@@ -123,6 +123,24 @@ async def submit_enterprise_auth(
     await db.commit()
     await db.refresh(current_user)
     
+    # 获取所有管理员，发送系统通知
+    try:
+        from app.models.admin import Admin
+        admin_result = await db.execute(select(Admin))
+        admins = admin_result.scalars().all()
+        admin_ids = [admin.id for admin in admins]
+        
+        if admin_ids:
+            await NotificationService.create_notification_for_multiple_users(
+                db=db,
+                user_ids=admin_ids,
+                notification_type=NotificationType.SYSTEM_NOTICE,
+                title="新的企业认证申请",
+                content=f"用户 {current_user.username} ({current_user.phone}) 提交了「{enterprise_name}」的企业认证申请，请及时审核。"
+            )
+    except Exception as e:
+        print(f"[Enterprise] 发送管理员通知失败: {e}")
+    
     return ApiResponse(code=200, message="企业认证申请已提交，请等待审核", data={
         "enterprise_status": "pending",
         "enterprise_name": enterprise_name,

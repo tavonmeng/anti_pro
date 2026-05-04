@@ -182,13 +182,32 @@ class OrderService:
         order_response = await OrderService._build_order_response(db, new_order, user)
 
         # 如果不是草稿（直接提交），生成 PDF 并发邮件
-        if not is_draft and user.email:
-            pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response)
-            await EmailService.send_order_confirmation(
-                user.email,
-                new_order.order_number,
-                pdf_bytes
-            )
+        if not is_draft:
+            if user.email:
+                pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response)
+                await EmailService.send_order_confirmation(
+                    user.email,
+                    new_order.order_number,
+                    pdf_bytes
+                )
+            
+            # 通知所有管理员有新订单提交
+            try:
+                from app.models.admin import Admin
+                admin_result = await db.execute(select(Admin))
+                admins = admin_result.scalars().all()
+                admin_ids = [admin.id for admin in admins]
+                if admin_ids:
+                    await NotificationService.create_notification_for_multiple_users(
+                        db=db,
+                        user_ids=admin_ids,
+                        notification_type=NotificationType.SYSTEM_NOTICE,
+                        title="新订单提交",
+                        content=f"用户 {user.username} 提交了新订单：{new_order.order_number}，请及时处理。",
+                        order_id=new_order.id
+                    )
+            except Exception as e:
+                print(f"[Order] 发送管理员新订单通知失败: {e}")
 
         return order_response
     
@@ -519,6 +538,27 @@ class OrderService:
                 content=f"订单 {order.order_number} 状态已变更为：{new_status_text}",
                 order_id=order.id
             )
+            
+        # 3. 如果是用户提交草稿或者是没有负责人的订单，通知管理员
+        if is_draft_submit or not assignee_ids:
+            try:
+                from app.models.admin import Admin
+                admin_result = await db.execute(select(Admin))
+                admins = admin_result.scalars().all()
+                admin_ids = [admin.id for admin in admins]
+                if admin_ids:
+                    title = "新订单提交" if is_draft_submit else "订单状态更新"
+                    content = f"用户提交了草稿订单：{order.order_number}，请及时分配。" if is_draft_submit else f"订单 {order.order_number} 状态变更为 {new_status_text}。"
+                    await NotificationService.create_notification_for_multiple_users(
+                        db=db,
+                        user_ids=admin_ids,
+                        notification_type=NotificationType.SYSTEM_NOTICE,
+                        title=title,
+                        content=content,
+                        order_id=order.id
+                    )
+            except Exception as e:
+                print(f"[Order] 发送管理员状态变更通知失败: {e}")
         
         return await OrderService._build_order_response(db, order, current_user)
     
@@ -926,6 +966,25 @@ class OrderService:
                 content=f"订单 {order.order_number} 收到新的反馈：{feedback_type_text}",
                 order_id=order.id
             )
+            
+        # 通知所有管理员有新反馈
+        try:
+            from app.models.admin import Admin
+            admin_result = await db.execute(select(Admin))
+            admins = admin_result.scalars().all()
+            admin_ids = [admin.id for admin in admins]
+            if admin_ids:
+                feedback_type_text = "需要修改" if feedback_data.type == FeedbackType.REVISION else "确认通过"
+                await NotificationService.create_notification_for_multiple_users(
+                    db=db,
+                    user_ids=admin_ids,
+                    notification_type=NotificationType.NEW_FEEDBACK,
+                    title=f"新反馈提交",
+                    content=f"订单 {order.order_number} 收到用户的反馈：{feedback_type_text}。",
+                    order_id=order.id
+                )
+        except Exception as e:
+            print(f"[Feedback] 发送管理员反馈通知失败: {e}")
         
         # 确保时间包含时区信息（UTC）
         feedback_created_at = feedback.created_at

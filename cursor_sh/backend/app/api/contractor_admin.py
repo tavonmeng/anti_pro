@@ -765,7 +765,54 @@ async def publish_deliverable_to_user(
         await db.commit()
         await db.refresh(deliverable)
         
-        # TODO: 触发用户通知（站内 + 邮件）
+        # 通知用户有新的交付物可查看
+        try:
+            from app.models.notification import Notification, NotificationType
+            from app.models.user import User
+            
+            # 获取订单信息
+            assignment_result = await db.execute(
+                select(ContractorAssignment).where(ContractorAssignment.id == deliverable.assignment_id)
+            )
+            assignment = assignment_result.scalar_one_or_none()
+            
+            if assignment:
+                order_result = await db.execute(
+                    select(Order).where(Order.id == assignment.order_id)
+                )
+                order = order_result.scalar_one_or_none()
+                
+                if order:
+                    order_number = order.order_number
+                    stage_name = deliverable.stage_name or '未知环节'
+                    
+                    # 站内信通知用户
+                    notif = Notification(
+                        user_id=order.user_id,
+                        order_id=order.id,
+                        type=NotificationType.PREVIEW_READY,
+                        title=f"新交付物 - {order_number}",
+                        content=f"您的订单 {order_number}「{stage_name}」环节的交付物已发布，请查看。",
+                    )
+                    db.add(notif)
+                    await db.commit()
+                    
+                    # 邮件通知用户
+                    user_result = await db.execute(
+                        select(User).where(User.id == order.user_id)
+                    )
+                    user = user_result.scalar_one_or_none()
+                    if user and user.email:
+                        from app.services.email_service import EmailService
+                        await EmailService.send_order_status_notification(
+                            user.email,
+                            order_number,
+                            "in_production",
+                            "preview_ready"
+                        )
+        except Exception as notify_err:
+            import logging
+            logging.getLogger(__name__).warning(f"发送交付物推送通知失败: {notify_err}")
         
         return ApiResponse(code=200, message="交付物已推送给用户", data={
             "id": deliverable.id,
@@ -839,6 +886,41 @@ async def advance_to_next_stage(
         
         await db.commit()
         await db.refresh(assignment)
+        
+        # 通知承包商环节推进
+        try:
+            from app.models.notification import Notification, NotificationType
+            
+            order_result = await db.execute(
+                select(Order).where(Order.id == assignment.order_id)
+            )
+            order = order_result.scalar_one_or_none()
+            order_number = order.order_number if order else "未知订单"
+            
+            if has_next:
+                # 通知承包商进入下一环节
+                next_stage_name = next((s.get("name", "") for s in schedule if s.get("display_order") == next_order), "")
+                notif = Notification(
+                    user_id=assignment.contractor_id,
+                    order_id=assignment.order_id,
+                    type=NotificationType.CONTRACTOR_ASSIGNMENT,
+                    title=f"环节推进 - {order_number}",
+                    content=f"订单 {order_number} 已推进到下一环节「{next_stage_name}」，请继续完成交付。",
+                )
+            else:
+                # 通知承包商所有环节完成
+                notif = Notification(
+                    user_id=assignment.contractor_id,
+                    order_id=assignment.order_id,
+                    type=NotificationType.ORDER_COMPLETED,
+                    title=f"派单完成 - {order_number}",
+                    content=f"订单 {order_number} 的所有工作环节已完成，感谢您的工作。",
+                )
+            db.add(notif)
+            await db.commit()
+        except Exception as notify_err:
+            import logging
+            logging.getLogger(__name__).warning(f"发送环节推进通知失败: {notify_err}")
         
         return ApiResponse(code=200, message=message, data={
             "id": assignment.id,

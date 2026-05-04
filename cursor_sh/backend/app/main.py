@@ -95,6 +95,14 @@ async def startup_event():
     await init_db()
     print(f"✅ 主业务数据库初始化完成 (app.db)")
     
+    # 移除 notifications 表的外键约束（支持给 admin/staff/contractor 发通知）
+    if deploy_mode in ("all", "internal", "external"):
+        try:
+            from migrations.drop_notification_fks import drop_notification_fks
+            await drop_notification_fks()
+        except Exception as e:
+            print(f"⚠️  notifications FK 迁移异常（不影响启动）: {e}")
+    
     # 初始化审计日志独立数据库（与主库物理隔离）
     await init_audit_db()
     print(f"✅ 审计日志数据库初始化完成 (audit.db)")

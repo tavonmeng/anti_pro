@@ -329,6 +329,35 @@ async def accept_assignment(
         await db.commit()
         await db.refresh(assignment)
         
+        # 通知管理员承包商已接单
+        try:
+            from app.models.notification import Notification, NotificationType
+            from app.models.admin import Admin
+            
+            order_result = await db.execute(
+                select(Order).where(Order.id == assignment.order_id)
+            )
+            order = order_result.scalar_one_or_none()
+            order_number = order.order_number if order else "未知订单"
+            contractor_name = current_user.real_name or current_user.username
+            
+            admins_result = await db.execute(select(Admin).where(Admin.is_active == True))
+            admins = admins_result.scalars().all()
+            
+            for admin in admins:
+                notif = Notification(
+                    user_id=admin.id,
+                    order_id=assignment.order_id,
+                    type=NotificationType.CONTRACTOR_RESPONDED,
+                    title=f"承包商已接单 - {order_number}",
+                    content=f"承包商 {contractor_name} 已接受订单 {order_number} 的派单，即将开始制作。",
+                )
+                db.add(notif)
+            await db.commit()
+        except Exception as notify_err:
+            import logging
+            logging.getLogger(__name__).warning(f"发送接单通知失败: {notify_err}")
+        
         return ApiResponse(code=200, message="接单成功", data={
             "id": assignment.id,
             "status": assignment.status.value,
@@ -370,6 +399,36 @@ async def reject_assignment(
         
         await db.commit()
         await db.refresh(assignment)
+        
+        # 通知管理员承包商已拒单
+        try:
+            from app.models.notification import Notification, NotificationType
+            from app.models.admin import Admin
+            
+            order_result = await db.execute(
+                select(Order).where(Order.id == assignment.order_id)
+            )
+            order = order_result.scalar_one_or_none()
+            order_number = order.order_number if order else "未知订单"
+            contractor_name = current_user.real_name or current_user.username
+            reject_reason = f"原因：{data.reject_reason}" if data.reject_reason else ""
+            
+            admins_result = await db.execute(select(Admin).where(Admin.is_active == True))
+            admins = admins_result.scalars().all()
+            
+            for admin in admins:
+                notif = Notification(
+                    user_id=admin.id,
+                    order_id=assignment.order_id,
+                    type=NotificationType.CONTRACTOR_RESPONDED,
+                    title=f"承包商已拒单 - {order_number}",
+                    content=f"承包商 {contractor_name} 拒绝了订单 {order_number} 的派单。{reject_reason}请重新分配。",
+                )
+                db.add(notif)
+            await db.commit()
+        except Exception as notify_err:
+            import logging
+            logging.getLogger(__name__).warning(f"发送拒单通知失败: {notify_err}")
         
         return ApiResponse(code=200, message="已拒单", data={
             "id": assignment.id,
