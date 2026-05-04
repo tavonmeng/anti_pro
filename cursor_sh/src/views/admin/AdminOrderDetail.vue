@@ -1177,7 +1177,7 @@ const dlvStatusType = (s: string) => ({
 
 const loadMemory = async (userId: string) => {
   try {
-    const token = localStorage.getItem('admin_token')
+    const token = localStorage.getItem('token')
     const resp = await fetch(`/api/admin/memory/${userId}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -1196,7 +1196,7 @@ const handleTriggerCrawl = async () => {
   const companyName = memoryData.value?.user_company || ''
   crawlLoading.value = true
   try {
-    const token = localStorage.getItem('admin_token')
+    const token = localStorage.getItem('token')
     const resp = await fetch(`/api/admin/memory/${order.value.userId}/crawl`, {
       method: 'POST',
       headers: {
@@ -1228,7 +1228,7 @@ const handleSaveNotes = async () => {
   if (!order.value?.userId) return
   notesLoading.value = true
   try {
-    const token = localStorage.getItem('admin_token')
+    const token = localStorage.getItem('token')
     const resp = await fetch(`/api/admin/memory/${order.value.userId}/notes`, {
       method: 'PUT',
       headers: {

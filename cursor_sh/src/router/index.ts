@@ -143,6 +143,12 @@ const router = createRouter({
           name: 'ChatRecords',
           component: () => import('../views/admin/ChatRecords.vue'),
           meta: { requiresAuth: true, role: 'admin' }
+        },
+        {
+          path: 'customers',
+          name: 'CustomerManagement',
+          component: () => import('../views/admin/CustomerManagement.vue'),
+          meta: { requiresAuth: true, role: 'admin' }
         }
       ]
     },

@@ -1,20 +1,113 @@
 """用户画像 Memory — 管理员 API 端点
 
-管理员可以：查看用户 Memory、手动触发爬取、编辑备忘录
+管理员可以：查看用户 Memory、手动触发爬取、编辑备忘录、查看客户列表
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func, desc
 
 from app.database import get_db
 from app.models.user import User
+from app.models.order import Order
+from app.models.user_memory import UserMemory
 from app.utils.dependencies import require_admin
 from app.services import memory_service
 
 router = APIRouter(prefix="/admin/memory", tags=["管理员 — 用户画像"])
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 客户列表（以客户为维度）
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+@router.get("/customers")
+async def get_customer_list(
+    page: int = Query(1, ge=1),
+    pageSize: int = Query(20, ge=1, le=100),
+    keyword: Optional[str] = Query(None),
+    current_admin=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取客户列表（含订单数和画像状态）"""
+    # 子查询：每个用户的订单数
+    order_count_sub = (
+        select(Order.user_id, func.count(Order.id).label("order_count"))
+        .where(Order.user_id.isnot(None))
+        .group_by(Order.user_id)
+        .subquery()
+    )
+
+    # 主查询：只查 role='user' 的用户
+    query = (
+        select(
+            User.id,
+            User.username,
+            User.phone,
+            User.email,
+            User.company,
+            User.enterprise_name,
+            User.created_at,
+            func.coalesce(order_count_sub.c.order_count, 0).label("order_count"),
+        )
+        .outerjoin(order_count_sub, User.id == order_count_sub.c.user_id)
+        .where(User.role == "user")
+    )
+
+    if keyword:
+        from sqlalchemy import or_
+        query = query.where(
+            or_(
+                User.username.ilike(f"%{keyword}%"),
+                User.phone.ilike(f"%{keyword}%"),
+                User.company.ilike(f"%{keyword}%"),
+                User.enterprise_name.ilike(f"%{keyword}%"),
+            )
+        )
+
+    # 总数
+    count_q = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_q)).scalar() or 0
+
+    # 分页
+    query = query.order_by(desc(User.created_at))
+    query = query.offset((page - 1) * pageSize).limit(pageSize)
+    result = await db.execute(query)
+    rows = result.all()
+
+    # 批量查 memory 状态
+    user_ids = [r[0] for r in rows]
+    memory_result = await db.execute(
+        select(UserMemory.user_id, UserMemory.company_info, UserMemory.updated_at)
+        .where(UserMemory.user_id.in_(user_ids))
+    )
+    memory_map = {}
+    for m in memory_result.all():
+        ci = m[1] or {}
+        memory_map[m[0]] = {
+            "hasCrawl": ci.get("crawl_status") == "success",
+            "crawlStatus": ci.get("crawl_status", ""),
+            "updatedAt": m[2].isoformat() if m[2] else None,
+        }
+
+    items = []
+    for r in rows:
+        user_id = r[0]
+        items.append({
+            "userId": user_id,
+            "username": r[1],
+            "phone": r[2],
+            "email": r[3],
+            "company": r[5] or r[4] or "",  # enterprise_name 优先
+            "createdAt": r[6].isoformat() if r[6] else None,
+            "orderCount": r[7],
+            "memory": memory_map.get(user_id, {"hasCrawl": False, "crawlStatus": "", "updatedAt": None}),
+        })
+
+    return {"code": 200, "data": {"data": items, "total": total}}
 
 
 class MemoryResponse(BaseModel):
