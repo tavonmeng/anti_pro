@@ -672,7 +672,7 @@ const getAuthHeaders = () => {
 
 // ==== 欢迎打字机动画逻辑 ====
 // Agent 模式：brand（品牌方）/ media（媒体方），通过 .env 配置
-const agentMode = import.meta.env.VITE_AGENT_MODE || 'brand'
+const agentMode = import.meta.env.VITE_AGENT_MODE || 'media'
 const isMediaMode = agentMode === 'media'
 
 const welcomeTitleFull = '您好，我是 Unique Video AI 的项目顾问。'

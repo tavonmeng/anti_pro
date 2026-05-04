@@ -226,7 +226,7 @@ import { ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import FileUpload from './FileUpload.vue'
 import type { UploadedFile, Order } from '@/types'
 
-const isMediaMode = (import.meta.env.VITE_AGENT_MODE || 'brand') === 'media'
+const isMediaMode = (import.meta.env.VITE_AGENT_MODE || 'media') === 'media'
 
 const props = defineProps<{
   order?: Order
