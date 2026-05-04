@@ -23,10 +23,18 @@ RUN --mount=type=cache,target=/app/node_modules/.vite \
 # 阶段2：仅保留产物，不含 node_modules（镜像从 ~1GB 缩到 ~30MB）
 FROM nginx:alpine
 
-# 自定义 Nginx 配置
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# 复制所有 Nginx 配置（启动时根据 DEPLOYMENT_MODE 自动选择）
+COPY nginx.internal.conf /etc/nginx/conf.d/nginx.internal.conf
+COPY nginx.external.conf /etc/nginx/conf.d/nginx.external.conf
+COPY nginx.internal.conf /etc/nginx/conf.d/default.conf
+
+# 自定义启动脚本（根据环境变量选择配置）
+COPY docker-entrypoint-custom.sh /docker-entrypoint-custom.sh
+RUN chmod +x /docker-entrypoint-custom.sh
 
 # 拷贝构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 8080
+ENTRYPOINT ["/docker-entrypoint-custom.sh"]
+CMD ["nginx", "-g", "daemon off;"]

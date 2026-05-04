@@ -7,8 +7,8 @@ services:
     # ⭐ 关键：从 .env 文件加载所有环境变量到容器内部
     env_file:
       - .env
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     volumes:
       - ./uploads:/app/uploads
       - ./logs:/app/logs
@@ -28,6 +28,8 @@ services:
       context: ..
       dockerfile: Dockerfile
     container_name: anti-pro-frontend
+    environment:
+      - DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-all}
     ports:
       - "80:8080"
     depends_on:
