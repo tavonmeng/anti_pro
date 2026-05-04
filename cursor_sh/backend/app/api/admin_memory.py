@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.order import Order
 from app.models.user_memory import UserMemory
 from app.utils.dependencies import require_admin
@@ -54,7 +54,7 @@ async def get_customer_list(
             func.coalesce(order_count_sub.c.order_count, 0).label("order_count"),
         )
         .outerjoin(order_count_sub, User.id == order_count_sub.c.user_id)
-        .where(User.role == "user")
+        .where(User.role == UserRole.USER)
     )
 
     if keyword:
@@ -142,7 +142,7 @@ async def _get_user_company(user_id: str, db: AsyncSession) -> str:
     return ""
 
 
-@router.get("/{user_id}", response_model=MemoryResponse)
+@router.get("/{user_id}")
 async def get_user_memory(
     user_id: str,
     current_admin=Depends(require_admin),
@@ -153,7 +153,7 @@ async def get_user_memory(
     user_company = await _get_user_company(user_id, db)
 
     if not memory:
-        return MemoryResponse(
+        data = MemoryResponse(
             user_id=user_id,
             user_company=user_company,
             company_info={},
@@ -163,19 +163,21 @@ async def get_user_memory(
             interaction_stats={},
             agent_notes="",
         )
+    else:
+        data = MemoryResponse(
+            user_id=memory.user_id,
+            user_company=user_company,
+            company_info=memory.company_info or {},
+            screen_resources=memory.screen_resources or [],
+            project_preferences=memory.project_preferences or {},
+            past_projects=memory.past_projects or [],
+            interaction_stats=memory.interaction_stats or {},
+            agent_notes=memory.agent_notes or "",
+            created_at=memory.created_at.isoformat() if memory.created_at else None,
+            updated_at=memory.updated_at.isoformat() if memory.updated_at else None,
+        )
 
-    return MemoryResponse(
-        user_id=memory.user_id,
-        user_company=user_company,
-        company_info=memory.company_info or {},
-        screen_resources=memory.screen_resources or [],
-        project_preferences=memory.project_preferences or {},
-        past_projects=memory.past_projects or [],
-        interaction_stats=memory.interaction_stats or {},
-        agent_notes=memory.agent_notes or "",
-        created_at=memory.created_at.isoformat() if memory.created_at else None,
-        updated_at=memory.updated_at.isoformat() if memory.updated_at else None,
-    )
+    return {"code": 200, "data": data.model_dump()}
 
 
 @router.put("/{user_id}/notes")
@@ -186,7 +188,7 @@ async def update_agent_notes(
 ):
     """管理员编辑 Agent 备忘录"""
     await memory_service.update_memory(user_id, {"agent_notes": request.agent_notes})
-    return {"message": "备忘录已更新"}
+    return {"code": 200, "data": None, "message": "备忘录已更新"}
 
 
 @router.post("/{user_id}/crawl")
@@ -212,7 +214,7 @@ async def trigger_crawl(
     # 触发后台爬取
     await memory_service.trigger_crawl(user_id, company_name)
 
-    return {"message": f"已触发爬取: {company_name}，结果将在数秒后更新"}
+    return {"code": 200, "data": None, "message": f"已触发爬取: {company_name}，结果将在数秒后更新"}
 
 
 @router.delete("/{user_id}/crawl-cache")
@@ -225,5 +227,5 @@ async def clear_crawl_cache(
         "company_info": {},
         "screen_resources": [],
     })
-    return {"message": "爬取缓存已清除"}
+    return {"code": 200, "data": None, "message": "爬取缓存已清除"}
 

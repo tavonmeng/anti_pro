@@ -256,9 +256,9 @@ const loadCustomers = async () => {
         keyword: searchKeyword.value || undefined,
       },
     })
-    const d = res?.data || res
-    customers.value = d?.data || []
-    total.value = d?.total || 0
+    // axios 拦截器已解包 response.data.data → res = {data: [...], total: N}
+    customers.value = res?.data || []
+    total.value = res?.total || 0
   } catch (e) {
     console.error('加载客户列表失败:', e)
   } finally {
