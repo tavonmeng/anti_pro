@@ -274,6 +274,7 @@ async def get_assignment_detail(
                 "status": d.status.value,
                 "adminReviewNote": d.admin_review_note,
                 "adminReviewedAt": d.admin_reviewed_at.isoformat() if d.admin_reviewed_at else None,
+                "adminComments": d.admin_comments or [],
                 "createdAt": d.created_at.isoformat() if d.created_at else None,
             })
         

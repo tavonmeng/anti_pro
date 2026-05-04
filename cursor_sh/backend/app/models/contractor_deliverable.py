@@ -56,6 +56,9 @@ class ContractorDeliverable(Base):
     published_at = Column(DateTime(timezone=True), nullable=True)
     published_by = Column(String(50), nullable=True)               # 执行推送的管理员 ID
 
+    # 管理员评论（JSON 数组: [{"content": "...", "createdBy": "admin-id", "createdByName": "管理员", "createdAt": "ISO"}]）
+    admin_comments = Column(JSON, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

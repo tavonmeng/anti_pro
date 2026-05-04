@@ -9,13 +9,13 @@
 
 import asyncio
 from sqlalchemy import text
-from app.database import async_engine
+from app.database import engine
 
 
 async def drop_notification_fks():
     """移除 notifications 表的 user_id 和 order_id 外键约束"""
     
-    async with async_engine.begin() as conn:
+    async with engine.begin() as conn:
         print("检查并移除 notifications 表的外键约束...")
         
         # MySQL: 查询外键名称

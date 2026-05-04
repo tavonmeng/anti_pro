@@ -92,6 +92,7 @@ export interface PreviewHistory {
 export interface OrderFeedback {
   id: string
   orderId: string
+  deliverableId?: string      // 关联的交付物ID（为空则是订单级别反馈）
   content: string
   type: 'approval' | 'revision'  // 确认或修改
   createdAt: string

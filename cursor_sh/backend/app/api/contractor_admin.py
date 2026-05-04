@@ -644,6 +644,7 @@ async def get_assignment_deliverables(
                 "publishedNote": d.published_note,
                 "publishedBy": d.published_by,
                 "publishedAt": d.published_at.isoformat() if d.published_at else None,
+                "adminComments": d.admin_comments or [],
                 "createdAt": d.created_at.isoformat() if d.created_at else None,
             })
         
@@ -934,3 +935,90 @@ async def advance_to_next_stage(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ========== 管理员评论（给 Contractor 的反馈） ==========
+
+class AdminCommentRequest(BaseModel):
+    content: str
+
+
+@router.post("/deliverables/{deliverable_id}/comment")
+async def add_admin_comment(
+    deliverable_id: str,
+    data: AdminCommentRequest,
+    current_user: AnyUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员对交付物添加评论（Contractor 可见，随时可添加）"""
+    try:
+        result = await db.execute(
+            select(ContractorDeliverable).where(ContractorDeliverable.id == deliverable_id)
+        )
+        deliverable = result.scalar_one_or_none()
+        
+        if not deliverable:
+            raise HTTPException(status_code=404, detail="交付物不存在")
+        
+        if not data.content.strip():
+            raise HTTPException(status_code=400, detail="评论内容不能为空")
+        
+        now = datetime.now(timezone.utc)
+        admin_name = current_user.username if hasattr(current_user, 'username') else '管理员'
+        
+        # 追加到 admin_comments JSON 数组
+        comments = deliverable.admin_comments or []
+        comments.append({
+            "id": generate_id("comment"),
+            "content": data.content.strip(),
+            "createdBy": current_user.id,
+            "createdByName": admin_name,
+            "createdAt": now.isoformat(),
+        })
+        deliverable.admin_comments = comments
+        
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(deliverable, "admin_comments")
+        
+        await db.commit()
+        await db.refresh(deliverable)
+        
+        # 通知承包商有新评论
+        try:
+            from app.models.notification import Notification, NotificationType
+            
+            assignment_result = await db.execute(
+                select(ContractorAssignment).where(ContractorAssignment.id == deliverable.assignment_id)
+            )
+            assignment = assignment_result.scalar_one_or_none()
+            
+            if assignment:
+                order_result = await db.execute(
+                    select(Order).where(Order.id == assignment.order_id)
+                )
+                order = order_result.scalar_one_or_none()
+                order_number = order.order_number if order else "未知订单"
+                stage_name = deliverable.stage_name or '未知环节'
+                
+                notif = Notification(
+                    user_id=assignment.contractor_id,
+                    order_id=assignment.order_id,
+                    type=NotificationType.NEW_FEEDBACK,
+                    title=f"管理员评论 - {order_number}",
+                    content=f"管理员对「{stage_name}」环节的交付物（V{deliverable.version}）添加了新评论：{data.content[:80]}",
+                )
+                db.add(notif)
+                await db.commit()
+        except Exception as notify_err:
+            import logging
+            logging.getLogger(__name__).warning(f"发送评论通知失败: {notify_err}")
+        
+        return ApiResponse(code=200, message="评论已添加", data={
+            "id": deliverable.id,
+            "adminComments": deliverable.admin_comments,
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

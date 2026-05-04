@@ -1165,6 +1165,11 @@ export const contractorAdminApi = {
   async getAssignmentDeliverables(assignmentId: string): Promise<any[]> {
     return request.get(`/contractor-admin/assignments/${assignmentId}/deliverables`)
   },
+
+  // 管理员对交付物添加评论（Contractor可见）
+  async addDeliverableComment(deliverableId: string, content: string): Promise<any> {
+    return request.post(`/contractor-admin/deliverables/${deliverableId}/comment`, { content })
+  },
 }
 
 // ========== 工作流配置 API ==========

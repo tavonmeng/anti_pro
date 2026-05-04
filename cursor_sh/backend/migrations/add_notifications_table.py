@@ -10,7 +10,7 @@
 
 import asyncio
 from sqlalchemy import text
-from app.database import async_engine
+from app.database import engine
 
 
 async def add_notifications_table():
@@ -40,7 +40,7 @@ async def add_notifications_table():
         "CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);"
     ]
     
-    async with async_engine.begin() as conn:
+    async with engine.begin() as conn:
         print("开始创建 notifications 表...")
         
         # 创建表

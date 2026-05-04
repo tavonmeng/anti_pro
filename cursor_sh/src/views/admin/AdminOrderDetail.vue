@@ -433,6 +433,46 @@
                   <strong>审核备注 ({{ formatTime(d.adminReviewedAt) || '暂无时间' }})：</strong>
                   {{ d.adminReviewNote }}
                 </div>
+                <!-- 客户对该交付物的反馈 -->
+                <div v-if="getDeliverableFeedbacks(d.id).length > 0" class="ca-dlv-customer-feedbacks">
+                  <strong style="font-size: 13px; color: #E6A23C;">📋 客户反馈：</strong>
+                  <div v-for="fb in getDeliverableFeedbacks(d.id)" :key="fb.id" class="ca-dlv-fb-item">
+                    <el-tag :type="fb.type === 'approval' ? 'success' : 'warning'" size="small">
+                      {{ fb.type === 'approval' ? '确认通过' : '需要修改' }}
+                    </el-tag>
+                    <span class="ca-fb-content">{{ fb.content }}</span>
+                    <span class="ca-fb-meta">{{ fb.createdByName }} · {{ formatTime(fb.createdAt) }}</span>
+                  </div>
+                </div>
+                <!-- 管理员评论历史 -->
+                <div v-if="d.adminComments && d.adminComments.length > 0" class="ca-dlv-admin-comments">
+                  <strong style="font-size: 13px; color: #409EFF;">💬 管理员评论（Contractor可见）：</strong>
+                  <div v-for="comment in d.adminComments" :key="comment.id" class="ca-admin-comment-item">
+                    <span class="ca-comment-content">{{ comment.content }}</span>
+                    <span class="ca-comment-meta">{{ comment.createdByName }} · {{ formatTime(comment.createdAt) }}</span>
+                  </div>
+                </div>
+                <!-- 管理员添加评论（给contractor的反馈） -->
+                <div class="ca-dlv-comment-input">
+                  <el-input
+                    v-model="dlvCommentInputs[d.id]"
+                    size="small"
+                    placeholder="写评论给 Contractor..."
+                    @keyup.enter="handleAddComment(d.id)"
+                  >
+                    <template #append>
+                      <el-button
+                        size="small"
+                        type="primary"
+                        :loading="commentingDlvId === d.id"
+                        @click="handleAddComment(d.id)"
+                        :disabled="!dlvCommentInputs[d.id]?.trim()"
+                      >
+                        发送
+                      </el-button>
+                    </template>
+                  </el-input>
+                </div>
               </div>
             </div>
           </div>
@@ -450,9 +490,13 @@
             >
               <el-card>
                 <div class="feedback-header">
-                  <el-tag :type="feedback.type === 'approval' ? 'success' : 'warning'">
-                    {{ feedback.type === 'approval' ? '确认通过' : '需要修改' }}
-                  </el-tag>
+                  <div style="display: flex; gap: 6px; align-items: center;">
+                    <el-tag :type="feedback.type === 'approval' ? 'success' : 'warning'">
+                      {{ feedback.type === 'approval' ? '确认通过' : '需要修改' }}
+                    </el-tag>
+                    <el-tag v-if="feedback.deliverableId" type="info" size="small" effect="plain">交付物</el-tag>
+                    <el-tag v-else type="" size="small" effect="plain">订单</el-tag>
+                  </div>
                   <span class="feedback-user">{{ feedback.createdByName }}</span>
                 </div>
                 <p class="feedback-content">{{ feedback.content }}</p>
@@ -780,6 +824,35 @@ const contractorAssignments = ref<any[]>([])
 const contractorAssignForm = ref({ contractorId: '', workflowType: 'traditional', demoDeadline: '', finalDeadline: '' })
 const workflowStages = ref<any[]>([])
 const stageDeadlines = ref<Record<string, string>>({})
+
+// 交付物评论状态
+const dlvCommentInputs = ref<Record<string, string>>({})
+const commentingDlvId = ref<string | null>(null)
+
+// 获取某个交付物关联的客户反馈
+const getDeliverableFeedbacks = (deliverableId: string) => {
+  if (!order.value || !order.value.feedbacks) return []
+  return order.value.feedbacks.filter((fb: any) => fb.deliverableId === deliverableId)
+}
+
+// 管理员给交付物添加评论（Contractor 可见）
+const handleAddComment = async (deliverableId: string) => {
+  const content = dlvCommentInputs.value[deliverableId]?.trim()
+  if (!content) return
+  
+  commentingDlvId.value = deliverableId
+  try {
+    await contractorAdminApi.addDeliverableComment(deliverableId, content)
+    ElMessage.success('评论已发送')
+    dlvCommentInputs.value[deliverableId] = ''
+    // 刷新交付物数据
+    if (order.value) loadContractorData(order.value.id)
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.detail || '评论失败')
+  } finally {
+    commentingDlvId.value = null
+  }
+}
 
 const canAssign = computed(() => {
   if (!contractorAssignForm.value.contractorId) return false
@@ -1772,6 +1845,73 @@ const handleAdminCancel = async () => {
 
 .memory-card .el-descriptions {
   margin-bottom: 0;
+}
+
+/* 交付物评论相关样式 */
+.ca-dlv-customer-feedbacks {
+  margin-top: 10px;
+  padding: 10px;
+  background: #FFF8E1;
+  border-radius: 6px;
+  border-left: 3px solid #E6A23C;
+}
+
+.ca-dlv-fb-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px dashed #F5E6CC;
+  &:last-child { border-bottom: none; }
+}
+
+.ca-fb-content {
+  flex: 1;
+  color: #606266;
+  line-height: 1.5;
+}
+
+.ca-fb-meta {
+  font-size: 11px;
+  color: #909399;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ca-dlv-admin-comments {
+  margin-top: 10px;
+  padding: 10px;
+  background: #ECF5FF;
+  border-radius: 6px;
+  border-left: 3px solid #409EFF;
+}
+
+.ca-admin-comment-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px dashed #D9ECFF;
+  &:last-child { border-bottom: none; }
+}
+
+.ca-comment-content {
+  flex: 1;
+  color: #303133;
+  line-height: 1.5;
+}
+
+.ca-comment-meta {
+  font-size: 11px;
+  color: #909399;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ca-dlv-comment-input {
+  margin-top: 10px;
 }
 </style>
 

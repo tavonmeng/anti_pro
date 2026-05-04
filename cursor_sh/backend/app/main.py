@@ -61,6 +61,11 @@ if deploy_mode in ("all", "external"):
 # 订单路由（所有模式都需要，权限由 JWT 控制）
 app.include_router(orders.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
+# 公告和日志路由（用户端也需要读取公告、发送行为日志）
+app.include_router(announcements.router, prefix="/api")
+app.include_router(logs.router, prefix="/api")
+# 企业认证路由（用户端提交、管理员端审核）
+app.include_router(enterprise.router, prefix="/api")
 
 if deploy_mode in ("all", "external"):
     # 用户端专属：AI 聊天（挂载没有 api 前缀）
@@ -69,9 +74,6 @@ if deploy_mode in ("all", "external"):
 if deploy_mode in ("all", "internal"):
     # 内部系统专属路由
     app.include_router(staff.router, prefix="/api")
-    app.include_router(logs.router, prefix="/api")
-    app.include_router(announcements.router, prefix="/api")
-    app.include_router(enterprise.router, prefix="/api")
     # 承包商相关路由
     app.include_router(contractor_api.router, prefix="/api")
     app.include_router(contractor_admin_api.router, prefix="/api")
@@ -151,6 +153,7 @@ async def root():
 
 
 @app.get("/health")
+@app.get("/api/health")
 async def health_check():
     """健康检查"""
     return {"status": "ok", "app": settings.APP_NAME}

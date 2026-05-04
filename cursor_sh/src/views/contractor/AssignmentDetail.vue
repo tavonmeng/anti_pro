@@ -124,6 +124,14 @@
                 <strong>管理员备注 ({{ formatDate(d.adminReviewedAt) || '暂无时间' }})：</strong>
                 {{ d.adminReviewNote }}
               </p>
+              <!-- 管理员评论列表 -->
+              <div v-if="d.adminComments && d.adminComments.length > 0" class="admin-comments-section">
+                <strong class="admin-comments-title">💬 管理员评论：</strong>
+                <div v-for="comment in d.adminComments" :key="comment.id" class="admin-comment-item">
+                  <span class="admin-comment-content">{{ comment.content }}</span>
+                  <span class="admin-comment-meta">{{ comment.createdByName }} · {{ formatDate(comment.createdAt) }}</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -770,4 +778,43 @@ onMounted(fetchDetail)
   .loading-icon { animation: spin 1s linear infinite; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* 管理员评论样式 */
+.admin-comments-section {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #ECF5FF;
+  border-radius: 6px;
+  border-left: 3px solid #409EFF;
+}
+
+.admin-comments-title {
+  font-size: 13px;
+  color: #409EFF;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.admin-comment-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px dashed #D9ECFF;
+  &:last-child { border-bottom: none; }
+}
+
+.admin-comment-content {
+  flex: 1;
+  color: #303133;
+  line-height: 1.5;
+}
+
+.admin-comment-meta {
+  font-size: 11px;
+  color: #909399;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 </style>

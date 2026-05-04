@@ -96,7 +96,6 @@ async def submit_enterprise_auth(
             )
             file_url = result["object_key"]  # 存 object_key，读取时再签名
         else:
-            import os
             upload_dir = os.path.join(settings.UPLOAD_DIR, "enterprise", current_user.id)
             os.makedirs(upload_dir, exist_ok=True)
 
