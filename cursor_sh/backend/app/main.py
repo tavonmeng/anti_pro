@@ -105,6 +105,13 @@ async def startup_event():
         except Exception as e:
             print(f"⚠️  notifications FK 迁移异常（不影响启动）: {e}")
     
+    # 反馈系统字段迁移（feedbacks.deliverable_id + contractor_deliverables.admin_comments）
+    try:
+        from scripts.migrate_feedback_system import migrate as migrate_feedback
+        await migrate_feedback()
+    except Exception as e:
+        print(f"⚠️  反馈系统迁移异常（不影响启动）: {e}")
+    
     # 初始化审计日志独立数据库（与主库物理隔离）
     await init_audit_db()
     print(f"✅ 审计日志数据库初始化完成 (audit.db)")
