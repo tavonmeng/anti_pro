@@ -6,5 +6,6 @@ dist
 *.md
 # 排除测试和脚本文件，减少 COPY . . 传输量
 *.sh
+!docker-entrypoint-custom.sh
 *.py
 test_*
