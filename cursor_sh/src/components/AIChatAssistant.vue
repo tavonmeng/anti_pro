@@ -407,6 +407,7 @@ import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Se
 import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
+import { chatHistoryApi } from '@/utils/api'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 
 // 语音输入开关，通过 .env 文件配置
@@ -1113,6 +1114,36 @@ const saveCurrentToHistory = () => {
   
   localStorage.setItem(getHistoryKey(), JSON.stringify(histories))
   savedHistories.value = histories
+
+  // 同步到后端数据库（静默，不阻断前端流程）
+  _syncToBackend(session)
+}
+
+/** 将会话同步到后端数据库（异步静默） */
+const _syncToBackend = async (session: SavedSession) => {
+  try {
+    const token = localStorage.getItem('token')
+    if (!token) return // 未登录不同步
+
+    const msgs = (session.messages || []).filter(
+      (m: any) => m.role === 'user' || m.role === 'assistant'
+    ).map((m: any) => ({
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp || '',
+    }))
+    if (msgs.length === 0) return
+
+    await chatHistoryApi.syncSession({
+      session_id: session.id || session_id.value,
+      business_type: businessType.value,
+      session_type: 'requirement',
+      messages: msgs,
+    })
+  } catch (e) {
+    // 静默失败，不阻断用户体验
+    console.warn('[ChatHistory] 同步失败:', e)
+  }
 }
 
 const toggleHistory = () => {

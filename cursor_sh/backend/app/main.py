@@ -71,6 +71,10 @@ if deploy_mode in ("all", "external"):
     # 用户端专属：AI 聊天（挂载没有 api 前缀）
     app.include_router(ai.router)
 
+# AI 聊天记录持久化（用户端保存、管理端查看，两端都需要）
+from app.api import ai_chat_history
+app.include_router(ai_chat_history.router, prefix="/api")
+
 if deploy_mode in ("all", "internal"):
     # 内部系统专属路由
     app.include_router(staff.router, prefix="/api")

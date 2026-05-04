@@ -137,6 +137,12 @@ const router = createRouter({
           name: 'WorkflowConfig',
           component: () => import('../views/admin/WorkflowConfig.vue'),
           meta: { requiresAuth: true, role: 'admin' }
+        },
+        {
+          path: 'chat-records',
+          name: 'ChatRecords',
+          component: () => import('../views/admin/ChatRecords.vue'),
+          meta: { requiresAuth: true, role: 'admin' }
         }
       ]
     },

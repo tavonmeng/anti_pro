@@ -41,6 +41,11 @@
         <el-icon><SetUp /></el-icon>
         <template #title>工作流配置</template>
       </el-menu-item>
+      
+      <el-menu-item index="chat-records">
+        <el-icon><ChatLineSquare /></el-icon>
+        <template #title>AI 聊天记录</template>
+      </el-menu-item>
     </template>
     
     <!-- 负责人菜单 -->
@@ -105,7 +110,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Grid, Document, User, Setting, SwitchButton, EditPen, ChatDotRound, OfficeBuilding, Suitcase, SetUp } from '@element-plus/icons-vue'
+import { Grid, Document, User, Setting, SwitchButton, EditPen, ChatDotRound, OfficeBuilding, Suitcase, SetUp, ChatLineSquare } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useOrderStore } from '@/stores/order'
 import NotificationBell from './NotificationBell.vue'
@@ -148,6 +153,8 @@ const activeMenu = computed(() => {
     return 'contractors'
   } else if (path.includes('/workflow-config') && isAdmin.value) {
     return 'workflow-config'
+  } else if (path.includes('/chat-records') && isAdmin.value) {
+    return 'chat-records'
   } else if (path.includes('/assignments') && isContractor.value) {
     return 'assignments'
   } else if (path.includes('/admin')) {
@@ -193,6 +200,8 @@ const handleMenuSelect = (index: string) => {
     router.push('/admin/contractors')
   } else if (index === 'workflow-config') {
     router.push('/admin/workflow-config')
+  } else if (index === 'chat-records') {
+    router.push('/admin/chat-records')
   } else if (index === 'assignments') {
     router.push('/contractor/assignments')
   }

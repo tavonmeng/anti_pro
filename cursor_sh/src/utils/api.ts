@@ -1200,3 +1200,54 @@ export const workflowApi = {
     return request.post('/workflow-config/reorder', { stage_ids: stageIds })
   },
 }
+
+// ========== AI 聊天记录持久化 API ==========
+export const chatHistoryApi = {
+  // 保存单条消息（每次对话后自动调用）
+  async saveMessage(data: {
+    session_id: string
+    role: string
+    content: string
+    business_type?: string
+    session_type?: string
+    metadata?: any
+  }): Promise<any> {
+    return request.post('/ai/chat-history/message', data)
+  },
+
+  // 批量同步整个会话
+  async syncSession(data: {
+    session_id: string
+    business_type?: string
+    session_type?: string
+    messages: Array<{ role: string; content: string; timestamp?: string }>
+  }): Promise<any> {
+    return request.post('/ai/chat-history/sync', data)
+  },
+
+  // 获取用户的会话列表
+  async getSessions(limit: number = 5): Promise<any> {
+    return request.get(`/ai/chat-history/sessions?limit=${limit}`)
+  },
+
+  // 获取某个会话的消息
+  async getSessionMessages(sessionId: string): Promise<any> {
+    return request.get(`/ai/chat-history/sessions/${sessionId}/messages`)
+  },
+
+  // 管理员：获取所有用户的聊天记录
+  async adminGetSessions(params: {
+    page?: number
+    pageSize?: number
+    user_id?: string
+    keyword?: string
+  } = {}): Promise<any> {
+    return request.get('/ai/chat-history/admin/sessions', { params })
+  },
+
+  // 管理员：获取某个会话的消息
+  async adminGetSessionMessages(sessionId: string): Promise<any> {
+    return request.get(`/ai/chat-history/admin/sessions/${sessionId}/messages`)
+  },
+}
+

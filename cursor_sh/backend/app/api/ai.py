@@ -670,6 +670,61 @@ async def ai_get_cases(category: str = None):
 # 会话存储工具
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+async def _save_to_db(
+    session_id: str,
+    user_id: str,
+    username: str,
+    user_msg: str,
+    assistant_msg: str,
+    business_type: str = "ai_3d_custom",
+):
+    """将用户消息和助手回复保存到数据库（异步）"""
+    try:
+        from app.database import async_session_maker
+        from app.models.ai_chat import AIChatSession, AIChatMessage
+        from sqlalchemy import select, func
+
+        async with async_session_maker() as db:
+            # 查找或创建 session
+            result = await db.execute(
+                select(AIChatSession).where(AIChatSession.id == session_id)
+            )
+            session = result.scalar_one_or_none()
+
+            if not session:
+                session = AIChatSession(
+                    id=session_id,
+                    user_id=user_id,
+                    username=username,
+                    session_type="requirement",
+                    business_type=business_type,
+                    title=(user_msg.strip()[:80] + "...") if len(user_msg.strip()) > 80 else user_msg.strip(),
+                    message_count=0,
+                )
+                db.add(session)
+
+            # 保存用户消息
+            db.add(AIChatMessage(
+                session_id=session_id,
+                role="user",
+                content=user_msg,
+            ))
+            # 保存助手回复
+            db.add(AIChatMessage(
+                session_id=session_id,
+                role="assistant",
+                content=assistant_msg,
+            ))
+
+            session.message_count = (session.message_count or 0) + 2
+            now = datetime.now()
+            session.updated_at = now
+
+            await db.commit()
+    except Exception as e:
+        print(f"[AI Chat] 数据库保存失败（不影响对话）: {e}")
+
+
 def _save_session_file(
     session_id: str,
     user_id: str,
@@ -677,14 +732,31 @@ def _save_session_file(
     history: list,
     user_msg: str,
     assistant_msg: str,
+    business_type: str = "ai_3d_custom",
 ):
-    """将完整的 AI 对话 session 保存为 JSON 文件
+    """将完整的 AI 对话 session 保存为 JSON 文件 + 数据库
 
     文件结构：
     logs/ai_sessions/
     └── {user_id}/
         └── {session_id}.json
     """
+    # 异步保存到数据库
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.ensure_future(_save_to_db(
+                session_id, user_id, username, user_msg, assistant_msg, business_type
+            ))
+        else:
+            loop.run_until_complete(_save_to_db(
+                session_id, user_id, username, user_msg, assistant_msg, business_type
+            ))
+    except Exception as e:
+        print(f"[AI Chat] 数据库保存调度失败: {e}")
+
+    # 同时保留 JSON 文件日志（兼容）
     try:
         full_messages = []
         for h in history:
@@ -717,4 +789,5 @@ def _save_session_file(
             json.dump(session_data, f, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        print(f"AI 会话保存失败: {e}")
+        print(f"AI 会话 JSON 保存失败: {e}")
+
