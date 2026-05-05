@@ -281,6 +281,26 @@ def build_memory_context(memory: UserMemory | None) -> str:
             "如涉及相似项目，可以引用历史经验提升专业度。\n"
         )
 
+    # 资料/官网提取的客户案例
+    doc_cases = ci.get("past_cases") or []
+    if doc_cases:
+        recent_cases = doc_cases[-8:]
+        lines = []
+        for c in recent_cases:
+            brand = c.get("brand", "")
+            title = c.get("title", "")
+            city = c.get("city", "")
+            content_type = c.get("content_type", "")
+            parts = [p for p in [brand, title, city, content_type] if p]
+            if parts:
+                lines.append(f"  • {' | '.join(parts)}")
+        if lines:
+            sections.append(
+                f"\n【客户资料中的过往案例 — 共 {len(doc_cases)} 个】\n"
+                + "\n".join(lines) + "\n"
+                "优先参考与户外大屏、商圈LED、裸眼3D相关的案例经验。\n"
+            )
+
     # Agent 备忘
     if memory.agent_notes:
         sections.append(f"\n【Agent 备忘录】\n{memory.agent_notes}\n")
@@ -458,4 +478,3 @@ def _merge_preferences(existing: dict, new: dict) -> dict:
         merged["_field_updated"] = field_timestamps
 
     return merged
-

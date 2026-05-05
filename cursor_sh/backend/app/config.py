@@ -100,6 +100,18 @@ class Settings(BaseSettings):
                 # 如果不是 JSON，按逗号分隔
                 return [origin.strip() for origin in v.split(',') if origin.strip()]
         return v
+
+    @compat_validator('DEBUG')
+    @classmethod
+    def parse_debug(cls, v):
+        """兼容部署环境中 DEBUG=release/prod 这类写法。"""
+        if isinstance(v, str):
+            value = v.strip().lower()
+            if value in ("true", "1", "yes", "on", "debug", "dev", "development"):
+                return True
+            if value in ("false", "0", "no", "off", "release", "prod", "production"):
+                return False
+        return v
     
     # 文件上传配置
     UPLOAD_DIR: str = "./uploads"
@@ -177,4 +189,3 @@ class Settings(BaseSettings):
 
 # 创建全局配置实例
 settings = Settings()
-

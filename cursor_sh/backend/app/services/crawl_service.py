@@ -19,7 +19,19 @@ _PAGE_KEYWORDS = [
     "案例", "合作案例", "作品", "项目", "案例展示",
     "关于", "about", "公司", "简介", "介绍",
     "产品", "服务", "业务",
+    "case", "caselist", "cityled", "ledmedia", "massmedia", "comprehensive",
 ]
+
+_PATH_KEYWORD_WEIGHTS = {
+    # 户外屏幕/裸眼3D/商圈 LED 相关页面优先抓取
+    "cityled": 30,
+    "comprehensive": 28,
+    "ledmedia": 26,
+    # 泛案例页次之，避免高铁媒体案例挤占户外屏幕案例上下文
+    "caselist": 18,
+    "case": 12,
+    "massmedia": 8,
+}
 
 _HEADERS = {
     "User-Agent": (
@@ -78,15 +90,18 @@ async def search_company_website(company_name: str, max_retries: int = 3) -> str
 
         # 2. 逐个验证
         for url in guessed_urls:
-            print(f"[CrawlService]   验证: {url}")
-            is_valid, reason = await _verify_website(url, company_name, company_short)
+            candidate_urls = _website_url_candidates(url)
 
-            if is_valid:
-                print(f"[CrawlService] ✅ 验证通过: {url}")
-                return url
-            else:
-                print(f"[CrawlService]   ❌ 验证失败: {reason}")
-                feedback_history.append(f"URL {url} 验证失败 — {reason}")
+            for candidate_url in candidate_urls:
+                print(f"[CrawlService]   验证: {candidate_url}")
+                is_valid, reason = await _verify_website(candidate_url, company_name, company_short)
+
+                if is_valid:
+                    print(f"[CrawlService] ✅ 验证通过: {candidate_url}")
+                    return candidate_url
+                else:
+                    print(f"[CrawlService]   ❌ 验证失败: {reason}")
+                    feedback_history.append(f"URL {candidate_url} 验证失败 — {reason}")
 
     print(f"[CrawlService] {max_retries} 轮推测均未找到 {company_name} 的官网")
     return None
@@ -157,6 +172,19 @@ async def _llm_guess_url(company_name: str, feedback_history: list[str]) -> list
     except Exception as e:
         print(f"[CrawlService] LLM 推测失败: {e}")
         return []
+
+
+def _website_url_candidates(url: str) -> list[str]:
+    """生成同一官网候选地址。
+
+    部分公司官网只开放 HTTP，不支持 HTTPS；LLM 通常会优先猜 HTTPS。
+    """
+    candidates = [url]
+    parsed = urlparse(url)
+    if parsed.scheme == "https":
+        http_url = "http://" + url[len("https://"):]
+        candidates.append(http_url)
+    return list(dict.fromkeys(candidates))
 
 
 async def _verify_website(url: str, company_name: str, company_short: str) -> tuple[bool, str]:
@@ -266,7 +294,7 @@ def _fuzzy_match(text: str, company_name: str, company_short: str) -> bool:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
-async def crawl_website(base_url: str, max_pages: int = 6) -> str:
+async def crawl_website(base_url: str, max_pages: int = 8) -> str:
     """深度爬取公司官网，返回合并后的纯文本
 
     策略：爬取首页 + 最多 max_pages-1 个关键子页面
@@ -348,6 +376,9 @@ async def extract_company_info(raw_text: str) -> dict:
         "   - year: 年份（如有）\n"
         "   - city: 城市（如有）\n"
         "   - brand: 品牌方（如有）\n\n"
+        "案例提取优先级：优先输出户外屏幕、商圈LED、城市LED、裸眼3D大屏、地标大屏、"
+        "数字户外OOH相关案例；如果这类案例存在，不要优先输出普通高铁站内媒体/车站媒体案例。"
+        "只有官网没有户外屏幕类案例时，才补充其他媒体案例。\n\n"
         "如果某个字段在网页内容中没有找到对应信息，就设为空列表或空字符串。\n"
         "确保返回合法的 JSON。"
     )
@@ -500,7 +531,11 @@ def _filter_relevant_links(links: list[str], base_url: str) -> list[str]:
         if link == base_url:
             continue
         path = urlparse(link).path.lower()
-        score = sum(1 for kw in _PAGE_KEYWORDS if kw in path)
+        score = sum(1 for kw in _PAGE_KEYWORDS if kw.lower() in path)
+        score += max(
+            (weight for kw, weight in _PATH_KEYWORD_WEIGHTS.items() if kw in path),
+            default=0,
+        )
         if score > 0:
             scored_links.append((score, link))
 
