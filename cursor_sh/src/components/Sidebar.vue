@@ -6,7 +6,7 @@
     @select="handleMenuSelect"
   >
     <div class="sidebar-header">
-      <h2 class="sidebar-title">{{ isAdmin ? '订单管理系统' : isStaff ? '服务工作台' : '用户工作台' }}</h2>
+      <h2 class="sidebar-title">{{ isAdmin ? '订单管理系统' : isStaff ? '服务工作台' : isContractor ? '承包商工作台' : '用户工作台' }}</h2>
       <NotificationBell class="notification-bell-sidebar" />
     </div>
     
@@ -31,6 +31,26 @@
         <el-icon><OfficeBuilding /></el-icon>
         <template #title>企业认证审核</template>
       </el-menu-item>
+      
+      <el-menu-item index="contractors">
+        <el-icon><Suitcase /></el-icon>
+        <template #title>承包商管理</template>
+      </el-menu-item>
+      
+      <el-menu-item index="workflow-config">
+        <el-icon><SetUp /></el-icon>
+        <template #title>工作流配置</template>
+      </el-menu-item>
+      
+      <el-menu-item index="chat-records">
+        <el-icon><ChatLineSquare /></el-icon>
+        <template #title>AI 聊天记录</template>
+      </el-menu-item>
+      
+      <el-menu-item index="customers">
+        <el-icon><UserFilled /></el-icon>
+        <template #title>客户画像</template>
+      </el-menu-item>
     </template>
     
     <!-- 负责人菜单 -->
@@ -38,6 +58,19 @@
       <el-menu-item index="orders">
         <el-icon><Document /></el-icon>
         <template #title>我的订单</template>
+      </el-menu-item>
+      
+      <el-menu-item index="profile">
+        <el-icon><Setting /></el-icon>
+        <template #title>个人设置</template>
+      </el-menu-item>
+    </template>
+    
+    <!-- 承包商菜单 -->
+    <template v-else-if="isContractor">
+      <el-menu-item index="assignments">
+        <el-icon><Document /></el-icon>
+        <template #title>我的派单</template>
       </el-menu-item>
       
       <el-menu-item index="profile">
@@ -82,7 +115,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Grid, Document, User, Setting, SwitchButton, EditPen, ChatDotRound, OfficeBuilding } from '@element-plus/icons-vue'
+import { Grid, Document, User, Setting, SwitchButton, EditPen, ChatDotRound, OfficeBuilding, Suitcase, SetUp, ChatLineSquare, UserFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useOrderStore } from '@/stores/order'
 import NotificationBell from './NotificationBell.vue'
@@ -102,6 +135,7 @@ const orderStore = useOrderStore()
 
 const isAdmin = computed(() => authStore.isAdmin())
 const isStaff = computed(() => authStore.isStaff())
+const isContractor = computed(() => authStore.isContractor())
 const draftCount = computed(() => orderStore.orderStats.draft)
 
 const activeMenu = computed(() => {
@@ -120,6 +154,16 @@ const activeMenu = computed(() => {
     return 'announcements'
   } else if (path.includes('/enterprise-review') && isAdmin.value) {
     return 'enterprise-review'
+  } else if (path.includes('/contractors') && isAdmin.value) {
+    return 'contractors'
+  } else if (path.includes('/workflow-config') && isAdmin.value) {
+    return 'workflow-config'
+  } else if (path.includes('/chat-records') && isAdmin.value) {
+    return 'chat-records'
+  } else if (path.includes('/customers') && isAdmin.value) {
+    return 'customers'
+  } else if (path.includes('/assignments') && isContractor.value) {
+    return 'assignments'
   } else if (path.includes('/admin')) {
     return 'orders'
   } else if (path.includes('/staff')) {
@@ -146,6 +190,8 @@ const handleMenuSelect = (index: string) => {
   } else if (index === 'profile') {
     if (authStore.isStaff()) {
       router.push('/staff/profile')
+    } else if (authStore.isContractor()) {
+      router.push('/contractor/profile')
     } else {
       router.push('/user/profile')
     }
@@ -157,12 +203,26 @@ const handleMenuSelect = (index: string) => {
     router.push('/admin/announcements')
   } else if (index === 'enterprise-review') {
     router.push('/admin/enterprise-review')
+  } else if (index === 'contractors') {
+    router.push('/admin/contractors')
+  } else if (index === 'workflow-config') {
+    router.push('/admin/workflow-config')
+  } else if (index === 'chat-records') {
+    router.push('/admin/chat-records')
+  } else if (index === 'customers') {
+    router.push('/admin/customers')
+  } else if (index === 'assignments') {
+    router.push('/contractor/assignments')
   }
 }
 
 const handleLogout = async () => {
   await authStore.logout()
-  router.push('/login')
+  if (isContractor.value || isAdmin.value || isStaff.value) {
+    router.push('/admin/login')
+  } else {
+    router.push('/login')
+  }
 }
 </script>
 

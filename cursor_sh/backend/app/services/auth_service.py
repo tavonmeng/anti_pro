@@ -7,6 +7,9 @@ from fastapi import HTTPException, status
 from app.models.user import User, UserRole
 from app.models.admin import Admin
 from app.models.staff_member import StaffMember
+from app.models.contractor import Contractor
+from app.models.contractor_invitation import ContractorInvitation
+from app.models.security_event import SecurityEvent, SecurityEventType
 from app.schemas.auth import (
     LoginRequest, RegisterRequest, LoginResponse, 
     ChangePasswordRequest, ResetPasswordRequest
@@ -23,6 +26,8 @@ def _get_model_for_role(role: UserRole):
         return Admin
     elif role == UserRole.STAFF:
         return StaffMember
+    elif role == UserRole.CONTRACTOR:
+        return Contractor
     else:
         return User
 
@@ -111,52 +116,111 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
     return LoginResponse(token=token, user=user_response)
 
 
-async def register(db: AsyncSession, register_data: RegisterRequest) -> dict:
+async def register(db: AsyncSession, register_data: RegisterRequest, client_ip: str = "", user_agent: str = "") -> dict:
     """用户注册（手机号+验证码+用户名+密码+邮箱）
     
     注册只允许 user 角色。admin 和 staff 由管理员后台创建。
+    包含反注册机行为分析 + 安全事件审计。
     """
+    # 构建行为数据快照（用于写入安全事件表）
+    behavior = register_data.behavior
+    behavior_snapshot = behavior.model_dump() if behavior else None
+    if behavior_snapshot and behavior:
+        behavior_snapshot["total_duration_sec"] = round(
+            (behavior.submit_clicked_at - behavior.page_loaded_at) / 1000, 1
+        )
+    
+    async def _log_event(event_type: SecurityEventType, user_id: str = None, block_reason: str = None, fail_reason: str = None):
+        """写入安全事件（独立 try 确保不影响主流程）"""
+        try:
+            event = SecurityEvent(
+                id=generate_id("sec"),
+                event_type=event_type,
+                user_id=user_id,
+                phone=register_data.phone,
+                username=register_data.username,
+                client_ip=client_ip[:50] if client_ip else None,
+                user_agent=user_agent[:500] if user_agent else None,
+                behavior_data=behavior_snapshot,
+                block_reason=block_reason,
+                fail_reason=fail_reason,
+            )
+            db.add(event)
+            await db.flush()  # 写入但不单独 commit，跟随主事务
+        except Exception as e:
+            print(f"[SecurityEvent] 写入失败: {e}")
+    
     try:
-        # 1. 校验短信验证码（立即消耗，每次提交都需要新的验证码）
-        is_valid = await verify_sms_code(register_data.phone, register_data.sms_code, consume=True)
-        if not is_valid:
+        # ========== 反注册机检测 ==========
+        
+        # 0a. 蜜罐字段检查（前端隐藏，正常用户不会填写）
+        if register_data.website:
+            print(f"[AntiBot] 蜜罐触发 IP={client_ip} phone={register_data.phone}")
+            await _log_event(SecurityEventType.REGISTER_BOT_BLOCKED, block_reason="honeypot_filled")
+            await db.commit()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="验证码错误或已过期"
+                detail="注册失败，请稍后重试"
             )
         
-        # 2. 检查手机号是否已注册（只查 users 表）
-        result = await db.execute(
-            select(User).where(User.phone == register_data.phone)
-        )
+        # 0b. 行为时序分析
+        if behavior:
+            total_time_sec = (behavior.submit_clicked_at - behavior.page_loaded_at) / 1000
+            
+            # 规则1: 总操作时长 < 8 秒 → 极有可能是机器人
+            if total_time_sec < 8:
+                await _log_event(SecurityEventType.REGISTER_BOT_BLOCKED, block_reason=f"too_fast:{total_time_sec:.1f}s")
+                await db.commit()
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="操作过快，请重新注册")
+            
+            # 规则2: 按键次数 < 15 → 不可能手动填完所有字段
+            if behavior.key_press_count < 15:
+                await _log_event(SecurityEventType.REGISTER_BOT_BLOCKED, block_reason=f"low_keypress:{behavior.key_press_count}")
+                await db.commit()
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="操作异常，请重新注册")
+            
+            # 规则3: 字段聚焦次数 < 3 → 没有正常的 tab/click 操作
+            if behavior.field_focus_count < 3:
+                await _log_event(SecurityEventType.REGISTER_BOT_BLOCKED, block_reason=f"low_focus:{behavior.field_focus_count}")
+                await db.commit()
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="操作异常，请重新注册")
+            
+            print(f"[AntiBot] 行为正常: 耗时={total_time_sec:.1f}s 按键={behavior.key_press_count} 聚焦={behavior.field_focus_count} IP={client_ip}")
+        else:
+            print(f"[AntiBot] 警告: 无行为数据 IP={client_ip} phone={register_data.phone}")
+        
+        # ========== 正常注册流程 ==========
+        
+        # 1. 校验短信验证码
+        is_valid = await verify_sms_code(register_data.phone, register_data.sms_code, consume=True)
+        if not is_valid:
+            await _log_event(SecurityEventType.REGISTER_FAIL, fail_reason="invalid_sms_code")
+            await db.commit()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证码错误或已过期")
+        
+        # 2. 检查手机号是否已注册
+        result = await db.execute(select(User).where(User.phone == register_data.phone))
         if result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="该手机号已注册"
-            )
+            await _log_event(SecurityEventType.REGISTER_FAIL, fail_reason="phone_exists")
+            await db.commit()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该手机号已注册")
         
-        # 3. 检查用户名是否已存在（需查三张表）
-        for Model in [User, Admin, StaffMember]:
-            result = await db.execute(
-                select(Model).where(Model.username == register_data.username)
-            )
+        # 3. 检查用户名是否已存在（需查四张表）
+        for Model in [User, Admin, StaffMember, Contractor]:
+            result = await db.execute(select(Model).where(Model.username == register_data.username))
             if result.scalar_one_or_none():
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="用户名已存在"
-                )
+                await _log_event(SecurityEventType.REGISTER_FAIL, fail_reason="username_exists")
+                await db.commit()
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已存在")
         
         # 4. 检查邮箱是否已使用
-        result = await db.execute(
-            select(User).where(User.email == register_data.email)
-        )
+        result = await db.execute(select(User).where(User.email == register_data.email))
         if result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="该邮箱已被使用"
-            )
+            await _log_event(SecurityEventType.REGISTER_FAIL, fail_reason="email_exists")
+            await db.commit()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该邮箱已被使用")
         
-        # 5. 创建新用户（只在 users 表）
+        # 5. 创建新用户
         new_user = User(
             id=generate_id("user"),
             username=register_data.username,
@@ -164,10 +228,16 @@ async def register(db: AsyncSession, register_data: RegisterRequest) -> dict:
             phone=register_data.phone,
             password_hash=get_password_hash(register_data.password),
             role=UserRole.USER,
-            is_active=True
+            is_active=True,
+            register_ip=client_ip[:50] if client_ip else None,
+            register_user_agent=user_agent[:500] if user_agent else None,
         )
         
         db.add(new_user)
+        
+        # 6. 记录注册成功事件
+        await _log_event(SecurityEventType.REGISTER_SUCCESS, user_id=new_user.id)
+        
         await db.commit()
         await db.refresh(new_user)
         
@@ -194,9 +264,9 @@ async def reset_password(db: AsyncSession, data: ResetPasswordRequest) -> dict:
             detail="验证码错误或已过期"
         )
     
-    # 2. 在三张表中查找用户
+    # 2. 在四张表中查找用户
     user = None
-    for Model in [User, Admin, StaffMember]:
+    for Model in [User, Admin, StaffMember, Contractor]:
         result = await db.execute(
             select(Model).where(Model.phone == data.phone)
         )
@@ -236,3 +306,145 @@ async def change_password(
     await db.refresh(user)
     
     return {"success": True, "message": "密码修改成功"}
+
+
+async def register_contractor(db: AsyncSession, register_data: dict) -> dict:
+    """承包商通过邀请链接注册
+    
+    Args:
+        register_data: 包含以下字段:
+            - invite_token: 邀请 token
+            - phone: 手机号
+            - sms_code: 短信验证码
+            - username: 用户名
+            - password: 密码
+            - email: 邮箱
+            - company: 公司名称（选填）
+            - address: 地址（选填）
+            - specialty: 专业方向（选填）
+            - expertise: 擅长领域（选填）
+    """
+    from datetime import datetime, timezone
+    
+    try:
+        # 1. 验证邀请 token
+        invite_token = register_data.get('invite_token')
+        if not invite_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="缺少邀请 token"
+            )
+        
+        result = await db.execute(
+            select(ContractorInvitation).where(
+                ContractorInvitation.token == invite_token
+            )
+        )
+        invitation = result.scalar_one_or_none()
+        
+        if not invitation:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="邀请链接无效"
+            )
+        
+        if invitation.is_used:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="邀请链接已被使用"
+            )
+        
+        now = datetime.now(timezone.utc)
+        if invitation.expires_at and invitation.expires_at.replace(tzinfo=timezone.utc) < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="邀请链接已过期"
+            )
+        
+        # 2. 验证短信验证码
+        phone = register_data.get('phone')
+        sms_code = register_data.get('sms_code')
+        if not phone or not sms_code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="请提供手机号和验证码"
+            )
+        
+        is_valid = await verify_sms_code(phone, sms_code, consume=True)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="验证码错误或已过期"
+            )
+        
+        # 3. 检查手机号是否已注册
+        result = await db.execute(
+            select(Contractor).where(Contractor.phone == phone)
+        )
+        if result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="该手机号已注册"
+            )
+        
+        # 4. 用户名：未提供则自动生成
+        username = register_data.get('username')
+        if not username:
+            username = f"contractor_{phone[-4:]}"
+            # 确保自动生成的用户名唯一
+            suffix = 1
+            base_username = username
+            while True:
+                dup = await db.execute(select(Contractor).where(Contractor.username == username))
+                if not dup.scalar_one_or_none():
+                    break
+                username = f"{base_username}_{suffix}"
+                suffix += 1
+        
+        # 检查用户名唯一性（查四张表）
+        for Model in [User, Admin, StaffMember, Contractor]:
+            result = await db.execute(
+                select(Model).where(Model.username == username)
+            )
+            if result.scalar_one_or_none():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="用户名已存在"
+                )
+        
+        # 5. 创建承包商账户
+        new_contractor = Contractor(
+            id=generate_id("contractor"),
+            username=username,
+            email=register_data.get('email', ''),
+            phone=phone,
+            password_hash=get_password_hash(register_data.get('password', '')),
+            real_name=register_data.get('real_name'),
+            company=register_data.get('company'),
+            address=register_data.get('address'),
+            specialty=register_data.get('specialty'),
+            expertise=register_data.get('expertise'),
+            is_active=True
+        )
+        
+        db.add(new_contractor)
+        
+        # 6. 标记邀请链接已使用
+        invitation.is_used = True
+        invitation.used_by = new_contractor.id
+        
+        await db.commit()
+        await db.refresh(new_contractor)
+        
+        return {"success": True, "contractor_id": new_contractor.id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        print(f"承包商注册错误: {error_detail}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"注册失败: {str(e)}"
+        )

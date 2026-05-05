@@ -1,10 +1,13 @@
 """企业认证 API 路由"""
 
+import os
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime
 from typing import Optional, List
+
+from app.config import settings
 
 from app.database import get_db
 from app.models.user import User, EnterpriseStatus
@@ -42,10 +45,11 @@ async def get_enterprise_status(
     
     status_val = _get_status(current_user)
     
+    from app.services.oss_service import maybe_sign_url
     return ApiResponse(code=200, message="获取成功", data={
         "enterprise_status": status_val,
         "enterprise_name": current_user.enterprise_name,
-        "business_license_url": current_user.business_license_url,
+        "business_license_url": maybe_sign_url(current_user.business_license_url or ""),
         "enterprise_reject_reason": current_user.enterprise_reject_reason,
         "enterprise_submitted_at": current_user.enterprise_submitted_at.isoformat() if current_user.enterprise_submitted_at else None,
         "enterprise_reviewed_at": current_user.enterprise_reviewed_at.isoformat() if current_user.enterprise_reviewed_at else None
@@ -78,21 +82,32 @@ async def submit_enterprise_auth(
             raise HTTPException(status_code=400, detail="营业执照仅支持 JPG/PNG/WEBP 格式")
         
         # 保存文件
-        import os
-        from app.config import settings
-        upload_dir = os.path.join(settings.UPLOAD_DIR, "enterprise", current_user.id)
-        os.makedirs(upload_dir, exist_ok=True)
-        
         file_ext = os.path.splitext(business_license.filename)[1] or '.jpg'
-        file_name = f"license_{int(datetime.utcnow().timestamp())}{file_ext}"
-        file_path = os.path.join(upload_dir, file_name)
-        
-        import aiofiles
         content = await business_license.read()
-        async with aiofiles.open(file_path, 'wb') as f:
-            await f.write(content)
-        
-        file_url = f"/uploads/enterprise/{current_user.id}/{file_name}"
+
+        if settings.OSS_ENABLED:
+            from app.services.oss_service import upload_and_sign
+            result = upload_and_sign(
+                data=content,
+                prefix="enterprise",
+                user_id=current_user.id,
+                filename="license_%d%s" % (int(datetime.utcnow().timestamp()), file_ext),
+                content_type=business_license.content_type or "",
+            )
+            file_url = result["object_key"]  # 存 object_key，读取时再签名
+        else:
+            upload_dir = os.path.join(settings.UPLOAD_DIR, "enterprise", current_user.id)
+            os.makedirs(upload_dir, exist_ok=True)
+
+            file_name = "license_%d%s" % (int(datetime.utcnow().timestamp()), file_ext)
+            file_path = os.path.join(upload_dir, file_name)
+
+            import aiofiles
+            async with aiofiles.open(file_path, 'wb') as f:
+                await f.write(content)
+
+            file_url = "/uploads/enterprise/%s/%s" % (current_user.id, file_name)
+
         current_user.business_license_url = file_url
     elif not current_user.business_license_url:
         # 首次提交且没上传文件
@@ -107,9 +122,28 @@ async def submit_enterprise_auth(
     await db.commit()
     await db.refresh(current_user)
     
+    # 获取所有管理员，发送系统通知
+    try:
+        from app.models.admin import Admin
+        admin_result = await db.execute(select(Admin))
+        admins = admin_result.scalars().all()
+        admin_ids = [admin.id for admin in admins]
+        
+        if admin_ids:
+            await NotificationService.create_notification_for_multiple_users(
+                db=db,
+                user_ids=admin_ids,
+                notification_type=NotificationType.SYSTEM_NOTICE,
+                title="新的企业认证申请",
+                content=f"用户 {current_user.username} ({current_user.phone}) 提交了「{enterprise_name}」的企业认证申请，请及时审核。"
+            )
+    except Exception as e:
+        print(f"[Enterprise] 发送管理员通知失败: {e}")
+    
     return ApiResponse(code=200, message="企业认证申请已提交，请等待审核", data={
         "enterprise_status": "pending",
-        "enterprise_name": enterprise_name
+        "enterprise_name": enterprise_name,
+        "submittedAt": current_user.enterprise_submitted_at.isoformat() if current_user.enterprise_submitted_at else datetime.utcnow().isoformat(),
     })
 
 
@@ -125,6 +159,7 @@ async def get_pending_enterprise_auths(
     users = result.scalars().all()
     
     items = []
+    from app.services.oss_service import maybe_sign_url
     for u in users:
         status_val = _get_status(u)
         items.append({
@@ -133,7 +168,7 @@ async def get_pending_enterprise_auths(
             "phone": u.phone,
             "email": u.email,
             "enterprise_name": u.enterprise_name,
-            "business_license_url": u.business_license_url,
+            "business_license_url": maybe_sign_url(u.business_license_url or ""),
             "enterprise_status": status_val,
             "enterprise_reject_reason": u.enterprise_reject_reason,
             "submitted_at": u.enterprise_submitted_at.isoformat() if u.enterprise_submitted_at else None,
@@ -186,7 +221,8 @@ async def review_enterprise_auth(
         
         return ApiResponse(code=200, message="企业认证已通过", data={
             "enterprise_status": "approved",
-            "username": target_user.username
+            "username": target_user.username,
+            "reviewedAt": target_user.enterprise_reviewed_at.isoformat() if target_user.enterprise_reviewed_at else datetime.utcnow().isoformat(),
         })
     
     elif action == "reject":
@@ -213,7 +249,8 @@ async def review_enterprise_auth(
         
         return ApiResponse(code=200, message="已拒绝企业认证", data={
             "enterprise_status": "rejected",
-            "reject_reason": reject_reason
+            "reject_reason": reject_reason,
+            "reviewedAt": target_user.enterprise_reviewed_at.isoformat() if target_user.enterprise_reviewed_at else datetime.utcnow().isoformat(),
         })
     
     else:

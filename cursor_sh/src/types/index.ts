@@ -1,5 +1,5 @@
 // 用户角色类型
-export type UserRole = 'admin' | 'user' | 'staff'
+export type UserRole = 'admin' | 'user' | 'staff' | 'contractor'
 
 // 订单类型
 export type OrderType = 'video_purchase' | 'ai_3d_custom' | 'digital_art'
@@ -92,6 +92,7 @@ export interface PreviewHistory {
 export interface OrderFeedback {
   id: string
   orderId: string
+  deliverableId?: string      // 关联的交付物ID（为空则是订单级别反馈）
   content: string
   type: 'approval' | 'revision'  // 确认或修改
   createdAt: string
@@ -228,6 +229,20 @@ export interface LoginRequest {
   captcha?: string
 }
 
+// 注册行为时序数据（反注册机）
+export interface RegisterBehavior {
+  page_loaded_at: number
+  phone_first_input_at?: number | null
+  sms_sent_at?: number | null
+  sms_input_at?: number | null
+  username_first_input_at?: number | null
+  email_first_input_at?: number | null
+  password_first_input_at?: number | null
+  submit_clicked_at: number
+  field_focus_count: number
+  key_press_count: number
+}
+
 // 注册请求接口
 export interface RegisterRequest {
   phone: string
@@ -236,6 +251,8 @@ export interface RegisterRequest {
   email: string
   password: string
   role: UserRole
+  behavior?: RegisterBehavior
+  website?: string               // 蜜罐字段
 }
 
 // 登录响应接口

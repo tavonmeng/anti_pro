@@ -66,6 +66,9 @@ class Order(Base):
     # 订单特定数据（JSON 存储不同类型订单的特定字段）
     order_data = Column(JSON, nullable=False)
     
+    # AI方案设计（管理员在派单前编写的设计方案）
+    design_plan = Column(JSON, nullable=True)
+    
     # 时间戳
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

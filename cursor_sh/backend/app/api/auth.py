@@ -1,6 +1,6 @@
 """认证 API 路由"""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -77,11 +77,16 @@ async def api_pre_verify_sms(data: VerifySmsRequest):
 @router.post("/register", response_model=ApiResponse[dict])
 async def api_register(
     register_data: RegisterRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """用户注册（手机号+验证码+用户名+密码+邮箱）"""
     try:
-        result = await register(db, register_data)
+        # 提取客户端 IP 和 User-Agent（用于安全审计）
+        client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.client.host if request.client else ""
+        user_agent = request.headers.get("User-Agent", "")
+        
+        result = await register(db, register_data, client_ip=client_ip, user_agent=user_agent)
         return ApiResponse(code=200, message="注册成功", data=result)
     except HTTPException as e:
         raise e

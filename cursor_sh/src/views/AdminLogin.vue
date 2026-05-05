@@ -169,7 +169,15 @@ const handleLogin = async () => {
         // 如果 admin 登录失败，尝试 staff 角色
         if (!success) {
           loginData = { ...loginForm, role: 'staff' as UserRole }
-          success = await authStore.login(loginData, false) // 这次显示错误消息
+          try {
+            success = await authStore.login(loginData, true)
+          } catch { success = false }
+        }
+        
+        // 如果 staff 也失败，尝试 contractor 角色
+        if (!success) {
+          loginData = { ...loginForm, role: 'contractor' as UserRole }
+          success = await authStore.login(loginData, false) // 最后一次显示错误
         }
         
         if (success) {
@@ -184,8 +192,11 @@ const handleLogin = async () => {
           } else if (authStore.isStaff()) {
             const redirect = router.currentRoute.value.query.redirect as string || undefined
             router.push(redirect || '/staff')
+          } else if (authStore.isContractor()) {
+            const redirect = router.currentRoute.value.query.redirect as string || undefined
+            router.push(redirect || '/contractor')
           } else {
-            ElMessage.error('您没有管理员或负责人权限')
+            ElMessage.error('您没有内部系统访问权限')
             if (captchaRef.value) {
               captchaRef.value.refresh()
               loginForm.captcha = ''

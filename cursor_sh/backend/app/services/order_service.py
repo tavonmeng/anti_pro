@@ -22,6 +22,7 @@ from app.services.file_service import FileService
 from app.services.email_service import EmailService
 from app.services.notification_service import NotificationService
 from app.services.pdf_service import PDFService
+from app.config import settings
 
 
 async def _get_order_assignee_ids(db: AsyncSession, order_id: str) -> List[str]:
@@ -181,13 +182,32 @@ class OrderService:
         order_response = await OrderService._build_order_response(db, new_order, user)
 
         # 如果不是草稿（直接提交），生成 PDF 并发邮件
-        if not is_draft and user.email:
-            pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response)
-            await EmailService.send_order_confirmation(
-                user.email,
-                new_order.order_number,
-                pdf_bytes
-            )
+        if not is_draft:
+            if user.email:
+                pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response)
+                await EmailService.send_order_confirmation(
+                    user.email,
+                    new_order.order_number,
+                    pdf_bytes
+                )
+            
+            # 通知所有管理员有新订单提交
+            try:
+                from app.models.admin import Admin
+                admin_result = await db.execute(select(Admin))
+                admins = admin_result.scalars().all()
+                admin_ids = [admin.id for admin in admins]
+                if admin_ids:
+                    await NotificationService.create_notification_for_multiple_users(
+                        db=db,
+                        user_ids=admin_ids,
+                        notification_type=NotificationType.SYSTEM_NOTICE,
+                        title="新订单提交",
+                        content=f"用户 {user.username} 提交了新订单：{new_order.order_number}，请及时处理。",
+                        order_id=new_order.id
+                    )
+            except Exception as e:
+                print(f"[Order] 发送管理员新订单通知失败: {e}")
 
         return order_response
     
@@ -518,6 +538,27 @@ class OrderService:
                 content=f"订单 {order.order_number} 状态已变更为：{new_status_text}",
                 order_id=order.id
             )
+            
+        # 3. 如果是用户提交草稿或者是没有负责人的订单，通知管理员
+        if is_draft_submit or not assignee_ids:
+            try:
+                from app.models.admin import Admin
+                admin_result = await db.execute(select(Admin))
+                admins = admin_result.scalars().all()
+                admin_ids = [admin.id for admin in admins]
+                if admin_ids:
+                    title = "新订单提交" if is_draft_submit else "订单状态更新"
+                    content = f"用户提交了草稿订单：{order.order_number}，请及时分配。" if is_draft_submit else f"订单 {order.order_number} 状态变更为 {new_status_text}。"
+                    await NotificationService.create_notification_for_multiple_users(
+                        db=db,
+                        user_ids=admin_ids,
+                        notification_type=NotificationType.SYSTEM_NOTICE,
+                        title=title,
+                        content=content,
+                        order_id=order.id
+                    )
+            except Exception as e:
+                print(f"[Order] 发送管理员状态变更通知失败: {e}")
         
         return await OrderService._build_order_response(db, order, current_user)
     
@@ -875,7 +916,7 @@ class OrderService:
         feedback_data: FeedbackCreate,
         current_user: AnyUser
     ) -> dict:
-        """提交订单反馈"""
+        """提交订单反馈（支持订单级别和交付物级别）"""
         result = await db.execute(select(Order).where(Order.id == order_id))
         order = result.scalar_one_or_none()
         
@@ -890,41 +931,66 @@ class OrderService:
         feedback = Feedback(
             id=generate_id("feedback"),
             order_id=order_id,
+            deliverable_id=feedback_data.deliverableId,
             content=feedback_data.content,
             type=feedback_data.type,
             created_by=current_user.id
         )
         db.add(feedback)
         
-        # 根据反馈类型更新订单状态
-        if feedback_data.type == FeedbackType.REVISION:
-            # 需要修改
-            order.status = OrderStatus.REVISION_NEEDED
-            order.revision_count += 1
-        elif feedback_data.type == FeedbackType.APPROVAL:
-            # 确认通过
-            if order.status == OrderStatus.PREVIEW_READY:
-                # 初稿通过，继续制作终稿
-                order.status = OrderStatus.IN_PRODUCTION
-            elif order.status == OrderStatus.FINAL_PREVIEW:
-                # 终稿通过，订单完成
-                order.status = OrderStatus.COMPLETED
+        # 仅订单级别反馈时才更新订单状态（交付物级别反馈不影响订单状态）
+        if not feedback_data.deliverableId:
+            if feedback_data.type == FeedbackType.REVISION:
+                # 需要修改
+                order.status = OrderStatus.REVISION_NEEDED
+                order.revision_count += 1
+            elif feedback_data.type == FeedbackType.APPROVAL:
+                # 确认通过
+                if order.status == OrderStatus.PREVIEW_READY:
+                    # 初稿通过，继续制作终稿
+                    order.status = OrderStatus.IN_PRODUCTION
+                elif order.status == OrderStatus.FINAL_PREVIEW:
+                    # 终稿通过，订单完成
+                    order.status = OrderStatus.COMPLETED
         
         await db.commit()
         await db.refresh(feedback)
         
+        # 构建通知描述
+        feedback_type_text = "需要修改" if feedback_data.type == FeedbackType.REVISION else "确认通过"
+        deliverable_hint = ""
+        if feedback_data.deliverableId:
+            deliverable_hint = "（针对交付物）"
+        
         # 创建系统内消息通知 - 通知所有负责该订单的staff
         assignee_ids = await _get_order_assignee_ids(db, order.id)
         if assignee_ids:
-            feedback_type_text = "需要修改" if feedback_data.type == FeedbackType.REVISION else "确认通过"
             await NotificationService.create_notification_for_multiple_users(
                 db=db,
                 user_ids=assignee_ids,
                 notification_type=NotificationType.NEW_FEEDBACK,
                 title=f"新反馈提交",
-                content=f"订单 {order.order_number} 收到新的反馈：{feedback_type_text}",
+                content=f"订单 {order.order_number} 收到新的反馈{deliverable_hint}：{feedback_type_text}",
                 order_id=order.id
             )
+            
+        # 通知所有管理员有新反馈
+        try:
+            from app.models.admin import Admin
+            admin_result = await db.execute(select(Admin))
+            admins = admin_result.scalars().all()
+            admin_ids = [admin.id for admin in admins]
+            if admin_ids:
+                await NotificationService.create_notification_for_multiple_users(
+                    db=db,
+                    user_ids=admin_ids,
+                    notification_type=NotificationType.NEW_FEEDBACK,
+                    title=f"客户反馈{deliverable_hint}",
+                    content=f"订单 {order.order_number} 收到用户的反馈{deliverable_hint}：{feedback_type_text}。内容：{feedback_data.content[:100]}",
+                    order_id=order.id
+                )
+        except Exception as e:
+            print(f"[Feedback] 发送管理员反馈通知失败: {e}")
         
         # 确保时间包含时区信息（UTC）
         feedback_created_at = feedback.created_at
@@ -935,6 +1001,7 @@ class OrderService:
         return {
             "id": feedback.id,
             "orderId": feedback.order_id,
+            "deliverableId": feedback.deliverable_id,
             "content": feedback.content,
             "type": feedback.type.value,
             "createdAt": feedback_created_at.isoformat(),
@@ -1145,6 +1212,7 @@ class OrderService:
             feedback_responses.append({
                 "id": feedback.id,
                 "orderId": feedback.order_id,
+                "deliverableId": feedback.deliverable_id,
                 "content": feedback.content,
                 "type": feedback.type.value,
                 "createdAt": feedback_created_at.isoformat(),
@@ -1186,5 +1254,85 @@ class OrderService:
         # 合并订单特定数据
         base_response.update(order.order_data)
         
+        # 获取已发布给用户的承包商交付物
+        try:
+            from app.models.contractor_deliverable import ContractorDeliverable
+            from app.models.contractor_assignment import ContractorAssignment
+            
+            published_dlv_result = await db.execute(
+                select(ContractorDeliverable)
+                .join(ContractorAssignment, ContractorDeliverable.assignment_id == ContractorAssignment.id)
+                .where(
+                    ContractorAssignment.order_id == order.id,
+                    ContractorDeliverable.is_published_to_user == True
+                )
+                .order_by(ContractorDeliverable.stage_order.asc(), ContractorDeliverable.created_at.asc())
+            )
+            published_deliverables = published_dlv_result.scalars().all()
+            
+            if published_deliverables:
+                base_response["publishedDeliverables"] = []
+                for dlv in published_deliverables:
+                    dlv_item = {
+                        "id": dlv.id,
+                        "stageName": dlv.stage_name,
+                        "stageOrder": dlv.stage_order,
+                        "version": dlv.version,
+                        "files": dlv.files or [],
+                        "description": dlv.description,
+                        "publishedNote": dlv.published_note,
+                        "publishedAt": dlv.published_at.isoformat() if dlv.published_at else None,
+                    }
+                    base_response["publishedDeliverables"].append(dlv_item)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"获取已发布交付物失败: {e}")
+        
+        # OSS 模式下：为所有文件 URL 字段生成签名 URL
+        if settings.OSS_ENABLED:
+            _sign_file_urls_in_response(base_response)
+        
         return base_response
 
+
+def _sign_file_urls_in_response(data: dict):
+    """为订单响应中所有文件 URL 生成 OSS 签名 URL。
+
+    处理字段：
+    - scenePhotos[].url
+    - scenePhotos[].file_url
+    - previewFiles[].url
+    - previewHistory[].files[].url
+    - site_photos[].url / site_photos[].file_url
+    """
+    from app.services.oss_service import maybe_sign_url
+
+    # 签名单个文件对象的 url 字段
+    def _sign_file_item(item):
+        if isinstance(item, dict):
+            if "url" in item and item["url"]:
+                item["url"] = maybe_sign_url(item["url"])
+            if "file_url" in item and item["file_url"]:
+                item["file_url"] = maybe_sign_url(item["file_url"])
+
+    # scenePhotos
+    for photo in data.get("scenePhotos", []) or []:
+        _sign_file_item(photo)
+
+    # site_photos（承包商端脱敏后的字段名）
+    for photo in data.get("site_photos", []) or []:
+        _sign_file_item(photo)
+
+    # previewFiles
+    for f in data.get("previewFiles", []) or []:
+        _sign_file_item(f)
+
+    # previewHistory -> files
+    for entry in data.get("previewHistory", []) or []:
+        for f in entry.get("files", []) or []:
+            _sign_file_item(f)
+
+    # publishedDeliverables -> files
+    for dlv in data.get("publishedDeliverables", []) or []:
+        for f in dlv.get("files", []) or []:
+            _sign_file_item(f)

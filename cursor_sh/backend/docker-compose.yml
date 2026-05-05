@@ -1,30 +1,39 @@
-version: '3.8'
-
 services:
   # 后端 API 服务
   backend:
+    image: anti_pro-backend
     build: .
-    container_name: ai-design-backend
-    ports:
-      - "8000:8000"
+    container_name: anti-pro-backend
+    # ⭐ 关键：从 .env 文件加载所有环境变量到容器内部
+    env_file:
+      - .env
+    expose:
+      - "8000"
     volumes:
       - ./uploads:/app/uploads
-      - ./app.db:/app/app.db
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - app-network
+
+  # 前端 Nginx 服务
+  frontend:
+    image: anti_pro-frontend
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: anti-pro-frontend
     environment:
-      - DEBUG=False
-      # ---- SQLite 模式（默认）----
-      - DB_TYPE=sqlite
-      - DB_NAME=app
-      # ---- MySQL RDS 模式（生产环境取消注释）----
-      # - DB_TYPE=mysql
-      # - DB_HOST=rm-xxxxx.mysql.rds.aliyuncs.com
-      # - DB_PORT=3306
-      # - DB_NAME=anti_pro_db
-      # - DB_USER=anti_pro_user
-      # - DB_PASSWORD=your_strong_password
-      # - DB_POOL_SIZE=10
-      # - DB_POOL_RECYCLE=1800
-      # - DB_POOL_PRE_PING=True
+      - DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-all}
+    ports:
+      - "80:8080"
+    depends_on:
+      - backend
     restart: unless-stopped
     networks:
       - app-network

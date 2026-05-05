@@ -10,13 +10,14 @@ from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.admin import Admin
 from app.models.staff_member import StaffMember
+from app.models.contractor import Contractor
 from app.utils.security import decode_access_token
 
 # HTTP Bearer 认证
 security = HTTPBearer()
 
 # 所有角色的联合类型
-AnyUser = Union[Admin, StaffMember, User]
+AnyUser = Union[Admin, StaffMember, User, Contractor]
 
 
 def _get_model_for_role(role_str: str):
@@ -25,6 +26,8 @@ def _get_model_for_role(role_str: str):
         return Admin
     elif role_str == "staff":
         return StaffMember
+    elif role_str == "contractor":
+        return Contractor
     else:
         return User
 
@@ -95,5 +98,33 @@ async def require_admin_or_staff(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="权限不足"
+        )
+    return current_user
+
+
+async def require_contractor(
+    current_user: AnyUser = Depends(get_current_user)
+) -> Contractor:
+    """要求承包商权限"""
+    role = current_user.role
+    role_value = role.value if hasattr(role, 'value') else role
+    if role_value != "contractor":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足，仅承包商可执行此操作"
+        )
+    return current_user
+
+
+async def require_internal_user(
+    current_user: AnyUser = Depends(get_current_user)
+) -> AnyUser:
+    """要求内部用户权限（管理员/设计师/承包商）"""
+    role = current_user.role
+    role_value = role.value if hasattr(role, 'value') else role
+    if role_value not in ["admin", "staff", "contractor"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足，仅内部用户可执行此操作"
         )
     return current_user

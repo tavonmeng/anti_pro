@@ -157,6 +157,52 @@
           </el-timeline>
         </div>
         
+        <!-- 已推送的交付物 -->
+        <div v-if="order.publishedDeliverables && order.publishedDeliverables.length > 0" class="deliverables-section">
+          <h3>交付物</h3>
+          <div v-for="dlv in order.publishedDeliverables" :key="dlv.id" class="deliverable-card">
+            <div class="dlv-header">
+              <el-tag type="success" size="small">{{ dlv.stageName }}</el-tag>
+              <span class="dlv-version">V{{ dlv.version }}</span>
+              <span class="dlv-time" v-if="dlv.publishedAt">{{ formatTime(dlv.publishedAt) }}</span>
+            </div>
+            <div v-if="dlv.description" class="dlv-description">
+              <p>{{ dlv.description }}</p>
+            </div>
+            <div v-if="dlv.publishedNote" class="dlv-note">
+              <p><strong>管理员备注：</strong>{{ dlv.publishedNote }}</p>
+            </div>
+            <div v-if="dlv.files && dlv.files.length > 0" class="dlv-files">
+              <div v-for="(file, fi) in dlv.files" :key="fi" class="file-item">
+                <a :href="file.url" target="_blank" class="file-link">
+                  <el-icon><VideoPlay /></el-icon>
+                  <span>{{ file.name || '交付文件' }}</span>
+                  <span class="file-size" v-if="file.size">{{ formatFileSize(file.size) }}</span>
+                </a>
+              </div>
+            </div>
+            <!-- 该交付物的历史评论 -->
+            <div v-if="getDeliverableFeedbacks(dlv.id).length > 0" class="dlv-feedback-list">
+              <div v-for="fb in getDeliverableFeedbacks(dlv.id)" :key="fb.id" class="dlv-feedback-item">
+                <el-tag :type="fb.type === 'approval' ? 'success' : 'warning'" size="small">
+                  {{ fb.type === 'approval' ? '确认通过' : '需要修改' }}
+                </el-tag>
+                <span class="dlv-fb-content">{{ fb.content }}</span>
+                <span class="dlv-fb-time">{{ formatTime(fb.createdAt) }}</span>
+              </div>
+            </div>
+            <!-- 评论按钮 -->
+            <div class="dlv-comment-actions">
+              <el-button size="small" type="success" plain @click="openDeliverableFeedback(dlv.id, 'approval')">
+                确认通过
+              </el-button>
+              <el-button size="small" type="warning" plain @click="openDeliverableFeedback(dlv.id, 'revision')">
+                需要修改
+              </el-button>
+            </div>
+          </div>
+        </div>
+        
         <!-- 操作按钮 -->
         <div class="action-buttons">
           <el-button
@@ -210,9 +256,12 @@
       @cancel="showConfirmation = false"
     />
     
-    <!-- 反馈对话框 -->
+    <!-- 反馈对话框（支持订单级别和交付物级别） -->
     <el-dialog v-model="feedbackDialogVisible" :title="feedbackType === 'approval' ? '确认通过' : '提交修改意见'" width="500px">
       <el-form :model="feedbackForm" label-width="80px">
+        <el-form-item v-if="feedbackTargetDeliverableId" label="针对">
+          <el-tag type="success" size="small">交付物</el-tag>
+        </el-form-item>
         <el-form-item label="反馈内容">
           <el-input
             v-model="feedbackForm.content"
@@ -256,6 +305,21 @@ const downloadingPdf = ref(false)
 const feedbackForm = ref({
   content: ''
 })
+const feedbackTargetDeliverableId = ref<string | null>(null)
+
+// 获取某个交付物关联的反馈
+const getDeliverableFeedbacks = (deliverableId: string) => {
+  if (!order.value || !order.value.feedbacks) return []
+  return order.value.feedbacks.filter((fb: any) => fb.deliverableId === deliverableId)
+}
+
+// 打开交付物级别反馈对话框
+const openDeliverableFeedback = (deliverableId: string, type: 'approval' | 'revision') => {
+  feedbackTargetDeliverableId.value = deliverableId
+  feedbackType.value = type
+  feedbackForm.value.content = ''
+  feedbackDialogVisible.value = true
+}
 
 const orderTypeMap: Record<string, string> = {
   video_purchase: '裸眼3D成片购买适配',
@@ -388,12 +452,14 @@ const formatFileSize = (bytes: number): string => {
 }
 
 const handleApprove = () => {
+  feedbackTargetDeliverableId.value = null
   feedbackType.value = 'approval'
   feedbackForm.value.content = ''
   feedbackDialogVisible.value = true
 }
 
 const handleRevision = () => {
+  feedbackTargetDeliverableId.value = null
   feedbackType.value = 'revision'
   feedbackForm.value.content = ''
   feedbackDialogVisible.value = true
@@ -406,7 +472,8 @@ const submitFeedback = async () => {
   try {
     await orderStore.submitFeedback(order.value.id, {
       content: feedbackForm.value.content || (feedbackType.value === 'approval' ? '确认通过' : '需要修改'),
-      type: feedbackType.value
+      type: feedbackType.value,
+      deliverableId: feedbackTargetDeliverableId.value || undefined
     })
     
     // 刷新订单详情
@@ -627,6 +694,106 @@ const goBack = () => {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+.deliverables-section {
+  margin-top: 32px;
+  
+  h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1D1D1F;
+    margin: 0 0 16px 0;
+  }
+}
+
+.deliverable-card {
+  border: 1px solid #E5E5EA;
+  border-left: 3px solid #34C759;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  background: #FAFAFA;
+  
+  .dlv-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  
+  .dlv-version {
+    font-size: 13px;
+    font-weight: 600;
+    color: #515154;
+  }
+  
+  .dlv-time {
+    font-size: 12px;
+    color: #86868B;
+    margin-left: auto;
+  }
+  
+  .dlv-description p,
+  .dlv-note p {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    color: #515154;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  
+  .dlv-note {
+    padding: 10px 12px;
+    background: #F0F9FF;
+    border-left: 3px solid #007AFF;
+    border-radius: 4px;
+    margin-bottom: 10px;
+  }
+  
+  .dlv-files {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+.dlv-feedback-list {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #E5E5EA;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dlv-feedback-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #FAFAFA;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.dlv-fb-content {
+  flex: 1;
+  color: #515154;
+  line-height: 1.5;
+}
+
+.dlv-fb-time {
+  font-size: 11px;
+  color: #86868B;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dlv-comment-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
 }
 </style>
 

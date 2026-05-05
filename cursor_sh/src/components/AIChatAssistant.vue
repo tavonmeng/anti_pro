@@ -286,13 +286,21 @@
           <template v-if="!isRecording && !isTranscribing">
             <!-- Left icons mock -->
             <div class="left-tools">
-              <el-icon class="tool-icon"><CirclePlusFilled /></el-icon>
+              <el-icon class="tool-icon" @click="triggerGenericFileUpload" title="上传参考文件（PDF、Word、压缩包等）"><CirclePlusFilled /></el-icon>
               <el-icon class="tool-icon" @click="triggerFileUpload" title="上传现场实拍图或参考文件"><PictureRounded /></el-icon>
               <input
                 type="file"
                 ref="fileInputRef"
                 multiple
                 accept="image/*,.pdf,.doc,.docx,.zip"
+                style="display: none;"
+                @change="handleFileSelected"
+              />
+              <input
+                type="file"
+                ref="genericFileInputRef"
+                multiple
+                accept=".pdf,.doc,.docx,.zip,.rar,.ppt,.pptx,.xls,.xlsx,.txt,.mp4,.mov,.avi"
                 style="display: none;"
                 @change="handleFileSelected"
               />
@@ -399,6 +407,7 @@ import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Se
 import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
+import { chatHistoryApi } from '@/utils/api'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 
 // 语音输入开关，通过 .env 文件配置
@@ -672,7 +681,7 @@ const getAuthHeaders = () => {
 
 // ==== 欢迎打字机动画逻辑 ====
 // Agent 模式：brand（品牌方）/ media（媒体方），通过 .env 配置
-const agentMode = import.meta.env.VITE_AGENT_MODE || 'brand'
+const agentMode = import.meta.env.VITE_AGENT_MODE || 'media'
 const isMediaMode = agentMode === 'media'
 
 const welcomeTitleFull = '您好，我是 Unique Video AI 的项目顾问。'
@@ -719,15 +728,22 @@ const confirmOrderType = ref<OrderType>('ai_3d_custom')
 
 // ===== 文件上传相关 =====
 const fileInputRef = ref<HTMLInputElement | null>(null)
-const uploadedFiles = ref<{name: string, url: string, isImage: boolean}[]>([])
+const genericFileInputRef = ref<HTMLInputElement | null>(null)
+const uploadedFiles = ref<{name: string, url: string, isImage: boolean, size: number, type: string, uploadTime: string, objectKey?: string}[]>([])
 
 const triggerFileUpload = () => {
   fileInputRef.value?.click()
 }
 
+const triggerGenericFileUpload = () => {
+  genericFileInputRef.value?.click()
+}
+
 const handleFileSelected = async (e: Event) => {
   const input = e.target as HTMLInputElement
   if (!input.files?.length) return
+
+  const uploadedNames: string[] = []
 
   for (const file of Array.from(input.files)) {
     const formData = new FormData()
@@ -746,15 +762,13 @@ const handleFileSelected = async (e: Event) => {
         uploadedFiles.value.push({
           name: file.name,
           url: data.url || data.file_url || '',
-          isImage
+          isImage,
+          size: data.size || file.size,
+          type: file.type || '',
+          uploadTime: data.uploadedAt || new Date().toISOString(),
+          objectKey: data.object_key || ''
         })
-        // 在聊天中提示已上传
-        messages.value.push({
-          role: 'user',
-          content: `[已上传文件: ${file.name}]`,
-          timestamp: getCurrentTime()
-        })
-        scrollToBottom()
+        uploadedNames.push(file.name)
       } else {
         ElMessage.error(`上传失败: ${file.name}`)
       }
@@ -764,6 +778,79 @@ const handleFileSelected = async (e: Event) => {
   }
   // 清空 input 值，允许重复上传同一文件
   input.value = ''
+
+  // 上传完毕后，在聊天中显示上传信息并自动通知 Agent
+  if (uploadedNames.length > 0) {
+    const uploadSummary = uploadedNames.length === 1
+      ? `[已上传文件: ${uploadedNames[0]}]`
+      : `[已上传 ${uploadedNames.length} 个文件: ${uploadedNames.join('、')}]`
+    messages.value.push({
+      role: 'user',
+      content: uploadSummary,
+      timestamp: getCurrentTime()
+    })
+    scrollToBottom()
+
+    // 自动通知 AI Agent，让它对上传做出回应（询问是否继续上传）
+    if (selectedMode.value === 'order_create') {
+      await notifyAgentAfterUpload(uploadedNames)
+    }
+  }
+}
+
+/** 上传文件后通知 AI Agent，让它对上传做出回应 */
+const notifyAgentAfterUpload = async (fileNames: string[]) => {
+  isLoading.value = true
+  try {
+    const uploadNotice = fileNames.length === 1
+      ? `我已经上传了一个文件：${fileNames[0]}，请确认收到。`
+      : `我已经上传了 ${fileNames.length} 个文件：${fileNames.join('、')}，请确认收到。`
+
+    // 构建历史消息（过滤案例浏览消息）
+    const historyMessages = messages.value.slice(0, messages.value.length - 1)
+    const formattedHistory = historyMessages
+      .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.isCaseDetour)
+      .map(m => ({ role: m.role, content: m.content }))
+
+    const response = await fetch('/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: session_id.value,
+        message: uploadNotice,
+        history: formattedHistory,
+        business_type: businessType.value
+      })
+    })
+
+    if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
+      throw new Error('API not available')
+    }
+
+    const data = await response.json()
+    const replyContent = data.message || data.answer || ''
+    const cleanContent = replyContent.replace('【需求收集完成】', '').trim()
+
+    if (cleanContent) {
+      const userMsgCount = messages.value.filter(m => m.role === 'user').length
+      const shouldComplete = replyContent.includes('【需求收集完成】') && userMsgCount >= 3
+
+      typewriterEffect(cleanContent, async () => {
+        if (shouldComplete) {
+          const lastMsg = messages.value[messages.value.length - 1]
+          if (lastMsg && lastMsg.role === 'assistant') {
+            lastMsg.isCompletePrompt = true
+          }
+          await autoExtractAndSaveDraft()
+        }
+      })
+    }
+  } catch (err) {
+    // 降级：如果 API 不可用，前端直接给出提示
+    typewriterEffect('收到，文件已成功上传。如果还有其他参考文件或现场实拍图需要上传，可以继续通过输入框左侧的按钮上传。如果没有了，我来为您整理需求信息。')
+  } finally {
+    isLoading.value = false
+  }
 }
 
 const removeUploadedFile = (index: number) => {
@@ -1027,6 +1114,36 @@ const saveCurrentToHistory = () => {
   
   localStorage.setItem(getHistoryKey(), JSON.stringify(histories))
   savedHistories.value = histories
+
+  // 同步到后端数据库（静默，不阻断前端流程）
+  _syncToBackend(session)
+}
+
+/** 将会话同步到后端数据库（异步静默） */
+const _syncToBackend = async (session: SavedSession) => {
+  try {
+    const token = localStorage.getItem('token')
+    if (!token) return // 未登录不同步
+
+    const msgs = (session.messages || []).filter(
+      (m: any) => m.role === 'user' || m.role === 'assistant'
+    ).map((m: any) => ({
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp || '',
+    }))
+    if (msgs.length === 0) return
+
+    await chatHistoryApi.syncSession({
+      session_id: session.id || session_id.value,
+      business_type: businessType.value,
+      session_type: 'requirement',
+      messages: msgs,
+    })
+  } catch (e) {
+    // 静默失败，不阻断用户体验
+    console.warn('[ChatHistory] 同步失败:', e)
+  }
 }
 
 const toggleHistory = () => {
@@ -1722,18 +1839,26 @@ const autoExtractAndSaveDraft = async () => {
     }
     
     inlineFormData.value = extracted
-    // 将上传的文件信息自动填入"现场实拍图"字段
+    // 将上传的文件信息自动填入"现场实拍图"字段（文本展示）
     if (uploadedFiles.value.length > 0) {
       const fileInfo = uploadedFiles.value.map(f => f.name).join('、')
       inlineFormData.value.site_photos = (inlineFormData.value.site_photos || '') 
         ? inlineFormData.value.site_photos + '；' + fileInfo 
         : fileInfo
-      // 保存文件URL列表供后续使用
-      inlineFormData.value._site_photo_urls = uploadedFiles.value.map(f => f.url).join(',')
     }
     try {
       const orderType = businessType.value
-      const newOrder = await orderStore.createOrder({ orderType, ...extracted }, true)
+      // 构造 scenePhotos 数组（后端需要 FileUpload 格式的对象数组）
+      const scenePhotos = uploadedFiles.value.map((f, idx) => ({
+        id: `upload_${Date.now()}_${idx}`,
+        name: f.name,
+        size: f.size || 0,
+        type: f.type || 'application/octet-stream',
+        uploadTime: f.uploadTime || new Date().toISOString(),
+        url: f.url,
+        object_key: f.objectKey || ''
+      }))
+      const newOrder = await orderStore.createOrder({ orderType, ...extracted, scenePhotos }, true)
       draftSavedOrderId.value = newOrder.id
     } catch (e) {
       console.error('auto save draft failed:', e)
@@ -1772,16 +1897,28 @@ const handleSubmitOrder = () => {
 const handleConfirmationDone = async (data: { email: string; phone: string }) => {
   showConfirmation.value = false
   try {
+    // 构造 scenePhotos 数组（后端需要 FileUpload 格式的对象数组）
+    const scenePhotos = uploadedFiles.value.map((f, idx) => ({
+      id: `upload_${Date.now()}_${idx}`,
+      name: f.name,
+      size: f.size || 0,
+      type: f.type || 'application/octet-stream',
+      uploadTime: f.uploadTime || new Date().toISOString(),
+      url: f.url,
+      object_key: f.objectKey || ''
+    }))
     if (draftSavedOrderId.value) {
       await orderStore.updateOrder(draftSavedOrderId.value, {
         orderType: confirmOrderType.value,
-        ...inlineFormData.value
+        ...inlineFormData.value,
+        scenePhotos
       })
       await orderStore.updateOrderStatus(draftSavedOrderId.value, 'pending_contract')
     } else {
       await orderStore.createOrder({
         orderType: confirmOrderType.value,
-        ...inlineFormData.value
+        ...inlineFormData.value,
+        scenePhotos
       }, false)
     }
     messages.value.push({

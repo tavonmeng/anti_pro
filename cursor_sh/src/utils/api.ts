@@ -1037,20 +1037,20 @@ export const notificationApi = {
 export const announcementApi = {
   // 获取公告列表 (activeOnly 为 true 时仅获取展示中的)
   async getAnnouncements(activeOnly: boolean = true): Promise<Announcement[]> {
-    const res = await request.get('/announcements', { params: { active_only: activeOnly } })
-    return res.data
+    const res: any = await request.get('/announcements', { params: { active_only: activeOnly } })
+    return res
   },
   
   // 创建公告
   async createAnnouncement(data: { title: string; content: string; is_active: boolean }): Promise<Announcement> {
-    const res = await request.post('/announcements', data)
-    return res.data
+    const res: any = await request.post('/announcements', data)
+    return res
   },
   
   // 更新公告
   async updateAnnouncement(id: string, data: Partial<{ title: string; content: string; is_active: boolean }>): Promise<Announcement> {
-    const res = await request.put(`/announcements/${id}`, data)
-    return res.data
+    const res: any = await request.put(`/announcements/${id}`, data)
+    return res
   },
   
   // 删除公告
@@ -1097,3 +1097,157 @@ export const enterpriseApi = {
     })
   }
 }
+
+// ========== 承包商管理 API（管理端）==========
+
+export const contractorAdminApi = {
+  // 生成邀请链接
+  async createInvitation(data: { note?: string; expires_days?: number }): Promise<any> {
+    return request.post('/contractor-admin/invitations', data)
+  },
+
+  // 获取邀请链接列表
+  async getInvitations(): Promise<any[]> {
+    return request.get('/contractor-admin/invitations')
+  },
+
+  // 撤销邀请链接
+  async revokeInvitation(id: string): Promise<void> {
+    return request.delete(`/contractor-admin/invitations/${id}`)
+  },
+
+  // 获取承包商列表
+  async getContractors(params?: { page?: number; pageSize?: number; keyword?: string }): Promise<{ data: any[]; total: number }> {
+    return request.get('/contractor-admin/list', { params })
+  },
+
+  // 编辑承包商
+  async updateContractor(id: string, data: any): Promise<any> {
+    return request.put(`/contractor-admin/${id}`, data)
+  },
+
+  // 派单
+  async assignOrder(data: { order_id: string; contractor_id: string; schedule_adjustments?: any[] }): Promise<any> {
+    return request.post('/contractor-admin/assign', data)
+  },
+
+  // 获取派单列表
+  async getAssignments(params?: { order_id?: string; status?: string; page?: number; pageSize?: number }): Promise<{ data: any[]; total: number }> {
+    return request.get('/contractor-admin/assignments', { params })
+  },
+
+  // 审核交付物
+  async reviewDeliverable(id: string, data: { approved: boolean; review_note?: string }): Promise<any> {
+    return request.put(`/contractor-admin/deliverables/${id}/review`, data)
+  },
+
+  // 推送交付物给用户
+  async publishDeliverable(id: string, data?: { published_note?: string }): Promise<any> {
+    return request.put(`/contractor-admin/deliverables/${id}/publish`, data || {})
+  },
+
+  // 推进到下一环节
+  async advanceStage(assignmentId: string): Promise<any> {
+    return request.put(`/contractor-admin/assignments/${assignmentId}/advance`)
+  },
+
+  // 获取设计方案
+  async getDesignPlan(orderId: string): Promise<any> {
+    return request.get(`/contractor-admin/orders/${orderId}/design-plan`)
+  },
+
+  // 保存设计方案
+  async saveDesignPlan(orderId: string, data: { content?: string; files?: any[]; status?: string }): Promise<any> {
+    return request.put(`/contractor-admin/orders/${orderId}/design-plan`, data)
+  },
+
+  // 获取派单交付物列表
+  async getAssignmentDeliverables(assignmentId: string): Promise<any[]> {
+    return request.get(`/contractor-admin/assignments/${assignmentId}/deliverables`)
+  },
+
+  // 管理员对交付物添加评论（Contractor可见）
+  async addDeliverableComment(deliverableId: string, content: string): Promise<any> {
+    return request.post(`/contractor-admin/deliverables/${deliverableId}/comment`, { content })
+  },
+}
+
+// ========== 工作流配置 API ==========
+
+export const workflowApi = {
+  // 获取环节列表
+  async getStages(): Promise<any[]> {
+    return request.get('/workflow-config')
+  },
+
+  // 创建环节
+  async createStage(data: { name: string; default_days: number; review_items?: string[] }): Promise<any> {
+    return request.post('/workflow-config', data)
+  },
+
+  // 更新环节
+  async updateStage(id: string, data: any): Promise<any> {
+    return request.put(`/workflow-config/${id}`, data)
+  },
+
+  // 删除环节
+  async deleteStage(id: string): Promise<void> {
+    return request.delete(`/workflow-config/${id}`)
+  },
+
+  // 排序
+  async reorderStages(stageIds: string[]): Promise<void> {
+    return request.post('/workflow-config/reorder', { stage_ids: stageIds })
+  },
+}
+
+// ========== AI 聊天记录持久化 API ==========
+export const chatHistoryApi = {
+  // 保存单条消息（每次对话后自动调用）
+  async saveMessage(data: {
+    session_id: string
+    role: string
+    content: string
+    business_type?: string
+    session_type?: string
+    metadata?: any
+  }): Promise<any> {
+    return request.post('/ai/chat-history/message', data)
+  },
+
+  // 批量同步整个会话
+  async syncSession(data: {
+    session_id: string
+    business_type?: string
+    session_type?: string
+    messages: Array<{ role: string; content: string; timestamp?: string }>
+  }): Promise<any> {
+    return request.post('/ai/chat-history/sync', data)
+  },
+
+  // 获取用户的会话列表
+  async getSessions(limit: number = 5): Promise<any> {
+    return request.get(`/ai/chat-history/sessions?limit=${limit}`)
+  },
+
+  // 获取某个会话的消息
+  async getSessionMessages(sessionId: string): Promise<any> {
+    return request.get(`/ai/chat-history/sessions/${sessionId}/messages`)
+  },
+
+  // 管理员：获取所有用户的聊天记录
+  async adminGetSessions(params: {
+    page?: number
+    pageSize?: number
+    user_id?: string
+    keyword?: string
+  } = {}): Promise<any> {
+    return request.get('/ai/chat-history/admin/sessions', { params })
+  },
+
+  // 管理员：获取某个会话的消息
+  async adminGetSessionMessages(sessionId: string): Promise<any> {
+    return request.get(`/ai/chat-history/admin/sessions/${sessionId}/messages`)
+  },
+}
+

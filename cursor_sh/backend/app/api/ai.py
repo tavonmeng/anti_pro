@@ -111,10 +111,17 @@ _DIALOG_RULES = (
 
     "5. 保持专业节奏，语言干练精准，不要寒暄客套。\n\n"
 
-    "6. 【补充信息提醒】在即将触发【需求收集完成】之前，"
-    "主动询问客户是否还有其他需要补充的内容，例如：'以上是核心需求项的梳理，请问还有其他需要补充说明的细节吗？"
-    "如有任何特殊要求或参考素材，都可以一并提供，我会整理到备注中。'\n"
-    "如果客户提供的补充内容无法归入上述任何结构化字段，将其完整记录，"
+    "6. 【上传环节放在最后】文件上传（现场实拍图/参考文件）是需求收集的最后一步。"
+    "在核心必问项（1-6项）都已收集之后，再主动询问客户是否有现场实拍图或参考文件需要上传。"
+    "告知客户：'核心需求信息已基本收集完毕。最后一步——如果您有现场实拍图、屏幕照片或其他参考素材，"
+    "可以通过输入框左侧的上传按钮直接上传。如果暂时没有，我们就可以整理信息了。'\n\n"
+
+    "7. 【文件上传确认】当客户上传了文件（消息中包含'已上传文件'或'已上传'字样）时，"
+    "先确认收到文件，然后询问是否还有其他文件需要上传。"
+    "如果客户表示没有更多文件了，直接总结所有已收集的信息并输出【需求收集完成】标记。"
+    "示例回复：'已收到您上传的文件。请问还有其他参考素材需要上传吗？没有的话，我来为您整理需求信息。'\n\n"
+
+    "8. 如果客户提供的补充内容无法归入上述任何结构化字段，将其完整记录，"
     "在最终提取时归入'备注'字段，确保不遗漏任何客户诉求。"
 )
 
@@ -246,10 +253,16 @@ _MEDIA_DIALOG_RULES = (
     "才可以提前结束。此时总结已收集的信息，指出哪些重要项还缺失，然后加上【需求收集完成】标记。"
     "客户正常回答问题时，不要主动结束。\n\n"
 
-    "9. 【补充信息提醒】在即将触发【需求收集完成】之前，"
-    "主动提醒客户：'如果您有现场实拍图、屏幕照片或其他参考素材，可以通过输入框左侧的上传按钮直接上传，"
-    "我会一并整理到需求文档中。'\n"
-    "同时询问是否还有其他需要补充的内容。"
+    "9. 【上传环节放在最后】文件上传（现场实拍图/参考文件）是需求收集的最后一步。"
+    "在核心必问项都已收集之后，再主动询问客户是否有现场实拍图或参考素材需要上传。"
+    "告知客户：'核心需求信息已基本收集完毕。最后——如果您有现场实拍图、屏幕照片或其他参考素材，"
+    "可以通过输入框左侧的上传按钮直接上传，我会一并整理到需求文档中。如果暂时没有，我们就可以整理信息了。'\n\n"
+
+    "10. 【文件上传确认】当客户上传了文件（消息中包含'已上传文件'或'已上传'字样）时，"
+    "先确认收到文件，然后询问是否还有其他文件需要上传。"
+    "如果客户表示没有更多文件了，直接总结所有已收集的信息并输出【需求收集完成】标记。"
+    "示例回复：'已收到您上传的文件。请问还有其他参考素材需要上传吗？没有的话，我来为您整理需求信息。'\n\n"
+
     "如果客户提供的补充内容无法归入任何结构化字段，将其完整记录到'备注'字段。"
 )
 
@@ -657,6 +670,61 @@ async def ai_get_cases(category: str = None):
 # 会话存储工具
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+async def _save_to_db(
+    session_id: str,
+    user_id: str,
+    username: str,
+    user_msg: str,
+    assistant_msg: str,
+    business_type: str = "ai_3d_custom",
+):
+    """将用户消息和助手回复保存到数据库（异步）"""
+    try:
+        from app.database import async_session_maker
+        from app.models.ai_chat import AIChatSession, AIChatMessage
+        from sqlalchemy import select, func
+
+        async with async_session_maker() as db:
+            # 查找或创建 session
+            result = await db.execute(
+                select(AIChatSession).where(AIChatSession.id == session_id)
+            )
+            session = result.scalar_one_or_none()
+
+            if not session:
+                session = AIChatSession(
+                    id=session_id,
+                    user_id=user_id,
+                    username=username,
+                    session_type="requirement",
+                    business_type=business_type,
+                    title=(user_msg.strip()[:80] + "...") if len(user_msg.strip()) > 80 else user_msg.strip(),
+                    message_count=0,
+                )
+                db.add(session)
+
+            # 保存用户消息
+            db.add(AIChatMessage(
+                session_id=session_id,
+                role="user",
+                content=user_msg,
+            ))
+            # 保存助手回复
+            db.add(AIChatMessage(
+                session_id=session_id,
+                role="assistant",
+                content=assistant_msg,
+            ))
+
+            session.message_count = (session.message_count or 0) + 2
+            now = datetime.now()
+            session.updated_at = now
+
+            await db.commit()
+    except Exception as e:
+        print(f"[AI Chat] 数据库保存失败（不影响对话）: {e}")
+
+
 def _save_session_file(
     session_id: str,
     user_id: str,
@@ -664,14 +732,31 @@ def _save_session_file(
     history: list,
     user_msg: str,
     assistant_msg: str,
+    business_type: str = "ai_3d_custom",
 ):
-    """将完整的 AI 对话 session 保存为 JSON 文件
+    """将完整的 AI 对话 session 保存为 JSON 文件 + 数据库
 
     文件结构：
     logs/ai_sessions/
     └── {user_id}/
         └── {session_id}.json
     """
+    # 异步保存到数据库
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.ensure_future(_save_to_db(
+                session_id, user_id, username, user_msg, assistant_msg, business_type
+            ))
+        else:
+            loop.run_until_complete(_save_to_db(
+                session_id, user_id, username, user_msg, assistant_msg, business_type
+            ))
+    except Exception as e:
+        print(f"[AI Chat] 数据库保存调度失败: {e}")
+
+    # 同时保留 JSON 文件日志（兼容）
     try:
         full_messages = []
         for h in history:
@@ -704,4 +789,5 @@ def _save_session_file(
             json.dump(session_data, f, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        print(f"AI 会话保存失败: {e}")
+        print(f"AI 会话 JSON 保存失败: {e}")
+

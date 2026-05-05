@@ -22,6 +22,20 @@ class LoginRequest(BaseModel):
     captcha: Optional[str] = None
 
 
+class RegisterBehavior(BaseModel):
+    """前端行为时序数据（用于反注册机检测）"""
+    page_loaded_at: float                                # 页面加载时间戳 (ms)
+    phone_first_input_at: Optional[float] = None         # 手机号首次输入时间
+    sms_sent_at: Optional[float] = None                  # 验证码发送时间
+    sms_input_at: Optional[float] = None                 # 验证码输入时间
+    username_first_input_at: Optional[float] = None      # 用户名首次输入时间
+    email_first_input_at: Optional[float] = None         # 邮箱首次输入时间
+    password_first_input_at: Optional[float] = None      # 密码首次输入时间
+    submit_clicked_at: float                             # 提交按钮点击时间戳
+    field_focus_count: int = 0                           # 字段聚焦总次数
+    key_press_count: int = 0                             # 按键总次数
+
+
 class RegisterRequest(BaseModel):
     """注册请求模型（手机号+验证码+用户名+密码+邮箱）"""
     phone: str = Field(..., min_length=11, max_length=11)
@@ -30,6 +44,9 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=6)
     role: UserRole = UserRole.USER
+    # 反注册机
+    behavior: Optional[RegisterBehavior] = None
+    website: Optional[str] = None                         # 蜜罐字段（前端隐藏，机器人会填）
 
 
 class SendSmsRequest(BaseModel):

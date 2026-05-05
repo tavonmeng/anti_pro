@@ -1,5 +1,5 @@
 # 后端镜像
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -9,9 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && fc-cache -f
 
-# Python 依赖（利用 Docker 缓存，先装依赖再拷代码）
+# Python 依赖（挂载 pip 缓存，第二次构建秒装）
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt gunicorn uvicorn
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt gunicorn uvicorn
 
 # 拷贝代码
 COPY . .

@@ -10,12 +10,14 @@ class FeedbackCreate(BaseModel):
     """反馈创建模型"""
     type: FeedbackType
     content: str
+    deliverableId: Optional[str] = None
 
 
 class FeedbackResponse(BaseModel):
     """反馈响应模型"""
     id: str
     orderId: str
+    deliverableId: Optional[str] = None
     content: str
     type: FeedbackType
     createdAt: datetime
