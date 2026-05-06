@@ -7,13 +7,14 @@
 
 from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, exists
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone
 
 from app.database import get_db
 from app.models.ai_chat import AIChatSession, AIChatMessage
+from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.utils.security import decode_access_token
 from app.utils.dependencies import require_admin, AnyUser
@@ -62,6 +63,15 @@ def _make_title(content: str) -> str:
     return title[:80] + "..." if len(title) > 80 else title
 
 
+def _refresh_session_owner(session: AIChatSession, user_id: str, username: str):
+    """会话先被匿名接口创建时，后续同步可补正为真实客户。"""
+    if user_id and user_id != "anonymous":
+        if not session.user_id or session.user_id == "anonymous":
+            session.user_id = user_id
+        if username and (not session.username or session.username == "anonymous"):
+            session.username = username
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 用户端 API
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -93,6 +103,10 @@ async def save_message(
                 message_count=0,
             )
             db.add(session)
+        else:
+            _refresh_session_owner(session, user_id, username)
+            session.session_type = data.session_type or session.session_type
+            session.business_type = data.business_type or session.business_type
 
         # 如果 session 还没有标题且这条是 user 消息，设置标题
         if not session.title and data.role == "user":
@@ -150,6 +164,10 @@ async def sync_session(
             )
             db.add(session)
             await db.flush()
+        else:
+            _refresh_session_owner(session, user_id, username)
+            session.session_type = data.session_type or session.session_type
+            session.business_type = data.business_type or session.business_type
 
         # 查已保存的消息数
         count_result = await db.execute(
@@ -285,16 +303,35 @@ async def admin_get_all_sessions(
 ):
     """管理员查看所有用户的聊天记录"""
     try:
-        query = select(AIChatSession)
+        query = (
+            select(
+                AIChatSession,
+                User.phone,
+                User.email,
+                User.company,
+                User.enterprise_name,
+            )
+            .outerjoin(User, AIChatSession.user_id == User.id)
+        )
 
         if user_id:
             query = query.where(AIChatSession.user_id == user_id)
         if keyword:
             from sqlalchemy import or_
+            kw = f"%{keyword}%"
             query = query.where(
                 or_(
-                    AIChatSession.title.ilike(f"%{keyword}%"),
-                    AIChatSession.username.ilike(f"%{keyword}%"),
+                    AIChatSession.title.ilike(kw),
+                    AIChatSession.username.ilike(kw),
+                    User.username.ilike(kw),
+                    User.phone.ilike(kw),
+                    User.email.ilike(kw),
+                    User.company.ilike(kw),
+                    User.enterprise_name.ilike(kw),
+                    exists().where(
+                        AIChatMessage.session_id == AIChatSession.id,
+                        AIChatMessage.content.ilike(kw),
+                    ),
                 )
             )
 
@@ -306,14 +343,17 @@ async def admin_get_all_sessions(
         query = query.order_by(desc(AIChatSession.updated_at))
         query = query.offset((page - 1) * pageSize).limit(pageSize)
         result = await db.execute(query)
-        sessions = result.scalars().all()
+        rows = result.all()
 
         items = []
-        for s in sessions:
+        for s, phone, email, company, enterprise_name in rows:
             items.append({
                 "id": s.id,
                 "userId": s.user_id,
                 "username": s.username,
+                "phone": phone,
+                "email": email,
+                "company": enterprise_name or company or "",
                 "title": s.title,
                 "sessionType": s.session_type,
                 "businessType": s.business_type,

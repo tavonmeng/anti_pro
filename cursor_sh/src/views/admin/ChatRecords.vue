@@ -9,9 +9,9 @@
     <div class="search-bar">
       <el-input
         v-model="searchKeyword"
-        placeholder="搜索用户名或对话内容..."
+        placeholder="搜索用户名、公司、手机号或对话内容..."
         clearable
-        style="width: 300px"
+        style="width: 360px"
         @keyup.enter="loadSessions"
       >
         <template #prefix>
@@ -37,8 +37,16 @@
             <el-avatar :size="28" style="background: #409EFF; flex-shrink: 0">
               {{ (row.username || '?')[0] }}
             </el-avatar>
-            <span>{{ row.username || row.userId }}</span>
+            <div class="user-meta">
+              <span>{{ row.username || row.userId }}</span>
+              <small v-if="row.phone">{{ row.phone }}</small>
+            </div>
           </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="客户公司" width="180">
+        <template #default="{ row }">
+          <span>{{ row.company || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="对话主题" min-width="300">
@@ -79,7 +87,7 @@
     <!-- 对话详情弹窗 -->
     <el-drawer
       v-model="drawerVisible"
-      :title="`对话详情 — ${activeSession?.username || ''}`"
+      :title="`对话详情 — ${activeSession?.company || activeSession?.username || ''}`"
       size="600px"
       direction="rtl"
     >
@@ -134,9 +142,9 @@ const loadSessions = async () => {
       pageSize: pageSize.value,
       keyword: searchKeyword.value || undefined,
     })
-    const d = res?.data || res
+    const d = Array.isArray(res?.data) ? res : (res?.data || res)
     sessions.value = d?.data || []
-    total.value = d?.total || 0
+    total.value = d?.total || sessions.value.length
   } catch (e) {
     console.error('加载聊天记录失败:', e)
   } finally {
@@ -151,7 +159,7 @@ const openSession = async (row: any) => {
   activeMessages.value = []
   try {
     const res: any = await chatHistoryApi.adminGetSessionMessages(row.id)
-    activeMessages.value = res?.data || []
+    activeMessages.value = Array.isArray(res) ? res : (res?.data || [])
   } catch (e) {
     console.error('加载消息失败:', e)
   } finally {
@@ -235,6 +243,18 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
+}
+
+.user-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.user-meta small {
+  color: #909399;
+  font-size: 11px;
 }
 
 .session-title {

@@ -408,6 +408,7 @@ import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
 import { chatHistoryApi } from '@/utils/api'
+import { getLatestEnterpriseStatus } from '@/utils/enterpriseGuard'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 
 // 语音输入开关，通过 .env 文件配置
@@ -814,7 +815,7 @@ const notifyAgentAfterUpload = async (fileNames: string[]) => {
 
     const response = await fetch('/ai/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         session_id: session_id.value,
         message: uploadNotice,
@@ -902,7 +903,8 @@ const inputMsg = ref('')
 const isLoading = ref(false)
 const isTyping = ref(false) // AI 正在逐字输出中
 const extractLoading = ref(false) // 信息提取整理中
-const session_id = ref(Math.random().toString(36).substring(7))
+const createSessionId = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+const session_id = ref(createSessionId())
 const chatContentRef = ref<any>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isComposing = ref(false) // 中文输入法组合输入状态
@@ -985,7 +987,7 @@ const startNewSession = () => {
   
   messages.value = []
   selectedMode.value = null
-  session_id.value = Math.random().toString(36).substring(7)
+  session_id.value = createSessionId()
   playWelcomeAnimation()
 }
 
@@ -1017,6 +1019,7 @@ interface SavedSession {
 
 const savedHistories = ref<SavedSession[]>([])
 const expandedHistories = ref<Record<string, boolean>>({})
+const getSessionSortValue = (id: string) => Number(String(id).split('_')[0]) || 0
 
 const displayedHistories = computed(() => {
   if (!searchQuery.value.trim()) return savedHistories.value
@@ -1037,7 +1040,7 @@ const loadSavedHistory = () => {
       const parsed = JSON.parse(raw)
       let parsedArr = Array.isArray(parsed) ? parsed : [parsed]
       // 按照 ID（时间戳）升序排列，最新的记录在最下方（靠近输入框）
-      parsedArr.sort((a, b) => Number(a.id) - Number(b.id))
+      parsedArr.sort((a, b) => getSessionSortValue(a.id) - getSessionSortValue(b.id))
       savedHistories.value = parsedArr
     }
   } catch {
@@ -1083,7 +1086,7 @@ const saveCurrentToHistory = () => {
   _lastSaveTimestamp = now
   
   const session: SavedSession = {
-    id: Date.now().toString(),
+    id: session_id.value,
     messages: [...messages.value],
     mode: selectedMode.value,
     savedAt: new Date().toLocaleString('zh-CN', {
@@ -1105,9 +1108,14 @@ const saveCurrentToHistory = () => {
     }
   } catch(e) {}
   
-  histories.push(session)
+  const existingIndex = histories.findIndex(h => h.id === session.id)
+  if (existingIndex >= 0) {
+    histories[existingIndex] = session
+  } else {
+    histories.push(session)
+  }
   // 按时间升序排序（最新的在最下方，靠近输入框）
-  histories.sort((a, b) => Number(a.id) - Number(b.id))
+  histories.sort((a, b) => getSessionSortValue(a.id) - getSessionSortValue(b.id))
   
   // 如果超过 5 条，保留最新的 5 条
   if (histories.length > 5) histories = histories.slice(-5)
@@ -1144,6 +1152,37 @@ const _syncToBackend = async (session: SavedSession) => {
     // 静默失败，不阻断用户体验
     console.warn('[ChatHistory] 同步失败:', e)
   }
+}
+
+let _lastBackendSyncSignature = ''
+
+/** 将当前会话按稳定 session_id 同步到后端，供管理员实时查看。 */
+const syncCurrentConversationToBackend = async () => {
+  const session: SavedSession = {
+    id: session_id.value,
+    messages: [...messages.value],
+    mode: selectedMode.value,
+    savedAt: new Date().toLocaleString('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    })
+  }
+
+  const msgs = session.messages.filter((m: any) =>
+    (m.role === 'user' || m.role === 'assistant') && (m.content || '').trim()
+  )
+  if (msgs.length === 0) return
+
+  const lastMsg = msgs[msgs.length - 1]
+  const signature = `${session.id}:${msgs.length}:${lastMsg.role}:${lastMsg.content}`
+  if (signature === _lastBackendSyncSignature) return
+  _lastBackendSyncSignature = signature
+
+  await _syncToBackend(session)
 }
 
 const toggleHistory = () => {
@@ -1203,7 +1242,7 @@ const scrollToBottom = async (instant: boolean = false) => {
 }
 
 // ===== 打字机效果：逐字显示 AI 回复 =====
-const typewriterEffect = (fullText: string, onComplete?: () => void) => {
+const typewriterEffect = (fullText: string, onComplete?: () => void | Promise<void>) => {
   isLoading.value = false
   isTyping.value = true
   
@@ -1239,7 +1278,10 @@ const typewriterEffect = (fullText: string, onComplete?: () => void) => {
         textareaRef.value?.focus()
       })
       
-      if (onComplete) onComplete()
+      ;(async () => {
+        if (onComplete) await onComplete()
+        await syncCurrentConversationToBackend()
+      })()
     }
   }
   
@@ -1399,7 +1441,9 @@ const selectMode = async (mode: string) => {
     // 需求收集 Agent 开场白
     isLoading.value = true
     try {
-      const response = await fetch(`/ai/start?session_id=${session_id.value}`)
+      const response = await fetch(`/ai/start?session_id=${session_id.value}`, {
+        headers: getAuthHeaders()
+      })
       if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
         throw new Error('API not available')
       }
@@ -1445,7 +1489,7 @@ const selectMode = async (mode: string) => {
     try {
       const response = await fetch('/ai/business-intro', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ message: '请介绍一下你们的业务', history: [] })
       })
       if (!response.ok) throw new Error('intro failed')
@@ -1486,7 +1530,7 @@ const sendMessage = async () => {
     try {
       const classifyRes = await fetch('/ai/classify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ message: userText })
       })
       if (classifyRes.ok) {
@@ -1564,6 +1608,7 @@ const handleOrderQuery = async (userText: string) => {
     })
   } catch (e) {
     messages.value.push({ role: 'assistant', content: '查询遇到问题，请稍后重试。', timestamp: getCurrentTime() })
+    void syncCurrentConversationToBackend()
   } finally {
     isLoading.value = false
   }
@@ -1584,7 +1629,7 @@ const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = fal
       .map(m => ({ role: m.role, content: m.content }))
     const response = await fetch('/ai/business-intro', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ message: userText, history: historyMsgs })
     })
     if (!response.ok) throw new Error('intro failed')
@@ -1635,6 +1680,7 @@ const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = fal
     })
   } catch (e) {
     messages.value.push({ role: 'assistant', content: '获取信息时遇到问题，请稍后重试。', timestamp: getCurrentTime() })
+    void syncCurrentConversationToBackend()
   } finally {
     isLoading.value = false
   }
@@ -1649,7 +1695,7 @@ const handleGeneral = async (userText: string) => {
       .map(m => ({ role: m.role, content: m.content }))
     const response = await fetch('/ai/general', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ session_id: session_id.value, message: userText, history: historyMsgs })
     })
     if (!response.ok) throw new Error('general failed')
@@ -1675,7 +1721,7 @@ const handleCustomAiChat = async (userText: string) => {
 
     const response = await fetch('/ai/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ 
         session_id: session_id.value, 
         message: userText,
@@ -1732,6 +1778,7 @@ const handleCustomAiChat = async (userText: string) => {
           content: mockReplies[userMsgCount], 
           timestamp: getCurrentTime() 
         })
+        void syncCurrentConversationToBackend()
       } else {
         const summaryMsg = '需求信息收集完毕，正在为您生成项目评估...'
         messages.value.push({ 
@@ -1771,6 +1818,7 @@ const handleCustomAiChat = async (userText: string) => {
             technology: ''
           }
         }
+        void syncCurrentConversationToBackend()
       }
       isLoading.value = false
     }, 1000)
@@ -1788,7 +1836,7 @@ const autoExtractAndSaveDraft = async () => {
     try {
       const response = await fetch('/ai/extract', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ history: formattedHistory })
       })
       if (response.ok) {
@@ -1811,7 +1859,7 @@ const autoExtractAndSaveDraft = async () => {
     try {
       const assessRes = await fetch('/ai/assess', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ extracted })
       })
       if (assessRes.ok) {
@@ -1873,11 +1921,12 @@ const handleContinueEditing = (msg: any) => {
   msg.formHidden = true
 }
 
-const handleSubmitOrder = () => {
+const handleSubmitOrder = async () => {
   if (!inlineFormData.value) return
   
   // 检查企业认证状态
-  if (authStore.user?.enterprise_status !== 'approved') {
+  const enterpriseStatus = await getLatestEnterpriseStatus(authStore)
+  if (enterpriseStatus !== 'approved') {
     messages.value.push({
       role: 'assistant',
       content: '您尚未完成企业认证，无法正式提交订单。您的需求已自动保存为草稿，请先前往「个人设置」完成企业认证后再提交。',
@@ -3454,7 +3503,3 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   to { transform: rotate(360deg); }
 }
 </style>
-
-
-
-

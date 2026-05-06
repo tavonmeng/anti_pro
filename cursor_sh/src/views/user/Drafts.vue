@@ -69,12 +69,15 @@ import { EditPen } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useOrderStore } from '@/stores/order'
 import { useUiStore } from '@/stores/ui'
+import { useAuthStore } from '@/stores/auth'
+import { ensureEnterpriseApproved } from '@/utils/enterpriseGuard'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 import type { Order } from '@/types'
 
 const router = useRouter()
 const orderStore = useOrderStore()
 const uiStore = useUiStore()
+const authStore = useAuthStore()
 
 const showConfirmation = ref(false)
 const selectedOrder = ref<Order | null>(null)
@@ -120,6 +123,15 @@ const handleEdit = (order: Order) => {
 }
 
 const handleSubmit = async (order: Order) => {
+  const approved = await ensureEnterpriseApproved(
+    authStore,
+    router,
+    '请先完成企业认证后再提交订单。草稿会继续保留在草稿箱中。'
+  )
+  if (!approved) {
+    return
+  }
+
   selectedOrder.value = order
   showConfirmation.value = true
 }

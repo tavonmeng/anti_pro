@@ -25,6 +25,20 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
     SECRET_KEY: str = "dev-secret-key-change-in-production"
+
+    @compat_validator('DEBUG')
+    @classmethod
+    def parse_debug(cls, v):
+        """兼容 DEBUG=release/prod/production 这类部署值。"""
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            value = v.strip().lower()
+            if value in ("true", "1", "yes", "y", "on", "debug", "dev", "development"):
+                return True
+            if value in ("false", "0", "no", "n", "off", "release", "prod", "production"):
+                return False
+        return v
     
     # 服务器配置
     HOST: str = "0.0.0.0"
@@ -177,4 +191,3 @@ class Settings(BaseSettings):
 
 # 创建全局配置实例
 settings = Settings()
-
