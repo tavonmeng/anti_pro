@@ -48,7 +48,7 @@ INTERNAL_SSH_OPTS="-i ${INTERNAL_SSH_KEY}"
 INTERNAL_REMOTE_DIR="/root/workspace"
 
 # 服务器上 docker-compose.yml 所在目录
-REMOTE_PROJECT_DIR="/root/service/anti_pro/cursor_sh"
+REMOTE_PROJECT_DIR="/root/service/anti_pro"
 
 # ============================================================
 #  构建镜像
