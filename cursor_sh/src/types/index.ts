@@ -70,6 +70,8 @@ export interface UploadedFile {
   type: string
   uploadTime: string
   url?: string  // 模拟存储路径
+  file_url?: string
+  object_key?: string
 }
 
 // 预览历史记录
@@ -287,4 +289,3 @@ export interface ApiResponse<T = any> {
   message: string
   data: T
 }
-

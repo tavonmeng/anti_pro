@@ -122,8 +122,8 @@ class FileService:
             file_size = file_upload.size
             file_type = file_upload.type
             upload_time = file_upload.uploadTime
-            existing_url = None
-            object_key = None
+            existing_url = file_upload.url or file_upload.file_url
+            object_key = file_upload.object_key
         
         # 使用已有的 URL（来自之前的上传接口），否则生成本地路径
         file_url = existing_url or "/uploads/%s/%s" % (order_id, file_name)
@@ -137,4 +137,3 @@ class FileService:
             url=file_url,
             object_key=object_key,
         )
-
