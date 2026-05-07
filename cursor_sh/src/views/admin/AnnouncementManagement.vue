@@ -3,12 +3,84 @@
     <div class="page-header">
       <div class="header-left">
         <h1 class="page-title">公告管理</h1>
-        <p class="page-subtitle">发布和管理系统对所有用户可见的公告内容</p>
+        <p class="page-subtitle">发布系统公告，并配置官网首页的重点运营入口</p>
       </div>
       <el-button type="primary" @click="handleAdd">
         发布新公告
       </el-button>
     </div>
+
+    <el-card class="marketing-card" v-loading="barLoading">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <h2 class="section-title">官网顶部运营条</h2>
+            <p class="section-subtitle">展示在官网首页顶部，可用于引导访客下载服务与案例 PDF</p>
+          </div>
+          <el-switch
+            v-model="barForm.is_active"
+            active-text="展示"
+            inactive-text="隐藏"
+          />
+        </div>
+      </template>
+
+      <el-form class="marketing-form" label-width="86px">
+        <el-form-item label="标题">
+          <el-input
+            v-model="barForm.title"
+            maxlength="200"
+            show-word-limit
+            placeholder="快速了解我们的服务和案例，点此处下载 PDF"
+          />
+        </el-form-item>
+        <el-form-item label="按钮文案">
+          <el-input
+            v-model="barForm.button_text"
+            maxlength="60"
+            placeholder="下载 PDF"
+          />
+        </el-form-item>
+        <el-form-item label="配图">
+          <div class="asset-row">
+            <div class="asset-preview image-preview" v-if="barForm.image_url">
+              <img :src="barForm.image_url" alt="" />
+            </div>
+            <span class="asset-name">{{ barForm.image_url ? '已上传配图' : '未上传配图' }}</span>
+            <el-button @click="imageInputRef?.click()" :loading="imageUploading">上传配图</el-button>
+            <el-button v-if="barForm.image_url" link type="danger" @click="clearImage">移除</el-button>
+            <input
+              ref="imageInputRef"
+              type="file"
+              accept="image/*"
+              class="hidden-file-input"
+              @change="handleImageSelected"
+            />
+          </div>
+        </el-form-item>
+        <el-form-item label="PDF">
+          <div class="asset-row">
+            <span class="pdf-pill" v-if="barForm.pdf_url">PDF</span>
+            <span class="asset-name">{{ barForm.pdf_name || (barForm.pdf_url ? '已上传 PDF' : '未上传 PDF') }}</span>
+            <el-button @click="pdfInputRef?.click()" :loading="pdfUploading">上传 PDF</el-button>
+            <el-button v-if="barForm.pdf_url" link type="primary" @click="previewPdf">预览</el-button>
+            <el-button v-if="barForm.pdf_url" link type="danger" @click="clearPdf">移除</el-button>
+            <input
+              ref="pdfInputRef"
+              type="file"
+              accept="application/pdf,.pdf"
+              class="hidden-file-input"
+              @change="handlePdfSelected"
+            />
+          </div>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="saveHomepageBar" :loading="barSaving">
+            保存官网运营条
+          </el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
 
     <!-- 数据表格 -->
     <el-card class="data-card">
@@ -85,7 +157,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { announcementApi } from '@/utils/api'
+import { announcementApi, homepageBarApi } from '@/utils/api'
 import type { Announcement } from '@/utils/api'
 
 const loading = ref(false)
@@ -94,12 +166,29 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
+const barLoading = ref(false)
+const barSaving = ref(false)
+const imageUploading = ref(false)
+const pdfUploading = ref(false)
+const imageInputRef = ref<HTMLInputElement | null>(null)
+const pdfInputRef = ref<HTMLInputElement | null>(null)
 
 const formData = reactive({
   id: '',
   title: '',
   content: '',
   is_active: true
+})
+
+const barForm = reactive({
+  title: '快速了解我们的服务和案例，点此处下载 PDF',
+  button_text: '下载 PDF',
+  pdf_url: '',
+  pdf_name: '',
+  pdf_object_key: '',
+  image_url: '',
+  image_object_key: '',
+  is_active: false
 })
 
 const rules = reactive<FormRules>({
@@ -136,7 +225,141 @@ const fetchAnnouncements = async () => {
 
 onMounted(() => {
   fetchAnnouncements()
+  fetchHomepageBar()
 })
+
+const fetchHomepageBar = async () => {
+  barLoading.value = true
+  try {
+    const config = await homepageBarApi.getConfig()
+    Object.assign(barForm, {
+      title: config.title || '快速了解我们的服务和案例，点此处下载 PDF',
+      button_text: config.button_text || '下载 PDF',
+      pdf_url: config.pdf_url || '',
+      pdf_name: config.pdf_name || '',
+      pdf_object_key: config.pdf_object_key || '',
+      image_url: config.image_url || '',
+      image_object_key: config.image_object_key || '',
+      is_active: config.is_active
+    })
+  } catch (error: any) {
+    ElMessage.error(error.message || '获取官网运营条失败')
+  } finally {
+    barLoading.value = false
+  }
+}
+
+const uploadMarketingAsset = async (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const token = localStorage.getItem('token')
+  const response = await fetch('/api/upload/site-photo', {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData
+  })
+  if (!response.ok) {
+    const detail = await response.text()
+    throw new Error(detail || '上传失败')
+  }
+  const payload = await response.json()
+  return payload.data || payload
+}
+
+const handleImageSelected = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    ElMessage.warning('请上传图片文件')
+    input.value = ''
+    return
+  }
+  imageUploading.value = true
+  try {
+    const data = await uploadMarketingAsset(file)
+    barForm.image_url = data.url || data.file_url || ''
+    barForm.image_object_key = data.object_key || ''
+    ElMessage.success('配图上传成功')
+  } catch (error: any) {
+    ElMessage.error(error.message || '配图上传失败')
+  } finally {
+    imageUploading.value = false
+    input.value = ''
+  }
+}
+
+const handlePdfSelected = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!/\.pdf$/i.test(file.name)) {
+    ElMessage.warning('请上传 PDF 文件')
+    input.value = ''
+    return
+  }
+  pdfUploading.value = true
+  try {
+    const data = await uploadMarketingAsset(file)
+    barForm.pdf_url = data.url || data.file_url || ''
+    barForm.pdf_name = data.filename || file.name
+    barForm.pdf_object_key = data.object_key || ''
+    ElMessage.success('PDF 上传成功')
+  } catch (error: any) {
+    ElMessage.error(error.message || 'PDF 上传失败')
+  } finally {
+    pdfUploading.value = false
+    input.value = ''
+  }
+}
+
+const clearImage = () => {
+  barForm.image_url = ''
+  barForm.image_object_key = ''
+}
+
+const clearPdf = () => {
+  barForm.pdf_url = ''
+  barForm.pdf_name = ''
+  barForm.pdf_object_key = ''
+}
+
+const previewPdf = () => {
+  if (barForm.pdf_url) {
+    window.open(barForm.pdf_url, '_blank', 'noopener,noreferrer')
+  }
+}
+
+const saveHomepageBar = async () => {
+  if (!barForm.title.trim()) {
+    ElMessage.warning('请输入运营条标题')
+    return
+  }
+  if (barForm.is_active && !barForm.pdf_url) {
+    ElMessage.warning('展示运营条前请先上传 PDF')
+    return
+  }
+
+  barSaving.value = true
+  try {
+    await homepageBarApi.updateConfig({
+      title: barForm.title.trim(),
+      button_text: barForm.button_text.trim() || '下载 PDF',
+      pdf_url: barForm.pdf_url,
+      pdf_name: barForm.pdf_name,
+      pdf_object_key: barForm.pdf_object_key,
+      image_url: barForm.image_url,
+      image_object_key: barForm.image_object_key,
+      is_active: barForm.is_active
+    })
+    ElMessage.success('官网运营条已保存')
+    fetchHomepageBar()
+  } catch (error: any) {
+    ElMessage.error(error.message || '保存失败')
+  } finally {
+    barSaving.value = false
+  }
+}
 
 const handleAdd = () => {
   isEdit.value = false
@@ -241,6 +464,73 @@ const resetForm = () => {
 }
 .data-card {
   border-radius: 12px;
+}
+.marketing-card {
+  margin-bottom: 24px;
+  border-radius: 12px;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+.section-subtitle {
+  font-size: 13px;
+  color: #777;
+  margin: 0;
+}
+.marketing-form {
+  max-width: 860px;
+}
+.asset-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.asset-preview {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  background: #f5f7fa;
+}
+.asset-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.asset-name {
+  color: #606266;
+  font-size: 13px;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pdf-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 24px;
+  border-radius: 4px;
+  background: #111;
+  color: #d7ff3f;
+  font-size: 12px;
+  font-weight: 700;
+}
+.hidden-file-input {
+  display: none;
 }
 .status-tip {
   margin-left: 12px;

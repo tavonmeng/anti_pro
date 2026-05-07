@@ -103,6 +103,21 @@ export interface Announcement {
   created_by: string
 }
 
+export interface HomepageBarConfig {
+  id: string
+  title: string
+  button_text: string
+  pdf_url?: string
+  pdf_name?: string
+  pdf_object_key?: string
+  image_url?: string
+  image_object_key?: string
+  is_active: boolean
+  created_by?: string
+  created_at: string
+  updated_at: string
+}
+
 export const authApi = {
   // 登录
   async login(data: LoginRequest, silent = false): Promise<LoginResponse> {
@@ -1059,6 +1074,30 @@ export const announcementApi = {
   }
 }
 
+// 官网顶部运营条 API
+export const homepageBarApi = {
+  async getPublic(): Promise<HomepageBarConfig | null> {
+    return request.get('/homepage-bar/public', { silent: true })
+  },
+
+  async getConfig(): Promise<HomepageBarConfig> {
+    return request.get('/homepage-bar')
+  },
+
+  async updateConfig(data: Partial<{
+    title: string
+    button_text: string
+    pdf_url: string
+    pdf_name: string
+    pdf_object_key: string
+    image_url: string
+    image_object_key: string
+    is_active: boolean
+  }>): Promise<HomepageBarConfig> {
+    return request.put('/homepage-bar', data)
+  }
+}
+
 // 企业认证 API 接口
 export const enterpriseApi = {
   // 获取当前用户企业认证状态
@@ -1250,4 +1289,3 @@ export const chatHistoryApi = {
     return request.get(`/ai/chat-history/admin/sessions/${sessionId}/messages`)
   },
 }
-

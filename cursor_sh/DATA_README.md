@@ -254,6 +254,24 @@ Columns:
 - `updated_at`.
 - `created_by`: admin ID.
 
+### `homepage_bars`
+
+Public homepage top marketing bar configuration.
+
+Columns:
+
+- `id`: singleton config ID, normally `homepage_top_bar`.
+- `title`: bar copy shown on the public homepage.
+- `button_text`: CTA button text.
+- `pdf_url`: local URL in local mode, or OSS object key in OSS mode. API responses sign it before returning.
+- `pdf_name`: display name of the uploaded PDF.
+- `pdf_object_key`: OSS object key for the PDF when OSS is enabled.
+- `image_url`: optional local image URL in local mode, or OSS object key in OSS mode. API responses sign it before returning.
+- `image_object_key`: OSS object key for the thumbnail/image when OSS is enabled.
+- `is_active`: whether the bar should be shown.
+- `created_by`: admin ID.
+- `created_at`, `updated_at`.
+
 ### `security_events`
 
 Registration/login/security telemetry.

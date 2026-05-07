@@ -2,6 +2,7 @@
   <header
     class="header-bar"
     :class="{ 'is-light': isLightMode }"
+    :style="{ top: `${topOffset}px` }"
     @mouseenter="onHeaderEnter"
     @mouseleave="onHeaderLeave"
   >
@@ -94,6 +95,10 @@ const props = defineProps({
   forceTransparent: {
     type: Boolean,
     default: false
+  },
+  topOffset: {
+    type: Number,
+    default: 0
   }
 })
 
@@ -268,6 +273,7 @@ onUnmounted(() => {
   background: transparent;
   /* 无上左右边框 */
   border: none;
+  transition: top 0.28s ease;
 }
 
 /* ─── Logo ─────────────────────────────────────────────────── */
