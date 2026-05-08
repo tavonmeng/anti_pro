@@ -13,6 +13,9 @@ class FileUpload(BaseModel):
     size: int
     type: str  # MIME type
     uploadTime: str
+    url: Optional[str] = None
+    file_url: Optional[str] = None
+    object_key: Optional[str] = None
 
 
 class FileResponse(BaseModel):
@@ -27,4 +30,3 @@ class FileResponse(BaseModel):
     
     class Config:
         from_attributes = True
-

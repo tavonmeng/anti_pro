@@ -702,6 +702,11 @@ async def _save_to_db(
                     message_count=0,
                 )
                 db.add(session)
+            elif user_id and user_id != "anonymous":
+                if not session.user_id or session.user_id == "anonymous":
+                    session.user_id = user_id
+                if username and (not session.username or session.username == "anonymous"):
+                    session.username = username
 
             # 保存用户消息
             db.add(AIChatMessage(
@@ -790,4 +795,3 @@ def _save_session_file(
 
     except Exception as e:
         print(f"AI 会话 JSON 保存失败: {e}")
-

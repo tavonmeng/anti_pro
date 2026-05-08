@@ -284,7 +284,9 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, VideoPlay, Download } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
+import { useAuthStore } from '@/stores/auth'
 import { orderApi } from '@/utils/api'
+import { ensureEnterpriseApproved } from '@/utils/enterpriseGuard'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 import { ElMessage } from 'element-plus'
@@ -293,6 +295,7 @@ import type { Order, VideoPurchaseOrder, DigitalArtOrder, TimelineItem, OrderSta
 const router = useRouter()
 const route = useRoute()
 const orderStore = useOrderStore()
+const authStore = useAuthStore()
 
 const order = ref<Order | null>(null)
 const loading = ref(true)
@@ -492,6 +495,13 @@ const handleEdit = () => {
 
 const handleSubmitDraft = async () => {
   if (!order.value) return
+  const approved = await ensureEnterpriseApproved(
+    authStore,
+    router,
+    '请先完成企业认证后再提交订单。当前草稿会继续保留在草稿箱中。'
+  )
+  if (!approved) return
+
   showConfirmation.value = true
 }
 
@@ -796,4 +806,3 @@ const goBack = () => {
   gap: 8px;
 }
 </style>
-

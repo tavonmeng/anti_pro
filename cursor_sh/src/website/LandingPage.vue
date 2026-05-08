@@ -1,7 +1,20 @@
 <template>
   <div class="landing-scope">
     <PageLoader v-if="!loaderDestroyed" @complete="handleLoadComplete" />
-    <TheHeader :force-light="isDetailOpen" :force-transparent="isShowcaseOpen && !isDetailOpen" @logoClick="handleGlobalLogoClick" @menuClick="handleGlobalMenuClick" @openLogin="openAuth('login')" @openRegister="openAuth('register')" />
+    <MarketingTopBar
+      v-if="!isShowcaseOpen && !isDetailOpen"
+      @visibility-change="isMarketingBarVisible = $event"
+      @active-change="isMarketingBarActive = $event"
+    />
+    <TheHeader
+      :force-light="isDetailOpen"
+      :force-transparent="isShowcaseOpen && !isDetailOpen"
+      :top-offset="headerTopOffset"
+      @logoClick="handleGlobalLogoClick"
+      @menuClick="handleGlobalMenuClick"
+      @openLogin="openAuth('login')"
+      @openRegister="openAuth('register')"
+    />
     <CustomCursor />
     
     <div class="main-page" ref="mainPageRef">
@@ -42,8 +55,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import TheHeader from './components/TheHeader.vue'
+import MarketingTopBar from './components/MarketingTopBar.vue'
 import AuthModal from './components/AuthModal.vue'
 import CaseDetailPage from './components/CaseDetailPage.vue'
 import CaseShowcasePage from './components/CaseShowcasePage.vue'
@@ -71,6 +85,14 @@ const isShowcaseOpen = ref(false)
 const activeCaseDetail = ref(null)
 const isDetailOpen = ref(false)
 const isExperimentOpen = ref(false)
+const isMarketingBarVisible = ref(true)
+const isMarketingBarActive = ref(false)
+const marketingBarHeight = 58
+const headerTopOffset = computed(() => (
+  isMarketingBarActive.value && isMarketingBarVisible.value && !isShowcaseOpen.value && !isDetailOpen.value
+    ? marketingBarHeight
+    : 0
+))
 
 // 登录/注册弹窗
 const authModalVisible = ref(false)

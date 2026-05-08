@@ -311,8 +311,10 @@
                 <img v-if="file.isImage" :src="file.url" class="file-thumb" />
                 <el-icon v-else class="file-icon-placeholder"><PictureRounded /></el-icon>
                 <span class="file-name">{{ file.name }}</span>
+                <span class="file-status">待发送</span>
                 <span class="file-remove" @click="removeUploadedFile(idx)">&times;</span>
               </div>
+              <span class="upload-more-hint">可继续上传更多文件或图片，完成后点击 Send</span>
             </div>
 
           <textarea
@@ -351,7 +353,7 @@
 
             <button
               class="stitch-send-btn"
-              :class="{ disabled: isLoading || isTyping || !inputMsg.trim() }"
+              :class="{ disabled: isLoading || isTyping || isUploadingFiles || (!inputMsg.trim() && uploadedFiles.length === 0) }"
               @click="sendMessage"
             >
               <span>Send</span>
@@ -408,6 +410,7 @@ import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
 import { chatHistoryApi } from '@/utils/api'
+import { getLatestEnterpriseStatus } from '@/utils/enterpriseGuard'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 
 // 语音输入开关，通过 .env 文件配置
@@ -727,9 +730,22 @@ const confirmOrderNumber = ref('')
 const confirmOrderType = ref<OrderType>('ai_3d_custom')
 
 // ===== 文件上传相关 =====
+type UploadedFile = {
+  name: string
+  url: string
+  isImage: boolean
+  size: number
+  type: string
+  uploadTime: string
+  objectKey?: string
+}
+
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const genericFileInputRef = ref<HTMLInputElement | null>(null)
-const uploadedFiles = ref<{name: string, url: string, isImage: boolean, size: number, type: string, uploadTime: string, objectKey?: string}[]>([])
+const uploadedFiles = ref<UploadedFile[]>([])
+const submittedFiles = ref<UploadedFile[]>([])
+const isUploadingFiles = ref(false)
+const failedUploadNames = ref<string[]>([])
 
 const triggerFileUpload = () => {
   fileInputRef.value?.click()
@@ -744,6 +760,8 @@ const handleFileSelected = async (e: Event) => {
   if (!input.files?.length) return
 
   const uploadedNames: string[] = []
+  const failedNames: string[] = []
+  isUploadingFiles.value = true
 
   for (const file of Array.from(input.files)) {
     const formData = new FormData()
@@ -770,91 +788,43 @@ const handleFileSelected = async (e: Event) => {
         })
         uploadedNames.push(file.name)
       } else {
+        failedNames.push(file.name)
         ElMessage.error(`上传失败: ${file.name}`)
       }
     } catch (err) {
+      failedNames.push(file.name)
       ElMessage.error(`上传失败: ${file.name}`)
     }
   }
   // 清空 input 值，允许重复上传同一文件
   input.value = ''
+  isUploadingFiles.value = false
 
-  // 上传完毕后，在聊天中显示上传信息并自动通知 Agent
   if (uploadedNames.length > 0) {
-    const uploadSummary = uploadedNames.length === 1
-      ? `[已上传文件: ${uploadedNames[0]}]`
-      : `[已上传 ${uploadedNames.length} 个文件: ${uploadedNames.join('、')}]`
-    messages.value.push({
-      role: 'user',
-      content: uploadSummary,
-      timestamp: getCurrentTime()
-    })
-    scrollToBottom()
-
-    // 自动通知 AI Agent，让它对上传做出回应（询问是否继续上传）
-    if (selectedMode.value === 'order_create') {
-      await notifyAgentAfterUpload(uploadedNames)
-    }
+    ElMessage.success(uploadedNames.length === 1
+      ? `${uploadedNames[0]} 已添加到本轮消息`
+      : `${uploadedNames.length} 个文件已添加到本轮消息`
+    )
   }
-}
-
-/** 上传文件后通知 AI Agent，让它对上传做出回应 */
-const notifyAgentAfterUpload = async (fileNames: string[]) => {
-  isLoading.value = true
-  try {
-    const uploadNotice = fileNames.length === 1
-      ? `我已经上传了一个文件：${fileNames[0]}，请确认收到。`
-      : `我已经上传了 ${fileNames.length} 个文件：${fileNames.join('、')}，请确认收到。`
-
-    // 构建历史消息（过滤案例浏览消息）
-    const historyMessages = messages.value.slice(0, messages.value.length - 1)
-    const formattedHistory = historyMessages
-      .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.isCaseDetour)
-      .map(m => ({ role: m.role, content: m.content }))
-
-    const response = await fetch('/ai/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: session_id.value,
-        message: uploadNotice,
-        history: formattedHistory,
-        business_type: businessType.value
-      })
-    })
-
-    if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
-      throw new Error('API not available')
-    }
-
-    const data = await response.json()
-    const replyContent = data.message || data.answer || ''
-    const cleanContent = replyContent.replace('【需求收集完成】', '').trim()
-
-    if (cleanContent) {
-      const userMsgCount = messages.value.filter(m => m.role === 'user').length
-      const shouldComplete = replyContent.includes('【需求收集完成】') && userMsgCount >= 3
-
-      typewriterEffect(cleanContent, async () => {
-        if (shouldComplete) {
-          const lastMsg = messages.value[messages.value.length - 1]
-          if (lastMsg && lastMsg.role === 'assistant') {
-            lastMsg.isCompletePrompt = true
-          }
-          await autoExtractAndSaveDraft()
-        }
-      })
-    }
-  } catch (err) {
-    // 降级：如果 API 不可用，前端直接给出提示
-    typewriterEffect('收到，文件已成功上传。如果还有其他参考文件或现场实拍图需要上传，可以继续通过输入框左侧的按钮上传。如果没有了，我来为您整理需求信息。')
-  } finally {
-    isLoading.value = false
+  if (failedNames.length > 0) {
+    failedUploadNames.value = Array.from(new Set([...failedUploadNames.value, ...failedNames]))
   }
 }
 
 const removeUploadedFile = (index: number) => {
   uploadedFiles.value.splice(index, 1)
+}
+
+const buildFileSummaryText = (files: UploadedFile[]) => {
+  if (files.length === 0) return ''
+  const names = files.map(file => file.name).join('、')
+  return files.length === 1
+    ? `[已上传文件: ${names}]`
+    : `[已上传 ${files.length} 个文件: ${names}]`
+}
+
+const buildUserMessageContent = (text: string, files: UploadedFile[]) => {
+  return [text, buildFileSummaryText(files)].filter(Boolean).join('\n')
 }
 
 // 表单字段定义
@@ -902,7 +872,8 @@ const inputMsg = ref('')
 const isLoading = ref(false)
 const isTyping = ref(false) // AI 正在逐字输出中
 const extractLoading = ref(false) // 信息提取整理中
-const session_id = ref(Math.random().toString(36).substring(7))
+const createSessionId = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+const session_id = ref(createSessionId())
 const chatContentRef = ref<any>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isComposing = ref(false) // 中文输入法组合输入状态
@@ -985,7 +956,7 @@ const startNewSession = () => {
   
   messages.value = []
   selectedMode.value = null
-  session_id.value = Math.random().toString(36).substring(7)
+  session_id.value = createSessionId()
   playWelcomeAnimation()
 }
 
@@ -1017,6 +988,7 @@ interface SavedSession {
 
 const savedHistories = ref<SavedSession[]>([])
 const expandedHistories = ref<Record<string, boolean>>({})
+const getSessionSortValue = (id: string) => Number(String(id).split('_')[0]) || 0
 
 const displayedHistories = computed(() => {
   if (!searchQuery.value.trim()) return savedHistories.value
@@ -1037,7 +1009,7 @@ const loadSavedHistory = () => {
       const parsed = JSON.parse(raw)
       let parsedArr = Array.isArray(parsed) ? parsed : [parsed]
       // 按照 ID（时间戳）升序排列，最新的记录在最下方（靠近输入框）
-      parsedArr.sort((a, b) => Number(a.id) - Number(b.id))
+      parsedArr.sort((a, b) => getSessionSortValue(a.id) - getSessionSortValue(b.id))
       savedHistories.value = parsedArr
     }
   } catch {
@@ -1083,7 +1055,7 @@ const saveCurrentToHistory = () => {
   _lastSaveTimestamp = now
   
   const session: SavedSession = {
-    id: Date.now().toString(),
+    id: session_id.value,
     messages: [...messages.value],
     mode: selectedMode.value,
     savedAt: new Date().toLocaleString('zh-CN', {
@@ -1105,9 +1077,14 @@ const saveCurrentToHistory = () => {
     }
   } catch(e) {}
   
-  histories.push(session)
+  const existingIndex = histories.findIndex(h => h.id === session.id)
+  if (existingIndex >= 0) {
+    histories[existingIndex] = session
+  } else {
+    histories.push(session)
+  }
   // 按时间升序排序（最新的在最下方，靠近输入框）
-  histories.sort((a, b) => Number(a.id) - Number(b.id))
+  histories.sort((a, b) => getSessionSortValue(a.id) - getSessionSortValue(b.id))
   
   // 如果超过 5 条，保留最新的 5 条
   if (histories.length > 5) histories = histories.slice(-5)
@@ -1144,6 +1121,37 @@ const _syncToBackend = async (session: SavedSession) => {
     // 静默失败，不阻断用户体验
     console.warn('[ChatHistory] 同步失败:', e)
   }
+}
+
+let _lastBackendSyncSignature = ''
+
+/** 将当前会话按稳定 session_id 同步到后端，供管理员实时查看。 */
+const syncCurrentConversationToBackend = async () => {
+  const session: SavedSession = {
+    id: session_id.value,
+    messages: [...messages.value],
+    mode: selectedMode.value,
+    savedAt: new Date().toLocaleString('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    })
+  }
+
+  const msgs = session.messages.filter((m: any) =>
+    (m.role === 'user' || m.role === 'assistant') && (m.content || '').trim()
+  )
+  if (msgs.length === 0) return
+
+  const lastMsg = msgs[msgs.length - 1]
+  const signature = `${session.id}:${msgs.length}:${lastMsg.role}:${lastMsg.content}`
+  if (signature === _lastBackendSyncSignature) return
+  _lastBackendSyncSignature = signature
+
+  await _syncToBackend(session)
 }
 
 const toggleHistory = () => {
@@ -1203,7 +1211,7 @@ const scrollToBottom = async (instant: boolean = false) => {
 }
 
 // ===== 打字机效果：逐字显示 AI 回复 =====
-const typewriterEffect = (fullText: string, onComplete?: () => void) => {
+const typewriterEffect = (fullText: string, onComplete?: () => void | Promise<void>) => {
   isLoading.value = false
   isTyping.value = true
   
@@ -1239,7 +1247,10 @@ const typewriterEffect = (fullText: string, onComplete?: () => void) => {
         textareaRef.value?.focus()
       })
       
-      if (onComplete) onComplete()
+      ;(async () => {
+        if (onComplete) await onComplete()
+        await syncCurrentConversationToBackend()
+      })()
     }
   }
   
@@ -1399,7 +1410,9 @@ const selectMode = async (mode: string) => {
     // 需求收集 Agent 开场白
     isLoading.value = true
     try {
-      const response = await fetch(`/ai/start?session_id=${session_id.value}`)
+      const response = await fetch(`/ai/start?session_id=${session_id.value}`, {
+        headers: getAuthHeaders()
+      })
       if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
         throw new Error('API not available')
       }
@@ -1445,7 +1458,7 @@ const selectMode = async (mode: string) => {
     try {
       const response = await fetch('/ai/business-intro', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ message: '请介绍一下你们的业务', history: [] })
       })
       if (!response.ok) throw new Error('intro failed')
@@ -1470,11 +1483,31 @@ const goToBrowse = (type: string) => {
 }
 
 const sendMessage = async () => {
-  if (!inputMsg.value.trim() || isLoading.value) return
+  if (isLoading.value || isTyping.value) return
+  if (isUploadingFiles.value) {
+    ElMessage.warning('文件仍在上传中，请稍候再发送')
+    return
+  }
+
   const userText = inputMsg.value.trim()
-  messages.value.push({ role: 'user', content: userText, timestamp: getCurrentTime() })
+  const pendingFiles = [...uploadedFiles.value]
+  if (!userText && pendingFiles.length === 0) return
+
+  if (failedUploadNames.value.length > 0) {
+    const failedNames = failedUploadNames.value.join('、')
+    failedUploadNames.value = []
+    ElMessage.warning(`${failedNames} 上传失败，未随本条消息发送。请重新选择文件后再发送。`)
+    return
+  }
+
+  const messageContent = buildUserMessageContent(userText, pendingFiles)
+  messages.value.push({ role: 'user', content: messageContent, timestamp: getCurrentTime() })
   inputMsg.value = ''
-  logger.logAction('AI', 'send_message', { mode: selectedMode.value, textLength: userText.length })
+  if (pendingFiles.length > 0) {
+    submittedFiles.value.push(...pendingFiles)
+    uploadedFiles.value = []
+  }
+  logger.logAction('AI', 'send_message', { mode: selectedMode.value, textLength: userText.length, fileCount: pendingFiles.length })
   
   if (textareaRef.value) {
     textareaRef.value.style.height = 'auto'
@@ -1486,8 +1519,8 @@ const sendMessage = async () => {
     try {
       const classifyRes = await fetch('/ai/classify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userText })
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ message: messageContent })
       })
       if (classifyRes.ok) {
         const { intent } = await classifyRes.json()
@@ -1515,25 +1548,25 @@ const sendMessage = async () => {
   // 根据当前意图路由到对应 handler
   // 跨模式拦截：任何模式下用户问案例，都走 business_intro（它有真实案例库）
   const _caseKeywords = ['案例', '作品', '看看你们做过', '之前做过', '过往项目', '成功案例', '看看案例', '展示一下']
-  if (_caseKeywords.some(kw => userText.includes(kw))) {
+  if (_caseKeywords.some(kw => messageContent.includes(kw))) {
     // 标记用户的案例请求消息，避免污染需求收集上下文
     const lastUserMsg = messages.value[messages.value.length - 1]
     if (lastUserMsg && lastUserMsg.role === 'user') lastUserMsg.isCaseDetour = true
-    await handleBusinessIntro(userText, true)
+    await handleBusinessIntro(messageContent, true)
   } else if (selectedMode.value === 'order_create') {
-    await handleCustomAiChat(userText)
+    await handleCustomAiChat(messageContent)
   } else if (selectedMode.value === 'order_query') {
-    await handleOrderQuery(userText)
+    await handleOrderQuery(messageContent)
   } else if (selectedMode.value === 'business_intro') {
     // 检测用户是否通过文字表达了下单意图，自动切换到对应业务的需求收集
-    const detectedType = _detectBusinessTypeFromText(userText)
+    const detectedType = _detectBusinessTypeFromText(messageContent)
     if (detectedType) {
       switchToOrderCreate(detectedType)
     } else {
-      await handleBusinessIntro(userText)
+      await handleBusinessIntro(messageContent)
     }
   } else {
-    await handleGeneral(userText)
+    await handleGeneral(messageContent)
   }
 }
 
@@ -1564,6 +1597,7 @@ const handleOrderQuery = async (userText: string) => {
     })
   } catch (e) {
     messages.value.push({ role: 'assistant', content: '查询遇到问题，请稍后重试。', timestamp: getCurrentTime() })
+    void syncCurrentConversationToBackend()
   } finally {
     isLoading.value = false
   }
@@ -1584,7 +1618,7 @@ const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = fal
       .map(m => ({ role: m.role, content: m.content }))
     const response = await fetch('/ai/business-intro', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ message: userText, history: historyMsgs })
     })
     if (!response.ok) throw new Error('intro failed')
@@ -1635,6 +1669,7 @@ const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = fal
     })
   } catch (e) {
     messages.value.push({ role: 'assistant', content: '获取信息时遇到问题，请稍后重试。', timestamp: getCurrentTime() })
+    void syncCurrentConversationToBackend()
   } finally {
     isLoading.value = false
   }
@@ -1649,7 +1684,7 @@ const handleGeneral = async (userText: string) => {
       .map(m => ({ role: m.role, content: m.content }))
     const response = await fetch('/ai/general', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ session_id: session_id.value, message: userText, history: historyMsgs })
     })
     if (!response.ok) throw new Error('general failed')
@@ -1675,7 +1710,7 @@ const handleCustomAiChat = async (userText: string) => {
 
     const response = await fetch('/ai/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ 
         session_id: session_id.value, 
         message: userText,
@@ -1732,6 +1767,7 @@ const handleCustomAiChat = async (userText: string) => {
           content: mockReplies[userMsgCount], 
           timestamp: getCurrentTime() 
         })
+        void syncCurrentConversationToBackend()
       } else {
         const summaryMsg = '需求信息收集完毕，正在为您生成项目评估...'
         messages.value.push({ 
@@ -1771,6 +1807,7 @@ const handleCustomAiChat = async (userText: string) => {
             technology: ''
           }
         }
+        void syncCurrentConversationToBackend()
       }
       isLoading.value = false
     }, 1000)
@@ -1788,7 +1825,7 @@ const autoExtractAndSaveDraft = async () => {
     try {
       const response = await fetch('/ai/extract', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ history: formattedHistory })
       })
       if (response.ok) {
@@ -1811,7 +1848,7 @@ const autoExtractAndSaveDraft = async () => {
     try {
       const assessRes = await fetch('/ai/assess', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ extracted })
       })
       if (assessRes.ok) {
@@ -1840,8 +1877,8 @@ const autoExtractAndSaveDraft = async () => {
     
     inlineFormData.value = extracted
     // 将上传的文件信息自动填入"现场实拍图"字段（文本展示）
-    if (uploadedFiles.value.length > 0) {
-      const fileInfo = uploadedFiles.value.map(f => f.name).join('、')
+    if (submittedFiles.value.length > 0) {
+      const fileInfo = submittedFiles.value.map(f => f.name).join('、')
       inlineFormData.value.site_photos = (inlineFormData.value.site_photos || '') 
         ? inlineFormData.value.site_photos + '；' + fileInfo 
         : fileInfo
@@ -1849,7 +1886,7 @@ const autoExtractAndSaveDraft = async () => {
     try {
       const orderType = businessType.value
       // 构造 scenePhotos 数组（后端需要 FileUpload 格式的对象数组）
-      const scenePhotos = uploadedFiles.value.map((f, idx) => ({
+      const scenePhotos = submittedFiles.value.map((f, idx) => ({
         id: `upload_${Date.now()}_${idx}`,
         name: f.name,
         size: f.size || 0,
@@ -1873,11 +1910,12 @@ const handleContinueEditing = (msg: any) => {
   msg.formHidden = true
 }
 
-const handleSubmitOrder = () => {
+const handleSubmitOrder = async () => {
   if (!inlineFormData.value) return
   
   // 检查企业认证状态
-  if (authStore.user?.enterprise_status !== 'approved') {
+  const enterpriseStatus = await getLatestEnterpriseStatus(authStore)
+  if (enterpriseStatus !== 'approved') {
     messages.value.push({
       role: 'assistant',
       content: '您尚未完成企业认证，无法正式提交订单。您的需求已自动保存为草稿，请先前往「个人设置」完成企业认证后再提交。',
@@ -1898,7 +1936,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   showConfirmation.value = false
   try {
     // 构造 scenePhotos 数组（后端需要 FileUpload 格式的对象数组）
-    const scenePhotos = uploadedFiles.value.map((f, idx) => ({
+    const scenePhotos = submittedFiles.value.map((f, idx) => ({
       id: `upload_${Date.now()}_${idx}`,
       name: f.name,
       size: f.size || 0,
@@ -2712,6 +2750,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 /* 已上传文件预览条 */
 .uploaded-files-strip {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
   padding: 4px 0;
@@ -2748,6 +2787,24 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100px;
+}
+
+.file-status {
+  flex: 0 0 auto;
+  color: #0d99ff;
+  font-size: 11px;
+}
+
+.upload-more-hint {
+  flex: 0 1 auto;
+  margin-left: auto;
+  min-width: 0;
+  color: #9aa0a6;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .file-remove {
@@ -3454,7 +3511,3 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   to { transform: rotate(360deg); }
 }
 </style>
-
-
-
-

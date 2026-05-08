@@ -38,7 +38,12 @@ async def upload_site_photo(
         raise HTTPException(status_code=413, detail="文件大小不能超过20MB")
 
     # 限制文件类型
-    allowed_ext = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.pdf', '.doc', '.docx', '.zip'}
+    allowed_ext = {
+        '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp',
+        '.pdf', '.doc', '.docx', '.zip', '.rar',
+        '.ppt', '.pptx', '.xls', '.xlsx', '.txt',
+        '.mp4', '.mov', '.avi',
+    }
     ext = os.path.splitext(file.filename or '')[1].lower()
     if ext not in allowed_ext:
         raise HTTPException(status_code=400, detail="不支持的文件类型: %s" % ext)

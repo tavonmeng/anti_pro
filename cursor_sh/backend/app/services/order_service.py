@@ -7,7 +7,7 @@ from typing import List, Optional, Union
 from datetime import datetime, timezone
 
 from app.models.order import Order, OrderType, OrderStatus, OrderAssignee
-from app.models.user import User, UserRole
+from app.models.user import EnterpriseStatus, User, UserRole
 from app.utils.dependencies import AnyUser
 from app.models.admin import Admin
 from app.models.staff_member import StaffMember
@@ -92,6 +92,22 @@ class OrderStateMachine:
 
 class OrderService:
     """订单服务类"""
+
+    @staticmethod
+    def _enterprise_status_value(user: AnyUser) -> str:
+        status_value = getattr(user, "enterprise_status", EnterpriseStatus.NONE)
+        if hasattr(status_value, "value"):
+            return status_value.value
+        return str(status_value or "none").lower()
+
+    @staticmethod
+    def _require_enterprise_approved(user: AnyUser):
+        """普通客户正式提交订单前必须完成企业认证。"""
+        if isinstance(user, User) and OrderService._enterprise_status_value(user) != EnterpriseStatus.APPROVED.value:
+            raise HTTPException(
+                status_code=403,
+                detail="请先完成企业认证后再提交订单。您可以先将订单保存为草稿。"
+            )
     
     @staticmethod
     async def create_order(
@@ -101,6 +117,9 @@ class OrderService:
         is_draft: bool = False
     ) -> dict:
         """创建订单（支持草稿模式）"""
+        if not is_draft:
+            OrderService._require_enterprise_approved(user)
+
         # 生成订单 ID 和订单号
         order_id = generate_id("order")
         order_number = generate_order_number()
@@ -439,6 +458,9 @@ class OrderService:
         # 兼容：如果前端还传 pending_assign，自动映射到 pending_contract
         if is_draft_submit and new_status == OrderStatus.PENDING_ASSIGN:
             new_status = OrderStatus.PENDING_CONTRACT
+
+        if is_draft_submit:
+            OrderService._require_enterprise_approved(current_user)
         
         # 允许订单创建者删除自己的草稿（draft -> cancelled）
         is_draft_delete = (
