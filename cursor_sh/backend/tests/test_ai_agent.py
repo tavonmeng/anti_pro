@@ -178,6 +178,77 @@ def test_extract_merge_keeps_tracked_optional_state_fields(monkeypatch):
     assert merged["special_requirements"] == "需要特殊裸眼3D破框效果"
 
 
+def test_completion_gate_blocks_early_llm_completion(monkeypatch):
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+    state = ai_module._build_requirement_state(
+        "ai_3d_custom",
+        fields={
+            "project_name": "分众传媒成都大屏项目",
+            "city_location": "成都春熙路",
+            "viewing_path": "纵向观看",
+            "art_direction": "自然生态意象",
+            "theme_concept": "关爱大自然",
+            "media_specs": "7680x2160",
+        },
+    )
+
+    reply, is_complete = ai_module._enforce_completion_gate(
+        "核心需求信息已基本覆盖，我来整理。 【需求收集完成】",
+        state,
+        "项目背景就是关爱大自然",
+    )
+
+    assert is_complete is False
+    assert "【需求收集完成】" not in reply
+    assert "项目背景" in reply
+
+
+def test_completion_gate_allows_user_stop_intent_with_partial_info(monkeypatch):
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+    state = ai_module._build_requirement_state(
+        "ai_3d_custom",
+        fields={
+            "project_name": "分众传媒成都大屏项目",
+            "city_location": "成都春熙路",
+        },
+    )
+
+    reply, is_complete = ai_module._enforce_completion_gate(
+        "我先按当前信息整理，缺失项会保留为空。 【需求收集完成】",
+        state,
+        "先这样吧，后面再补",
+    )
+
+    assert is_complete is True
+    assert "【需求收集完成】" in reply
+
+
+def test_completion_gate_allows_sufficient_media_collection(monkeypatch):
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+    state = ai_module._build_requirement_state(
+        "ai_3d_custom",
+        fields={
+            "project_name": "分众传媒成都大屏项目",
+            "resource_background": "春熙路核心商圈大屏",
+            "audience_scene": "商圈年轻客群",
+            "city_location": "成都春熙路",
+            "viewing_path": "纵向观看",
+            "art_direction": "自然生态意象",
+            "theme_concept": "关爱大自然",
+            "media_specs": "7680x2160",
+        },
+    )
+
+    reply, is_complete = ai_module._enforce_completion_gate(
+        "信息已经基本差不多，我来整理。 【需求收集完成】",
+        state,
+        "没有其他补充",
+    )
+
+    assert is_complete is True
+    assert "【需求收集完成】" in reply
+
+
 @pytest.mark.asyncio
 async def test_post_json_chat_completion_retries_empty_content(monkeypatch):
     calls = []

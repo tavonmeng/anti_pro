@@ -173,15 +173,15 @@ _DIALOG_RULES = (
     "客户回答包含多个信息时，先确认收到，再追问下一个缺失项。"
     "切勿重复问已经问过的问题。\n\n"
 
-    "2. 【触发完成的严格条件】在输出【需求收集完成】之前，"
-    "逐项检查核心必问项的收集情况。"
-    "只有当至少5项有了客户的实质性回答后，才可以输出【需求收集完成】标记。"
-    "不足5项时必须继续追问。\n\n"
+    "2. 【完成条件】在输出【需求收集完成】之前，先判断是否已经'基本差不多'："
+    "核心必问项中至少5项已有客户的实质性回答或客户明确跳过。"
+    "不要把行业常识、你的推断、占位示例当作客户回答。"
+    "如果不足5项，且客户没有表达不想继续，必须继续追问。\n\n"
 
     "3. 满足条件后，简要总结已收集的信息，"
     "在回复的最末尾加上标记：【需求收集完成】。\n\n"
 
-    "4. 【被动结束情况】只有当客户明确表达不想继续时（比如'算了''就这样吧''先这样''回头再说''直接填表吧'），"
+    "4. 【被动结束情况】当客户明确表达不想继续，或你能从表达中判断客户不想再补充时（比如'算了''就这样吧''先这样''回头再说''直接填表吧''没有了'），"
     "才可以提前结束。此时总结已收集的信息，指出哪些重要项还缺失，然后加上【需求收集完成】标记。"
     "客户正常回答问题时，不要主动结束。\n\n"
 
@@ -317,15 +317,15 @@ _MEDIA_DIALOG_RULES = (
     "   - 技术与交付阶段（媒体规格、技术需求、审核规范、上刊时间等）\n"
     "过渡示例：'基础信息差不多了，接下来我们聊聊创意方向。'\n\n"
 
-    "6. 【触发完成的严格条件】在输出【需求收集完成】之前，"
-    "逐项检查核心必问项的收集情况。"
-    "只有当至少8项有了客户的实质性回答后，才可以输出【需求收集完成】标记。"
-    "不足8项时必须继续追问。\n\n"
+    "6. 【完成条件】在输出【需求收集完成】之前，先判断是否已经'基本差不多'："
+    "核心必问项中至少8项已有客户的实质性回答或客户明确跳过。"
+    "不要把商圈常识、你的推断、占位示例当作客户回答。"
+    "如果不足8项，且客户没有表达不想继续，必须继续追问。\n\n"
 
     "7. 满足条件后，简要总结已收集的信息，"
     "在回复的最末尾加上标记：【需求收集完成】。\n\n"
 
-    "8. 【被动结束情况】只有当客户明确表达不想继续时（比如'算了''就这样吧''先这样''回头再说''直接填表吧'），"
+    "8. 【被动结束情况】当客户明确表达不想继续，或你能从表达中判断客户不想再补充时（比如'算了''就这样吧''先这样''回头再说''直接填表吧''没有了'），"
     "才可以提前结束。此时总结已收集的信息，指出哪些重要项还缺失，然后加上【需求收集完成】标记。"
     "客户正常回答问题时，不要主动结束。\n\n"
 
@@ -403,6 +403,82 @@ def _is_mock_completion_message(message: str) -> bool:
         "完成了", "需求完成", "收集完成", "信息齐了",
     ]
     return any(marker in message for marker in positive_markers)
+
+
+_COMPLETION_MARKER = "【需求收集完成】"
+
+_STOP_INTENT_MARKERS = [
+    "就这样", "先这样", "差不多了", "可以了", "没问题", "确认",
+    "直接整理", "直接填表", "直接提交", "开始整理", "不用再问",
+    "不想继续", "回头再说", "后面再补", "先到这里", "先到这",
+    "没有了", "没了", "暂时没有", "其他没有", "没有更多",
+]
+
+_NEGATIVE_STOP_INTENT_MARKERS = [
+    "还没完成", "没有完成", "没完成", "未完成", "不完整", "没收集完",
+    "还不确认", "不要提交", "先不要提交", "不是确认", "不可以了",
+]
+
+
+def _user_wants_to_finish(message: str) -> bool:
+    text = (message or "").strip()
+    if not text:
+        return False
+    if any(marker in text for marker in _NEGATIVE_STOP_INTENT_MARKERS):
+        return False
+    return any(marker in text for marker in _STOP_INTENT_MARKERS)
+
+
+def _has_any_requirement_info(state: dict[str, Any]) -> bool:
+    fields = state.get("fields", {}) if isinstance(state, dict) else {}
+    return bool(fields) or bool(state.get("remarks")) or bool(state.get("collected_fields"))
+
+
+def _has_sufficient_requirement_info(state: dict[str, Any]) -> bool:
+    """判断是否达到'基本差不多'的最低信息量，避免 LLM 过早整理。"""
+    if not isinstance(state, dict):
+        return False
+
+    business_type = state.get("business_type") or "ai_3d_custom"
+    required_fields = _get_required_fields(business_type)
+    required_set = set(required_fields)
+    collected = {field for field in state.get("collected_fields", []) if field in required_set}
+    skipped = {field for field in state.get("skipped_fields", []) if field in required_set}
+    covered_count = len(collected | skipped)
+
+    mode = "media" if settings.AGENT_MODE == "media" else "brand"
+    if mode == "media" and business_type == "ai_3d_custom":
+        min_covered = 8
+    elif business_type == "ai_3d_custom":
+        min_covered = 5
+    else:
+        min_covered = max(4, min(len(required_fields), 5))
+
+    return covered_count >= min_covered
+
+
+def _completion_followup_question(state: dict[str, Any]) -> str:
+    next_label = state.get("next_field_label") or "还缺的核心信息"
+    return f"在整理需求单前，我还想再确认一个关键信息：{next_label}目前方便补充吗？"
+
+
+def _enforce_completion_gate(reply: str, state: dict[str, Any], user_msg: str) -> tuple[str, bool]:
+    """统一收口判断：收集基本充分，或用户明确不想继续，才允许完成。"""
+    has_marker = _COMPLETION_MARKER in (reply or "")
+    if not has_marker:
+        return reply, False
+
+    user_stop = _user_wants_to_finish(user_msg)
+    has_enough = _has_sufficient_requirement_info(state)
+    can_finish = has_enough or (user_stop and _has_any_requirement_info(state))
+    if can_finish:
+        return reply, True
+
+    cleaned = reply.replace(_COMPLETION_MARKER, "").strip()
+    followup = _completion_followup_question(state)
+    if followup not in cleaned:
+        cleaned = f"{cleaned}\n\n{followup}" if cleaned else followup
+    return cleaned, False
 
 
 def _get_required_fields(business_type: str) -> list[str]:
@@ -543,6 +619,7 @@ def _build_state_prompt_context(state: dict[str, Any]) -> str:
             base_context +
             f"建议下一问字段：{next_label}\n"
             "请优先围绕建议下一问字段提问；不要重复询问已收集字段。"
+            "除非客户明确不想继续，否则当前仍不应整理需求单或输出【需求收集完成】。"
             "如果用户修正了之前的信息，以最新表达为准。"
             "如果本轮用户顺带回答了多个字段，应全部承认并跳过这些已收集字段。"
             "如果你从完整对话中判断结构化记录漏掉了已提供的信息，可以按完整对话修正节奏。\n"
@@ -837,6 +914,7 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
             timeout=30.0,
         )
         reply = data["choices"][0]["message"]["content"]
+        reply, is_complete = _enforce_completion_gate(reply, requirement_state, request.message)
 
         _save_session_file(
             session_id=request.session_id, user_id=user_id, username=username,
@@ -845,7 +923,7 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
             user_message_id=request.user_message_id,
             assistant_message_id=request.assistant_message_id,
         )
-        requirement_state["is_complete"] = "【需求收集完成】" in reply
+        requirement_state["is_complete"] = is_complete
 
         # 后台对话学习 — 从对话中提取偏好写回 Memory
         if user_id != "anonymous":
