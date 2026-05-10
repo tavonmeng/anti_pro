@@ -391,6 +391,8 @@ const orderFields = computed(() => {
     { key: 'online_time', label: '上刊时间', value: o.online_time },
     { key: 'background', label: '项目背景', value: o.background },
     { key: 'prohibited_content', label: '品牌禁忌内容', value: o.prohibited_content },
+    { key: 'special_requirements', label: '其他特殊合作要求', value: o.special_requirements },
+    { key: 'remarks', label: '备注', value: o.remarks },
   ].filter(f => f.value !== undefined && f.value !== null)
 })
 

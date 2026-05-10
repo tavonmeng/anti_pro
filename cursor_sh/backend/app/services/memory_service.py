@@ -53,6 +53,67 @@ def _pending_crawl_is_fresh(company_info: dict) -> bool:
     return (datetime.now() - started).total_seconds() < ttl
 
 
+def _now_iso() -> str:
+    return datetime.now().isoformat()
+
+
+def _stamp_company_info(company_info: dict, now: str) -> dict:
+    if not isinstance(company_info, dict):
+        return {}
+    stamped = {**company_info}
+    stamped["updated_at"] = now
+    if stamped.get("crawl_status") == "success" and not stamped.get("crawled_at"):
+        stamped["crawled_at"] = now
+    return stamped
+
+
+def _screen_resource_key(item: dict) -> tuple:
+    return (
+        str(item.get("city", "")).strip(),
+        str(item.get("location", "")).strip(),
+        str(item.get("type", "")).strip(),
+        str(item.get("size", "")).strip(),
+        str(item.get("resolution", "")).strip(),
+    )
+
+
+def _stamp_screen_resources(resources: list, now: str, existing_resources: list | None = None) -> list:
+    if not isinstance(resources, list):
+        return []
+
+    existing_by_key = {}
+    if isinstance(existing_resources, list):
+        for item in existing_resources:
+            if isinstance(item, dict):
+                existing_by_key[_screen_resource_key(item)] = item
+
+    stamped = []
+    for item in resources:
+        if not isinstance(item, dict):
+            continue
+        previous = existing_by_key.get(_screen_resource_key(item), {})
+        stamped.append({
+            **item,
+            "first_seen_at": item.get("first_seen_at") or previous.get("first_seen_at") or now,
+            "last_seen_at": now,
+        })
+    return stamped
+
+
+def _stamp_project_preferences(preferences: dict, now: str) -> dict:
+    if not isinstance(preferences, dict):
+        return {}
+    if preferences and not preferences.get("last_updated"):
+        return {**preferences, "last_updated": now}
+    return preferences
+
+
+def _short_date(value: str | None) -> str:
+    if not value:
+        return ""
+    return str(value)[:10]
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # CRUD
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -77,6 +138,7 @@ async def get_or_create_memory(user_id: str, db: AsyncSession | None = None) -> 
         if memory:
             return memory
 
+        now = _now_iso()
         memory = UserMemory(
             id=str(uuid.uuid4()),
             user_id=user_id,
@@ -86,8 +148,8 @@ async def get_or_create_memory(user_id: str, db: AsyncSession | None = None) -> 
             past_projects=[],
             interaction_stats={
                 "total_sessions": 0,
-                "first_contact": datetime.now().isoformat(),
-                "last_contact": datetime.now().isoformat(),
+                "first_contact": now,
+                "last_contact": now,
             },
             agent_notes="",
         )
@@ -116,9 +178,23 @@ async def update_memory(user_id: str, updates: dict, db: AsyncSession | None = N
         if not memory:
             return
 
+        now = _now_iso()
         for key, value in updates.items():
             if hasattr(memory, key):
+                if key == "company_info":
+                    value = _stamp_company_info(value, now)
+                elif key == "screen_resources":
+                    value = _stamp_screen_resources(value, now, memory.screen_resources or [])
+                elif key == "project_preferences":
+                    value = _stamp_project_preferences(value, now)
                 setattr(memory, key, value)
+
+        if "agent_notes" in updates:
+            stats = {**(memory.interaction_stats or {})}
+            if not stats.get("agent_notes_created_at"):
+                stats["agent_notes_created_at"] = now
+            stats["agent_notes_updated_at"] = now
+            memory.interaction_stats = stats
 
         await session.commit()
 
@@ -138,11 +214,12 @@ async def update_interaction_stats(user_id: str):
     """每次 /chat 请求后调用，更新交互统计"""
     async with async_session_maker() as session:
         memory = await get_or_create_memory(user_id, db=session)
-        stats = memory.interaction_stats or {}
+        stats = {**(memory.interaction_stats or {})}
         stats["total_sessions"] = stats.get("total_sessions", 0) + 1
-        stats["last_contact"] = datetime.now().isoformat()
+        now = _now_iso()
+        stats["last_contact"] = now
         if not stats.get("first_contact"):
-            stats["first_contact"] = datetime.now().isoformat()
+            stats["first_contact"] = now
 
         memory.interaction_stats = stats
         await session.commit()
@@ -164,7 +241,7 @@ async def sync_past_project(user_id: str, project_info: dict):
         past = memory.past_projects or []
 
         # 添加时间戳
-        project_info["updated_at"] = datetime.now().isoformat()
+        project_info["updated_at"] = _now_iso()
 
         # 如果已有该订单，更新状态
         updated = False
@@ -208,11 +285,13 @@ async def trigger_crawl(user_id: str, company_name: str):
             return
         if crawl_status == "pending" and _pending_crawl_is_fresh(company_info):
             return
+        now = _now_iso()
         memory.company_info = {
             **company_info,
             "name": company_name,
             "crawl_status": "pending",
-            "crawl_started_at": datetime.now().isoformat(),
+            "crawl_started_at": now,
+            "updated_at": now,
         }
         await session.commit()
 
@@ -248,7 +327,7 @@ async def _background_crawl(user_id: str, company_name: str, task_key: str = "")
                     "name": company_name,
                     "crawl_status": "failed",
                     "error": str(e),
-                    "crawled_at": datetime.now().isoformat(),
+                    "crawled_at": _now_iso(),
                 },
             })
         except Exception:
@@ -272,24 +351,37 @@ def build_memory_context(memory: UserMemory | None) -> str:
     if not memory:
         return ""
 
-    sections = []
+    sections = [
+        (
+            "\n【客户记忆使用规则】\n"
+            "- 本轮用户明确提供的信息优先级最高；当前结构化需求状态优先于历史记忆。\n"
+            "- 客户记忆只能作为参考、候选项和追问线索，不能替客户确认本次需求。\n"
+            "- 如果记忆与本轮对话冲突，以本轮对话为准，并可自然确认差异。\n"
+            "- 引用记忆时要像顾问自然承接，不要说“根据系统记忆”等系统化表述。\n"
+        )
+    ]
 
     # 公司信息
     ci = memory.company_info or {}
     if ci.get("description"):
+        advantages = ci.get("advantages") or []
+        advantage_text = f"\n- 可参考优势：{'、'.join(advantages[:4])}" if advantages else ""
+        source_date = _short_date(ci.get("crawled_at") or ci.get("updated_at"))
+        source_text = f"\n- 信息时间：{source_date}" if source_date else ""
         sections.append(
-            f"\n【客户背景信息 — 来自公司官网】\n"
-            f"公司：{ci.get('name', '未知')}\n"
-            f"简介：{ci.get('description', '')}\n"
+            f"\n【顾问线索：客户背景】\n"
+            f"- 公司：{ci.get('name', '未知')}\n"
+            f"- 简介：{ci.get('description', '')[:300]}"
+            f"{advantage_text}"
+            f"{source_text}\n"
+            "- 使用方式：可用于理解客户行业与资源背景，不要替客户确认本次项目目标。\n"
         )
-        if ci.get("advantages"):
-            sections.append(f"核心优势：{'、'.join(ci['advantages'])}\n")
 
     # 屏幕资源
     screens = memory.screen_resources or []
     if screens:
         lines = []
-        for s in screens:
+        for s in screens[:5]:
             parts = [s.get("city", ""), s.get("location", "")]
             if s.get("type"):
                 parts.append(s["type"])
@@ -299,12 +391,15 @@ def build_memory_context(memory: UserMemory | None) -> str:
                 parts.append(s["resolution"])
             if s.get("daily_traffic"):
                 parts.append(f"日均客流{s['daily_traffic']}")
+            if s.get("last_seen_at"):
+                parts.append(f"更新时间{_short_date(s['last_seen_at'])}")
             lines.append(f"  • {' | '.join(p for p in parts if p)}")
 
+        more = f"\n  • 另有 {len(screens) - 5} 块资源未展开" if len(screens) > 5 else ""
         sections.append(
-            f"\n【客户已知屏幕资源 — 共 {len(screens)} 块】\n"
-            + "\n".join(lines) + "\n"
-            "提示：你可以在对话开始时主动提及这些屏幕，询问本次项目是针对哪块屏幕。\n"
+            f"\n【顾问线索：已知屏幕资源 — 共 {len(screens)} 块】\n"
+            + "\n".join(lines) + more + "\n"
+            "- 使用方式：如果本轮尚未说明投放点位，可询问是否针对其中某块屏幕；不要默认选用。\n"
         )
 
     # 项目偏好
@@ -326,7 +421,9 @@ def build_memory_context(memory: UserMemory | None) -> str:
         if pp.get("last_updated"):
             freshness = f"（更新于 {pp['last_updated'][:10]}）"
         sections.append(
-            f"\n【客户历史偏好{freshness}】\n" + "\n".join(pref_lines) + "\n"
+            f"\n【顾问线索：历史偏好{freshness}】\n"
+            + "\n".join(f"- {line}" for line in pref_lines) + "\n"
+            "- 使用方式：可作为候选项帮助客户更快表达，但本轮用户新说法优先。\n"
         )
 
     # 历史项目
@@ -344,13 +441,20 @@ def build_memory_context(memory: UserMemory | None) -> str:
             status = status_map.get(p.get("status", ""), p.get("status", ""))
             lines.append(f"  • {name} ({city}) — {status}")
         sections.append(
-            f"\n【近期项目（{len(past)} 个）】\n" + "\n".join(lines) + "\n"
-            "如涉及相似项目，可以引用历史经验提升专业度。\n"
+            f"\n【顾问线索：近期项目（{len(past)} 个）】\n" + "\n".join(lines) + "\n"
+            "- 使用方式：如本轮项目相似，可以自然引用历史经验；不要把历史项目字段当作本次需求。\n"
         )
 
     # Agent 备忘
     if memory.agent_notes:
-        sections.append(f"\n【Agent 备忘录】\n{memory.agent_notes}\n")
+        stats = memory.interaction_stats or {}
+        note_date = _short_date(stats.get("agent_notes_updated_at"))
+        note_title = f"（更新于 {note_date}）" if note_date else ""
+        sections.append(
+            f"\n【顾问线索：人工备忘{note_title}】\n"
+            f"{memory.agent_notes[:500]}\n"
+            "- 使用方式：人工备忘优先作为沟通偏好和注意事项，仍需以本轮用户表述为准。\n"
+        )
 
     return "\n".join(sections)
 
@@ -429,17 +533,22 @@ async def _extract_preferences(conversation: list[dict]) -> dict:
 
     system_prompt = (
         "你是一个用户画像分析师。请分析以下客户与顾问的对话，"
-        "提取客户透露的项目偏好和关键信息。\n\n"
+        "提取客户透露的、未来对话可复用的稳定偏好和沟通线索。\n\n"
         "只返回严格的 JSON，不要任何其他文字。\n"
         "如果对话中没有提到某个字段，就不要包含该字段。\n\n"
         "可提取的字段：\n"
-        "- common_cities (list[string]): 提到的投放城市\n"
-        "- preferred_styles (list[string]): 偏好的视觉风格，如'科技感'、'国潮'、'未来感'\n"
-        "- budget_range (string): 预算范围，如'20-30万'\n"
-        "- typical_duration (string): 视频时长偏好，如'30秒'\n"
-        "- screen_preferences (list[string]): 偏好的屏幕类型，如'L型大屏'、'曲面屏'\n"
+        "- common_cities (list[string]): 客户反复使用、明确表示常用或长期关注的投放城市\n"
+        "- preferred_styles (list[string]): 客户明确表达的长期视觉偏好，如'科技感'、'国潮'、'未来感'\n"
+        "- budget_range (string): 客户常见或可复用的预算区间，如'20-30万'\n"
+        "- typical_duration (string): 客户常用的视频时长偏好，如'30秒'\n"
+        "- screen_preferences (list[string]): 客户常用或明确偏好的屏幕类型，如'L型大屏'、'曲面屏'\n"
         "- notes (string): 其他值得记录的关键信息，一句话概括\n\n"
-        "重要：只提取客户（user）明确提到的信息，不要推测。\n"
+        "重要规则：\n"
+        "- 只提取客户（user）明确提到的信息，不要推测。\n"
+        "- 不要把单次项目事实直接当作长期偏好；例如'这次投上海'不是 common_cities，"
+        "除非客户说'我们通常投上海'或历史对话里反复出现。\n"
+        "- 不要记录已经被客户纠正或否定的旧信息，以最新表达为准。\n"
+        "- notes 只记录未来沟通有价值的稳定线索，不记录一次性执行细节。\n"
         "如果整段对话没有任何可提取的偏好信息，返回空对象 {}"
     )
 

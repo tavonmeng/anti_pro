@@ -99,6 +99,10 @@
           <el-input v-model="formData.special_requirements" type="textarea" :rows="2" placeholder="选填，特殊定制效果等" />
         </el-form-item>
 
+        <el-form-item label="备注" prop="remarks">
+          <el-input v-model="formData.remarks" type="textarea" :rows="2" placeholder="选填，其他对理解或执行项目有价值的信息" />
+        </el-form-item>
+
         <el-form-item label="现场实拍图" prop="scenePhotos">
           <FileUpload 
             v-model="formData.scenePhotos"
@@ -187,6 +191,10 @@
             </el-form-item>
           </el-col>
         </el-row>
+
+        <el-form-item label="备注" prop="remarks">
+          <el-input v-model="formData.remarks" type="textarea" :rows="2" placeholder="选填，其他对理解或执行项目有价值的信息" />
+        </el-form-item>
 
         <el-form-item label="现场实拍图" prop="scenePhotos">
           <FileUpload 

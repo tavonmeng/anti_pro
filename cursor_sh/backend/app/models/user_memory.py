@@ -24,13 +24,19 @@ class UserMemory(Base):
     #   "description": "国内领先的...",
     #   "advantages": ["核心商圈资源", "..."],
     #   "crawled_at": "2026-05-01T12:00:00",
+    #   "updated_at": "2026-05-01T12:00:00",
     #   "crawl_status": "success" | "failed" | "pending"
     # }
     company_info = Column(JSON, default=dict)
 
     # 屏幕资源列表（来自官网爬取 + LLM 提取）
     # [
-    #   {"city": "成都", "location": "春熙路", "type": "L型LED", "size": "800㎡", "resolution": "3840x2160"},
+    #   {
+    #     "city": "成都", "location": "春熙路", "type": "L型LED",
+    #     "size": "800㎡", "resolution": "3840x2160",
+    #     "first_seen_at": "2026-05-01T12:00:00",
+    #     "last_seen_at": "2026-05-10T12:00:00"
+    #   },
     #   ...
     # ]
     screen_resources = Column(JSON, default=list)
@@ -40,7 +46,9 @@ class UserMemory(Base):
     #   "common_cities": ["成都", "上海"],
     #   "preferred_styles": ["未来科技", "城市文化"],
     #   "budget_range": "30-60万",
-    #   "typical_duration": "30秒"
+    #   "typical_duration": "30秒",
+    #   "last_updated": "2026-05-10T12:00:00",
+    #   "_field_updated": {"budget_range": "2026-05-10T12:00:00"}
     # }
     project_preferences = Column(JSON, default=dict)
 

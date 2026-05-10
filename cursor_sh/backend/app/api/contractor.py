@@ -159,6 +159,8 @@ async def get_my_assignments(
                     "online_time": order_data.get("online_time"),
                     "target_group": order_data.get("target_group"),
                     "background": order_data.get("background"),
+                    "special_requirements": order_data.get("special_requirements"),
+                    "remarks": order_data.get("remarks"),
                     "createdAt": order.created_at.isoformat() if order.created_at else None,
                 }
             
@@ -224,6 +226,8 @@ async def get_assignment_detail(
                 "target_group": order_data.get("target_group"),
                 "background": order_data.get("background"),
                 "prohibited_content": order_data.get("prohibited_content"),
+                "special_requirements": order_data.get("special_requirements"),
+                "remarks": order_data.get("remarks"),
                 "site_photos": order_data.get("site_photos") or order_data.get("scenePhotos"),
                 "createdAt": order.created_at.isoformat() if order.created_at else None,
             }

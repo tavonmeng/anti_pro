@@ -12,6 +12,7 @@ import asyncio
 import json
 import os
 from datetime import datetime
+from typing import Any
 from sqlalchemy.exc import IntegrityError
 from app.config import settings
 from app.services.ai_client import post_chat_completion
@@ -46,6 +47,77 @@ class ChatRequest(BaseModel):
     business_type: str = "ai_3d_custom"  # ai_3d_custom / video_purchase / digital_art
     user_message_id: str | None = None
     assistant_message_id: str | None = None
+
+
+_REQUIREMENT_FIELDS = {
+    "brand": {
+        "ai_3d_custom": ["brand", "target_group", "content", "city", "budget", "online_time"],
+        "video_purchase": ["brand", "content_preference", "city", "media_size", "budget", "online_time"],
+        "digital_art": ["brand", "event_scene", "creative_direction", "venue", "budget", "online_time"],
+    },
+    "media": {
+        "ai_3d_custom": [
+            "project_name", "resource_background", "audience_scene", "city_location",
+            "viewing_path", "art_direction", "theme_concept", "media_specs",
+            "tech_delivery", "content_review", "online_time",
+        ],
+        "video_purchase": ["brand", "content_preference", "city", "media_size", "budget", "online_time"],
+        "digital_art": ["brand", "event_scene", "creative_direction", "venue", "budget", "online_time"],
+    },
+}
+
+_TRACKED_OPTIONAL_FIELDS = {
+    "brand": {
+        "ai_3d_custom": [
+            "background", "brand_tone", "style", "prohibited_content",
+            "media_size", "time_number", "technology", "site_photos",
+        ],
+        "video_purchase": ["site_photos"],
+        "digital_art": ["site_photos"],
+    },
+    "media": {
+        "ai_3d_custom": [
+            "media_positioning", "timing_number", "budget",
+            "special_requirements", "site_photos",
+        ],
+        "video_purchase": ["site_photos"],
+        "digital_art": ["site_photos"],
+    },
+}
+
+_FIELD_LABELS = {
+    "brand": "品牌/产品",
+    "target_group": "目标受众",
+    "content": "内容需求",
+    "city": "投放城市/站点",
+    "budget": "制作预算",
+    "online_time": "预计上刊时间",
+    "content_preference": "内容偏好",
+    "media_size": "屏幕尺寸与分辨率",
+    "event_scene": "活动场景与用途",
+    "creative_direction": "创意方向",
+    "venue": "场地信息",
+    "project_name": "项目名称",
+    "resource_background": "项目背景与媒体简介",
+    "audience_scene": "目标受众与场景特点",
+    "city_location": "投放城市与媒体位置",
+    "viewing_path": "观看动线说明",
+    "art_direction": "艺术方向与风格偏好",
+    "theme_concept": "内容主题与核心表达",
+    "media_specs": "媒体尺寸与物理规格",
+    "tech_delivery": "技术需求",
+    "content_review": "素材审核规范与周期",
+    "background": "项目背景",
+    "brand_tone": "品牌调性",
+    "style": "风格偏好",
+    "prohibited_content": "品牌禁忌内容",
+    "time_number": "投放时长/数量",
+    "technology": "技术需求",
+    "site_photos": "现场实拍图/参考文件",
+    "media_positioning": "媒体定位与品牌调性",
+    "timing_number": "投放时长与数量",
+    "special_requirements": "其他特殊合作要求",
+}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -333,6 +405,337 @@ def _is_mock_completion_message(message: str) -> bool:
     return any(marker in message for marker in positive_markers)
 
 
+def _get_required_fields(business_type: str) -> list[str]:
+    mode = "media" if settings.AGENT_MODE == "media" else "brand"
+    mode_fields = _REQUIREMENT_FIELDS.get(mode, _REQUIREMENT_FIELDS["brand"])
+    return mode_fields.get(business_type, mode_fields["ai_3d_custom"])
+
+
+def _get_tracked_fields(business_type: str) -> list[str]:
+    mode = "media" if settings.AGENT_MODE == "media" else "brand"
+    required_fields = _get_required_fields(business_type)
+    optional_fields = _TRACKED_OPTIONAL_FIELDS.get(mode, {}).get(business_type, [])
+    return list(dict.fromkeys(required_fields + optional_fields))
+
+
+def _normalize_field_map(raw_fields: Any, required_fields: list[str]) -> dict[str, str]:
+    if not isinstance(raw_fields, dict):
+        return {}
+
+    normalized = {}
+    allowed = set(required_fields)
+    for key, value in raw_fields.items():
+        if key not in allowed or value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            normalized[key] = text[:500]
+    return normalized
+
+
+def _normalize_field_list(raw_fields: Any, required_fields: list[str]) -> list[str]:
+    if not isinstance(raw_fields, list):
+        return []
+
+    allowed = set(required_fields)
+    normalized = []
+    for field in raw_fields:
+        if isinstance(field, str) and field in allowed and field not in normalized:
+            normalized.append(field)
+    return normalized
+
+
+def _build_requirement_state(
+    business_type: str,
+    *,
+    fields: dict[str, str] | None = None,
+    skipped_fields: list[str] | None = None,
+    updated_fields: list[str] | None = None,
+    remarks: str = "",
+    is_complete: bool = False,
+    confidence: float = 0.0,
+) -> dict[str, Any]:
+    required_fields = _get_required_fields(business_type)
+    tracked_fields = _get_tracked_fields(business_type)
+    fields = _normalize_field_map(fields or {}, tracked_fields)
+    skipped_fields = _normalize_field_list(skipped_fields or [], tracked_fields)
+    updated_fields = _normalize_field_list(updated_fields or [], tracked_fields)
+
+    collected_fields = [field for field in required_fields if fields.get(field)]
+    missing_fields = [
+        field for field in required_fields
+        if field not in collected_fields and field not in skipped_fields
+    ]
+    next_field = missing_fields[0] if missing_fields else None
+
+    try:
+        confidence = max(0.0, min(1.0, float(confidence)))
+    except (TypeError, ValueError):
+        confidence = 0.0
+
+    return {
+        "is_complete": bool(is_complete),
+        "business_type": business_type,
+        "fields": fields,
+        "collected_fields": collected_fields,
+        "missing_fields": missing_fields,
+        "skipped_fields": skipped_fields,
+        "updated_fields": updated_fields,
+        "remarks": str(remarks or "").strip()[:1000],
+        "next_field": next_field,
+        "next_field_label": _FIELD_LABELS.get(next_field, next_field) if next_field else None,
+        "confidence": confidence,
+    }
+
+
+def _build_mock_requirement_state(message: str, business_type: str, is_complete: bool = False) -> dict[str, Any]:
+    fields: dict[str, str] = {}
+    skipped_fields = []
+    uncertain_markers = ["不确定", "待定", "先不填", "先跳过", "不知道", "不清楚", "暂时没有"]
+
+    if "预算" in message and any(marker in message for marker in uncertain_markers):
+        skipped_fields.append("budget")
+    elif "预算" in message:
+        fields["budget"] = message[:120]
+    if any(keyword in message for keyword in ["上线", "上刊", "时间", "投放时间"]) and any(marker in message for marker in uncertain_markers):
+        skipped_fields.append("online_time")
+    if any(city in message for city in ["北京", "上海", "广州", "深圳", "成都", "重庆", "杭州"]):
+        fields["city"] = message[:120]
+    if any(keyword in message for keyword in ["品牌", "产品", "公司"]):
+        fields["brand"] = message[:120]
+    if any(keyword in message for keyword in ["裸眼", "3D", "视频", "画面", "创意", "内容"]):
+        fields["content"] = message[:120]
+
+    return _build_requirement_state(
+        business_type,
+        fields=fields,
+        skipped_fields=skipped_fields,
+        updated_fields=list(fields.keys()) + skipped_fields,
+        is_complete=is_complete,
+        confidence=0.3 if fields else 0.0,
+    )
+
+
+def _build_state_prompt_context(state: dict[str, Any]) -> str:
+    def _labels(fields: list[str]) -> str:
+        return "、".join(_FIELD_LABELS.get(field, field) for field in fields) or "无"
+
+    field_lines = []
+    for field in state.get("collected_fields", []):
+        value = state.get("fields", {}).get(field, "")
+        label = _FIELD_LABELS.get(field, field)
+        field_lines.append(f"- {label}: {value}")
+
+    next_field = state.get("next_field")
+    next_label = state.get("next_field_label") or "无"
+
+    base_context = (
+        "\n\n【当前需求收集状态 — 系统结构化记录】\n"
+        f"已收集字段：{_labels(state.get('collected_fields', []))}\n"
+        f"缺失字段：{_labels(state.get('missing_fields', []))}\n"
+        f"用户明确跳过字段：{_labels(state.get('skipped_fields', []))}\n"
+        f"本轮更新字段：{_labels(state.get('updated_fields', []))}\n"
+        "当前字段值：\n"
+        f"{chr(10).join(field_lines) if field_lines else '- 暂无'}\n"
+    )
+    if next_field:
+        return (
+            base_context +
+            f"建议下一问字段：{next_label}\n"
+            "请优先围绕建议下一问字段提问；不要重复询问已收集字段。"
+            "如果用户修正了之前的信息，以最新表达为准。"
+            "如果本轮用户顺带回答了多个字段，应全部承认并跳过这些已收集字段。"
+            "如果你从完整对话中判断结构化记录漏掉了已提供的信息，可以按完整对话修正节奏。\n"
+        )
+    return (
+        base_context +
+        "当前核心字段已基本覆盖。可简要总结，并在满足原有完成条件时输出【需求收集完成】。"
+    )
+
+
+def _parse_json_object(content: str) -> dict[str, Any]:
+    parsed = json.loads(content)
+    if not isinstance(parsed, dict):
+        raise ValueError("LLM JSON response is not an object")
+    return parsed
+
+
+async def _repair_json_with_llm(
+    raw_content: str,
+    *,
+    schema_hint: str,
+    timeout: float,
+) -> dict[str, Any] | None:
+    if not raw_content.strip() or not settings.AI_API_KEY:
+        return None
+
+    try:
+        repair_data = await post_chat_completion(
+            {
+                "model": settings.AI_MODEL_NAME,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是 JSON 格式修复器。请把用户提供的内容修复成严格 JSON 对象。"
+                            "只能输出 JSON，不要解释，不要 markdown。"
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"目标 JSON 结构：\n{schema_hint}\n\n"
+                            f"待修复内容：\n{raw_content}"
+                        ),
+                    },
+                ],
+                "response_format": {"type": "json_object"},
+                "temperature": 0,
+                "max_tokens": 900,
+            },
+            timeout=timeout,
+        )
+        repaired = repair_data["choices"][0]["message"]["content"].strip()
+        if not repaired:
+            return None
+        return _parse_json_object(repaired)
+    except Exception as e:
+        print(f"[AI Chat] LLM JSON 修复失败: {e}")
+        return None
+
+
+async def _post_json_chat_completion(
+    payload: dict[str, Any],
+    *,
+    schema_hint: str,
+    timeout: float,
+    empty_retry: int = 1,
+    repair_retry: int = 1,
+) -> dict[str, Any] | None:
+    """调用 LLM 获取 JSON；空内容重试，格式错误时让 LLM 自修复。"""
+    last_content = ""
+    attempts = max(1, empty_retry + 1)
+
+    for attempt in range(attempts):
+        data = await post_chat_completion(payload, timeout=timeout)
+        content = data["choices"][0]["message"].get("content") or ""
+        content = content.strip()
+        last_content = content
+
+        if not content:
+            if attempt < attempts - 1:
+                continue
+            return None
+
+        try:
+            return _parse_json_object(content)
+        except Exception:
+            break
+
+    for _ in range(max(0, repair_retry)):
+        repaired = await _repair_json_with_llm(
+            last_content,
+            schema_hint=schema_hint,
+            timeout=timeout,
+        )
+        if repaired is not None:
+            return repaired
+
+    return None
+
+
+async def _extract_requirement_state(
+    *,
+    user_msg: str,
+    history: list,
+    business_type: str,
+) -> dict[str, Any]:
+    """从当前对话中提取结构化需求状态。
+
+    这是第一版轻量状态层：失败时返回空状态，不影响原有对话流程。
+    """
+    tracked_fields = _get_tracked_fields(business_type)
+    empty_state = _build_requirement_state(business_type)
+    if not settings.AI_API_KEY:
+        return _build_mock_requirement_state(user_msg, business_type)
+
+    field_descriptions = "\n".join(
+        f"- {field}: {_FIELD_LABELS.get(field, field)}"
+        for field in tracked_fields
+    )
+    recent_history = [
+        h for h in history
+        if h.get("role") in ["user", "assistant"] and h.get("content")
+    ][-12:]
+    chat_text = "\n".join([f"{h['role']}: {h['content']}" for h in recent_history])
+    if chat_text:
+        chat_text += f"\nuser: {user_msg}"
+    else:
+        chat_text = f"user: {user_msg}"
+
+    system_prompt = (
+        "你是需求信息状态提取器。请从对话中提取当前最新、仍然有效的需求字段状态，输出严格 JSON。\n"
+        "必须遵守：\n"
+        "- 只提取用户明确提供的信息，不要推测。\n"
+        "- 如果用户修正了旧信息，使用最新值覆盖旧值。\n"
+        "- 如果用户说某项暂不确定、先跳过、不方便提供，把字段放入 skipped_fields。\n"
+        "- 同一条用户消息可能同时回答多个字段，必须把所有明确字段都提取出来，不要只提取正在被追问的字段。\n"
+        "- 遇到'不是A，是B''改成B''预算从A换成B'这类表达，字段值只保留B。\n"
+        "- 如果客户透露了无法归入支持字段、但对理解客户意图或后续执行有价值的信息，请自行总结到 remarks。\n"
+        "- updated_fields 只放本轮用户消息明确新增、修改、清空或跳过的字段。\n"
+        "- 未提及或不确定的字段不要放入 fields。\n\n"
+        f"业务类型：{business_type}\n"
+        f"支持字段：\n{field_descriptions}\n\n"
+        "返回 JSON 格式：\n"
+        '{'
+        '"fields": {"字段名": "当前最新值"}, '
+        '"skipped_fields": ["字段名"], '
+        '"updated_fields": ["字段名"], '
+        '"remarks": "无法归入字段但有价值的信息摘要", '
+        '"confidence": 0.0'
+        '}\n'
+        "不要输出 JSON 以外的任何内容。"
+    )
+
+    payload = {
+        "model": settings.AI_MODEL_NAME,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"对话如下：\n{chat_text}\n\n请提取当前状态。"},
+        ],
+        "response_format": {"type": "json_object"},
+        "temperature": 0,
+        "max_tokens": 700,
+    }
+    schema_hint = (
+        '{"fields": {"字段名": "当前最新值"}, '
+        '"skipped_fields": ["字段名"], '
+        '"updated_fields": ["字段名"], '
+        '"remarks": "无法归入字段但有价值的信息摘要", '
+        '"confidence": 0.0}'
+    )
+
+    try:
+        parsed = await _post_json_chat_completion(
+            payload,
+            schema_hint=schema_hint,
+            timeout=15.0,
+        )
+        if parsed is None:
+            return empty_state
+        return _build_requirement_state(
+            business_type,
+            fields=parsed.get("fields", {}),
+            skipped_fields=parsed.get("skipped_fields", []),
+            updated_fields=parsed.get("updated_fields", []),
+            remarks=parsed.get("remarks", ""),
+            confidence=parsed.get("confidence", 0.0),
+        )
+    except Exception as e:
+        print(f"[AI Chat] 结构化需求状态提取失败（不影响对话）: {e}")
+        return empty_state
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 需求收集 Agent（/chat）
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -389,14 +792,22 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
         except Exception as e:
             print(f"[AI Chat] Memory 加载失败（不影响对话）: {e}")
 
+    requirement_state = await _extract_requirement_state(
+        user_msg=request.message,
+        history=request.history,
+        business_type=request.business_type,
+    )
+
     if not settings.AI_API_KEY:
         mock_reply = "【真实后端接口调试中】"
-        if _is_mock_completion_message(request.message):
+        is_mock_complete = _is_mock_completion_message(request.message)
+        if is_mock_complete:
             mock_reply += "核心需求已确认，我将为您整理项目评估与需求明细。 【需求收集完成】"
         elif len(request.message) > 5:
             mock_reply += f"收到您的反馈：{request.message[:10]}... 请问这支内容的投放渠道和大概预算是多少？"
         else:
             mock_reply += "好的，请继续详细描述您的诉求。"
+        requirement_state["is_complete"] = is_mock_complete
 
         _save_session_file(
             session_id=request.session_id, user_id=user_id, username=username,
@@ -405,7 +816,7 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
             user_message_id=request.user_message_id,
             assistant_message_id=request.assistant_message_id,
         )
-        return {"message": mock_reply}
+        return {"message": mock_reply, "state": requirement_state}
 
     try:
         system_prompt = _get_requirement_prompt(request.business_type)
@@ -413,6 +824,7 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
         # 将 Memory 上下文追加到 system prompt
         if memory_context:
             system_prompt += memory_context
+        system_prompt += _build_state_prompt_context(requirement_state)
 
         llm_messages = [{"role": "system", "content": system_prompt}]
         for h in request.history:
@@ -429,9 +841,11 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
         _save_session_file(
             session_id=request.session_id, user_id=user_id, username=username,
             history=request.history, user_msg=request.message, assistant_msg=reply,
+            business_type=request.business_type,
             user_message_id=request.user_message_id,
             assistant_message_id=request.assistant_message_id,
         )
+        requirement_state["is_complete"] = "【需求收集完成】" in reply
 
         # 后台对话学习 — 从对话中提取偏好写回 Memory
         if user_id != "anonymous":
@@ -447,7 +861,7 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
             except Exception:
                 pass
 
-        return {"message": reply}
+        return {"message": reply, "state": requirement_state}
 
     except HTTPException:
         raise
@@ -462,24 +876,62 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
 
 class ExtractRequest(BaseModel):
     history: list = Field(default_factory=list)
+    state: dict = Field(default_factory=dict)
+    business_type: str = "ai_3d_custom"
+
+
+def _merge_state_into_extracted(
+    extracted: dict[str, Any],
+    state: dict[str, Any] | None,
+    business_type: str,
+) -> dict[str, Any]:
+    """用当前结构化 state 修正最终提取结果。
+
+    `/ai/extract` 会读取完整历史，可能被早期旧值干扰；state 表示当前
+    对话中最新、仍有效的字段，因此同名字段以 state 为准。
+    """
+    if not isinstance(extracted, dict):
+        extracted = {}
+    if not isinstance(state, dict):
+        return extracted
+
+    tracked_fields = _get_tracked_fields(business_type)
+    state_fields = _normalize_field_map(state.get("fields", {}), tracked_fields)
+    merged = {**extracted, **state_fields}
+
+    skipped_fields = _normalize_field_list(state.get("skipped_fields", []), tracked_fields)
+    updated_fields = _normalize_field_list(state.get("updated_fields", []), tracked_fields)
+    for field in skipped_fields:
+        if field in updated_fields and field not in state_fields:
+            merged[field] = ""
+
+    if isinstance(state.get("remarks"), str) and state["remarks"].strip():
+        merged["remarks"] = state["remarks"].strip()[:1000]
+
+    return merged
 
 @router.post("/extract")
 async def ai_extract(request: ExtractRequest):
     """从对话历史中提取结构化信息"""
+    state_fields = request.state.get("fields", {}) if isinstance(request.state, dict) else {}
+    skipped_fields = request.state.get("skipped_fields", []) if isinstance(request.state, dict) else []
+
     if not settings.AI_API_KEY:
         if settings.AGENT_MODE == "media":
-            return {
+            mock_extracted = {
                 "project_name": "示例项目 (Mock)",
                 "city_location": "成都春熙路",
                 "art_direction": "未来科技",
                 "budget": "60万"
             }
-        return {
+            return _merge_state_into_extracted(mock_extracted, request.state, request.business_type)
+        mock_extracted = {
             "brand": "示例品牌 (Mock)",
             "target_group": "年轻群体",
             "style": "科技感设计",
             "budget": "10万以上"
         }
+        return _merge_state_into_extracted(mock_extracted, request.state, request.business_type)
 
     try:
         if settings.AGENT_MODE == "media":
@@ -492,7 +944,9 @@ async def ai_extract(request: ExtractRequest):
                 "media_specs, timing_number, tech_delivery, content_review, "
                 "budget, online_time, special_requirements, site_photos, remarks.\n"
                 "其中 site_photos（现场实拍图）记录客户是否提供了现场照片或参考文件，如有则记录描述信息。\n"
-                "其中 remarks（备注）用于记录客户提供的任何无法归入上述字段的补充说明。"
+                "其中 remarks（备注）由你自行总结：凡是无法归入上述字段、但对理解客户意图或后续执行有价值的信息，"
+                "请简洁整理进 remarks，不要限定为固定类型，也不要编造。\n"
+                "如果当前结构化状态与历史对话冲突，以当前结构化状态为准。"
             )
         else:
             system_prompt = (
@@ -502,35 +956,57 @@ async def ai_extract(request: ExtractRequest):
                 "brand, background, target_group, brand_tone, content, style, prohibited_content, "
                 "city, media_size, time_number, technology, budget, online_time, site_photos, remarks.\n"
                 "其中 site_photos（现场实拍图）记录客户是否提供了现场照片或参考文件，如有则记录描述信息。\n"
-                "其中 remarks（备注）用于记录客户提供的任何无法归入上述字段的补充说明、特殊要求或参考素材信息。"
+                "其中 remarks（备注）由你自行总结：凡是无法归入上述字段、但对理解客户意图或后续执行有价值的信息，"
+                "请简洁整理进 remarks，不要限定为固定类型，也不要编造。\n"
+                "如果当前结构化状态与历史对话冲突，以当前结构化状态为准。"
             )
 
         chat_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in request.history])
-
-        data = await post_chat_completion(
+        state_text = json.dumps(
             {
-                "model": settings.AI_MODEL_NAME,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"对话记录如下：\n{chat_text}\n\n请提取为JSON。"}
-                ],
-                "response_format": {"type": "json_object"}
+                "fields": state_fields,
+                "skipped_fields": skipped_fields,
             },
+            ensure_ascii=False,
+        )
+
+        payload = {
+            "model": settings.AI_MODEL_NAME,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": (
+                        f"当前结构化状态如下：\n{state_text}\n\n"
+                        f"对话记录如下：\n{chat_text}\n\n请提取为JSON。"
+                    ),
+                },
+            ],
+            "response_format": {"type": "json_object"},
+        }
+        schema_hint = (
+            "品牌方字段：brand, background, target_group, brand_tone, content, style, "
+            "prohibited_content, city, media_size, time_number, technology, budget, "
+            "online_time, site_photos, remarks。\n"
+            "媒体方字段：project_name, resource_background, audience_scene, media_positioning, "
+            "city_location, viewing_path, art_direction, theme_concept, media_specs, "
+            "timing_number, tech_delivery, content_review, budget, online_time, "
+            "special_requirements, site_photos, remarks。\n"
+            "返回 JSON 对象，字段值为字符串；remarks 用于简洁总结无法归类但有执行价值的信息。"
+        )
+
+        parsed = await _post_json_chat_completion(
+            payload,
+            schema_hint=schema_hint,
             timeout=30.0,
         )
-        content = data["choices"][0]["message"]["content"]
-
-        if content.startswith("```json"):
-            content = content.split("```json")[-1].split("```")[0].strip()
-        elif content.startswith("```"):
-            content = content.split("```")[-1].split("```")[0].strip()
-
-        parsed = json.loads(content)
-        return parsed
+        if parsed is None:
+            return _merge_state_into_extracted({}, request.state, request.business_type)
+        return _merge_state_into_extracted(parsed, request.state, request.business_type)
 
     except Exception as e:
         print(f"提取信息失败: {e}")
-        return {}
+        return _merge_state_into_extracted({}, request.state, request.business_type)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

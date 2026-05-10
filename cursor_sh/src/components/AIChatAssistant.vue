@@ -841,6 +841,7 @@ const _brandFormFields = [
   { key: 'media_size', label: '投放媒体及尺寸', placeholder: '选填', multiline: false },
   { key: 'technology', label: '技术需求', placeholder: '选填，如分辨率、格式等', multiline: false },
   { key: 'site_photos', label: '现场实拍图', placeholder: '选填，通过左侧上传按钮上传的文件将自动归入此项', multiline: false },
+  { key: 'remarks', label: '备注', placeholder: '其他对理解或执行项目有价值的信息', multiline: true },
 ]
 
 // ===== 媒体方表单字段 =====
@@ -861,6 +862,7 @@ const _mediaFormFields = [
   { key: 'media_positioning', label: '媒体定位 & 品牌调性', placeholder: '选填，适配的品牌类型', multiline: false },
   { key: 'special_requirements', label: '其他特殊合作要求', placeholder: '选填，特殊定制效果等', multiline: true },
   { key: 'site_photos', label: '现场实拍图', placeholder: '选填，通过左侧上传按钮上传', multiline: false },
+  { key: 'remarks', label: '备注', placeholder: '其他对理解或执行项目有价值的信息', multiline: true },
 ]
 
 const formFields = isMediaMode ? _mediaFormFields : _brandFormFields
@@ -1733,19 +1735,23 @@ const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
 
     const data = await response.json()
     const replyContent = data.message || data.answer || '处理成功';
+    const agentState = data.state || null;
     const cleanContent = replyContent.replace('【需求收集完成】', '').trim();
     
     // 前端兜底：至少3轮用户对话才允许触发完成
     const userMsgCount = messages.value.filter(m => m.role === 'user').length;
-    const shouldComplete = replyContent.includes('【需求收集完成】') && userMsgCount >= 3;
+    const shouldComplete = (agentState?.is_complete === true || replyContent.includes('【需求收集完成】')) && userMsgCount >= 3;
     
     typewriterEffect(cleanContent, async () => {
+      const lastMsg = messages.value[messages.value.length - 1]
+      if (lastMsg && lastMsg.role === 'assistant' && agentState) {
+        lastMsg.agentState = agentState
+      }
       if (shouldComplete) {
-        const lastMsg = messages.value[messages.value.length - 1]
         if (lastMsg && lastMsg.role === 'assistant') {
           lastMsg.isCompletePrompt = true
         }
-        await autoExtractAndSaveDraft()
+        await autoExtractAndSaveDraft(agentState)
       }
     }, assistantMessageId)
 
@@ -1798,7 +1804,8 @@ const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
             content_review: '',
             budget: '60万',
             online_time: '2026年6月',
-            special_requirements: ''
+            special_requirements: '',
+            remarks: ''
           }
         } else {
           inlineFormData.value = {
@@ -1811,7 +1818,8 @@ const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
             background: '',
             style: '科技感设计',
             media_size: '',
-            technology: ''
+            technology: '',
+            remarks: ''
           }
         }
         void syncCurrentConversationToBackend()
@@ -1822,7 +1830,7 @@ const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
 }
 
 // ===== 需求收集完成 -> 自动提取 + 专业评估 + 保存草稿 + 内嵌表单 =====
-const autoExtractAndSaveDraft = async () => {
+const autoExtractAndSaveDraft = async (agentState: any = null) => {
   extractLoading.value = true
   try {
     const formattedHistory = messages.value
@@ -1833,7 +1841,11 @@ const autoExtractAndSaveDraft = async () => {
       const response = await fetch('/ai/extract', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ history: formattedHistory })
+        body: JSON.stringify({
+          history: formattedHistory,
+          state: agentState || {},
+          business_type: businessType.value
+        })
       })
       if (response.ok) {
         const data = await response.json()
@@ -1845,6 +1857,12 @@ const autoExtractAndSaveDraft = async () => {
     if (Object.keys(extracted).length === 0) {
       const brandMatch = messages.value.find(m => m.role === 'user')?.content.slice(0, 15) || '';
       extracted = { brand: brandMatch, target_group: '', content: '', city: '', budget: '', online_time: '', background: '', style: '', media_size: '', technology: '' }
+    }
+    if (agentState?.fields && typeof agentState.fields === 'object') {
+      extracted = { ...extracted, ...agentState.fields }
+    }
+    if (agentState?.remarks) {
+      extracted.remarks = agentState.remarks
     }
     for (const field of formFields) {
       if (!extracted[field.key]) extracted[field.key] = ''
