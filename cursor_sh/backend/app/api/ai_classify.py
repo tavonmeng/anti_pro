@@ -5,7 +5,7 @@
 
 import httpx
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_client import post_chat_completion
 
@@ -14,7 +14,7 @@ classify_router = APIRouter()
 
 class ClassifyRequest(BaseModel):
     message: str
-    history: list = []
+    history: list = Field(default_factory=list)
 
 
 # ───────────────────────────────────────────────────────

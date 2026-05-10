@@ -14,7 +14,7 @@ import json
 import httpx
 from typing import Tuple, List, Set
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_client import post_chat_completion
 
@@ -23,7 +23,7 @@ intro_router = APIRouter()
 
 class BusinessIntroRequest(BaseModel):
     message: str
-    history: list = []
+    history: list = Field(default_factory=list)
 
 
 # ───────────────────────────────────────────────────────

@@ -5,7 +5,7 @@
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_client import post_chat_completion
 
@@ -15,7 +15,7 @@ general_router = APIRouter()
 class GeneralRequest(BaseModel):
     session_id: str
     message: str
-    history: list = []
+    history: list = Field(default_factory=list)
 
 
 @general_router.post("/general")

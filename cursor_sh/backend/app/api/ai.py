@@ -6,7 +6,7 @@ AI 智能体 — 主路由入口
 """
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import httpx
 import asyncio
 import json
@@ -42,7 +42,7 @@ router.include_router(general_router)
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    history: list = []
+    history: list = Field(default_factory=list)
     business_type: str = "ai_3d_custom"  # ai_3d_custom / video_purchase / digital_art
     user_message_id: str | None = None
     assistant_message_id: str | None = None
@@ -320,6 +320,19 @@ def _get_requirement_prompt(business_type: str) -> str:
         return prompts.get(business_type, _PROMPT_AI_3D)
 
 
+def _is_mock_completion_message(message: str) -> bool:
+    """离线 mock 模式下，识别用户明确确认需求已整理完毕的表达。"""
+    negative_markers = ["还没完成", "没有完成", "没完成", "未完成", "不完整", "还不行"]
+    if any(marker in message for marker in negative_markers):
+        return False
+
+    positive_markers = [
+        "没问题", "可以了", "确认", "就这样", "先这样",
+        "完成了", "需求完成", "收集完成", "信息齐了",
+    ]
+    return any(marker in message for marker in positive_markers)
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 需求收集 Agent（/chat）
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -378,20 +391,21 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
 
     if not settings.AI_API_KEY:
         mock_reply = "【真实后端接口调试中】"
-        if "完成" in request.message or "没问题" in request.message:
-            mock_reply += "太好了，我已经收集齐了所有核心需求！马上为您生成完整需求单..."
+        if _is_mock_completion_message(request.message):
+            mock_reply += "核心需求已确认，我将为您整理项目评估与需求明细。 【需求收集完成】"
         elif len(request.message) > 5:
             mock_reply += f"收到您的反馈：{request.message[:10]}... 请问这支内容的投放渠道和大概预算是多少？"
         else:
             mock_reply += "好的，请继续详细描述您的诉求。"
 
-            _save_session_file(
-                session_id=request.session_id, user_id=user_id, username=username,
-                history=request.history, user_msg=request.message, assistant_msg=mock_reply,
-                user_message_id=request.user_message_id,
-                assistant_message_id=request.assistant_message_id,
-            )
-            return {"message": mock_reply}
+        _save_session_file(
+            session_id=request.session_id, user_id=user_id, username=username,
+            history=request.history, user_msg=request.message, assistant_msg=mock_reply,
+            business_type=request.business_type,
+            user_message_id=request.user_message_id,
+            assistant_message_id=request.assistant_message_id,
+        )
+        return {"message": mock_reply}
 
     try:
         system_prompt = _get_requirement_prompt(request.business_type)
@@ -447,7 +461,7 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class ExtractRequest(BaseModel):
-    history: list = []
+    history: list = Field(default_factory=list)
 
 @router.post("/extract")
 async def ai_extract(request: ExtractRequest):
@@ -524,7 +538,7 @@ async def ai_extract(request: ExtractRequest):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class AssessRequest(BaseModel):
-    extracted: dict = {}
+    extracted: dict = Field(default_factory=dict)
 
 @router.post("/assess")
 async def ai_assess(request: AssessRequest):

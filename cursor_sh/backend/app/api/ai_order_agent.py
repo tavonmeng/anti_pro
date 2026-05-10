@@ -8,7 +8,7 @@ import httpx
 from datetime import datetime, timedelta
 from typing import Optional, Dict
 from fastapi import APIRouter, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_client import post_chat_completion
 from app.utils.security import decode_access_token
@@ -22,7 +22,7 @@ order_router = APIRouter()
 
 class QueryOrdersRequest(BaseModel):
     message: str
-    history: list = []
+    history: list = Field(default_factory=list)
 
 
 # ───────────────────────────────────────────────────────
