@@ -6,8 +6,8 @@
 
 ```
 anti_pro/
-├── website/              # 官网（Vite + Vue 3）
-├── cursor_sh/            # 业务管理系统
+├── website/              # 旧独立官网（Docker 当前不部署，待清理）
+├── cursor_sh/            # 当前主应用（官网 + 业务管理系统）
 │   ├── src/              #   前端（Vue 3 + TypeScript + Element Plus）
 │   ├── backend/          #   后端（FastAPI + SQLAlchemy）
 │   │   ├── app/          #     应用代码

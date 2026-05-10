@@ -57,6 +57,23 @@ def upload_bytes(data: bytes, object_key: str, content_type: str = "") -> str:
     return object_key
 
 
+def upload_file(object_key: str, file_path: str, content_type: str = "") -> str:
+    """
+    从本地临时文件上传到 OSS，避免大文件在应用进程中整块占用内存。
+    """
+    bucket = _get_bucket()
+
+    headers = {}
+    if content_type:
+        headers["Content-Type"] = content_type
+
+    result = bucket.put_object_from_file(object_key, file_path, headers=headers)
+    if result.status != 200:
+        raise RuntimeError("OSS 上传失败，状态码: %d" % result.status)
+
+    return object_key
+
+
 def get_signed_url(object_key: str, expires: int = 3600) -> str:
     """
     生成带签名的临时访问 URL（私有 Bucket 专用）。
@@ -132,6 +149,31 @@ def upload_and_sign(
         "url": signed_url,
         "filename": filename,
         "size": len(data),
+    }
+
+
+def upload_file_and_sign(
+    file_path: str,
+    prefix: str,
+    user_id: str,
+    filename: str,
+    content_type: str = "",
+    sign_expires: int = 3600,
+) -> dict:
+    """
+    上传本地文件并返回签名 URL。
+
+    适用于 UploadFile 已流式落到临时文件后的大文件上传路径。
+    """
+    object_key = build_object_key(prefix, user_id, filename)
+    upload_file(object_key, file_path, content_type)
+    signed_url = get_signed_url(object_key, sign_expires)
+
+    return {
+        "object_key": object_key,
+        "url": signed_url,
+        "filename": filename,
+        "size": os.path.getsize(file_path),
     }
 
 

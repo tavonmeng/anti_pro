@@ -874,6 +874,7 @@ const isTyping = ref(false) // AI 正在逐字输出中
 const extractLoading = ref(false) // 信息提取整理中
 const createSessionId = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 const session_id = ref(createSessionId())
+const createMessageId = (role: string) => `${session_id.value}_${role}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 const chatContentRef = ref<any>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isComposing = ref(false) // 中文输入法组合输入状态
@@ -1105,6 +1106,7 @@ const _syncToBackend = async (session: SavedSession) => {
     const msgs = (session.messages || []).filter(
       (m: any) => m.role === 'user' || m.role === 'assistant'
     ).map((m: any) => ({
+      client_message_id: m.client_message_id || (m.client_message_id = createMessageId(m.role)),
       role: m.role,
       content: m.content,
       timestamp: m.timestamp || '',
@@ -1211,13 +1213,14 @@ const scrollToBottom = async (instant: boolean = false) => {
 }
 
 // ===== 打字机效果：逐字显示 AI 回复 =====
-const typewriterEffect = (fullText: string, onComplete?: () => void | Promise<void>) => {
+const typewriterEffect = (fullText: string, onComplete?: () => void | Promise<void>, clientMessageId?: string) => {
   isLoading.value = false
   isTyping.value = true
   
   // 先 push 一条空的 assistant 消息
   const msgIndex = messages.value.length
   messages.value.push({
+    client_message_id: clientMessageId || createMessageId('assistant'),
     role: 'assistant',
     content: '',
     timestamp: getCurrentTime()
@@ -1501,7 +1504,8 @@ const sendMessage = async () => {
   }
 
   const messageContent = buildUserMessageContent(userText, pendingFiles)
-  messages.value.push({ role: 'user', content: messageContent, timestamp: getCurrentTime() })
+  const userMessageId = createMessageId('user')
+  messages.value.push({ client_message_id: userMessageId, role: 'user', content: messageContent, timestamp: getCurrentTime() })
   inputMsg.value = ''
   if (pendingFiles.length > 0) {
     submittedFiles.value.push(...pendingFiles)
@@ -1554,7 +1558,7 @@ const sendMessage = async () => {
     if (lastUserMsg && lastUserMsg.role === 'user') lastUserMsg.isCaseDetour = true
     await handleBusinessIntro(messageContent, true)
   } else if (selectedMode.value === 'order_create') {
-    await handleCustomAiChat(messageContent)
+    await handleCustomAiChat(messageContent, userMessageId)
   } else if (selectedMode.value === 'order_query') {
     await handleOrderQuery(messageContent)
   } else if (selectedMode.value === 'business_intro') {
@@ -1698,7 +1702,7 @@ const handleGeneral = async (userText: string) => {
   }
 }
 
-const handleCustomAiChat = async (userText: string) => {
+const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
   isLoading.value = true
   try {
     // 提取所有除当前这句（即最后一条）以外的历史记录
@@ -1708,6 +1712,7 @@ const handleCustomAiChat = async (userText: string) => {
       .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.isCaseDetour)
       .map(m => ({ role: m.role, content: m.content }));
 
+    const assistantMessageId = createMessageId('assistant')
     const response = await fetch('/ai/chat', {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -1715,7 +1720,9 @@ const handleCustomAiChat = async (userText: string) => {
         session_id: session_id.value, 
         message: userText,
         history: formattedHistory,
-        business_type: businessType.value
+        business_type: businessType.value,
+        user_message_id: userMessageId,
+        assistant_message_id: assistantMessageId
       })
     })
     
@@ -1740,7 +1747,7 @@ const handleCustomAiChat = async (userText: string) => {
         }
         await autoExtractAndSaveDraft()
       }
-    })
+    }, assistantMessageId)
 
   } catch (error) {
     // 降级兜底：前端 Mock 模拟对话收集需求（至少5轮）

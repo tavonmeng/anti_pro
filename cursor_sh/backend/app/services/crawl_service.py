@@ -11,6 +11,7 @@ import httpx
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from app.config import settings
+from app.services.ai_client import post_chat_completion
 
 
 # 子页面关键词 — 用于从首页内链中筛选有价值的页面
@@ -127,33 +128,25 @@ async def _llm_guess_url(company_name: str, feedback_history: list[str]) -> list
             user_msg += f"  - {fb}\n"
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{settings.AI_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.AI_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": settings.AI_MODEL_NAME,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_msg},
-                    ],
-                },
-                timeout=15.0,
-            )
-            response.raise_for_status()
-            data = response.json()
-            content = data["choices"][0]["message"]["content"].strip()
+        data = await post_chat_completion(
+            {
+                "model": settings.AI_MODEL_NAME,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_msg},
+                ],
+            },
+            timeout=15.0,
+        )
+        content = data["choices"][0]["message"]["content"].strip()
 
-            # 提取 JSON
-            json_match = re.search(r"\[[\s\S]*?\]", content)
-            if json_match:
-                urls = json.loads(json_match.group(0))
-                # 确保是字符串列表且都是 URL
-                return [u for u in urls if isinstance(u, str) and u.startswith("http")][:3]
-            return []
+        # 提取 JSON
+        json_match = re.search(r"\[[\s\S]*?\]", content)
+        if json_match:
+            urls = json.loads(json_match.group(0))
+            # 确保是字符串列表且都是 URL
+            return [u for u in urls if isinstance(u, str) and u.startswith("http")][:3]
+        return []
     except Exception as e:
         print(f"[CrawlService] LLM 推测失败: {e}")
         return []
@@ -353,32 +346,24 @@ async def extract_company_info(raw_text: str) -> dict:
     )
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{settings.AI_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.AI_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": settings.AI_MODEL_NAME,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"以下是公司官网的内容：\n\n{raw_text}"},
-                    ],
-                },
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            data = response.json()
-            content = data["choices"][0]["message"]["content"]
+        data = await post_chat_completion(
+            {
+                "model": settings.AI_MODEL_NAME,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"以下是公司官网的内容：\n\n{raw_text}"},
+                ],
+            },
+            timeout=30.0,
+        )
+        content = data["choices"][0]["message"]["content"]
 
-            # 尝试从 markdown code block 中提取 JSON
-            json_match = re.search(r"```(?:json)?\s*([\s\S]*?)```", content)
-            if json_match:
-                content = json_match.group(1)
+        # 尝试从 markdown code block 中提取 JSON
+        json_match = re.search(r"```(?:json)?\s*([\s\S]*?)```", content)
+        if json_match:
+            content = json_match.group(1)
 
-            return json.loads(content.strip())
+        return json.loads(content.strip())
     except Exception as e:
         print(f"[CrawlService] LLM 提取失败: {e}")
         return {}

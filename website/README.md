@@ -1,5 +1,7 @@
 # Unique Vision Website
 
+> Deprecated: 这是旧版独立官网目录，当前 Docker 部署不会构建或发布它。现用官网已合并到 `cursor_sh/src/website/`，下一步可清理本目录。
+
 3D OOH 数字内容平台官网首页前端项目。
 
 ## 技术栈

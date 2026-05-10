@@ -451,48 +451,7 @@ else
     journalctl -xeu "$SERVICE_NAME" --no-pager -n 15
 fi
 
-# ---- 独立 AI 后端（遗留兼容）----
-if [ -d "$PROJECT_ROOT/ai_backend" ] && [ -f "$PROJECT_ROOT/ai_backend/requirements.txt" ]; then
-    info "检测到独立 AI 后端，部署中..."
-    cd "$PROJECT_ROOT/ai_backend"
-    [ ! -d "venv" ] && $PYTHON_CMD -m venv venv
-    source venv/bin/activate
-    pip install --upgrade pip -q
-    pip install -r requirements.txt -q
-    pip install gunicorn uvicorn -q
-
-    cat > gunicorn_config.py << 'EOF'
-bind = "127.0.0.1:8001"
-workers = 2
-worker_class = "uvicorn.workers.UvicornWorker"
-timeout = 120
-EOF
-
-    cat > /etc/systemd/system/$AI_SERVICE_NAME.service << EOF
-[Unit]
-Description=AI Agent API (Legacy)
-After=network.target
-
-[Service]
-Type=simple
-User=$USER_TO_RUN
-Group=$GROUP_TO_RUN
-WorkingDirectory=$PROJECT_ROOT/ai_backend
-Environment="PATH=$PROJECT_ROOT/ai_backend/venv/bin"
-ExecStart=$PROJECT_ROOT/ai_backend/venv/bin/gunicorn main:app -c $PROJECT_ROOT/ai_backend/gunicorn_config.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload
-    systemctl enable "$AI_SERVICE_NAME"
-    systemctl restart "$AI_SERVICE_NAME"
-else
-    info "AI 已集成在主后端，跳过独立 AI 部署"
-fi
+info "AI 已集成在主后端，跳过独立 AI 部署"
 
 # ==============================================================
 #  步骤 4: 构建前端

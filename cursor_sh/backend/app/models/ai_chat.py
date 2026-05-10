@@ -3,7 +3,7 @@
 将客户的 AI 对话完整保存到数据库，管理员可随时查阅。
 """
 
-from sqlalchemy import Column, String, Integer, Text, DateTime, JSON, ForeignKey, Index
+from sqlalchemy import Column, String, Integer, Text, DateTime, JSON, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -29,7 +29,12 @@ class AIChatMessage(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(50), nullable=False, index=True)
+    client_message_id = Column(String(80), nullable=True, index=True)
     role = Column(String(20), nullable=False)                  # user / assistant / system
     content = Column(Text, nullable=False)
     metadata_json = Column(JSON, nullable=True)                # 附加数据（上传文件等）
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("session_id", "client_message_id", name="uq_ai_chat_session_client_msg"),
+    )

@@ -1,12 +1,14 @@
 """FastAPI 应用主入口"""
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 import os
+from sqlalchemy import text
 
 from app.config import settings
-from app.database import init_db
+from app.database import init_db, engine
 from app.audit_database import init_audit_db
 from app.api import auth, orders, staff, notifications, ai, logs, announcements, enterprise, asr
 from app.api import contractor as contractor_api
@@ -15,7 +17,11 @@ from app.api import workflow_config as workflow_config_api
 from app.api import homepage_bar as homepage_bar_api
 from app.middleware.cors import setup_cors
 from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
-from app.middleware.audit_logger import AuditLoggerMiddleware
+from app.middleware.audit_logger import (
+    AuditLoggerMiddleware,
+    start_audit_log_workers,
+    stop_audit_log_workers,
+)
 from app.utils.log_setup import init_loguru
 
 # 创建 FastAPI 应用
@@ -94,53 +100,90 @@ if settings.LOG_ENABLED:
     app.add_middleware(AuditLoggerMiddleware)
 
 
+@asynccontextmanager
+async def _startup_database_lock():
+    """MySQL 部署下用 advisory lock 串行化多 worker 启动迁移。"""
+    if not settings.is_mysql:
+        yield
+        return
+
+    lock_name = "%s:%s" % (settings.DB_NAME, "startup_migrations")
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            text("SELECT GET_LOCK(:lock_name, :timeout)"),
+            {"lock_name": lock_name, "timeout": settings.STARTUP_DB_LOCK_TIMEOUT},
+        )
+        acquired = result.scalar()
+        if str(acquired) != "1":
+            raise RuntimeError("获取启动迁移锁超时: %s" % lock_name)
+
+        try:
+            yield
+        finally:
+            await conn.execute(
+                text("SELECT RELEASE_LOCK(:lock_name)"),
+                {"lock_name": lock_name},
+            )
+
+
 @app.on_event("startup")
 async def startup_event():
     """应用启动事件"""
     # 初始化日志系统（在数据库之前，以便记录启动过程）
     init_loguru()
-    
-    # 初始化主业务数据库
-    await init_db()
-    print(f"✅ 主业务数据库初始化完成 (app.db)")
-    
-    # 移除 notifications 表的外键约束（支持给 admin/staff/contractor 发通知）
-    if deploy_mode in ("all", "internal", "external"):
+
+    async with _startup_database_lock():
+        # 初始化主业务数据库
+        await init_db()
+        print(f"✅ 主业务数据库初始化完成 (app.db)")
+
+        # 移除 notifications 表的外键约束（支持给 admin/staff/contractor 发通知）
+        if deploy_mode in ("all", "internal", "external"):
+            try:
+                from migrations.drop_notification_fks import drop_notification_fks
+                await drop_notification_fks()
+            except Exception as e:
+                print(f"⚠️  notifications FK 迁移异常（不影响启动）: {e}")
+
+        # 反馈系统字段迁移（feedbacks.deliverable_id + contractor_deliverables.admin_comments）
         try:
-            from migrations.drop_notification_fks import drop_notification_fks
-            await drop_notification_fks()
+            from scripts.migrate_feedback_system import migrate as migrate_feedback
+            await migrate_feedback()
         except Exception as e:
-            print(f"⚠️  notifications FK 迁移异常（不影响启动）: {e}")
-    
-    # 反馈系统字段迁移（feedbacks.deliverable_id + contractor_deliverables.admin_comments）
-    try:
-        from scripts.migrate_feedback_system import migrate as migrate_feedback
-        await migrate_feedback()
-    except Exception as e:
-        print(f"⚠️  反馈系统迁移异常（不影响启动）: {e}")
-    
-    # 初始化审计日志独立数据库（与主库物理隔离）
-    await init_audit_db()
-    print(f"✅ 审计日志数据库初始化完成 (audit.db)")
-    
-    # 内部系统专属初始化（用户端不需要管理员账户和工作流配置）
-    if deploy_mode in ("all", "internal"):
-        # 确保管理员账户存在（幂等，从 .env 读取配置）
-        from scripts.init_admin import ensure_admin
+            print(f"⚠️  反馈系统迁移异常（不影响启动）: {e}")
+
+        # AI 聊天消息幂等字段迁移（client_message_id + 唯一索引）
         try:
-            await ensure_admin()
+            from scripts.migrate_ai_chat_message_ids import migrate as migrate_ai_chat_message_ids
+            await migrate_ai_chat_message_ids()
         except Exception as e:
-            print(f"⚠️  管理员初始化异常（不影响启动）: {e}")
-        
-        # 确保工作流环节配置存在（幂等，仅首次初始化）
-        from scripts.init_workflow import ensure_workflow_stages
-        from app.database import async_session_maker
-        try:
-            async with async_session_maker() as session:
-                await ensure_workflow_stages(session)
-        except Exception as e:
-            print(f"⚠️  工作流配置初始化异常（不影响启动）: {e}")
-    
+            print(f"⚠️  AI聊天消息幂等迁移异常（不影响启动）: {e}")
+
+        # 初始化审计日志独立数据库（与主库物理隔离）
+        await init_audit_db()
+        print(f"✅ 审计日志数据库初始化完成 (audit.db)")
+
+        if settings.LOG_ENABLED:
+            start_audit_log_workers()
+
+        # 内部系统专属初始化（用户端不需要管理员账户和工作流配置）
+        if deploy_mode in ("all", "internal"):
+            # 确保管理员账户存在（幂等，从 .env 读取配置）
+            from scripts.init_admin import ensure_admin
+            try:
+                await ensure_admin()
+            except Exception as e:
+                print(f"⚠️  管理员初始化异常（不影响启动）: {e}")
+
+            # 确保工作流环节配置存在（幂等，仅首次初始化）
+            from scripts.init_workflow import ensure_workflow_stages
+            from app.database import async_session_maker
+            try:
+                async with async_session_maker() as session:
+                    await ensure_workflow_stages(session)
+            except Exception as e:
+                print(f"⚠️  工作流配置初始化异常（不影响启动）: {e}")
+
     # 确保上传目录存在（仅本地存储模式）
     if not settings.OSS_ENABLED:
         os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
@@ -152,6 +195,13 @@ async def startup_event():
     print(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} 启动成功")
     print(f"📋 部署模式: {mode_label.get(deploy_mode, deploy_mode)}")
     print(f"📚 API 文档: http://{settings.HOST}:{settings.PORT}/docs")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭时停止后台 worker，尽量刷完审计日志。"""
+    if settings.LOG_ENABLED:
+        await stop_audit_log_workers()
 
 
 @app.get("/")

@@ -16,6 +16,7 @@ from typing import Tuple, List, Set
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.config import settings
+from app.services.ai_client import post_chat_completion
 
 intro_router = APIRouter()
 
@@ -236,66 +237,60 @@ async def ai_business_intro(request: BusinessIntroRequest):
                 llm_messages.append({"role": h["role"], "content": h["content"]})
         llm_messages.append({"role": "user", "content": request.message})
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{settings.AI_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.AI_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={"model": settings.AI_MODEL_NAME, "messages": llm_messages},
-                timeout=30.0
-            )
-            response.raise_for_status()
-            data = response.json()
-            reply = data["choices"][0]["message"]["content"]
+        data = await post_chat_completion(
+            {"model": settings.AI_MODEL_NAME, "messages": llm_messages},
+            timeout=30.0,
+        )
+        reply = data["choices"][0]["message"]["content"]
 
-            # ===== 核心：代码拦截【展示案例】信号，注入真实数据 =====
-            reply, injected_cases = _inject_case_into_reply(reply, cases_data, shown_ids)
+        # ===== 核心：代码拦截【展示案例】信号，注入真实数据 =====
+        reply, injected_cases = _inject_case_into_reply(reply, cases_data, shown_ids)
 
-            # 同时检查 LLM 是否自己用了旧格式的【推荐案例:xxx】（兼容）
-            old_ids = re.findall(r'【推荐案例:(case_\w+)】', reply)
-            valid_case_ids = {c["id"] for c in cases_data}
-            # 清理伪造的旧标记
-            for oid in old_ids:
-                if oid not in valid_case_ids:
-                    reply = reply.replace(f'【推荐案例:{oid}】', '')
+        # 同时检查 LLM 是否自己用了旧格式的【推荐案例:xxx】（兼容）
+        old_ids = re.findall(r'【推荐案例:(case_\w+)】', reply)
+        valid_case_ids = {c["id"] for c in cases_data}
+        # 清理伪造的旧标记
+        for oid in old_ids:
+            if oid not in valid_case_ids:
+                reply = reply.replace(f'【推荐案例:{oid}】', '')
 
-            # 汇总返回的案例
-            old_cases = [c for c in cases_data if c["id"] in old_ids and c["id"] in valid_case_ids]
-            all_referenced_cases = injected_cases + [c for c in old_cases if c not in injected_cases]
+        # 汇总返回的案例
+        old_cases = [c for c in cases_data if c["id"] in old_ids and c["id"] in valid_case_ids]
+        all_referenced_cases = injected_cases + [c for c in old_cases if c not in injected_cases]
 
-            # 处理引导下单
-            user_turn_count = sum(1 for h in request.history if h.get("role") == "user") + 1
-            guide_info = {}
+        # 处理引导下单
+        user_turn_count = sum(1 for h in request.history if h.get("role") == "user") + 1
+        guide_info = {}
 
-            guide_match = re.search(r'【引导下单(?::([^:】]+):([^】]+))?】', reply)
-            if guide_match:
-                if user_turn_count < 3:
-                    reply = re.sub(r'【引导下单(?::[^】]+)?】', '', reply).strip()
-                else:
-                    reply = re.sub(r'【引导下单(?::[^】]+)?】', '', reply).strip()
-                    guide_info["should_guide"] = True
-                    if guide_match.group(1) and guide_match.group(2):
-                        guide_info["business_type"] = guide_match.group(1).strip()
-                        guide_info["requirement_summary"] = guide_match.group(2).strip()
+        guide_match = re.search(r'【引导下单(?::([^:】]+):([^】]+))?】', reply)
+        if guide_match:
+            if user_turn_count < 3:
+                reply = re.sub(r'【引导下单(?::[^】]+)?】', '', reply).strip()
+            else:
+                reply = re.sub(r'【引导下单(?::[^】]+)?】', '', reply).strip()
+                guide_info["should_guide"] = True
+                if guide_match.group(1) and guide_match.group(2):
+                    guide_info["business_type"] = guide_match.group(1).strip()
+                    guide_info["requirement_summary"] = guide_match.group(2).strip()
 
-            # 兜底：用户明确问案例但 LLM 完全没输出任何案例信号
-            if not all_referenced_cases:
-                user_msg_lower = request.message.lower()
-                case_keywords = ["案例", "作品", "成功项目", "过往", "看看你们做过", "之前做过", "有什么案例", "展示"]
-                if any(kw in user_msg_lower for kw in case_keywords):
-                    # 代码主动选一个案例注入
-                    fallback_case = _pick_next_case(cases_data, shown_ids)
-                    if fallback_case:
-                        case_text = "\n\n" + _format_case_text(fallback_case)
-                        remaining = len([c for c in cases_data if c["id"] not in shown_ids and c["id"] != fallback_case["id"]])
-                        if remaining > 0:
-                            case_text += f"\n\n还有{remaining}个不同行业的代表项目，需要继续了解吗？"
-                        reply += case_text
-                        all_referenced_cases = [fallback_case]
+        # 兜底：用户明确问案例但 LLM 完全没输出任何案例信号
+        if not all_referenced_cases:
+            user_msg_lower = request.message.lower()
+            case_keywords = ["案例", "作品", "成功项目", "过往", "看看你们做过", "之前做过", "有什么案例", "展示"]
+            if any(kw in user_msg_lower for kw in case_keywords):
+                # 代码主动选一个案例注入
+                fallback_case = _pick_next_case(cases_data, shown_ids)
+                if fallback_case:
+                    case_text = "\n\n" + _format_case_text(fallback_case)
+                    remaining = len([c for c in cases_data if c["id"] not in shown_ids and c["id"] != fallback_case["id"]])
+                    if remaining > 0:
+                        case_text += f"\n\n还有{remaining}个不同行业的代表项目，需要继续了解吗？"
+                    reply += case_text
+                    all_referenced_cases = [fallback_case]
 
-            return {"message": reply, "cases": all_referenced_cases, "guide": guide_info}
+        return {"message": reply, "cases": all_referenced_cases, "guide": guide_info}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"业务介绍 LLM 调用失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

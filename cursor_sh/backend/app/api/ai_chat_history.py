@@ -11,6 +11,7 @@ from sqlalchemy import select, func, desc, exists
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone
+from sqlalchemy.exc import IntegrityError
 
 from app.database import get_db
 from app.models.ai_chat import AIChatSession, AIChatMessage
@@ -28,6 +29,7 @@ router = APIRouter(prefix="/ai/chat-history", tags=["AI 聊天记录"])
 
 class SaveMessageRequest(BaseModel):
     session_id: str
+    client_message_id: Optional[str] = None
     role: str                          # user / assistant
     content: str
     business_type: str = "ai_3d_custom"
@@ -40,7 +42,7 @@ class SyncSessionRequest(BaseModel):
     session_id: str
     business_type: str = "ai_3d_custom"
     session_type: str = "requirement"
-    messages: list[dict]               # [{"role": "user", "content": "...", "timestamp": "..."}]
+    messages: list[dict]               # [{"client_message_id": "...", "role": "user", "content": "..."}]
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -70,6 +72,34 @@ def _refresh_session_owner(session: AIChatSession, user_id: str, username: str):
             session.user_id = user_id
         if username and (not session.username or session.username == "anonymous"):
             session.username = username
+
+
+def _message_pair(message: dict) -> tuple[str, str]:
+    return (message.get("role", "user"), message.get("content", ""))
+
+
+def _unsynced_messages(existing: list[tuple[str, str]], incoming: list[dict]) -> list[dict]:
+    """Return only incoming messages that are not already stored as a prefix.
+
+    The AI endpoint can persist the same turn in the background while the
+    browser also syncs the whole conversation. Prefix matching keeps the common
+    path idempotent and avoids duplicating the full transcript on retries.
+    """
+    incoming_pairs = [_message_pair(m) for m in incoming]
+    if existing == incoming_pairs[:len(existing)]:
+        return incoming[len(existing):]
+
+    # If a previous background save wrote the latest turn first, find the
+    # longest suffix of existing that matches the incoming prefix.
+    max_overlap = min(len(existing), len(incoming_pairs))
+    for overlap in range(max_overlap, 0, -1):
+        if existing[-overlap:] == incoming_pairs[:overlap]:
+            return incoming[overlap:]
+    return incoming
+
+
+def _message_client_id(message: dict) -> str:
+    return message.get("client_message_id") or message.get("clientMessageId") or ""
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -112,9 +142,27 @@ async def save_message(
         if not session.title and data.role == "user":
             session.title = _make_title(data.content)
 
+        if data.client_message_id:
+            existing_msg_result = await db.execute(
+                select(AIChatMessage).where(
+                    AIChatMessage.session_id == data.session_id,
+                    AIChatMessage.client_message_id == data.client_message_id,
+                )
+            )
+            existing_msg = existing_msg_result.scalar_one_or_none()
+            if existing_msg:
+                existing_msg.role = data.role
+                existing_msg.content = data.content
+                if data.metadata is not None:
+                    existing_msg.metadata_json = data.metadata
+                session.updated_at = datetime.now(timezone.utc)
+                await db.commit()
+                return {"code": 200, "message": "ok"}
+
         # 保存消息
         msg = AIChatMessage(
             session_id=data.session_id,
+            client_message_id=data.client_message_id,
             role=data.role,
             content=data.content,
             metadata_json=data.metadata,
@@ -124,7 +172,10 @@ async def save_message(
         session.message_count = (session.message_count or 0) + 1
         session.updated_at = datetime.now(timezone.utc)
 
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
         return {"code": 200, "message": "ok"}
 
     except Exception as e:
@@ -169,26 +220,48 @@ async def sync_session(
             session.session_type = data.session_type or session.session_type
             session.business_type = data.business_type or session.business_type
 
-        # 查已保存的消息数
-        count_result = await db.execute(
-            select(func.count(AIChatMessage.id)).where(
-                AIChatMessage.session_id == data.session_id
-            )
+        existing_result = await db.execute(
+            select(AIChatMessage.role, AIChatMessage.content)
+            .where(AIChatMessage.session_id == data.session_id)
+            .order_by(AIChatMessage.id.asc())
         )
-        existing_count = count_result.scalar() or 0
+        existing_pairs = [(role, content) for role, content in existing_result.all()]
 
-        # 仅保存新消息（跳过已有的）
-        new_messages = data.messages[existing_count:]
+        incoming_with_ids = [m for m in data.messages if _message_client_id(m)]
+        if incoming_with_ids and len(incoming_with_ids) == len(data.messages):
+            message_ids = [_message_client_id(m) for m in data.messages]
+            id_result = await db.execute(
+                select(AIChatMessage).where(
+                    AIChatMessage.session_id == data.session_id,
+                    AIChatMessage.client_message_id.in_(message_ids),
+                )
+            )
+            existing_by_id = {m.client_message_id: m for m in id_result.scalars().all()}
+            for incoming in data.messages:
+                existing_msg = existing_by_id.get(_message_client_id(incoming))
+                if existing_msg:
+                    incoming_content = incoming.get("content", "")
+                    if existing_msg.content != incoming_content:
+                        existing_msg.content = incoming_content
+                    if incoming.get("metadata") is not None:
+                        existing_msg.metadata_json = incoming.get("metadata")
+            existing_ids = set(existing_by_id.keys())
+            new_messages = [m for m in data.messages if _message_client_id(m) not in existing_ids]
+        else:
+            # 兼容旧客户端/旧 localStorage 记录：按已有前缀跳过。
+            new_messages = _unsynced_messages(existing_pairs, data.messages)
+
         for m in new_messages:
             msg = AIChatMessage(
                 session_id=data.session_id,
+                client_message_id=_message_client_id(m) or None,
                 role=m.get("role", "user"),
                 content=m.get("content", ""),
                 metadata_json=m.get("metadata"),
             )
             db.add(msg)
 
-        session.message_count = existing_count + len(new_messages)
+        session.message_count = len(existing_pairs) + len(new_messages)
         session.updated_at = datetime.now(timezone.utc)
 
         # 补充标题
@@ -199,7 +272,10 @@ async def sync_session(
             if first_user_msg:
                 session.title = _make_title(first_user_msg)
 
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
         return {"code": 200, "message": "ok", "data": {"synced": len(new_messages)}}
 
     except Exception as e:
@@ -274,6 +350,7 @@ async def get_session_messages(
 
         items = [
             {
+                "client_message_id": m.client_message_id,
                 "role": m.role,
                 "content": m.content,
                 "timestamp": m.created_at.isoformat() if m.created_at else None,
@@ -384,6 +461,7 @@ async def admin_get_session_messages(
 
         items = [
             {
+                "client_message_id": m.client_message_id,
                 "role": m.role,
                 "content": m.content,
                 "timestamp": m.created_at.isoformat() if m.created_at else None,

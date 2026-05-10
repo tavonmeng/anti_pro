@@ -12,10 +12,11 @@
 import time
 import uuid
 import json
+import asyncio
+from contextlib import suppress
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
-from fastapi import FastAPI
 
 from app.config import settings
 from app.utils.log_setup import (
@@ -30,12 +31,106 @@ from app.utils.security import decode_access_token
 # 预解析配置
 _db_methods = set()
 _db_enabled = False
+_audit_queue: asyncio.Queue | None = None
+_audit_workers: list[asyncio.Task] = []
+_dropped_audit_logs = 0
 
 
 def _init_config():
     global _db_methods, _db_enabled
     _db_enabled = settings.LOG_DB_ENABLED
     _db_methods = {m.strip().upper() for m in settings.LOG_DB_METHODS.split(",") if m.strip()}
+
+
+def start_audit_log_workers():
+    """启动有界审计日志入库 worker，避免每个请求无限 create_task。"""
+    global _audit_queue, _audit_workers
+
+    _init_config()
+    if not _db_enabled or _audit_workers:
+        return
+
+    queue_size = max(1, int(settings.LOG_DB_QUEUE_SIZE or 1000))
+    worker_count = max(1, int(settings.LOG_DB_WORKERS or 1))
+    _audit_queue = asyncio.Queue(maxsize=queue_size)
+    _audit_workers = [
+        asyncio.create_task(_audit_worker_loop(i), name=f"audit-log-worker-{i}")
+        for i in range(worker_count)
+    ]
+
+
+async def stop_audit_log_workers():
+    """应用关闭时尽量刷完队列，然后取消 worker。"""
+    global _audit_queue, _audit_workers
+
+    queue = _audit_queue
+    if queue is not None:
+        with suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(queue.join(), timeout=5)
+
+    for task in _audit_workers:
+        task.cancel()
+    if _audit_workers:
+        await asyncio.gather(*_audit_workers, return_exceptions=True)
+
+    _audit_workers = []
+    _audit_queue = None
+
+
+async def _audit_worker_loop(worker_id: int):
+    while True:
+        queue = _audit_queue
+        if queue is None:
+            await asyncio.sleep(0.1)
+            continue
+
+        payload = await queue.get()
+        try:
+            await _persist_audit_log(**payload)
+        except Exception as e:
+            get_module_logger("system").error(f"审计日志 worker {worker_id} 异常: {e}")
+        finally:
+            queue.task_done()
+
+
+def _enqueue_audit_log(payload: dict, logger):
+    global _dropped_audit_logs
+
+    if _audit_queue is None:
+        try:
+            start_audit_log_workers()
+        except RuntimeError as e:
+            logger.error(f"审计日志 worker 启动失败: {e}")
+            return
+
+    queue = _audit_queue
+    if queue is None:
+        return
+
+    try:
+        queue.put_nowait(payload)
+    except asyncio.QueueFull:
+        _dropped_audit_logs += 1
+        if _dropped_audit_logs == 1 or _dropped_audit_logs % 100 == 0:
+            logger.warning(f"审计日志队列已满，累计丢弃 {_dropped_audit_logs} 条")
+
+
+def _request_body_skip_reason(request: Request) -> str:
+    content_type = request.headers.get("content-type", "").lower()
+    if "multipart/form-data" in content_type:
+        return "[multipart/form-data payload skipped]"
+
+    content_length_raw = request.headers.get("content-length", "")
+    try:
+        content_length = int(content_length_raw) if content_length_raw else 0
+    except ValueError:
+        content_length = 0
+
+    max_read_size = max(int(settings.LOG_MAX_PAYLOAD_SIZE or 4096) * 4, 64 * 1024)
+    if content_length > max_read_size:
+        return "[payload skipped: %d bytes]" % content_length
+
+    return ""
 
 
 class AuditLoggerMiddleware(BaseHTTPMiddleware):
@@ -75,7 +170,11 @@ class AuditLoggerMiddleware(BaseHTTPMiddleware):
         request_body_str = ""
         if method in ("POST", "PUT", "PATCH", "DELETE"):
             try:
-                body_bytes = await request.body()
+                request_body_str = _request_body_skip_reason(request)
+                if not request_body_str:
+                    body_bytes = await request.body()
+                else:
+                    body_bytes = b""
                 if body_bytes:
                     body_text = body_bytes.decode("utf-8", errors="replace")
                     try:
@@ -121,24 +220,19 @@ class AuditLoggerMiddleware(BaseHTTPMiddleware):
 
         # ---- 9. 写操作入库 ----
         if _db_enabled and method in _db_methods:
-            import asyncio
-            # 真正的 fire-and-forget 异步任务：扔到事件循环后台执行，主线程立即响应前端，完全不拖慢性能
-            try:
-                asyncio.create_task(_persist_audit_log(
-                    trace_id=trace_id,
-                    user_id=user_id,
-                    username=username,
-                    type="api_call",
-                    module=module.capitalize(),
-                    action=action_str,
-                    ip_address=_get_client_ip(request),
-                    user_agent=request.headers.get("user-agent", "")[:300],
-                    payload=request_body_str,
-                    response_status=status_code,
-                    duration_ms=duration_ms,
-                ))
-            except Exception as e:
-                mod_logger.bind(trace_id=trace_id).error(f"审计日志入库失败: {e}")
+            _enqueue_audit_log({
+                "trace_id": trace_id,
+                "user_id": user_id,
+                "username": username,
+                "type": "api_call",
+                "module": module.capitalize(),
+                "action": action_str,
+                "ip_address": _get_client_ip(request),
+                "user_agent": request.headers.get("user-agent", "")[:300],
+                "payload": request_body_str,
+                "response_status": status_code,
+                "duration_ms": duration_ms,
+            }, mod_logger.bind(trace_id=trace_id))
 
         # ---- 10. 注入 Trace-ID 到响应头 ----
         if response:

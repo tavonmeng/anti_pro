@@ -7,6 +7,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from app.config import settings
+from app.services.ai_client import post_chat_completion
 
 general_router = APIRouter()
 
@@ -45,20 +46,14 @@ async def ai_general(request: GeneralRequest, raw_request: Request):
                 llm_messages.append({"role": h["role"], "content": h["content"]})
         llm_messages.append({"role": "user", "content": request.message})
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{settings.AI_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.AI_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={"model": settings.AI_MODEL_NAME, "messages": llm_messages},
-                timeout=30.0
-            )
-            response.raise_for_status()
-            data = response.json()
-            reply = data["choices"][0]["message"]["content"]
-            return {"message": reply}
+        data = await post_chat_completion(
+            {"model": settings.AI_MODEL_NAME, "messages": llm_messages},
+            timeout=30.0,
+        )
+        reply = data["choices"][0]["message"]["content"]
+        return {"message": reply}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"通用问答 LLM 调用失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

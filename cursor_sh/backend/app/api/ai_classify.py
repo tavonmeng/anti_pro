@@ -7,6 +7,7 @@ import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel
 from app.config import settings
+from app.services.ai_client import post_chat_completion
 
 classify_router = APIRouter()
 
@@ -66,29 +67,21 @@ async def ai_classify(request: ClassifyRequest):
                 "- business_intro: 用户想了解公司业务、看案例、咨询服务范围\n"
                 "- general: 其他闲聊或通用问题"
             )
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{settings.AI_BASE_URL}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {settings.AI_API_KEY}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": settings.AI_MODEL_NAME,
-                        "messages": [
-                            {"role": "system", "content": classify_prompt},
-                            {"role": "user", "content": msg}
-                        ],
-                        "max_tokens": 20,
-                        "temperature": 0
-                    },
-                    timeout=10.0
-                )
-                response.raise_for_status()
-                data = response.json()
-                result = data["choices"][0]["message"]["content"].strip().lower()
-                intent = result if result in _VALID_INTENTS else "order_create"
-                return {"intent": intent}
+            data = await post_chat_completion(
+                {
+                    "model": settings.AI_MODEL_NAME,
+                    "messages": [
+                        {"role": "system", "content": classify_prompt},
+                        {"role": "user", "content": msg}
+                    ],
+                    "max_tokens": 20,
+                    "temperature": 0
+                },
+                timeout=10.0,
+            )
+            result = data["choices"][0]["message"]["content"].strip().lower()
+            intent = result if result in _VALID_INTENTS else "order_create"
+            return {"intent": intent}
         except Exception as e:
             print(f"意图分类 LLM 调用失败: {e}")
 

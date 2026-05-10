@@ -1,6 +1,8 @@
 """企业认证 API 路由"""
 
 import os
+import uuid
+import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -17,6 +19,45 @@ from app.services.notification_service import NotificationService
 from app.models.notification import NotificationType
 
 router = APIRouter(prefix="/enterprise", tags=["企业认证"])
+
+UPLOAD_CHUNK_SIZE = 1024 * 1024
+BUSINESS_LICENSE_MAX_SIZE = 10 * 1024 * 1024
+
+
+async def _stream_upload_to_temp(file: UploadFile, max_size: int) -> tuple[str, int]:
+    tmp_dir = os.path.join(settings.UPLOAD_DIR, ".tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    tmp_path = os.path.join(tmp_dir, "%s%s.part" % (uuid.uuid4().hex, ext))
+    size = 0
+
+    try:
+        async with aiofiles.open(tmp_path, "wb") as out:
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > max_size:
+                    raise HTTPException(status_code=413, detail="营业执照图片不能超过10MB")
+                await out.write(chunk)
+        return tmp_path, size
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _cleanup_temp_file(tmp_path: str):
+    if not tmp_path:
+        return
+    try:
+        os.remove(tmp_path)
+    except OSError:
+        pass
 
 
 def _get_status(user) -> str:
@@ -82,31 +123,30 @@ async def submit_enterprise_auth(
             raise HTTPException(status_code=400, detail="营业执照仅支持 JPG/PNG/WEBP 格式")
         
         # 保存文件
-        file_ext = os.path.splitext(business_license.filename)[1] or '.jpg'
-        content = await business_license.read()
+        file_ext = os.path.splitext(os.path.basename(business_license.filename or ""))[1] or '.jpg'
+        file_name = "license_%d%s" % (int(datetime.utcnow().timestamp()), file_ext)
+        tmp_path, _size = await _stream_upload_to_temp(business_license, BUSINESS_LICENSE_MAX_SIZE)
 
-        if settings.OSS_ENABLED:
-            from app.services.oss_service import upload_and_sign
-            result = upload_and_sign(
-                data=content,
-                prefix="enterprise",
-                user_id=current_user.id,
-                filename="license_%d%s" % (int(datetime.utcnow().timestamp()), file_ext),
-                content_type=business_license.content_type or "",
-            )
-            file_url = result["object_key"]  # 存 object_key，读取时再签名
-        else:
-            upload_dir = os.path.join(settings.UPLOAD_DIR, "enterprise", current_user.id)
-            os.makedirs(upload_dir, exist_ok=True)
-
-            file_name = "license_%d%s" % (int(datetime.utcnow().timestamp()), file_ext)
-            file_path = os.path.join(upload_dir, file_name)
-
-            import aiofiles
-            async with aiofiles.open(file_path, 'wb') as f:
-                await f.write(content)
-
-            file_url = "/uploads/enterprise/%s/%s" % (current_user.id, file_name)
+        try:
+            if settings.OSS_ENABLED:
+                from app.services.oss_service import upload_file_and_sign
+                result = upload_file_and_sign(
+                    file_path=tmp_path,
+                    prefix="enterprise",
+                    user_id=current_user.id,
+                    filename=file_name,
+                    content_type=business_license.content_type or "",
+                )
+                file_url = result["object_key"]  # 存 object_key，读取时再签名
+            else:
+                upload_dir = os.path.join(settings.UPLOAD_DIR, "enterprise", current_user.id)
+                os.makedirs(upload_dir, exist_ok=True)
+                file_path = os.path.join(upload_dir, file_name)
+                os.replace(tmp_path, file_path)
+                tmp_path = ""
+                file_url = "/uploads/enterprise/%s/%s" % (current_user.id, file_name)
+        finally:
+            _cleanup_temp_file(tmp_path)
 
         current_user.business_license_url = file_url
     elif not current_user.business_license_url:

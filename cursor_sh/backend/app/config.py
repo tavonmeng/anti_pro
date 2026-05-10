@@ -62,8 +62,8 @@ class Settings(BaseSettings):
     DB_CHARSET: str = "utf8mb4"          # MySQL 字符集
     
     # 连接池配置（MySQL RDS 专用）
-    DB_POOL_SIZE: int = 10               # 连接池常驻连接数
-    DB_MAX_OVERFLOW: int = 20            # 最大溢出连接数
+    DB_POOL_SIZE: int = 5                # 连接池常驻连接数
+    DB_MAX_OVERFLOW: int = 10            # 最大溢出连接数
     DB_POOL_TIMEOUT: int = 30            # 获取连接超时（秒）
     DB_POOL_RECYCLE: int = 1800          # 连接回收时间（秒），RDS 推荐 1800
     DB_POOL_PRE_PING: bool = True        # 连接健康检查，防止 RDS 闲置断开
@@ -159,6 +159,8 @@ class Settings(BaseSettings):
     LOG_COMPRESSION: str = "gz"              # 归档压缩格式：gz / zip / None
     LOG_DB_ENABLED: bool = True              # 是否将审计日志写入数据库
     LOG_DB_METHODS: str = "POST,PUT,DELETE"  # 哪些 HTTP Method 触发数据库记录
+    LOG_DB_QUEUE_SIZE: int = 1000            # 审计日志入库队列上限，避免后台任务无限堆积
+    LOG_DB_WORKERS: int = 2                  # 每个进程内审计日志入库 worker 数
     LOG_SANITIZE_FIELDS: str = "password,oldPassword,newPassword,old_password,new_password,token,secret,sms_code,captcha,invite_token"
     LOG_MAX_PAYLOAD_SIZE: int = 4096         # payload 字段最大字符数（超出截断）
     LOG_MODULES: str = "Auth,Workspace,Order,AI,Staff,Notification,Contractor,System"
@@ -173,6 +175,13 @@ class Settings(BaseSettings):
     AI_API_KEY: str = ""
     AI_BASE_URL: str = "https://api.openai.com/v1"
     AI_MODEL_NAME: str = "gpt-3.5-turbo"
+    AI_HTTP_TIMEOUT: float = 30.0
+    AI_MAX_CONCURRENT_REQUESTS: int = 4
+    AI_REQUEST_QUEUE_TIMEOUT: float = 5.0
+    AI_BACKGROUND_MAX_CONCURRENT: int = 2
+    AI_CRAWL_MAX_CONCURRENT: int = 1
+    AI_CRAWL_PENDING_TTL_SECONDS: int = 1800
+    STARTUP_DB_LOCK_TIMEOUT: int = 60
     
     # 部署模式：all = 全量（开发用）, external = 用户端, internal = 内部系统
     DEPLOYMENT_MODE: str = "all"

@@ -1245,6 +1245,7 @@ export const chatHistoryApi = {
   // 保存单条消息（每次对话后自动调用）
   async saveMessage(data: {
     session_id: string
+    client_message_id?: string
     role: string
     content: string
     business_type?: string
@@ -1259,7 +1260,7 @@ export const chatHistoryApi = {
     session_id: string
     business_type?: string
     session_type?: string
-    messages: Array<{ role: string; content: string; timestamp?: string }>
+    messages: Array<{ client_message_id?: string; role: string; content: string; timestamp?: string }>
   }): Promise<any> {
     return request.post('/ai/chat-history/sync', data)
   },

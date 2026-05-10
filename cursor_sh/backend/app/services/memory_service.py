@@ -11,6 +11,46 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user_memory import UserMemory
 from app.database import async_session_maker
+from app.config import settings
+
+
+_crawl_tasks: set[str] = set()
+_crawl_semaphore: asyncio.Semaphore | None = None
+_background_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_crawl_semaphore() -> asyncio.Semaphore:
+    global _crawl_semaphore
+    limit = max(1, int(settings.AI_CRAWL_MAX_CONCURRENT or 1))
+    if _crawl_semaphore is None:
+        _crawl_semaphore = asyncio.Semaphore(limit)
+    return _crawl_semaphore
+
+
+def _get_background_semaphore() -> asyncio.Semaphore:
+    global _background_semaphore
+    limit = max(1, int(settings.AI_BACKGROUND_MAX_CONCURRENT or 1))
+    if _background_semaphore is None:
+        _background_semaphore = asyncio.Semaphore(limit)
+    return _background_semaphore
+
+
+def _pending_crawl_is_fresh(company_info: dict) -> bool:
+    """判断 pending 爬取是否仍在有效期内，避免异常退出后永久卡住。"""
+    if company_info.get("crawl_status") != "pending":
+        return False
+
+    started_at = company_info.get("crawl_started_at")
+    if not started_at:
+        return False
+
+    try:
+        started = datetime.fromisoformat(started_at)
+    except (TypeError, ValueError):
+        return False
+
+    ttl = max(60, int(settings.AI_CRAWL_PENDING_TTL_SECONDS or 1800))
+    return (datetime.now() - started).total_seconds() < ttl
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -152,16 +192,43 @@ async def trigger_crawl(user_id: str, company_name: str):
 
     不阻塞当前请求，在后台完成搜索→爬取→提取→存储。
     """
-    asyncio.create_task(_background_crawl(user_id, company_name))
+    company_name = (company_name or "").strip()
+    if not user_id or not company_name:
+        return
+
+    task_key = f"{user_id}:{company_name}"
+    if task_key in _crawl_tasks:
+        return
+
+    async with async_session_maker() as session:
+        memory = await get_or_create_memory(user_id, db=session)
+        company_info = memory.company_info or {}
+        crawl_status = company_info.get("crawl_status")
+        if crawl_status == "success":
+            return
+        if crawl_status == "pending" and _pending_crawl_is_fresh(company_info):
+            return
+        memory.company_info = {
+            **company_info,
+            "name": company_name,
+            "crawl_status": "pending",
+            "crawl_started_at": datetime.now().isoformat(),
+        }
+        await session.commit()
+
+    _crawl_tasks.add(task_key)
+    task = asyncio.create_task(_background_crawl(user_id, company_name, task_key))
+    task.add_done_callback(lambda _: _crawl_tasks.discard(task_key))
 
 
-async def _background_crawl(user_id: str, company_name: str):
+async def _background_crawl(user_id: str, company_name: str, task_key: str = ""):
     """后台爬取任务"""
     try:
         from app.services.crawl_service import crawl_and_extract
 
-        print(f"[MemoryService] 开始后台爬取: user={user_id}, company={company_name}")
-        result = await crawl_and_extract(company_name)
+        async with _get_crawl_semaphore():
+            print(f"[MemoryService] 开始后台爬取: user={user_id}, company={company_name}")
+            result = await crawl_and_extract(company_name)
 
         await update_memory(user_id, {
             "company_info": result.get("company_info", {}),
@@ -308,6 +375,13 @@ async def learn_from_conversation(user_id: str, conversation: list[dict]):
     if len(user_msgs) < 3:
         return
 
+    semaphore = _get_background_semaphore()
+    try:
+        await asyncio.wait_for(semaphore.acquire(), timeout=0.1)
+    except asyncio.TimeoutError:
+        print(f"[MemoryService] 对话学习队列繁忙，跳过: user={user_id}")
+        return
+
     try:
         extracted = await _extract_preferences(conversation)
         if not extracted:
@@ -328,6 +402,8 @@ async def learn_from_conversation(user_id: str, conversation: list[dict]):
 
     except Exception as e:
         print(f"[MemoryService] 对话学习失败: {e}")
+    finally:
+        semaphore.release()
 
 
 async def _extract_preferences(conversation: list[dict]) -> dict:
@@ -345,8 +421,8 @@ async def _extract_preferences(conversation: list[dict]) -> dict:
     """
     import re
     import json
-    import httpx
     from app.config import settings
+    from app.services.ai_client import post_chat_completion
 
     if not settings.AI_API_KEY:
         return {}
@@ -378,31 +454,23 @@ async def _extract_preferences(conversation: list[dict]) -> dict:
         return {}
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{settings.AI_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.AI_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": settings.AI_MODEL_NAME,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": dialog_text},
-                    ],
-                },
-                timeout=15.0,
-            )
-            response.raise_for_status()
-            data = response.json()
-            content = data["choices"][0]["message"]["content"].strip()
+        data = await post_chat_completion(
+            {
+                "model": settings.AI_MODEL_NAME,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": dialog_text},
+                ],
+            },
+            timeout=15.0,
+        )
+        content = data["choices"][0]["message"]["content"].strip()
 
-            # 提取 JSON
-            json_match = re.search(r"\{[\s\S]*\}", content)
-            if json_match:
-                return json.loads(json_match.group(0))
-            return {}
+        # 提取 JSON
+        json_match = re.search(r"\{[\s\S]*\}", content)
+        if json_match:
+            return json.loads(json_match.group(0))
+        return {}
     except Exception as e:
         print(f"[MemoryService] LLM 提取偏好失败: {e}")
         return {}
@@ -458,4 +526,3 @@ def _merge_preferences(existing: dict, new: dict) -> dict:
         merged["_field_updated"] = field_timestamps
 
     return merged
-

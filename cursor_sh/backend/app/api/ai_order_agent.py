@@ -10,6 +10,7 @@ from typing import Optional, Dict
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from app.config import settings
+from app.services.ai_client import post_chat_completion
 from app.utils.security import decode_access_token
 
 order_router = APIRouter()
@@ -399,29 +400,22 @@ async def _llm_understand_query(user_msg: str, history: list, orders_summary: st
             llm_messages.append({"role": h["role"], "content": h["content"]})
         llm_messages.append({"role": "user", "content": user_msg})
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{settings.AI_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.AI_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": settings.AI_MODEL_NAME,
-                    "messages": llm_messages,
-                    "max_tokens": 200,
-                    "temperature": 0,
-                    "response_format": {"type": "json_object"}
-                },
-                timeout=15.0
-            )
-            resp.raise_for_status()
-            raw = resp.json()["choices"][0]["message"]["content"].strip()
-            # 兼容 markdown 包裹
-            if raw.startswith("```"):
-                raw = raw.split("```json")[-1].split("```")[0].strip() if "```json" in raw else raw.split("```")[1].split("```")[0].strip()
-            import json as _json
-            return _json.loads(raw)
+        data = await post_chat_completion(
+            {
+                "model": settings.AI_MODEL_NAME,
+                "messages": llm_messages,
+                "max_tokens": 200,
+                "temperature": 0,
+                "response_format": {"type": "json_object"}
+            },
+            timeout=15.0,
+        )
+        raw = data["choices"][0]["message"]["content"].strip()
+        # 兼容 markdown 包裹
+        if raw.startswith("```"):
+            raw = raw.split("```json")[-1].split("```")[0].strip() if "```json" in raw else raw.split("```")[1].split("```")[0].strip()
+        import json as _json
+        return _json.loads(raw)
     except Exception as e:
         print(f"LLM 订单意图分析失败: {e}")
     return None

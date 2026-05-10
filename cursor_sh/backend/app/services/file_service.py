@@ -10,6 +10,44 @@ from app.config import settings
 from app.utils.validators import validate_file_size, validate_file_type, generate_id
 from app.schemas.file import FileUpload, FileResponse
 
+UPLOAD_CHUNK_SIZE = 1024 * 1024
+
+
+async def _stream_file_to_temp(file: UploadFile) -> tuple[str, int]:
+    tmp_dir = os.path.join(settings.UPLOAD_DIR, ".tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    file_id = generate_id("tmp")
+    extension = os.path.splitext(os.path.basename(file.filename or ""))[1]
+    tmp_path = os.path.join(tmp_dir, "%s%s.part" % (file_id, extension))
+    size = 0
+
+    try:
+        async with aiofiles.open(tmp_path, "wb") as out:
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                size += len(chunk)
+                validate_file_size(size)
+                await out.write(chunk)
+        return tmp_path, size
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _cleanup_temp_file(tmp_path: str):
+    if not tmp_path:
+        return
+    try:
+        os.remove(tmp_path)
+    except OSError:
+        pass
+
 
 class FileService:
     """文件服务类"""
@@ -18,11 +56,6 @@ class FileService:
     async def save_file_local(file: UploadFile, order_id: str) -> FileResponse:
         """保存文件到本地"""
         # 验证文件
-        file_content = await file.read()
-        file_size = len(file_content)
-        await file.seek(0)  # 重置文件指针
-        
-        validate_file_size(file_size)
         validate_file_type(file.content_type)
         
         # 生成文件 ID 和路径
@@ -31,12 +64,16 @@ class FileService:
         os.makedirs(upload_dir, exist_ok=True)
         
         # 保存文件
-        file_extension = os.path.splitext(file.filename)[1]
+        file_extension = os.path.splitext(file.filename or "")[1]
         file_name = f"{file_id}{file_extension}"
         file_path = os.path.join(upload_dir, file_name)
-        
-        async with aiofiles.open(file_path, 'wb') as f:
-            await f.write(file_content)
+
+        tmp_path, file_size = await _stream_file_to_temp(file)
+        try:
+            os.replace(tmp_path, file_path)
+            tmp_path = ""
+        finally:
+            _cleanup_temp_file(tmp_path)
         
         # 构造文件 URL（相对路径）
         file_url = f"/uploads/{order_id}/{file_name}"
@@ -53,26 +90,26 @@ class FileService:
     @staticmethod
     async def save_file_oss(file: UploadFile, order_id: str) -> FileResponse:
         """保存文件到阿里云 OSS（私有 Bucket + 签名 URL）"""
-        from app.services.oss_service import upload_and_sign
+        from app.services.oss_service import upload_file_and_sign
 
         # 验证文件
-        file_content = await file.read()
-        file_size = len(file_content)
-
-        validate_file_size(file_size)
         validate_file_type(file.content_type)
 
         file_id = generate_id("file")
-        file_extension = os.path.splitext(file.filename)[1]
+        file_extension = os.path.splitext(file.filename or "")[1]
         filename = "%s%s" % (file_id, file_extension)
 
-        result = upload_and_sign(
-            data=file_content,
-            prefix="orders/%s" % order_id,
-            user_id="",  # 订单附件不按用户分目录
-            filename=filename,
-            content_type=file.content_type or "",
-        )
+        tmp_path, file_size = await _stream_file_to_temp(file)
+        try:
+            result = upload_file_and_sign(
+                file_path=tmp_path,
+                prefix="orders/%s" % order_id,
+                user_id="",  # 订单附件不按用户分目录
+                filename=filename,
+                content_type=file.content_type or "",
+            )
+        finally:
+            _cleanup_temp_file(tmp_path)
 
         return FileResponse(
             id=file_id,

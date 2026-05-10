@@ -12,7 +12,9 @@ import asyncio
 import json
 import os
 from datetime import datetime
+from sqlalchemy.exc import IntegrityError
 from app.config import settings
+from app.services.ai_client import post_chat_completion
 from app.utils.security import decode_access_token
 
 router = APIRouter(prefix="/ai", tags=["AI 智能体对话"])
@@ -42,6 +44,8 @@ class ChatRequest(BaseModel):
     message: str
     history: list = []
     business_type: str = "ai_3d_custom"  # ai_3d_custom / video_purchase / digital_art
+    user_message_id: str | None = None
+    assistant_message_id: str | None = None
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -381,11 +385,13 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
         else:
             mock_reply += "好的，请继续详细描述您的诉求。"
 
-        _save_session_file(
-            session_id=request.session_id, user_id=user_id, username=username,
-            history=request.history, user_msg=request.message, assistant_msg=mock_reply,
-        )
-        return {"message": mock_reply}
+            _save_session_file(
+                session_id=request.session_id, user_id=user_id, username=username,
+                history=request.history, user_msg=request.message, assistant_msg=mock_reply,
+                user_message_id=request.user_message_id,
+                assistant_message_id=request.assistant_message_id,
+            )
+            return {"message": mock_reply}
 
     try:
         system_prompt = _get_requirement_prompt(request.business_type)
@@ -400,41 +406,37 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
                 llm_messages.append({"role": h["role"], "content": h["content"]})
         llm_messages.append({"role": "user", "content": request.message})
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{settings.AI_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.AI_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={"model": settings.AI_MODEL_NAME, "messages": llm_messages},
-                timeout=30.0
-            )
-            response.raise_for_status()
-            data = response.json()
-            reply = data["choices"][0]["message"]["content"]
+        data = await post_chat_completion(
+            {"model": settings.AI_MODEL_NAME, "messages": llm_messages},
+            timeout=30.0,
+        )
+        reply = data["choices"][0]["message"]["content"]
 
-            _save_session_file(
-                session_id=request.session_id, user_id=user_id, username=username,
-                history=request.history, user_msg=request.message, assistant_msg=reply,
-            )
+        _save_session_file(
+            session_id=request.session_id, user_id=user_id, username=username,
+            history=request.history, user_msg=request.message, assistant_msg=reply,
+            user_message_id=request.user_message_id,
+            assistant_message_id=request.assistant_message_id,
+        )
 
-            # 后台对话学习 — 从对话中提取偏好写回 Memory
-            if user_id != "anonymous":
-                try:
-                    from app.services.memory_service import learn_from_conversation
-                    full_conversation = []
-                    for h in request.history:
-                        if h.get("role") in ["user", "assistant"] and h.get("content"):
-                            full_conversation.append({"role": h["role"], "content": h["content"]})
-                    full_conversation.append({"role": "user", "content": request.message})
-                    full_conversation.append({"role": "assistant", "content": reply})
-                    asyncio.create_task(learn_from_conversation(user_id, full_conversation))
-                except Exception:
-                    pass
+        # 后台对话学习 — 从对话中提取偏好写回 Memory
+        if user_id != "anonymous":
+            try:
+                from app.services.memory_service import learn_from_conversation
+                full_conversation = []
+                for h in request.history:
+                    if h.get("role") in ["user", "assistant"] and h.get("content"):
+                        full_conversation.append({"role": h["role"], "content": h["content"]})
+                full_conversation.append({"role": "user", "content": request.message})
+                full_conversation.append({"role": "assistant", "content": reply})
+                asyncio.create_task(learn_from_conversation(user_id, full_conversation))
+            except Exception:
+                pass
 
-            return {"message": reply}
+        return {"message": reply}
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"大模型调用失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -491,34 +493,26 @@ async def ai_extract(request: ExtractRequest):
 
         chat_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in request.history])
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{settings.AI_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.AI_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": settings.AI_MODEL_NAME,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"对话记录如下：\n{chat_text}\n\n请提取为JSON。"}
-                    ],
-                    "response_format": {"type": "json_object"}
-                },
-                timeout=30.0
-            )
-            response.raise_for_status()
-            data = response.json()
-            content = data["choices"][0]["message"]["content"]
+        data = await post_chat_completion(
+            {
+                "model": settings.AI_MODEL_NAME,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"对话记录如下：\n{chat_text}\n\n请提取为JSON。"}
+                ],
+                "response_format": {"type": "json_object"}
+            },
+            timeout=30.0,
+        )
+        content = data["choices"][0]["message"]["content"]
 
-            if content.startswith("```json"):
-                content = content.split("```json")[-1].split("```")[0].strip()
-            elif content.startswith("```"):
-                content = content.split("```")[-1].split("```")[0].strip()
+        if content.startswith("```json"):
+            content = content.split("```json")[-1].split("```")[0].strip()
+        elif content.startswith("```"):
+            content = content.split("```")[-1].split("```")[0].strip()
 
-            parsed = json.loads(content)
-            return parsed
+        parsed = json.loads(content)
+        return parsed
 
     except Exception as e:
         print(f"提取信息失败: {e}")
@@ -548,26 +542,18 @@ async def ai_assess(request: AssessRequest):
             # 有评估逻辑内容，调用 LLM 生成评估
             if settings.AI_API_KEY:
                 info = "\n".join([f"{k}: {v}" for k, v in request.extracted.items() if v])
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"{settings.AI_BASE_URL}/chat/completions",
-                        headers={
-                            "Authorization": f"Bearer {settings.AI_API_KEY}",
-                            "Content-Type": "application/json"
-                        },
-                        json={
-                            "model": settings.AI_MODEL_NAME,
-                            "messages": [
-                                {"role": "system", "content": assess_logic},
-                                {"role": "user", "content": f"客户需求信息：\n{info}"}
-                            ]
-                        },
-                        timeout=30.0
-                    )
-                    response.raise_for_status()
-                    data = response.json()
-                    assessment = data["choices"][0]["message"]["content"]
-                    return {"assessment": assessment}
+                data = await post_chat_completion(
+                    {
+                        "model": settings.AI_MODEL_NAME,
+                        "messages": [
+                            {"role": "system", "content": assess_logic},
+                            {"role": "user", "content": f"客户需求信息：\n{info}"}
+                        ]
+                    },
+                    timeout=30.0,
+                )
+                assessment = data["choices"][0]["message"]["content"]
+                return {"assessment": assessment}
             return {"assessment": ""}
         except Exception as e:
             print(f"媒体方项目评估失败: {e}")
@@ -621,26 +607,18 @@ async def ai_assess(request: AssessRequest):
 
         info = "\n".join([f"{k}: {v}" for k, v in d.items() if v])
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{settings.AI_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.AI_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": settings.AI_MODEL_NAME,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"客户需求信息：\n{info}"}
-                    ]
-                },
-                timeout=30.0
-            )
-            response.raise_for_status()
-            data = response.json()
-            assessment = data["choices"][0]["message"]["content"]
-            return {"assessment": assessment}
+        data = await post_chat_completion(
+            {
+                "model": settings.AI_MODEL_NAME,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"客户需求信息：\n{info}"}
+                ]
+            },
+            timeout=30.0,
+        )
+        assessment = data["choices"][0]["message"]["content"]
+        return {"assessment": assessment}
     except Exception as e:
         print(f"项目评估生成失败: {e}")
         return {"assessment": "**项目评估**\n\n需求信息已整理完毕。以下是需求明细，请确认或修改："}
@@ -677,6 +655,8 @@ async def _save_to_db(
     user_msg: str,
     assistant_msg: str,
     business_type: str = "ai_3d_custom",
+    user_message_id: str | None = None,
+    assistant_message_id: str | None = None,
 ):
     """将用户消息和助手回复保存到数据库（异步）"""
     try:
@@ -708,24 +688,57 @@ async def _save_to_db(
                 if username and (not session.username or session.username == "anonymous"):
                     session.username = username
 
-            # 保存用户消息
-            db.add(AIChatMessage(
-                session_id=session_id,
-                role="user",
-                content=user_msg,
-            ))
-            # 保存助手回复
-            db.add(AIChatMessage(
-                session_id=session_id,
-                role="assistant",
-                content=assistant_msg,
-            ))
+            existing_ids = set()
+            if user_message_id or assistant_message_id:
+                known_ids = [mid for mid in [user_message_id, assistant_message_id] if mid]
+                existing_result = await db.execute(
+                    select(AIChatMessage.client_message_id).where(
+                        AIChatMessage.session_id == session_id,
+                        AIChatMessage.client_message_id.in_(known_ids),
+                    )
+                )
+                existing_ids = {row[0] for row in existing_result.all()}
+                if user_message_id in existing_ids and assistant_message_id in existing_ids:
+                    return
+            else:
+                existing_result = await db.execute(
+                    select(AIChatMessage.role, AIChatMessage.content)
+                    .where(AIChatMessage.session_id == session_id)
+                    .order_by(AIChatMessage.id.desc())
+                    .limit(2)
+                )
+                recent = list(reversed(existing_result.all()))
+                if recent == [("user", user_msg), ("assistant", assistant_msg)]:
+                    return
 
-            session.message_count = (session.message_count or 0) + 2
+            added_count = 0
+            # 保存用户消息
+            if not user_message_id or user_message_id not in existing_ids:
+                db.add(AIChatMessage(
+                    session_id=session_id,
+                    client_message_id=user_message_id,
+                    role="user",
+                    content=user_msg,
+                ))
+                added_count += 1
+            # 保存助手回复
+            if not assistant_message_id or assistant_message_id not in existing_ids:
+                db.add(AIChatMessage(
+                    session_id=session_id,
+                    client_message_id=assistant_message_id,
+                    role="assistant",
+                    content=assistant_msg,
+                ))
+                added_count += 1
+
+            session.message_count = (session.message_count or 0) + added_count
             now = datetime.now()
             session.updated_at = now
 
-            await db.commit()
+            try:
+                await db.commit()
+            except IntegrityError:
+                await db.rollback()
     except Exception as e:
         print(f"[AI Chat] 数据库保存失败（不影响对话）: {e}")
 
@@ -738,6 +751,8 @@ def _save_session_file(
     user_msg: str,
     assistant_msg: str,
     business_type: str = "ai_3d_custom",
+    user_message_id: str | None = None,
+    assistant_message_id: str | None = None,
 ):
     """将完整的 AI 对话 session 保存为 JSON 文件 + 数据库
 
@@ -752,11 +767,13 @@ def _save_session_file(
         loop = asyncio.get_event_loop()
         if loop.is_running():
             asyncio.ensure_future(_save_to_db(
-                session_id, user_id, username, user_msg, assistant_msg, business_type
+                session_id, user_id, username, user_msg, assistant_msg, business_type,
+                user_message_id, assistant_message_id
             ))
         else:
             loop.run_until_complete(_save_to_db(
-                session_id, user_id, username, user_msg, assistant_msg, business_type
+                session_id, user_id, username, user_msg, assistant_msg, business_type,
+                user_message_id, assistant_message_id
             ))
     except Exception as e:
         print(f"[AI Chat] 数据库保存调度失败: {e}")
