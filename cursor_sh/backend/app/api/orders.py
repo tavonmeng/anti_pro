@@ -81,6 +81,8 @@ async def create_order(
                         "order_number": order.get("orderNumber", ""),
                         "project_name": order_dict.get("project_name", order_dict.get("brand", "")),
                         "city": order_dict.get("city_location", order_dict.get("city", "")),
+                        "art_direction": order_dict.get("art_direction", order_dict.get("style", "")),
+                        "theme_concept": order_dict.get("theme_concept", order_dict.get("content", "")),
                         "status": "pending_assign",
                         "created_at": order.get("createdAt", ""),
                     }

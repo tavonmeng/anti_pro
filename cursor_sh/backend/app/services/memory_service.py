@@ -304,17 +304,32 @@ def build_memory_context(memory: UserMemory | None) -> str:
         sections.append(
             f"\n【客户已知屏幕资源 — 共 {len(screens)} 块】\n"
             + "\n".join(lines) + "\n"
-            "提示：你可以在对话开始时主动提及这些屏幕，询问本次项目是针对哪块屏幕。\n"
+            "提示：第一轮开场不要主动提及这些屏幕。等客户描述完本次大方向后，"
+            "可以用“我们了解到您这边有……”这类自然措辞提出候选屏幕，让客户确认本次项目是否针对其中某块屏。"
+            "不要说“留存过”“记忆里”“Memory”等会让客户有压力的表达。"
+            "客户确认后，再把对应点位、尺寸、分辨率、客流等信息带入需求整理。\n"
         )
 
     # 项目偏好
     pp = memory.project_preferences or {}
-    if pp.get("preferred_styles") or pp.get("budget_range") or pp.get("common_cities"):
+    if (
+        pp.get("preferred_styles") or pp.get("creative_goals") or
+        pp.get("theme_concepts") or pp.get("content_taboos") or
+        pp.get("budget_range") or pp.get("common_cities")
+    ):
         pref_lines = []
         if pp.get("common_cities"):
             pref_lines.append(f"常用城市：{', '.join(pp['common_cities'])}")
         if pp.get("preferred_styles"):
             pref_lines.append(f"偏好风格：{', '.join(pp['preferred_styles'])}")
+        if pp.get("creative_goals"):
+            pref_lines.append(f"常见创意目标：{', '.join(pp['creative_goals'])}")
+        if pp.get("theme_concepts"):
+            pref_lines.append(f"历史内容主题：{', '.join(pp['theme_concepts'])}")
+        if pp.get("content_taboos"):
+            pref_lines.append(f"内容禁忌/规避项：{', '.join(pp['content_taboos'])}")
+        if pp.get("reference_cases"):
+            pref_lines.append(f"参考案例偏好：{', '.join(pp['reference_cases'])}")
         if pp.get("budget_range"):
             pref_lines.append(f"预算范围：{pp['budget_range']}")
         if pp.get("typical_duration"):
@@ -337,12 +352,17 @@ def build_memory_context(memory: UserMemory | None) -> str:
         for p in recent:
             name = p.get("project_name") or p.get("order_number", "未命名")
             city = p.get("city", "")
+            creative = "；".join(
+                part for part in [p.get("art_direction", ""), p.get("theme_concept", "")]
+                if part
+            )
             status_map = {
                 "completed": "已完成", "in_production": "制作中",
                 "pending_assign": "待确认", "cancelled": "已取消",
             }
             status = status_map.get(p.get("status", ""), p.get("status", ""))
-            lines.append(f"  • {name} ({city}) — {status}")
+            extra = f"｜{creative}" if creative else ""
+            lines.append(f"  • {name} ({city}) — {status}{extra}")
         sections.append(
             f"\n【近期项目（{len(past)} 个）】\n" + "\n".join(lines) + "\n"
             "如涉及相似项目，可以引用历史经验提升专业度。\n"
@@ -413,9 +433,12 @@ async def _extract_preferences(conversation: list[dict]) -> dict:
         {
             "common_cities": ["成都"],
             "preferred_styles": ["科技感"],
+            "creative_goals": ["招商展示"],
+            "theme_concepts": ["城市文化"],
             "budget_range": "20-30万",
             "typical_duration": "30秒",
             "screen_preferences": ["L型大屏"],
+            "content_taboos": ["过度商业广告化"],
             "notes": "客户对交付时间比较敏感"
         }
     """
@@ -435,6 +458,10 @@ async def _extract_preferences(conversation: list[dict]) -> dict:
         "可提取的字段：\n"
         "- common_cities (list[string]): 提到的投放城市\n"
         "- preferred_styles (list[string]): 偏好的视觉风格，如'科技感'、'国潮'、'未来感'\n"
+        "- creative_goals (list[string]): 创意目标，如'招商展示'、'提升地标影响力'、'城市形象展示'\n"
+        "- theme_concepts (list[string]): 内容主题或核心表达，如'城市文化'、'春节氛围'、'品牌招商'\n"
+        "- content_taboos (list[string]): 明确不希望出现或需要规避的内容/调性\n"
+        "- reference_cases (list[string]): 客户明确喜欢或提到的参考案例/参考方向\n"
         "- budget_range (string): 预算范围，如'20-30万'\n"
         "- typical_duration (string): 视频时长偏好，如'30秒'\n"
         "- screen_preferences (list[string]): 偏好的屏幕类型，如'L型大屏'、'曲面屏'\n"
@@ -489,7 +516,10 @@ def _merge_preferences(existing: dict, new: dict) -> dict:
     now = datetime.now().isoformat()
     changed_fields = []
 
-    list_fields = ["common_cities", "preferred_styles", "screen_preferences"]
+    list_fields = [
+        "common_cities", "preferred_styles", "screen_preferences",
+        "creative_goals", "theme_concepts", "content_taboos", "reference_cases",
+    ]
     for field in list_fields:
         if field in new and new[field]:
             old_list = merged.get(field, [])

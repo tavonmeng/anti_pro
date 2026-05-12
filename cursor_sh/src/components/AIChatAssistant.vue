@@ -845,7 +845,6 @@ const _brandFormFields = [
 
 // ===== 媒体方表单字段 =====
 const _mediaFormFields = [
-  { key: 'project_name', label: '项目名称', placeholder: '例如：上海首位中心大屏矩阵裸眼3D OOH项目', multiline: false },
   { key: 'resource_background', label: '项目背景 & 媒体简介', placeholder: '媒体资源背景介绍，位置特点、日均客流等', multiline: true },
   { key: 'audience_scene', label: '目标受众 & 场景特点', placeholder: '受众画像和场景特征', multiline: true },
   { key: 'city_location', label: '投放城市 & 媒体位置', placeholder: '城市、区域、具体位置', multiline: false },
@@ -858,6 +857,7 @@ const _mediaFormFields = [
   { key: 'timing_number', label: '投放时长 & 数量', placeholder: '选填，几支内容、每支多少秒', multiline: false },
   { key: 'budget', label: '项目制作预算', placeholder: '选填，预算范围', multiline: false },
   { key: 'online_time', label: '预计上刊时间', placeholder: '以最迟提交报审时间为准', multiline: false },
+  { key: 'project_name', label: '项目名称', placeholder: '系统将根据点位、屏幕和核心概念自动生成，可修改', multiline: false },
   { key: 'media_positioning', label: '媒体定位 & 品牌调性', placeholder: '选填，适配的品牌类型', multiline: false },
   { key: 'special_requirements', label: '其他特殊合作要求', placeholder: '选填，特殊定制效果等', multiline: true },
   { key: 'site_photos', label: '现场实拍图', placeholder: '选填，通过左侧上传按钮上传', multiline: false },
@@ -1389,10 +1389,10 @@ const switchToOrderCreate = (type: string = 'ai_3d_custom', requirementSummary: 
   } else {
     const openings: Record<string, string> = {
       ai_3d_custom: isMediaMode
-        ? `好的，我来协助您完成这次项目的需求梳理。\n\n我在裸眼3D户外媒体内容领域有多年的项目经验，接下来会通过几个问题了解您的项目全貌，大约需要5分钟。如果某个问题暂时不清楚或不方便回答，可以直接跳过，后续在表单里补充也完全没问题。\n\n我们先从基础信息开始——请问本次项目的名称是什么？`
-        : `好的，我们进入${label}的需求梳理环节。\n\n首先想了解一下：这次项目是哪个品牌的？主要想呈现什么样的裸眼3D创意画面？`,
+        ? `好的，我来协助您完成这次项目的需求梳理。\n\n我们大致会从基础信息、创意方向、技术与交付三个环节来聊。我先了解一下整体想法，后面再逐步补齐点位、屏幕规格和交付要求；暂时不确定的内容也可以先跳过。\n\n您可以先说说这次大概想做什么内容，或者希望这块屏达到什么效果。`
+        : `好的，我们进入${label}的需求梳理环节。\n\n我们先从基础信息开始：这次项目是哪个品牌或产品？`,
       video_purchase: `好的，我们进入${label}的需求梳理环节。\n\n首先想确认一下：您的品牌名称是什么？这样我们可以在成片上做对应的品牌元素适配。`,
-      digital_art: `好的，我们进入${label}的需求梳理环节。\n\n首先想了解一下：这次项目的品牌或活动名称是什么？活动场景大概是什么样的？`,
+      digital_art: `好的，我们进入${label}的需求梳理环节。\n\n首先想了解一下：这次项目的品牌或活动名称是什么？`,
     }
     openingMsg = openings[type] || openings.ai_3d_custom
   }
@@ -1750,25 +1750,30 @@ const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
     }, assistantMessageId)
 
   } catch (error) {
-    // 降级兜底：前端 Mock 模拟对话收集需求（至少5轮）
+    // 降级兜底：前端 Mock 模拟对话收集需求（按一轮一个问题推进）
     const userMsgCount = messages.value.filter(m => m.role === 'user').length;
     
     const mockReplies: Record<number, string> = isMediaMode ? {
-      1: '收到。接下来想了解一下这个媒体的基本情况——屏幕日均客流量大概是多少？主要面向什么样的受众群体？',
-      2: '了解。那观众主要从哪个方向观看？最佳观看点在什么位置？',
-      3: '明白。在视觉方向上，您期望什么样的艺术风格？（比如未来科技、自然生态、城市文化等）',
-      4: '清楚了。屏幕的分辨率和物理尺寸是多少？对交付格式有什么技术要求？',
-      5: '最后确认一下：预计什么时候需要上刊？是否有特殊的内容审核规范？',
+      1: '收到。接下来补一下基础信息：这块屏位于哪个城市和具体位置？',
+      2: '了解。这个媒体的基本情况如何？比如位置特点、日均客流或主要目标客群。',
+      3: '明白。这个媒体主要面向什么样的受众或场景？',
+      4: '清楚了。观众主要从哪个方向观看？有没有比较理想的观看点？',
+      5: '在视觉方向上，您期望什么样的艺术风格？比如未来科技、自然生态、城市文化或抽象艺术。',
+      6: '屏幕的分辨率和物理尺寸是多少？',
+      7: '预计什么时候需要上刊？',
+      8: '关于项目预算这块，目前有一个大致的范围吗？这样我可以帮您匹配更合适的制作方案。',
+      9: '核心需求信息已基本收集完毕。最后，如果您有现场实拍图、屏幕照片或其他参考素材，可以通过输入框左侧的上传按钮直接上传；如果暂时没有，我们就可以整理信息了。',
     } : {
       1: '好的，产品很有意思。为了让最终视觉效果更匹配，您期望这支视频想要打动哪类年轻受众呢？（比如在校学生、或者职场新人等）',
       2: '明白。在视觉呈现上，您大概有什么特定的风格倾向吗？（比如赛博朋克、极简风，或者写实拟真都可以）',
       3: '非常清晰。接下来想了解一下，您准备把这支内容具体投放在哪个城市或站点呢？',
-      4: '好的。那制作预算大概在什么范围呢？这样我可以帮您推荐最合适的方案。',
-      5: '最后一个问题：您期望这支内容什么时候上线呢？了解时间节点后我就可以帮您汇总所有信息了。',
+      4: '最后一个项目信息：您期望这支内容什么时候上线？',
+      5: '关于制作预算，目前有一个大致范围吗？这样我可以帮您推荐更合适的方案。',
+      6: '核心需求信息已基本收集完毕。最后，如果您有现场实拍图、屏幕照片或其他参考素材，可以通过输入框左侧的上传按钮直接上传；如果暂时没有，我们就可以整理信息了。',
     }
     
     setTimeout(() => {
-      if (userMsgCount <= 5 && mockReplies[userMsgCount]) {
+      if (mockReplies[userMsgCount]) {
         messages.value.push({ 
           role: 'assistant', 
           content: mockReplies[userMsgCount], 
