@@ -368,6 +368,28 @@ def build_memory_context(memory: UserMemory | None) -> str:
             "如涉及相似项目，可以引用历史经验提升专业度。\n"
         )
 
+    # 管理员导入资料中抽取的过往案例
+    doc_cases = ci.get("past_cases") or []
+    if doc_cases:
+        recent_cases = doc_cases[-8:]
+        lines = []
+        for c in recent_cases:
+            parts = [
+                c.get("brand", ""),
+                c.get("title", ""),
+                c.get("city", ""),
+                c.get("content_type", ""),
+            ]
+            line = " | ".join(p for p in parts if p)
+            if line:
+                lines.append(f"  • {line}")
+        if lines:
+            sections.append(
+                f"\n【客户资料中的过往案例 — 共 {len(doc_cases)} 个】\n"
+                + "\n".join(lines) + "\n"
+                "可作为理解客户业务和创意偏好的参考；如果要用于本次需求，仍需自然询问客户确认。\n"
+            )
+
     # Agent 备忘
     if memory.agent_notes:
         sections.append(f"\n【Agent 备忘录】\n{memory.agent_notes}\n")

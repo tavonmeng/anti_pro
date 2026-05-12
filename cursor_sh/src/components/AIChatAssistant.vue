@@ -130,8 +130,30 @@
                 <div class="user-content-row">
                   <div class="user-col">
                     <span class="user-tag">You</span>
-                    <div class="message-bubble user-bubble" v-html="highlightSearch(msg.content)"></div>
+                    <div
+                      v-if="displayUserMessageText(msg.content)"
+                      class="message-bubble user-bubble"
+                      v-html="highlightSearch(displayUserMessageText(msg.content))"
+                    ></div>
+                    <div v-if="msg.attachments?.length" class="message-attachment-grid">
+                      <div
+                        v-for="file in msg.attachments"
+                        :key="file.objectKey || file.url || file.name"
+                        class="message-attachment-preview"
+                        :title="file.name"
+                      >
+                        <img v-if="file.isImage && file.url" :src="file.url" class="message-attachment-thumb" />
+                        <div v-else class="message-file-preview">
+                          <el-icon><PictureRounded /></el-icon>
+                          <span>{{ getFileExtension(file.name) }}</span>
+                        </div>
+                      </div>
+                    </div>
                     <span class="msg-time" v-if="msg.timestamp">{{ msg.timestamp }}</span>
+                    <div v-if="canModifyLastUserMessage(msg)" class="user-message-actions">
+                      <button class="msg-action-btn" @click.stop="editLastUserMessage(msg)">编辑</button>
+                      <button class="msg-action-btn danger" @click.stop="revokeLastUserMessage(msg)">撤回</button>
+                    </div>
                   </div>
                   <div class="user-avatar">t</div>
                 </div>
@@ -160,8 +182,8 @@
                     </div>
                     <template v-else-if="inlineFormData">
                       <p class="form-intro">以下各项均可直接修改，也可通过对话补充调整：</p>
-                      <div class="inline-form">
-                        <div class="form-field" v-for="field in formFields" :key="field.key">
+	                      <div class="inline-form">
+	                        <div class="form-field" v-for="field in formFields" :key="field.key">
                           <label class="field-label">{{ field.label }}</label>
                           <input
                             v-if="!field.multiline"
@@ -176,10 +198,27 @@
                             v-model="inlineFormData[field.key]"
                             :placeholder="field.placeholder"
                             rows="2"
-                          ></textarea>
+	                          ></textarea>
+	                        </div>
+	                      </div>
+                      <div v-if="submittedFiles.length > 0" class="form-attachment-preview">
+                        <div class="form-attachment-label">已上传素材</div>
+                        <div class="form-attachment-list">
+                          <div
+                            v-for="file in submittedFiles"
+                            :key="file.objectKey || file.url || file.name"
+                            class="form-attachment-item"
+                            :title="file.name"
+                          >
+                            <img v-if="file.isImage && file.url" :src="file.url" class="form-attachment-thumb" />
+                            <div v-else class="form-file-thumb">
+                              <el-icon><PictureRounded /></el-icon>
+                            </div>
+                            <span class="form-attachment-name">{{ file.name }}</span>
+                          </div>
                         </div>
                       </div>
-                      <div class="inline-form-actions">
+	                      <div class="inline-form-actions">
                         <button class="comp-btn comp-btn-ghost" @click="handleContinueEditing(msg)">继续对话补充</button>
                         <button class="comp-btn comp-btn-primary" @click="handleSubmitOrder">确认无误，提交订单</button>
                       </div>
@@ -403,22 +442,23 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
-import { useRouter, onBeforeRouteLeave } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Clock, Delete, ArrowUp, Loading, Plus, Check } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
-import { chatHistoryApi } from '@/utils/api'
+import { chatHistoryApi, orderApi } from '@/utils/api'
 import { getLatestEnterpriseStatus } from '@/utils/enterpriseGuard'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 
 // 语音输入开关，通过 .env 文件配置
 const ENABLE_VOICE_INPUT = import.meta.env.VITE_ENABLE_VOICE_INPUT === 'true'
-import type { OrderType } from '@/types'
+import type { OrderStatus, OrderType } from '@/types'
 
 const emit = defineEmits(['close', 'mode-change'])
 const router = useRouter()
+const route = useRoute()
 const orderStore = useOrderStore()
 const authStore = useAuthStore()
 
@@ -728,6 +768,22 @@ const draftSavedOrderId = ref<string | null>(null)
 const showConfirmation = ref(false)
 const confirmOrderNumber = ref('')
 const confirmOrderType = ref<OrderType>('ai_3d_custom')
+const orderSubmitCompleted = ref(false)
+
+type ConversationStateSnapshot = {
+  selectedMode: string | null
+  businessType: string
+  inlineFormData: Record<string, string> | null
+  draftSavedOrderId: string | null
+  showConfirmation: boolean
+  confirmOrderNumber: string
+  confirmOrderType: OrderType
+  submittedFilesLength: number
+  orderSubmitCompleted: boolean
+  routeFullPath: string
+}
+
+const clonePlain = <T,>(value: T): T => JSON.parse(JSON.stringify(value))
 
 // ===== 文件上传相关 =====
 type UploadedFile = {
@@ -825,6 +881,18 @@ const buildFileSummaryText = (files: UploadedFile[]) => {
 
 const buildUserMessageContent = (text: string, files: UploadedFile[]) => {
   return [text, buildFileSummaryText(files)].filter(Boolean).join('\n')
+}
+
+const displayUserMessageText = (text: string = '') => {
+  return text
+    .replace(/\n?\[已上传文件: [^\]]+\]/g, '')
+    .replace(/\n?\[已上传 \d+ 个文件: [^\]]+\]/g, '')
+    .trim()
+}
+
+const getFileExtension = (name: string = '') => {
+  const ext = name.split('.').pop()
+  return ext && ext !== name ? ext.slice(0, 5).toUpperCase() : 'FILE'
 }
 
 // 表单字段定义
@@ -1098,7 +1166,7 @@ const saveCurrentToHistory = () => {
 }
 
 /** 将会话同步到后端数据库（异步静默） */
-const _syncToBackend = async (session: SavedSession) => {
+const _syncToBackend = async (session: SavedSession, replace = false) => {
   try {
     const token = localStorage.getItem('token')
     if (!token) return // 未登录不同步
@@ -1110,14 +1178,16 @@ const _syncToBackend = async (session: SavedSession) => {
       role: m.role,
       content: m.content,
       timestamp: m.timestamp || '',
+      metadata: m.attachments?.length ? { attachments: m.attachments } : undefined,
     }))
-    if (msgs.length === 0) return
+    if (msgs.length === 0 && !replace) return
 
     await chatHistoryApi.syncSession({
       session_id: session.id || session_id.value,
       business_type: businessType.value,
       session_type: 'requirement',
       messages: msgs,
+      replace,
     })
   } catch (e) {
     // 静默失败，不阻断用户体验
@@ -1148,12 +1218,156 @@ const syncCurrentConversationToBackend = async () => {
   )
   if (msgs.length === 0) return
 
-  const lastMsg = msgs[msgs.length - 1]
-  const signature = `${session.id}:${msgs.length}:${lastMsg.role}:${lastMsg.content}`
+  const signature = JSON.stringify({
+    id: session.id,
+    messages: msgs.map((m: any) => ({
+      id: m.client_message_id || '',
+      role: m.role,
+      content: m.content,
+    })),
+  })
   if (signature === _lastBackendSyncSignature) return
   _lastBackendSyncSignature = signature
 
   await _syncToBackend(session)
+}
+
+const buildCurrentSavedSession = (): SavedSession => ({
+  id: session_id.value,
+  messages: [...messages.value],
+  mode: selectedMode.value,
+  savedAt: new Date().toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
+})
+
+const removeCurrentSessionFromLocalHistory = () => {
+  try {
+    const raw = localStorage.getItem(getHistoryKey())
+    if (!raw) return
+    const parsed = JSON.parse(raw)
+    let histories: SavedSession[] = Array.isArray(parsed) ? parsed : [parsed]
+    histories = histories.filter(h => h.id !== session_id.value)
+    localStorage.setItem(getHistoryKey(), JSON.stringify(histories))
+    savedHistories.value = histories
+  } catch {
+    savedHistories.value = []
+  }
+}
+
+const syncConversationReplace = async () => {
+  _lastBackendSyncSignature = ''
+  const session = buildCurrentSavedSession()
+  if (messages.value.length === 0) {
+    removeCurrentSessionFromLocalHistory()
+  } else {
+    _lastSaveTimestamp = 0
+    saveCurrentToHistory()
+  }
+  await _syncToBackend(session, true)
+}
+
+const getLastUserMessage = () => {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    const msg = messages.value[i]
+    if (msg.role === 'user' && !msg.isContextCarryOver) {
+      return msg
+    }
+  }
+  return null
+}
+
+const hasUploadedFileSummary = (msg: any) => {
+  return /\[已上传/.test(msg?.content || '')
+}
+
+const captureConversationState = (): ConversationStateSnapshot => ({
+  selectedMode: selectedMode.value,
+  businessType: businessType.value,
+  inlineFormData: inlineFormData.value ? clonePlain(inlineFormData.value) : null,
+  draftSavedOrderId: draftSavedOrderId.value,
+  showConfirmation: showConfirmation.value,
+  confirmOrderNumber: confirmOrderNumber.value,
+  confirmOrderType: confirmOrderType.value,
+  submittedFilesLength: submittedFiles.value.length,
+  orderSubmitCompleted: orderSubmitCompleted.value,
+  routeFullPath: route.fullPath,
+})
+
+const cancelGeneratedDraftIfNeeded = async (snapshot?: ConversationStateSnapshot) => {
+  const currentDraftId = draftSavedOrderId.value
+  if (!currentDraftId || currentDraftId === snapshot?.draftSavedOrderId) return
+  try {
+    await orderApi.updateOrderStatus(currentDraftId, 'cancelled' as OrderStatus)
+  } catch (e) {
+    console.warn('[AIChat] 自动草稿取消失败:', e)
+  }
+}
+
+const restoreConversationState = async (snapshot?: ConversationStateSnapshot) => {
+  await cancelGeneratedDraftIfNeeded(snapshot)
+  selectedMode.value = snapshot?.selectedMode ?? null
+  businessType.value = snapshot?.businessType || 'ai_3d_custom'
+  inlineFormData.value = snapshot?.inlineFormData ? clonePlain(snapshot.inlineFormData) : null
+  draftSavedOrderId.value = snapshot?.draftSavedOrderId ?? null
+  showConfirmation.value = snapshot?.showConfirmation ?? false
+  confirmOrderNumber.value = snapshot?.confirmOrderNumber || ''
+  confirmOrderType.value = snapshot?.confirmOrderType || 'ai_3d_custom'
+  orderSubmitCompleted.value = snapshot?.orderSubmitCompleted ?? false
+  submittedFiles.value = submittedFiles.value.slice(0, snapshot?.submittedFilesLength ?? submittedFiles.value.length)
+  emit('mode-change', selectedMode.value)
+}
+
+const canModifyLastUserMessage = (msg: any) => {
+  if (!msg || msg.role !== 'user') return false
+  if (!msg.stateBeforeSend) return false
+  const snapshot = msg.stateBeforeSend as ConversationStateSnapshot
+  if (snapshot.routeFullPath && snapshot.routeFullPath !== route.fullPath) return false
+  if (orderSubmitCompleted.value) return false
+  if (isLoading.value || isTyping.value || extractLoading.value || isUploadingFiles.value || showConfirmation.value) return false
+  if (hasUploadedFileSummary(msg)) return false
+  return getLastUserMessage() === msg
+}
+
+const truncateFromMessage = async (msg: any) => {
+  const idx = messages.value.findIndex(m => m === msg)
+  if (idx < 0) return false
+  const snapshot = msg.stateBeforeSend as ConversationStateSnapshot | undefined
+  messages.value = messages.value.slice(0, idx)
+  await restoreConversationState(snapshot)
+  return true
+}
+
+const editLastUserMessage = async (msg: any) => {
+  if (hasUploadedFileSummary(msg)) {
+    ElMessage.warning('包含上传文件的消息暂不支持编辑')
+    return
+  }
+  if (!canModifyLastUserMessage(msg)) return
+  const content = msg.content || ''
+  if (!(await truncateFromMessage(msg))) return
+  inputMsg.value = content
+  await syncConversationReplace()
+  await nextTick()
+  adjustTextareaHeight()
+  textareaRef.value?.focus()
+}
+
+const revokeLastUserMessage = async (msg: any) => {
+  if (hasUploadedFileSummary(msg)) {
+    ElMessage.warning('包含上传文件的消息暂不支持撤回')
+    return
+  }
+  if (!canModifyLastUserMessage(msg)) return
+  if (!(await truncateFromMessage(msg))) return
+  inputMsg.value = ''
+  await syncConversationReplace()
+  ElMessage.success('已撤回最后一条消息')
 }
 
 const toggleHistory = () => {
@@ -1504,8 +1718,16 @@ const sendMessage = async () => {
   }
 
   const messageContent = buildUserMessageContent(userText, pendingFiles)
+  const stateBeforeSend = captureConversationState()
   const userMessageId = createMessageId('user')
-  messages.value.push({ client_message_id: userMessageId, role: 'user', content: messageContent, timestamp: getCurrentTime() })
+  messages.value.push({
+    client_message_id: userMessageId,
+    role: 'user',
+    content: messageContent,
+    timestamp: getCurrentTime(),
+    attachments: pendingFiles.length ? pendingFiles : undefined,
+    stateBeforeSend,
+  })
   inputMsg.value = ''
   if (pendingFiles.length > 0) {
     submittedFiles.value.push(...pendingFiles)
@@ -1976,6 +2198,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
       content: '🎉 订单已正式提交成功！我们的团队会尽快开始处理。您可以在"我的订单"中查看进度。',
       timestamp: getCurrentTime()
     })
+    orderSubmitCompleted.value = true
     scrollToBottom()
     saveCurrentToHistory()
   } catch (e) {
@@ -2524,6 +2747,72 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   letter-spacing: 0.05em;
 }
 
+.user-message-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.msg-action-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #7c828c;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 0;
+  cursor: pointer;
+}
+
+.msg-action-btn:hover {
+  color: #1a1c1c;
+}
+
+.msg-action-btn.danger:hover {
+  color: #b42318;
+}
+
+.message-attachment-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 280px;
+  margin-top: 6px;
+}
+
+.message-attachment-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+}
+
+.message-attachment-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.message-file-preview {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #5f6368;
+  font-size: 10px;
+  font-weight: 600;
+  background: #f6f7f8;
+}
+
 .ai-time {
   padding-left: 4px; /* Align slightly inwards matching the bubble */
 }
@@ -3000,6 +3289,65 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   gap: 8px;
   margin-top: 16px;
   justify-content: flex-end;
+}
+
+.form-attachment-preview {
+  margin-top: 12px;
+}
+
+.form-attachment-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #86868b;
+  margin-bottom: 6px;
+}
+
+.form-attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.form-attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 180px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.form-attachment-thumb,
+.form-file-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  flex: 0 0 auto;
+}
+
+.form-attachment-thumb {
+  object-fit: cover;
+  display: block;
+}
+
+.form-file-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0d99ff;
+  background: rgba(13, 153, 255, 0.08);
+}
+
+.form-attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #555;
 }
 
 .auto-draft-notice {

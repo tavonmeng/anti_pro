@@ -7,7 +7,7 @@
 
 from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, exists
+from sqlalchemy import select, func, desc, exists, delete
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone
@@ -43,6 +43,7 @@ class SyncSessionRequest(BaseModel):
     business_type: str = "ai_3d_custom"
     session_type: str = "requirement"
     messages: list[dict]               # [{"client_message_id": "...", "role": "user", "content": "..."}]
+    replace: bool = False              # True 时以后端消息完全替换为本次列表
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -200,6 +201,17 @@ async def sync_session(
         )
         session = result.scalar_one_or_none()
 
+        if data.replace and not data.messages:
+            if session:
+                await db.execute(
+                    delete(AIChatMessage).where(AIChatMessage.session_id == data.session_id)
+                )
+                await db.execute(
+                    delete(AIChatSession).where(AIChatSession.id == data.session_id)
+                )
+                await db.commit()
+            return {"code": 200, "message": "ok", "data": {"synced": 0}}
+
         if not session:
             first_user_msg = next(
                 (m["content"] for m in data.messages if m.get("role") == "user"), ""
@@ -230,6 +242,13 @@ async def sync_session(
         incoming_with_ids = [m for m in data.messages if _message_client_id(m)]
         if incoming_with_ids and len(incoming_with_ids) == len(data.messages):
             message_ids = [_message_client_id(m) for m in data.messages]
+            if data.replace:
+                await db.execute(
+                    delete(AIChatMessage).where(
+                        AIChatMessage.session_id == data.session_id,
+                        ~AIChatMessage.client_message_id.in_(message_ids),
+                    )
+                )
             id_result = await db.execute(
                 select(AIChatMessage).where(
                     AIChatMessage.session_id == data.session_id,
@@ -249,6 +268,11 @@ async def sync_session(
             new_messages = [m for m in data.messages if _message_client_id(m) not in existing_ids]
         else:
             # 兼容旧客户端/旧 localStorage 记录：按已有前缀跳过。
+            if data.replace:
+                await db.execute(
+                    delete(AIChatMessage).where(AIChatMessage.session_id == data.session_id)
+                )
+                existing_pairs = []
             new_messages = _unsynced_messages(existing_pairs, data.messages)
 
         for m in new_messages:
@@ -261,11 +285,16 @@ async def sync_session(
             )
             db.add(msg)
 
-        session.message_count = len(existing_pairs) + len(new_messages)
+        session.message_count = len(data.messages) if data.replace else len(existing_pairs) + len(new_messages)
         session.updated_at = datetime.now(timezone.utc)
 
         # 补充标题
-        if not session.title:
+        if data.replace:
+            first_user_msg = next(
+                (m["content"] for m in data.messages if m.get("role") == "user"), ""
+            )
+            session.title = _make_title(first_user_msg) if first_user_msg else None
+        elif not session.title:
             first_user_msg = next(
                 (m["content"] for m in data.messages if m.get("role") == "user"), ""
             )

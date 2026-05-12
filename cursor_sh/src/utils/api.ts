@@ -1260,7 +1260,8 @@ export const chatHistoryApi = {
     session_id: string
     business_type?: string
     session_type?: string
-    messages: Array<{ client_message_id?: string; role: string; content: string; timestamp?: string }>
+    messages: Array<{ client_message_id?: string; role: string; content: string; timestamp?: string; metadata?: Record<string, any> }>
+    replace?: boolean
   }): Promise<any> {
     return request.post('/ai/chat-history/sync', data)
   },
