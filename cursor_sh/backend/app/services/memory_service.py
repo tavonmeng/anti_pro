@@ -5,11 +5,13 @@
 
 import uuid
 import asyncio
+import re
 from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user_memory import UserMemory
+from app.models.user import User
 from app.database import async_session_maker
 from app.config import settings
 
@@ -183,6 +185,209 @@ async def sync_past_project(user_id: str, project_info: dict):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 管理员上传资料同步
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+async def sync_document_ingest(user_id: str, document_info: dict):
+    """将管理员上传 PDF/PPT 的 ingest 结果同步到用户 Memory。
+
+    document_info:
+      {
+        "filename": "...",
+        "document_title": "...",
+        "brief": "...",
+        "company_info": {...},
+        "media_assets": [...]
+      }
+    """
+    if not user_id or not document_info:
+        return
+
+    async with async_session_maker() as session:
+        memory = await get_or_create_memory(user_id, db=session)
+        registered_company = await _get_registered_company_for_user(user_id, session)
+
+        ci = dict(memory.company_info or {})
+        doc_company = document_info.get("company_info") or {}
+        extracted_company = doc_company.get("company_name") or ""
+        company_display_name = extracted_company or registered_company or "未知客户"
+        company_key = _normalize_company_name(company_display_name)
+        doc_title = document_info.get("document_title") or ""
+        brief = document_info.get("brief") or ""
+        now = datetime.now().isoformat()
+
+        if company_display_name and company_display_name != "未知客户":
+            ci["name"] = company_display_name
+        if brief and not ci.get("description"):
+            ci["description"] = brief
+        if doc_company.get("selling_points") and not ci.get("advantages"):
+            ci["advantages"] = doc_company.get("selling_points", [])[:8]
+
+        ci["active_company_key"] = company_key
+        ci["active_company_name"] = company_display_name
+        ci["registered_company_name"] = registered_company
+        ci["extracted_company_name"] = extracted_company
+        ci["document_profile"] = doc_company
+        ci["document_brief"] = brief
+        ci["document_title"] = doc_title
+        ci["document_source_filename"] = document_info.get("filename", "")
+        ci["document_ingested_at"] = now
+        ci["document_ingest_status"] = "success"
+
+        companies = ci.get("documents_by_company") or {}
+        company_bucket = companies.get(company_key) or {}
+        company_bucket["company_key"] = company_key
+        company_bucket["company_name"] = company_display_name
+        company_bucket["registered_company_name"] = registered_company
+        company_bucket["extracted_company_name"] = extracted_company
+        company_bucket["profile"] = doc_company
+        company_bucket["brief"] = brief
+        company_bucket["updated_at"] = now
+
+        doc_history = ci.get("document_ingests") or []
+        doc_record = {
+            "company_key": company_key,
+            "company_name": company_display_name,
+            "document_id": document_info.get("document_id", ""),
+            "order_id": document_info.get("order_id", ""),
+            "file_index": document_info.get("file_index"),
+            "filename": document_info.get("filename", ""),
+            "title": doc_title,
+            "brief": brief,
+            "ingested_at": now,
+        }
+        doc_history.append(doc_record)
+        ci["document_ingests"] = doc_history[-5:]
+
+        company_docs = company_bucket.get("documents") or []
+        company_docs.append(doc_record)
+        company_bucket["documents"] = company_docs[-10:]
+        companies[company_key] = company_bucket
+        ci["documents_by_company"] = companies
+
+        memory.company_info = ci
+
+        existing_screens = memory.screen_resources or []
+        merged_screens = _merge_document_media_assets(
+            existing_screens,
+            document_info.get("media_assets") or [],
+            source_filename=document_info.get("filename", ""),
+            company_key=company_key,
+            company_name=company_display_name,
+        )
+        memory.screen_resources = merged_screens
+
+        await session.commit()
+        print(f"[MemoryService] 文档资料已同步到 Memory: user={user_id}, company={company_display_name}, screens={len(merged_screens)}")
+
+
+async def upsert_customer_document_ingest(user_id: str, document_id: str, updates: dict):
+    """更新客户维度资料 ingest 记录。"""
+    if not user_id or not document_id:
+        return
+
+    async with async_session_maker() as session:
+        memory = await get_or_create_memory(user_id, db=session)
+        ci = dict(memory.company_info or {})
+        docs = ci.get("customer_documents") or []
+
+        found = False
+        for doc in docs:
+            if doc.get("document_id") == document_id:
+                doc.update(updates)
+                found = True
+                break
+
+        if not found:
+            docs.append({"document_id": document_id, **updates})
+
+        ci["customer_documents"] = docs[-20:]
+        memory.company_info = ci
+        await session.commit()
+
+
+async def _get_registered_company_for_user(user_id: str, session: AsyncSession) -> str:
+    result = await session.execute(
+        select(User.enterprise_name, User.company).where(User.id == user_id)
+    )
+    row = result.first()
+    if not row:
+        return ""
+    return row.enterprise_name or row.company or ""
+
+
+def _normalize_company_name(name: str) -> str:
+    """生成用于客户资料关联的稳定 company_key。"""
+    value = (name or "").strip().lower()
+    value = re.sub(r"[\s（）()【】\[\]·,，.。\-_/]+", "", value)
+    suffixes = [
+        "有限责任公司", "股份有限公司", "集团有限公司", "有限公司",
+        "集团", "公司", "传媒", "广告", "文化", "科技",
+    ]
+    for suffix in suffixes:
+        if value.endswith(suffix.lower()) and len(value) > len(suffix):
+            value = value[: -len(suffix)]
+    return value or "unknown"
+
+
+def _merge_document_media_assets(
+    existing: list,
+    media_assets: list,
+    source_filename: str = "",
+    company_key: str = "",
+    company_name: str = "",
+) -> list:
+    """将文档中的大屏/媒体资产合并到 screen_resources。"""
+    merged = [dict(item) for item in (existing or []) if isinstance(item, dict)]
+
+    def _key(item: dict) -> tuple[str, str]:
+        return (
+            str(item.get("company_key") or "").strip(),
+            str(item.get("city") or "").strip(),
+            str(item.get("location") or item.get("screen_location") or "").strip(),
+        )
+
+    index = {_key(item): i for i, item in enumerate(merged)}
+    for asset in media_assets:
+        if not isinstance(asset, dict):
+            continue
+
+        specs = asset.get("screen_specs") or {}
+        daily_media_contacts = asset.get("daily_media_contacts") or _extract_daily_media_contacts(
+            asset.get("audience_or_traffic") or []
+        )
+        item = {
+            "company_key": company_key,
+            "company_name": company_name,
+            "city": asset.get("city", ""),
+            "location": asset.get("screen_location", ""),
+            "type": "、".join(asset.get("screen_features") or []),
+            "size": specs.get("size", ""),
+            "resolution": specs.get("resolution", ""),
+            "daily_media_contacts": daily_media_contacts,
+            "daily_traffic": "、".join(asset.get("audience_or_traffic") or []),
+            "city_value": asset.get("city_value") or [],
+            "location_features": asset.get("location_features") or [],
+            "screen_features": asset.get("screen_features") or [],
+            "screen_specs": specs,
+            "audience_or_traffic": asset.get("audience_or_traffic") or [],
+            "source": "uploaded_document",
+            "source_filename": source_filename,
+            "source_pages": asset.get("source_pages") or [],
+        }
+
+        key = _key(item)
+        if key in index:
+            existing_item = merged[index[key]]
+            existing_item.update({k: v for k, v in item.items() if v})
+        else:
+            merged.append(item)
+
+    return merged[-50:]
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 爬取触发（后台异步）
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -285,12 +490,59 @@ def build_memory_context(memory: UserMemory | None) -> str:
         if ci.get("advantages"):
             sections.append(f"核心优势：{'、'.join(ci['advantages'])}\n")
 
+    doc_profile = ci.get("document_profile") or {}
+    active_company_key = ci.get("active_company_key", "")
+    companies = ci.get("documents_by_company") or {}
+    active_company = companies.get(active_company_key) or {}
+    if active_company.get("profile"):
+        doc_profile = active_company.get("profile") or doc_profile
+    if doc_profile or ci.get("document_brief"):
+        lines = []
+        if active_company.get("company_name"):
+            lines.append(f"资料归属客户：{active_company['company_name']}")
+        if doc_profile.get("company_name"):
+            lines.append(f"公司名称：{doc_profile['company_name']}")
+        if doc_profile.get("brand_name"):
+            lines.append(f"品牌/项目：{doc_profile['brand_name']}")
+        if doc_profile.get("industry"):
+            lines.append(f"行业：{doc_profile['industry']}")
+        if doc_profile.get("company_positioning"):
+            lines.append(f"公司定位：{doc_profile['company_positioning']}")
+        for label, key in [
+            ("主营业务", "business_scope"),
+            ("目标客群", "target_audience"),
+            ("核心产品/服务", "products_or_services"),
+            ("品牌卖点/优势", "selling_points"),
+            ("品牌调性/视觉风格", "tone_and_style"),
+            ("已有资产/案例", "existing_assets"),
+            ("官网/渠道", "website_or_channels"),
+        ]:
+            values = doc_profile.get(key)
+            if values:
+                lines.append(f"{label}：{'、'.join(values[:8])}")
+        doc_brief = active_company.get("brief") or ci.get("document_brief")
+        if doc_brief:
+            lines.append(f"资料摘要：{doc_brief}")
+        sections.append(
+            "\n【客户资料画像 — 来自管理员上传 PDF/PPT】\n"
+            + "\n".join(lines)
+            + "\n提示：这些信息来自客户资料，可用于主动理解客户行业、品牌调性和项目背景。\n"
+        )
+
     # 屏幕资源
     screens = memory.screen_resources or []
+    if active_company_key and any(s.get("company_key") for s in screens):
+        screens = [
+            s for s in screens
+            if not s.get("company_key") or s.get("company_key") == active_company_key
+        ]
     if screens:
         lines = []
         for s in screens:
-            parts = [s.get("city", ""), s.get("location", "")]
+            parts = []
+            if s.get("company_name"):
+                parts.append(f"客户：{s['company_name']}")
+            parts.extend([s.get("city", ""), s.get("location", "")])
             if s.get("type"):
                 parts.append(s["type"])
             if s.get("size"):
@@ -299,6 +551,22 @@ def build_memory_context(memory: UserMemory | None) -> str:
                 parts.append(s["resolution"])
             if s.get("daily_traffic"):
                 parts.append(f"日均客流{s['daily_traffic']}")
+            if s.get("daily_media_contacts"):
+                parts.append(f"日媒体接触人次{s['daily_media_contacts']}")
+            if s.get("city_value"):
+                parts.append(f"城市价值：{'、'.join(s['city_value'][:4])}")
+            if s.get("location_features"):
+                parts.append(f"位置特点：{'、'.join(s['location_features'][:4])}")
+            if s.get("screen_features"):
+                parts.append(f"大屏特点：{'、'.join(s['screen_features'][:4])}")
+            specs = s.get("screen_specs") or {}
+            spec_parts = [
+                specs.get("aspect_ratio", ""),
+                specs.get("orientation", ""),
+                specs.get("duration", ""),
+            ]
+            if any(spec_parts):
+                parts.append(f"规格补充：{'、'.join(p for p in spec_parts if p)}")
             lines.append(f"  • {' | '.join(p for p in parts if p)}")
 
         sections.append(
@@ -526,3 +794,17 @@ def _merge_preferences(existing: dict, new: dict) -> dict:
         merged["_field_updated"] = field_timestamps
 
     return merged
+
+
+def _extract_daily_media_contacts(values: list) -> str:
+    """兼容旧结构：从客流/曝光字段里提取日媒体接触人次。"""
+    for value in values or []:
+        text = str(value or "").strip()
+        if not text:
+            continue
+        if "日媒体接触" in text or "日均媒体接触" in text:
+            return text
+        match = re.search(r"(日[^，、；;]*?(?:媒体接触|触达|接触人次)[^，、；;]*)", text)
+        if match:
+            return match.group(1)
+    return ""

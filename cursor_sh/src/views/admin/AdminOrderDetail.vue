@@ -326,9 +326,32 @@
                   <div v-for="(file, idx) in designPlan.files" :key="idx" class="dp-file-item">
                     <el-icon v-if="isImage(file.filename)" size="18"><Picture /></el-icon>
                     <el-icon v-else size="18"><DocumentIcon /></el-icon>
-                    <a v-if="file.url" :href="file.url" target="_blank" class="dp-file-name">{{ file.filename }}</a>
-                    <span v-else class="dp-file-name">{{ file.filename }}</span>
-                    <span class="dp-file-size">{{ formatFileSize(file.size || 0) }}</span>
+                    <div class="dp-file-main">
+                      <div class="dp-file-line">
+                        <a v-if="file.url" :href="file.url" target="_blank" class="dp-file-name">{{ file.filename }}</a>
+                        <span v-else class="dp-file-name">{{ file.filename }}</span>
+                        <span class="dp-file-size">{{ formatFileSize(file.size || 0) }}</span>
+                        <el-tag v-if="isDocumentFile(file.filename)" :type="ingestStatusType(file.ingest_status)" size="small">
+                          {{ ingestStatusText(file.ingest_status) }}
+                        </el-tag>
+                      </div>
+                      <div v-if="file.ingest_result?.brief" class="dp-ingest-brief">
+                        {{ file.ingest_result.brief }}
+                      </div>
+                      <div v-else-if="file.ingest_error" class="dp-ingest-error">
+                        {{ file.ingest_error }}
+                      </div>
+                    </div>
+                    <el-button
+                      v-if="isDocumentFile(file.filename)"
+                      type="primary"
+                      link
+                      size="small"
+                      :loading="ingestLoading[idx]"
+                      @click="triggerPlanFileIngest(idx, file.ingest_status === 'success')"
+                    >
+                      {{ file.ingest_status === 'success' ? '重新解析' : '解析' }}
+                    </el-button>
                     <el-button type="danger" link size="small" @click="removePlanFile(idx)">删除</el-button>
                   </div>
                 </div>
@@ -872,6 +895,7 @@ const onWorkflowTypeChange = () => {
 // AI方案设计
 const designPlan = ref<any>({ content: '', files: [], status: 'draft' })
 const savingPlan = ref(false)
+const ingestLoading = ref<Record<number, boolean>>({})
 const isDesignPlanCompleted = computed(() => designPlan.value.status === 'completed')
 const uploadHeaders = computed(() => {
   const token = localStorage.getItem('token')
@@ -998,6 +1022,21 @@ const loadDesignPlan = async (orderId: string) => {
 }
 
 const isImage = (filename: string) => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(filename || '')
+const isDocumentFile = (filename: string) => /\.(pdf|pptx|txt|md)$/i.test(filename || '')
+
+const ingestStatusText = (status?: string) => ({
+  queued: '等待解析',
+  processing: '解析中',
+  success: '已解析',
+  failed: '解析失败',
+}[status || ''] || '未解析')
+
+const ingestStatusType = (status?: string) => ({
+  queued: 'warning',
+  processing: 'warning',
+  success: 'success',
+  failed: 'danger',
+}[status || ''] || 'info') as '' | 'success' | 'warning' | 'danger' | 'info'
 
 const beforePlanUpload = (file: File) => {
   if (file.size > 50 * 1024 * 1024) {
@@ -1022,6 +1061,33 @@ const handlePlanUploadSuccess = (response: any) => {
 
 const removePlanFile = (idx: number) => {
   designPlan.value.files.splice(idx, 1)
+}
+
+const triggerPlanFileIngest = async (idx: number, force = false) => {
+  if (!order.value) return
+  ingestLoading.value[idx] = true
+  try {
+    await contractorAdminApi.saveDesignPlan(order.value.id, {
+      content: designPlan.value.content,
+      files: designPlan.value.files,
+      status: designPlan.value.status || 'draft',
+    })
+    const res: any = await contractorAdminApi.ingestDesignPlan(order.value.id, {
+      file_index: idx,
+      force,
+    })
+    designPlan.value = res?.designPlan || designPlan.value
+    ElMessage.success('已触发资料解析')
+    setTimeout(async () => {
+      if (order.value) {
+        await loadDesignPlan(order.value.id)
+      }
+      ingestLoading.value[idx] = false
+    }, 8000)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || e?.message || '触发解析失败')
+    ingestLoading.value[idx] = false
+  }
 }
 
 const saveDesignPlan = async (status: string) => {
@@ -1794,11 +1860,19 @@ const handleAdminCancel = async () => {
 .dp-icon { font-size: 20px; }
 .dp-files { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .dp-file-item {
-  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px;
   background: #F9FAFB; border-radius: 6px; border: 1px solid #E5E7EB; font-size: 13px;
 }
-.dp-file-name { flex: 1; color: #409eff; text-decoration: none; &:hover { text-decoration: underline; } }
+.dp-file-main { flex: 1; min-width: 0; }
+.dp-file-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dp-file-name { flex: 1; min-width: 0; color: #409eff; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; &:hover { text-decoration: underline; } }
 .dp-file-size { color: #86868B; font-size: 12px; }
+.dp-ingest-brief {
+  margin-top: 6px; color: #475467; font-size: 12px; line-height: 1.5;
+}
+.dp-ingest-error {
+  margin-top: 6px; color: #D92D20; font-size: 12px; line-height: 1.5;
+}
 .dp-upload { margin-top: 4px; }
 .dp-footer {
   display: flex; justify-content: space-between; align-items: center;
@@ -1914,4 +1988,3 @@ const handleAdminCancel = async () => {
   margin-top: 10px;
 }
 </style>
-

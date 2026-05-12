@@ -1200,6 +1200,11 @@ export const contractorAdminApi = {
     return request.put(`/contractor-admin/orders/${orderId}/design-plan`, data)
   },
 
+  // 触发设计方案附件 ingest
+  async ingestDesignPlan(orderId: string, data: { file_index?: number; force?: boolean }): Promise<any> {
+    return request.post(`/contractor-admin/orders/${orderId}/design-plan/ingest`, data)
+  },
+
   // 获取派单交付物列表
   async getAssignmentDeliverables(assignmentId: string): Promise<any[]> {
     return request.get(`/contractor-admin/assignments/${assignmentId}/deliverables`)

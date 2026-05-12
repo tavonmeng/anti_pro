@@ -161,6 +161,12 @@ async def submit_enterprise_auth(
     
     await db.commit()
     await db.refresh(current_user)
+
+    try:
+        from app.services.company_profile_service import attach_matching_profile_to_user
+        await attach_matching_profile_to_user(current_user.id, enterprise_name)
+    except Exception as e:
+        print(f"[Enterprise] 公司资料匹配失败（不影响认证提交）: {e}")
     
     # 获取所有管理员，发送系统通知
     try:
@@ -247,6 +253,12 @@ async def review_enterprise_auth(
         
         await db.commit()
         await db.refresh(target_user)
+
+        try:
+            from app.services.company_profile_service import attach_matching_profile_to_user
+            await attach_matching_profile_to_user(target_user.id, target_user.enterprise_name)
+        except Exception as e:
+            print(f"[Enterprise] 公司资料匹配失败（不影响认证通过）: {e}")
         
         # 发送通知
         try:

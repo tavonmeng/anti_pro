@@ -7,6 +7,7 @@ from typing import Optional
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
 import secrets
+import asyncio
 
 from app.database import get_db
 from app.models.contractor import Contractor
@@ -19,6 +20,7 @@ from app.schemas.response import ApiResponse
 from app.utils.dependencies import require_admin, AnyUser
 from app.utils.validators import generate_id
 from app.config import settings
+from app.services.document_ingest_service import ingest_design_plan_file, is_ingestable_file
 
 router = APIRouter(prefix="/contractor-admin", tags=["承包商管理（管理端）"])
 
@@ -54,6 +56,11 @@ class DesignPlanUpdate(BaseModel):
     content: Optional[str] = None
     files: Optional[list] = None
     status: Optional[str] = "draft"  # draft | completed
+
+class DesignPlanIngestRequest(BaseModel):
+    """设计方案文件 ingest 请求"""
+    file_index: Optional[int] = None
+    force: bool = False
 
 
 # ========== 邀请链接管理 ==========
@@ -330,6 +337,66 @@ async def save_design_plan(
     
     await db.commit()
     return ApiResponse(code=200, message="保存成功", data=plan)
+
+
+@router.post("/orders/{order_id}/design-plan/ingest")
+async def trigger_design_plan_ingest(
+    order_id: str,
+    data: DesignPlanIngestRequest,
+    current_user: AnyUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """触发 AI 方案设计附件的文档 ingest（PDF/PPTX/TXT/MD）。"""
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+
+    plan = order.design_plan or {}
+    files = plan.get("files") or []
+    if not files:
+        raise HTTPException(status_code=400, detail="该方案暂无可解析文件")
+
+    if data.file_index is not None:
+        if data.file_index < 0 or data.file_index >= len(files):
+            raise HTTPException(status_code=400, detail="文件索引无效")
+        target_indexes = [data.file_index]
+    else:
+        target_indexes = list(range(len(files)))
+
+    queued_indexes = []
+    now = datetime.now(timezone.utc).isoformat()
+    for index in target_indexes:
+        file_info = files[index] or {}
+        if not is_ingestable_file(file_info):
+            continue
+        if file_info.get("ingest_status") == "success" and not data.force:
+            continue
+        file_info["ingest_status"] = "queued"
+        file_info["ingest_error"] = ""
+        file_info["ingest_queued_at"] = now
+        file_info["ingest_model"] = settings.DOCUMENT_INGEST_MODEL_NAME
+        files[index] = file_info
+        queued_indexes.append(index)
+
+    if not queued_indexes:
+        raise HTTPException(status_code=400, detail="没有需要解析的 PDF/PPTX/TXT/MD 文件")
+
+    plan["files"] = files
+    plan["updatedAt"] = now
+    order.design_plan = plan
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(order, "design_plan")
+    await db.commit()
+
+    for index in queued_indexes:
+        asyncio.create_task(ingest_design_plan_file(order_id, index, force=data.force))
+
+    return ApiResponse(
+        code=200,
+        message="已触发资料解析",
+        data={"queuedIndexes": queued_indexes, "designPlan": plan}
+    )
 
 
 # ========== 派单管理 ==========
@@ -1021,4 +1088,3 @@ async def add_admin_comment(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

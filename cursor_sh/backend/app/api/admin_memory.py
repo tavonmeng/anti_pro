@@ -3,11 +3,15 @@
 管理员可以：查看用户 Memory、手动触发爬取、编辑备忘录、查看客户列表
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
+from datetime import datetime, timezone
+import asyncio
+import os
+import uuid
 
 from app.database import get_db
 from app.models.user import User, UserRole
@@ -15,6 +19,18 @@ from app.models.order import Order
 from app.models.user_memory import UserMemory
 from app.utils.dependencies import require_admin
 from app.services import memory_service
+from app.services.company_profile_service import (
+    attach_company_profile_to_user_by_key,
+    create_company_library_document,
+    create_company_profile_ingest_job,
+    get_company_library_document,
+    get_company_profile_by_key,
+    list_company_library_documents,
+    list_company_profile_ingest_jobs,
+    list_company_profiles,
+    update_company_profile,
+)
+from app.services.company_library_storage import sign_company_library_asset, store_company_library_asset
 
 router = APIRouter(prefix="/admin/memory", tags=["管理员 — 用户画像"])
 
@@ -87,8 +103,10 @@ async def get_customer_list(
     memory_map = {}
     for m in memory_result.all():
         ci = m[1] or {}
+        docs = ci.get("customer_documents") or []
+        has_document_profile = any(d.get("ingest_status") == "success" for d in docs)
         memory_map[m[0]] = {
-            "hasCrawl": ci.get("crawl_status") == "success",
+            "hasCrawl": ci.get("crawl_status") == "success" or has_document_profile,
             "crawlStatus": ci.get("crawl_status", ""),
             "updatedAt": m[2].isoformat() if m[2] else None,
         }
@@ -129,6 +147,238 @@ class UpdateNotesRequest(BaseModel):
 
 class TriggerCrawlRequest(BaseModel):
     company_name: str = ""   # 可选，为空时自动从用户记录获取
+
+
+class UpdateCompanyProfileRequest(BaseModel):
+    company_name: Optional[str] = None
+    profile_data: Optional[dict] = None
+    screen_resources: Optional[list] = None
+    notes: Optional[str] = None
+
+
+class AttachCompanyProfileRequest(BaseModel):
+    user_id: str
+
+
+@router.get("/company-profiles")
+async def get_company_profiles(
+    current_admin=Depends(require_admin),
+):
+    """获取已 ingest 的公司资料库列表。"""
+    profiles = await list_company_profiles(limit=100)
+    items = []
+    for p in profiles:
+        items.append({
+            "id": p.id,
+            "company_key": p.company_key,
+            "company_name": p.company_name,
+            "brief": (p.profile_data or {}).get("brief", ""),
+            "document_count": len(p.documents or []),
+            "screen_count": len(p.screen_resources or []),
+            "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+        })
+    return {"code": 200, "data": items}
+
+
+def _serialize_company_profile(profile):
+    documents = []
+    for doc in profile.documents or []:
+        item = dict(doc or {})
+        assets = item.get("assets") or {}
+        item["assets"] = {
+            "raw_file": sign_company_library_asset(assets.get("raw_file")),
+            "extracted_text": sign_company_library_asset(assets.get("extracted_text")),
+            "structured_memory": sign_company_library_asset(assets.get("structured_memory")),
+        }
+        documents.append(item)
+    return {
+        "id": profile.id,
+        "company_key": profile.company_key,
+        "company_name": profile.company_name,
+        "profile_data": profile.profile_data or {},
+        "screen_resources": profile.screen_resources or [],
+        "documents": documents,
+        "notes": profile.notes or "",
+        "created_at": profile.created_at.isoformat() if profile.created_at else None,
+        "updated_at": profile.updated_at.isoformat() if profile.updated_at else None,
+    }
+
+
+def _serialize_company_library_document(document):
+    return {
+        "id": document.id,
+        "filename": document.filename,
+        "source": document.source,
+        "status": document.status,
+        "error": document.error or "",
+        "company_key": document.company_key or "",
+        "company_name": document.company_name or "",
+        "file_size": document.file_size or "",
+        "mime_type": document.mime_type or "",
+        "page_count": document.page_count or "",
+        "text_chars": document.text_chars or "",
+        "raw_file": sign_company_library_asset(document.raw_file or {}),
+        "extracted_text": sign_company_library_asset(document.extracted_text or {}),
+        "structured_memory": sign_company_library_asset(document.structured_memory or {}),
+        "text_preview": document.text_preview or "",
+        "notes": document.notes or "",
+        "created_at": document.created_at.isoformat() if document.created_at else None,
+        "updated_at": document.updated_at.isoformat() if document.updated_at else None,
+    }
+
+
+@router.get("/company-library/documents")
+async def get_company_library_documents(
+    current_admin=Depends(require_admin),
+):
+    """获取公司资料库中的原始资料、解析文本、结构化 memory 资产。"""
+    documents = await list_company_library_documents(limit=100)
+    return {"code": 200, "data": [_serialize_company_library_document(item) for item in documents]}
+
+
+@router.get("/company-library/documents/{document_id}")
+async def get_company_library_document_detail(
+    document_id: str,
+    current_admin=Depends(require_admin),
+):
+    document = await get_company_library_document(document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="公司资料不存在")
+    return {"code": 200, "data": _serialize_company_library_document(document)}
+
+
+@router.get("/company-profiles/ingest-jobs")
+async def get_company_profile_ingest_jobs(
+    current_admin=Depends(require_admin),
+):
+    """获取最近的公司资料 ingest 任务。"""
+    jobs = await list_company_profile_ingest_jobs(limit=20)
+    items = []
+    for job in jobs:
+        items.append({
+            "id": job.id,
+            "filename": job.filename,
+            "status": job.status,
+            "error": job.error or "",
+            "company_key": job.company_key or "",
+            "company_name": job.company_name or "",
+            "file_size": job.file_size or "",
+            "mime_type": job.mime_type or "",
+            "page_count": job.page_count or "",
+            "text_chars": job.text_chars or "",
+            "result": job.result or {},
+            "queued_at": job.queued_at.isoformat() if job.queued_at else None,
+            "started_at": job.started_at.isoformat() if job.started_at else None,
+            "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+            "created_at": job.created_at.isoformat() if job.created_at else None,
+            "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+        })
+    return {"code": 200, "data": items}
+
+
+@router.get("/company-profiles/{company_key}")
+async def get_company_profile_detail(
+    company_key: str,
+    current_admin=Depends(require_admin),
+):
+    """获取某个公司资料库画像详情。"""
+    profile = await get_company_profile_by_key(company_key)
+    if not profile:
+        raise HTTPException(status_code=404, detail="公司资料不存在")
+
+    return {"code": 200, "data": _serialize_company_profile(profile)}
+
+
+@router.put("/company-profiles/{company_key}")
+async def update_company_profile_detail(
+    company_key: str,
+    request: UpdateCompanyProfileRequest,
+    current_admin=Depends(require_admin),
+):
+    """管理员编辑已解析的公司资料和备注。"""
+    updates = request.model_dump(exclude_unset=True)
+    profile = await update_company_profile(company_key, updates)
+    if not profile:
+        raise HTTPException(status_code=404, detail="公司资料不存在")
+    return {"code": 200, "data": _serialize_company_profile(profile), "message": "公司资料已更新"}
+
+
+@router.post("/company-profiles/{company_key}/attach-user")
+async def attach_company_profile_to_registered_user(
+    company_key: str,
+    request: AttachCompanyProfileRequest,
+    current_admin=Depends(require_admin),
+):
+    """管理员手动把公司资料关联到某个已注册用户。"""
+    ok, message = await attach_company_profile_to_user_by_key(company_key, request.user_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail=message)
+    profile = await get_company_profile_by_key(company_key)
+    return {"code": 200, "data": _serialize_company_profile(profile), "message": message}
+
+
+@router.post("/company-profiles/ingest")
+async def upload_company_profile_document(
+    file: UploadFile = File(...),
+    current_admin=Depends(require_admin),
+):
+    """管理员全局上传公司资料，自动识别公司名并归档。
+
+    不要求客户已注册。客户注册/填写公司名后会按公司名匹配到 Agent Memory。
+    """
+    filename = file.filename or "company_document"
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in {".pdf", ".pptx", ".txt", ".md"}:
+        raise HTTPException(status_code=400, detail="仅支持 PDF/PPTX/TXT/MD 公司资料")
+
+    contents = await file.read()
+    if len(contents) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="文件大小不能超过50MB")
+
+    document_id = str(uuid.uuid4())
+    raw_file = store_company_library_asset(
+        document_id=document_id,
+        stage="raw",
+        filename=filename,
+        data=contents,
+        content_type=file.content_type or "application/octet-stream",
+    )
+    await create_company_library_document(
+        document_id=document_id,
+        filename=filename,
+        file_size=len(contents),
+        mime_type=file.content_type or "",
+        raw_file=raw_file,
+    )
+    await create_company_profile_ingest_job(
+        document_id=document_id,
+        filename=filename,
+        file_size=len(contents),
+        mime_type=file.content_type or "",
+        result={"stage": "queued", "raw_file": raw_file},
+    )
+
+    from app.services.document_ingest_service import ingest_company_document_job
+
+    asyncio.create_task(
+        ingest_company_document_job(
+            document_id=document_id,
+            filename=filename,
+            contents=contents,
+            raw_file=raw_file,
+        )
+    )
+
+    return {
+        "code": 200,
+        "data": {
+            "document_id": document_id,
+            "filename": filename,
+            "ingest_status": "queued",
+            "raw_file": sign_company_library_asset(raw_file),
+        },
+        "message": "已上传公司资料并触发后台解析",
+    }
 
 
 async def _get_user_company(user_id: str, db: AsyncSession) -> str:
@@ -191,6 +441,55 @@ async def update_agent_notes(
     return {"code": 200, "data": None, "message": "备忘录已更新"}
 
 
+@router.post("/{user_id}/documents/ingest")
+async def upload_customer_document_for_ingest(
+    user_id: str,
+    file: UploadFile = File(...),
+    current_admin=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """管理员上传客户维度 PDF/PPTX 资料，并触发客户画像 ingest。"""
+    user_result = await db.execute(select(User.id).where(User.id == user_id))
+    if not user_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="客户不存在")
+
+    filename = file.filename or "customer_document"
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in {".pdf", ".pptx", ".txt", ".md"}:
+        raise HTTPException(status_code=400, detail="仅支持 PDF/PPTX/TXT/MD 客户资料")
+
+    contents = await file.read()
+    if len(contents) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="文件大小不能超过50MB")
+
+    document_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    await memory_service.get_or_create_memory(user_id, db=db)
+    await memory_service.upsert_customer_document_ingest(user_id, document_id, {
+        "filename": filename,
+        "source": "customer_profile_upload",
+        "size": len(contents),
+        "mime_type": file.content_type or "",
+        "ingest_status": "queued",
+        "ingest_error": "",
+        "ingest_queued_at": now,
+    })
+
+    from app.services.document_ingest_service import ingest_customer_document_bytes
+    asyncio.create_task(ingest_customer_document_bytes(
+        user_id=user_id,
+        document_id=document_id,
+        filename=filename,
+        contents=contents,
+    ))
+
+    return {
+        "code": 200,
+        "data": {"document_id": document_id, "filename": filename, "ingest_status": "queued"},
+        "message": "已上传客户资料并触发解析",
+    }
+
+
 @router.post("/{user_id}/crawl")
 async def trigger_crawl(
     user_id: str,
@@ -228,4 +527,3 @@ async def clear_crawl_cache(
         "screen_resources": [],
     })
     return {"code": 200, "data": None, "message": "爬取缓存已清除"}
-

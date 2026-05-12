@@ -49,7 +49,7 @@
       
       <el-menu-item index="customers">
         <el-icon><UserFilled /></el-icon>
-        <template #title>客户画像</template>
+        <template #title>客户画像管理</template>
       </el-menu-item>
     </template>
     
@@ -281,4 +281,3 @@ const handleLogout = async () => {
   }
 }
 </style>
-

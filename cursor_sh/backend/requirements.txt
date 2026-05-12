@@ -21,6 +21,8 @@ bcrypt<5.0.0
 
 # 文件处理
 aiofiles
+PyMuPDF
+python-pptx
 
 # PDF 生成
 reportlab

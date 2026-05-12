@@ -182,6 +182,12 @@ class Settings(BaseSettings):
     AI_CRAWL_MAX_CONCURRENT: int = 1
     AI_CRAWL_PENDING_TTL_SECONDS: int = 1800
     STARTUP_DB_LOCK_TIMEOUT: int = 60
+
+    # 管理员上传文档 ingest 专用配置（默认走阿里云百炼 OpenAI 兼容接口）
+    DOCUMENT_INGEST_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    DOCUMENT_INGEST_MODEL_NAME: str = "qwen3.6-max-preview"
+    DOCUMENT_INGEST_MAX_CHARS: int = 180000
+    DOCUMENT_INGEST_HTTP_TIMEOUT: int = 600
     
     # 部署模式：all = 全量（开发用）, external = 用户端, internal = 内部系统
     DEPLOYMENT_MODE: str = "all"

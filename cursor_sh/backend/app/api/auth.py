@@ -153,6 +153,13 @@ async def update_profile_api(
             
         await db.commit()
         await db.refresh(current_user)
+
+        if profile_data.company:
+            try:
+                from app.services.company_profile_service import attach_matching_profile_to_user
+                await attach_matching_profile_to_user(current_user.id, profile_data.company)
+            except Exception as e:
+                print(f"[Auth] 公司资料匹配失败（不影响资料更新）: {e}")
         
         role_value = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
         
