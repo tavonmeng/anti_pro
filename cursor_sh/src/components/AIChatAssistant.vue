@@ -12,19 +12,11 @@
         <div class="header-center">
           <div class="header-search">
             <el-icon class="search-icon"><Search /></el-icon>
-            <input type="text" v-model="searchQuery" placeholder="搜索当前聊天与历史记录..." class="search-input" @input="onSearchInput" />
+            <input type="text" v-model="searchQuery" placeholder="搜索当前聊天..." class="search-input" @input="onSearchInput" />
           </div>
         </div>
 
         <div class="header-right">
-          <button
-            class="icon-toggle history-btn"
-            :class="{ active: showHistory }"
-            title="历史聊天"
-            @click="toggleHistory"
-          >
-            <el-icon><Clock /></el-icon>
-          </button>
           <button class="icon-toggle" title="Help"><el-icon><QuestionFilled /></el-icon></button>
           <button class="new-session-btn" @click="startNewSession">New Session</button>
           <button class="icon-toggle collapse-btn" @click="collapse"><el-icon><Close /></el-icon></button>
@@ -35,58 +27,6 @@
 
       <div class="chat-content" ref="chatContentRef">
         <div class="messages-container" ref="messagesContainer">
-          <!-- 历史聊天记录（内联下压式，保存多条，无卡片底色） -->
-          <transition name="collapse-history">
-            <div v-if="showHistory" class="history-inline">
-              <div v-if="!displayedHistories || displayedHistories.length === 0" class="history-empty">
-                <el-icon><Clock /></el-icon>
-                <span>{{ searchQuery ? '未找到相关历史记录' : '暂无历史记录' }}</span>
-              </div>
-              <template v-else>
-                <div v-for="(history, hIndex) in displayedHistories" :key="history.id || hIndex" class="history-session-item">
-                  <div class="history-header">
-                    <div class="history-title-group">
-                      <el-icon class="history-icon"><Clock /></el-icon>
-                      <span class="history-time">{{ history.savedAt }} 的对话记录</span>
-                    </div>
-                  </div>
-                  
-                  <div class="history-preview-chat">
-                    <div
-                      v-for="(msg, i) in (expandedHistories[history.id] ? history.messages : history.messages.slice(0, 3))"
-                      :key="i"
-                      :class="['preview-msg', msg.role]"
-                    >
-                      <div class="preview-avatar">{{ msg.role === 'user' ? 'U' : 'AI' }}</div>
-                      <div class="preview-bubble">{{ (!expandedHistories[history.id] && msg.content.length > 80) ? msg.content.slice(0, 80) + '...' : msg.content }}</div>
-                    </div>
-                    <div v-if="history.messages.length > 3" class="history-more-indicator" @click="toggleExpandHistory(history.id)">
-                      <template v-if="!expandedHistories[history.id]">
-                        <div class="more-dots">
-                          <span></span><span></span><span></span>
-                        </div>
-                        <span class="more-text">点击展开剩余 {{ history.messages.length - 3 }} 条</span>
-                      </template>
-                      <template v-else>
-                        <el-icon class="collapse-icon"><ArrowUp /></el-icon>
-                        <span class="more-text">收起内容</span>
-                      </template>
-                    </div>
-                  </div>
-                  
-                  <div class="history-actions-bottom-right">
-                    <button class="history-clear-btn-icon" @click="deleteHistory(history.id)" title="删除记录">
-                      <el-icon><Delete /></el-icon>
-                    </button>
-                    <button class="stitch-primary-btn history-restore-btn-new" @click="restoreHistory(history)">接着上回聊</button>
-                  </div>
-                  
-                  <div class="session-divider" v-if="hIndex < savedHistories.length - 1"></div>
-                </div>
-              </template>
-              <div class="history-master-divider" v-if="displayedHistories && displayedHistories.length > 0"></div>
-            </div>
-          </transition>
           <!-- Welcome + Quick Actions -->
           <div v-if="!selectedMode" class="welcome-section message assistant">
             <div class="assistant-wrapper">
@@ -130,12 +70,29 @@
                 <div class="user-content-row">
                   <div class="user-col">
                     <span class="user-tag">You</span>
+                    <div v-if="isInlineEditingMessage(msg)" class="inline-message-edit">
+                      <textarea
+                        :ref="setInlineEditTextareaRef"
+                        v-model="inlineEditText"
+                        class="inline-message-edit-textarea"
+                        placeholder="编辑这条消息..."
+                        rows="1"
+                        @input="adjustInlineEditHeight"
+                        @keydown.enter="handleInlineEditEnter($event, msg)"
+                        @compositionstart="isComposing = true"
+                        @compositionend="isComposing = false"
+                      ></textarea>
+                      <div class="inline-message-edit-actions">
+                        <button class="inline-edit-btn secondary" @click.stop="cancelInlineEdit">取消</button>
+                        <button class="inline-edit-btn primary" @click.stop="submitInlineEdit(msg)">发送</button>
+                      </div>
+                    </div>
                     <div
-                      v-if="displayUserMessageText(msg.content)"
+                      v-else-if="displayUserMessageText(msg.content)"
                       class="message-bubble user-bubble"
                       v-html="highlightSearch(displayUserMessageText(msg.content))"
                     ></div>
-                    <div v-if="msg.attachments?.length" class="message-attachment-grid">
+                    <div v-if="!isInlineEditingMessage(msg) && msg.attachments?.length" class="message-attachment-grid">
                       <div
                         v-for="file in msg.attachments"
                         :key="file.objectKey || file.url || file.name"
@@ -149,11 +106,11 @@
                         </div>
                       </div>
                     </div>
-                    <span class="msg-time" v-if="msg.timestamp">{{ msg.timestamp }}</span>
-                    <div v-if="canModifyLastUserMessage(msg)" class="user-message-actions">
-                      <button class="msg-action-btn" @click.stop="editLastUserMessage(msg)">编辑</button>
+                    <div v-if="canModifyLastUserMessage(msg) && !isInlineEditingMessage(msg)" class="user-message-actions">
+                      <button class="msg-action-btn" @click.stop="startInlineEdit(msg)">编辑</button>
                       <button class="msg-action-btn danger" @click.stop="revokeLastUserMessage(msg)">撤回</button>
                     </div>
+                    <span class="msg-time" v-if="!isInlineEditingMessage(msg) && msg.timestamp">{{ msg.timestamp }}</span>
                   </div>
                   <div class="user-avatar">t</div>
                 </div>
@@ -444,11 +401,19 @@
 import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Clock, Delete, ArrowUp, Loading, Plus, Check } from '@element-plus/icons-vue'
+import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Loading, Plus, Check } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
+import { useUiStore } from '@/stores/ui'
 import { logger } from '@/utils/logger'
 import { chatHistoryApi, orderApi } from '@/utils/api'
+import {
+  deleteAiChatSession,
+  loadAiChatSessions,
+  makeAiChatSessionTitle,
+  upsertAiChatSession,
+  type AiChatSavedSession,
+} from '@/utils/aiChatSessions'
 import { getLatestEnterpriseStatus } from '@/utils/enterpriseGuard'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 
@@ -461,6 +426,7 @@ const router = useRouter()
 const route = useRoute()
 const orderStore = useOrderStore()
 const authStore = useAuthStore()
+const uiStore = useUiStore()
 
 const searchQuery = ref('')
 
@@ -707,12 +673,7 @@ const drawWaveform = () => {
 
 
 
-const onSearchInput = () => {
-  if (searchQuery.value && !showHistory.value) {
-    showHistory.value = true
-    loadSavedHistory()
-  }
-}
+const onSearchInput = () => {}
 
 // auth header helper
 const getAuthHeaders = () => {
@@ -771,6 +732,10 @@ const confirmOrderType = ref<OrderType>('ai_3d_custom')
 const orderSubmitCompleted = ref(false)
 
 type ConversationStateSnapshot = {
+  agentKey?: string
+  agentLabel?: string
+  sessionType?: string
+  agentMode?: string
   selectedMode: string | null
   businessType: string
   inlineFormData: Record<string, string> | null
@@ -778,7 +743,10 @@ type ConversationStateSnapshot = {
   showConfirmation: boolean
   confirmOrderNumber: string
   confirmOrderType: OrderType
-  submittedFilesLength: number
+  submittedFilesLength?: number
+  submittedFiles?: UploadedFile[]
+  uploadedFiles?: UploadedFile[]
+  inputMsg?: string
   orderSubmitCompleted: boolean
   routeFullPath: string
 }
@@ -923,7 +891,7 @@ const _mediaFormFields = [
   { key: 'tech_delivery', label: '技术需求', placeholder: '分辨率、格式、帧率、色彩空间等', multiline: false },
   { key: 'content_review', label: '素材审核规范 & 周期', placeholder: '审核要求、周期、规避内容等', multiline: true },
   { key: 'timing_number', label: '投放时长 & 数量', placeholder: '选填，几支内容、每支多少秒', multiline: false },
-  { key: 'budget', label: '项目制作预算', placeholder: '选填，预算范围', multiline: false },
+  { key: 'budget', label: '项目制作预算', placeholder: '选填，预算范围或待定', multiline: false },
   { key: 'online_time', label: '预计上刊时间', placeholder: '以最迟提交报审时间为准', multiline: false },
   { key: 'project_name', label: '项目名称', placeholder: '系统将根据点位、屏幕和核心概念自动生成，可修改', multiline: false },
   { key: 'media_positioning', label: '媒体定位 & 品牌调性', placeholder: '选填，适配的品牌类型', multiline: false },
@@ -945,6 +913,9 @@ const session_id = ref(createSessionId())
 const createMessageId = (role: string) => `${session_id.value}_${role}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 const chatContentRef = ref<any>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const inlineEditTextareaRef = ref<HTMLTextAreaElement | null>(null)
+const inlineEditingKey = ref('')
+const inlineEditText = ref('')
 const isComposing = ref(false) // 中文输入法组合输入状态
 
 const adjustTextareaHeight = () => {
@@ -952,6 +923,17 @@ const adjustTextareaHeight = () => {
   if (!ta) return
   ta.style.height = 'auto'
   ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
+}
+
+const adjustInlineEditHeight = () => {
+  const ta = inlineEditTextareaRef.value
+  if (!ta) return
+  ta.style.height = 'auto'
+  ta.style.height = Math.min(ta.scrollHeight, 220) + 'px'
+}
+
+const setInlineEditTextareaRef = (el: Element | null) => {
+  inlineEditTextareaRef.value = el as HTMLTextAreaElement | null
 }
 
 /** 处理 Enter 键：IME 组合输入期间不发送消息 */
@@ -1013,29 +995,28 @@ const collapse = () => {
 }
 
 const startNewSession = () => {
-  // 如果当前已有对话，保存并将顶部历史面板展开，形成"旧对话被折叠顶上去"的视觉效果
-  if (messages.value.length > 0) {
-    saveCurrentToHistory()
-    loadSavedHistory()
-    showHistory.value = true
-  } else {
-    // 如果当前已经是空白对话，说明用户是单纯想退出历史面板，直接关闭即可
-    showHistory.value = false
-  }
-  
+  saveCurrentToHistory({ force: true })
+  clearInlineEdit()
   messages.value = []
   selectedMode.value = null
+  businessType.value = 'ai_3d_custom'
+  inlineFormData.value = null
+  draftSavedOrderId.value = null
+  showConfirmation.value = false
+  confirmOrderNumber.value = ''
+  confirmOrderType.value = 'ai_3d_custom'
+  orderSubmitCompleted.value = false
+  uploadedFiles.value = []
+  submittedFiles.value = []
+  inputMsg.value = ''
   session_id.value = createSessionId()
+  uiStore.setActiveAIChatSession(session_id.value)
   playWelcomeAnimation()
 }
 
 // --- 历史聊天记录 ---
 // 使用用户 ID 隔离存储，防止不同用户看到彼此的聊天记录
-const getHistoryKey = () => {
-  const userId = authStore.user?.id || 'anonymous'
-  return `ai_chat_session_${userId}`
-}
-const showHistory = ref(false)
+const getCurrentUserId = () => authStore.user?.id || 'anonymous'
 
 const displayedMessages = computed(() => {
   if (!searchQuery.value.trim()) return messages.value
@@ -1048,49 +1029,65 @@ const displayedMessages = computed(() => {
   })
 })
 
-interface SavedSession {
-  id: string
-  messages: any[]
-  mode: string | null
-  savedAt: string
+type SavedSession = AiChatSavedSession
+
+const agentRegistry: Record<string, { label: string; sessionType: string; selectedMode: string | null; businessType?: string }> = {
+  general: { label: '通用问答', sessionType: 'general', selectedMode: null },
+  business_intro: { label: '业务介绍', sessionType: 'business_intro', selectedMode: 'business_intro' },
+  case_intro: { label: '案例介绍', sessionType: 'case_intro', selectedMode: 'business_intro' },
+  order_query: { label: '订单查询', sessionType: 'order_query', selectedMode: 'order_query' },
+  requirement_ai_3d_custom: { label: 'AI裸眼3D内容定制', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'ai_3d_custom' },
+  requirement_video_purchase: { label: '裸眼3D成片购买', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'video_purchase' },
+  requirement_digital_art: { label: '数字艺术内容定制', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'digital_art' },
 }
 
 const savedHistories = ref<SavedSession[]>([])
-const expandedHistories = ref<Record<string, boolean>>({})
-const getSessionSortValue = (id: string) => Number(String(id).split('_')[0]) || 0
 
-const displayedHistories = computed(() => {
-  if (!searchQuery.value.trim()) return savedHistories.value
-  const q = searchQuery.value.toLowerCase()
-  return savedHistories.value.filter(session => {
-    return session.messages.some(m => m.content && m.content.toLowerCase().includes(q))
+const ensureMessageClientIds = (items: any[] = messages.value) => {
+  items.forEach((m: any) => {
+    if ((m?.role === 'user' || m?.role === 'assistant') && !m.client_message_id) {
+      m.client_message_id = createMessageId(m.role)
+    }
   })
-})
+}
 
-const toggleExpandHistory = (id: string) => {
-  expandedHistories.value[id] = !expandedHistories.value[id]
+const getCurrentAgentKey = () => {
+  if (selectedMode.value === 'order_create') {
+    return `requirement_${businessType.value || 'ai_3d_custom'}`
+  }
+  if (selectedMode.value === 'order_query') return 'order_query'
+  if (selectedMode.value === 'business_intro') {
+    const hasCaseContext = messages.value.some(m => m?.isCaseList || m?.isCaseDetour || /案例|作品|过往项目/.test(m?.content || ''))
+    return hasCaseContext ? 'case_intro' : 'business_intro'
+  }
+  return 'general'
+}
+
+const getAgentMeta = (agentKey = getCurrentAgentKey()) => {
+  return agentRegistry[agentKey] || {
+    label: agentKey,
+    sessionType: 'general',
+    selectedMode: null,
+  }
 }
 
 const loadSavedHistory = () => {
-  try {
-    const raw = localStorage.getItem(getHistoryKey())
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      let parsedArr = Array.isArray(parsed) ? parsed : [parsed]
-      // 按照 ID（时间戳）升序排列，最新的记录在最下方（靠近输入框）
-      parsedArr.sort((a, b) => getSessionSortValue(a.id) - getSessionSortValue(b.id))
-      savedHistories.value = parsedArr
-    }
-  } catch {
-    savedHistories.value = []
-  }
+  savedHistories.value = loadAiChatSessions(getCurrentUserId())
 }
 
 onMounted(() => {
   playWelcomeAnimation()
   loadSavedHistory()
+  uiStore.setActiveAIChatSession(session_id.value)
+  if (uiStore.pendingAIChatSessionId) {
+    void restoreHistoryById(uiStore.pendingAIChatSessionId)
+  }
   // 监听浏览器关闭/刷新事件，确保保存聊天记录
   window.addEventListener('beforeunload', _handleBeforeUnload)
+})
+
+watch(() => uiStore.pendingAIChatSessionId, (sessionId) => {
+  if (sessionId) void restoreHistoryById(sessionId)
 })
 
 // ── 自动保存聊天记录：确保任何退出方式都会保存 ──
@@ -1115,18 +1112,39 @@ onBeforeRouteLeave(() => {
 
 let _lastSaveTimestamp = 0
 
-const saveCurrentToHistory = () => {
-  if (messages.value.length === 0) return
-  
+const hasCurrentSessionContent = () => {
+  return messages.value.length > 0
+    || Boolean(inputMsg.value.trim())
+    || uploadedFiles.value.length > 0
+    || submittedFiles.value.length > 0
+    || Boolean(inlineFormData.value)
+}
+
+const saveCurrentToHistory = (options: { force?: boolean; syncBackend?: boolean } = {}) => {
+  if (!hasCurrentSessionContent()) return
+  ensureMessageClientIds()
+
   // 防抖：同一秒内不重复保存（避免 collapse + onBeforeUnmount 双重触发）
   const now = Date.now()
-  if (now - _lastSaveTimestamp < 1000) return
+  if (!options.force && now - _lastSaveTimestamp < 1000) return
   _lastSaveTimestamp = now
+
+  const agentKey = getCurrentAgentKey()
+  const agentMeta = getAgentMeta(agentKey)
   
   const session: SavedSession = {
     id: session_id.value,
-    messages: [...messages.value],
+    title: makeAiChatSessionTitle(messages.value),
+    messages: clonePlain(messages.value),
     mode: selectedMode.value,
+    agentKey,
+    agentLabel: agentMeta.label,
+    sessionType: agentMeta.sessionType,
+    businessType: businessType.value,
+    agentMode,
+    routeFullPath: route.fullPath,
+    stateSnapshot: captureConversationState(),
+    updatedAt: now,
     savedAt: new Date().toLocaleString('zh-CN', {
       timeZone: 'Asia/Shanghai',
       month: '2-digit',
@@ -1137,32 +1155,14 @@ const saveCurrentToHistory = () => {
     })
   }
 
-  let histories: SavedSession[] = []
-  try {
-    const raw = localStorage.getItem(getHistoryKey())
-    if (raw) {
-       const parsed = JSON.parse(raw)
-       histories = Array.isArray(parsed) ? parsed : [parsed]
-    }
-  } catch(e) {}
-  
-  const existingIndex = histories.findIndex(h => h.id === session.id)
-  if (existingIndex >= 0) {
-    histories[existingIndex] = session
-  } else {
-    histories.push(session)
-  }
-  // 按时间升序排序（最新的在最下方，靠近输入框）
-  histories.sort((a, b) => getSessionSortValue(a.id) - getSessionSortValue(b.id))
-  
-  // 如果超过 5 条，保留最新的 5 条
-  if (histories.length > 5) histories = histories.slice(-5)
-  
-  localStorage.setItem(getHistoryKey(), JSON.stringify(histories))
-  savedHistories.value = histories
+  savedHistories.value = upsertAiChatSession(getCurrentUserId(), session)
+  uiStore.setActiveAIChatSession(session.id)
+  uiStore.markAIChatHistoryChanged()
 
   // 同步到后端数据库（静默，不阻断前端流程）
-  _syncToBackend(session)
+  if (options.syncBackend !== false) {
+    _syncToBackend(session)
+  }
 }
 
 /** 将会话同步到后端数据库（异步静默） */
@@ -1184,8 +1184,8 @@ const _syncToBackend = async (session: SavedSession, replace = false) => {
 
     await chatHistoryApi.syncSession({
       session_id: session.id || session_id.value,
-      business_type: businessType.value,
-      session_type: 'requirement',
+      business_type: session.businessType || businessType.value,
+      session_type: session.sessionType || 'requirement',
       messages: msgs,
       replace,
     })
@@ -1199,10 +1199,18 @@ let _lastBackendSyncSignature = ''
 
 /** 将当前会话按稳定 session_id 同步到后端，供管理员实时查看。 */
 const syncCurrentConversationToBackend = async () => {
+  ensureMessageClientIds()
   const session: SavedSession = {
     id: session_id.value,
-    messages: [...messages.value],
+    messages: clonePlain(messages.value),
     mode: selectedMode.value,
+    agentKey: getCurrentAgentKey(),
+    agentLabel: getAgentMeta().label,
+    sessionType: getAgentMeta().sessionType,
+    businessType: businessType.value,
+    agentMode,
+    routeFullPath: route.fullPath,
+    stateSnapshot: captureConversationState(),
     savedAt: new Date().toLocaleString('zh-CN', {
       timeZone: 'Asia/Shanghai',
       month: '2-digit',
@@ -1229,35 +1237,39 @@ const syncCurrentConversationToBackend = async () => {
   if (signature === _lastBackendSyncSignature) return
   _lastBackendSyncSignature = signature
 
+  saveCurrentToHistory({ force: true, syncBackend: false })
   await _syncToBackend(session)
 }
 
-const buildCurrentSavedSession = (): SavedSession => ({
-  id: session_id.value,
-  messages: [...messages.value],
-  mode: selectedMode.value,
-  savedAt: new Date().toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
-})
+const buildCurrentSavedSession = (): SavedSession => {
+  ensureMessageClientIds()
+  return {
+    id: session_id.value,
+    title: makeAiChatSessionTitle(messages.value),
+    messages: clonePlain(messages.value),
+    mode: selectedMode.value,
+    agentKey: getCurrentAgentKey(),
+    agentLabel: getAgentMeta().label,
+    sessionType: getAgentMeta().sessionType,
+    businessType: businessType.value,
+    agentMode,
+    routeFullPath: route.fullPath,
+    stateSnapshot: captureConversationState(),
+    updatedAt: Date.now(),
+    savedAt: new Date().toLocaleString('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    })
+  }
+}
 
 const removeCurrentSessionFromLocalHistory = () => {
-  try {
-    const raw = localStorage.getItem(getHistoryKey())
-    if (!raw) return
-    const parsed = JSON.parse(raw)
-    let histories: SavedSession[] = Array.isArray(parsed) ? parsed : [parsed]
-    histories = histories.filter(h => h.id !== session_id.value)
-    localStorage.setItem(getHistoryKey(), JSON.stringify(histories))
-    savedHistories.value = histories
-  } catch {
-    savedHistories.value = []
-  }
+  savedHistories.value = deleteAiChatSession(getCurrentUserId(), session_id.value)
+  uiStore.markAIChatHistoryChanged()
 }
 
 const syncConversationReplace = async () => {
@@ -1267,7 +1279,7 @@ const syncConversationReplace = async () => {
     removeCurrentSessionFromLocalHistory()
   } else {
     _lastSaveTimestamp = 0
-    saveCurrentToHistory()
+    saveCurrentToHistory({ force: true })
   }
   await _syncToBackend(session, true)
 }
@@ -1286,7 +1298,26 @@ const hasUploadedFileSummary = (msg: any) => {
   return /\[已上传/.test(msg?.content || '')
 }
 
+const getMessageEditKey = (msg: any) => {
+  return msg?.client_message_id || `${msg?.timestamp || ''}:${msg?.content || ''}`
+}
+
+const isInlineEditingMessage = (msg: any) => {
+  return Boolean(inlineEditingKey.value && inlineEditingKey.value === getMessageEditKey(msg))
+}
+
+const clearInlineEdit = () => {
+  inlineEditingKey.value = ''
+  inlineEditText.value = ''
+  inlineEditTextareaRef.value = null
+  isComposing.value = false
+}
+
 const captureConversationState = (): ConversationStateSnapshot => ({
+  agentKey: getCurrentAgentKey(),
+  agentLabel: getAgentMeta().label,
+  sessionType: getAgentMeta().sessionType,
+  agentMode,
   selectedMode: selectedMode.value,
   businessType: businessType.value,
   inlineFormData: inlineFormData.value ? clonePlain(inlineFormData.value) : null,
@@ -1295,6 +1326,9 @@ const captureConversationState = (): ConversationStateSnapshot => ({
   confirmOrderNumber: confirmOrderNumber.value,
   confirmOrderType: confirmOrderType.value,
   submittedFilesLength: submittedFiles.value.length,
+  submittedFiles: clonePlain(submittedFiles.value),
+  uploadedFiles: clonePlain(uploadedFiles.value),
+  inputMsg: inputMsg.value,
   orderSubmitCompleted: orderSubmitCompleted.value,
   routeFullPath: route.fullPath,
 })
@@ -1310,6 +1344,7 @@ const cancelGeneratedDraftIfNeeded = async (snapshot?: ConversationStateSnapshot
 }
 
 const restoreConversationState = async (snapshot?: ConversationStateSnapshot) => {
+  clearInlineEdit()
   await cancelGeneratedDraftIfNeeded(snapshot)
   selectedMode.value = snapshot?.selectedMode ?? null
   businessType.value = snapshot?.businessType || 'ai_3d_custom'
@@ -1319,8 +1354,40 @@ const restoreConversationState = async (snapshot?: ConversationStateSnapshot) =>
   confirmOrderNumber.value = snapshot?.confirmOrderNumber || ''
   confirmOrderType.value = snapshot?.confirmOrderType || 'ai_3d_custom'
   orderSubmitCompleted.value = snapshot?.orderSubmitCompleted ?? false
-  submittedFiles.value = submittedFiles.value.slice(0, snapshot?.submittedFilesLength ?? submittedFiles.value.length)
+  submittedFiles.value = snapshot?.submittedFiles
+    ? clonePlain(snapshot.submittedFiles)
+    : submittedFiles.value.slice(0, snapshot?.submittedFilesLength ?? submittedFiles.value.length)
+  uploadedFiles.value = snapshot?.uploadedFiles ? clonePlain(snapshot.uploadedFiles) : []
+  inputMsg.value = snapshot?.inputMsg || ''
   emit('mode-change', selectedMode.value)
+}
+
+const restoreSavedSessionState = async (session: SavedSession) => {
+  clearInlineEdit()
+  const snapshot = session.stateSnapshot as ConversationStateSnapshot | undefined
+  const agentKey = session.agentKey || snapshot?.agentKey || 'general'
+  const agentMeta = getAgentMeta(agentKey)
+
+  selectedMode.value = snapshot?.selectedMode ?? session.mode ?? agentMeta.selectedMode
+  businessType.value = snapshot?.businessType || session.businessType || agentMeta.businessType || 'ai_3d_custom'
+  inlineFormData.value = snapshot?.inlineFormData ? clonePlain(snapshot.inlineFormData) : null
+  draftSavedOrderId.value = snapshot?.draftSavedOrderId ?? null
+  showConfirmation.value = snapshot?.showConfirmation ?? false
+  confirmOrderNumber.value = snapshot?.confirmOrderNumber || ''
+  confirmOrderType.value = snapshot?.confirmOrderType || (businessType.value as OrderType) || 'ai_3d_custom'
+  orderSubmitCompleted.value = snapshot?.orderSubmitCompleted ?? false
+  submittedFiles.value = snapshot?.submittedFiles ? clonePlain(snapshot.submittedFiles) : []
+  uploadedFiles.value = snapshot?.uploadedFiles ? clonePlain(snapshot.uploadedFiles) : []
+  inputMsg.value = snapshot?.inputMsg || ''
+
+  isLoading.value = false
+  isTyping.value = false
+  extractLoading.value = false
+  isUploadingFiles.value = false
+  failedUploadNames.value = []
+  emit('mode-change', selectedMode.value)
+  await nextTick()
+  adjustTextareaHeight()
 }
 
 const canModifyLastUserMessage = (msg: any) => {
@@ -1344,18 +1411,64 @@ const truncateFromMessage = async (msg: any) => {
 }
 
 const editLastUserMessage = async (msg: any) => {
+  await startInlineEdit(msg)
+}
+
+const startInlineEdit = async (msg: any) => {
   if (hasUploadedFileSummary(msg)) {
     ElMessage.warning('包含上传文件的消息暂不支持编辑')
     return
   }
   if (!canModifyLastUserMessage(msg)) return
-  const content = msg.content || ''
-  if (!(await truncateFromMessage(msg))) return
-  inputMsg.value = content
-  await syncConversationReplace()
+  inlineEditingKey.value = getMessageEditKey(msg)
+  inlineEditText.value = displayUserMessageText(msg.content || '')
   await nextTick()
-  adjustTextareaHeight()
-  textareaRef.value?.focus()
+  adjustInlineEditHeight()
+  const ta = inlineEditTextareaRef.value
+  if (ta) {
+    ta.focus()
+    const end = ta.value.length
+    ta.setSelectionRange(end, end)
+  }
+}
+
+const cancelInlineEdit = () => {
+  clearInlineEdit()
+}
+
+const submitInlineEdit = async (msg: any) => {
+  if (!isInlineEditingMessage(msg)) return
+  if (!canModifyLastUserMessage(msg)) {
+    clearInlineEdit()
+    return
+  }
+
+  const editedText = inlineEditText.value.trim()
+  if (!editedText) {
+    ElMessage.warning('编辑内容不能为空')
+    await nextTick()
+    inlineEditTextareaRef.value?.focus()
+    return
+  }
+
+  if (editedText === displayUserMessageText(msg.content || '').trim()) {
+    clearInlineEdit()
+    return
+  }
+
+  if (!(await truncateFromMessage(msg))) return
+  clearInlineEdit()
+  await syncConversationReplace()
+  inputMsg.value = editedText
+  await nextTick()
+  await sendMessage()
+}
+
+const handleInlineEditEnter = (e: KeyboardEvent, msg: any) => {
+  if (e.shiftKey) return
+  if (e.isComposing || isComposing.value) return
+  e.preventDefault()
+  submitInlineEdit(msg)
 }
 
 const revokeLastUserMessage = async (msg: any) => {
@@ -1365,36 +1478,34 @@ const revokeLastUserMessage = async (msg: any) => {
   }
   if (!canModifyLastUserMessage(msg)) return
   if (!(await truncateFromMessage(msg))) return
+  clearInlineEdit()
   inputMsg.value = ''
   await syncConversationReplace()
   ElMessage.success('已撤回最后一条消息')
 }
 
-const toggleHistory = () => {
-  showHistory.value = !showHistory.value
-  if (showHistory.value) {
-    loadSavedHistory()
+const restoreHistoryById = async (id: string) => {
+  if (!id) return
+  if (id === session_id.value) {
+    uiStore.clearPendingAIChatSession()
+    uiStore.setActiveAIChatSession(id)
+    return
   }
-}
 
-const restoreHistory = (history: SavedSession) => {
-  messages.value = [...history.messages]
-  selectedMode.value = history.mode
-  if (selectedMode.value) {
-    emit('mode-change', selectedMode.value)
+  saveCurrentToHistory({ force: true })
+  loadSavedHistory()
+  const history = savedHistories.value.find(session => session.id === id)
+  if (!history) {
+    uiStore.clearPendingAIChatSession()
+    return
   }
-  showHistory.value = false
+
+  session_id.value = history.id
+  messages.value = clonePlain(history.messages || [])
+  await restoreSavedSessionState(history)
+  uiStore.setActiveAIChatSession(history.id)
+  uiStore.clearPendingAIChatSession()
   scrollToBottom(true) // 恢复历史时瞬间到底，不要用平滑动画，否则容易卡在最上面
-}
-
-const deleteHistory = (id: string) => {
-  const index = savedHistories.value.findIndex(h => h.id === id)
-  if (index === -1) return
-  savedHistories.value.splice(index, 1)
-  localStorage.setItem(getHistoryKey(), JSON.stringify(savedHistories.value))
-  if (savedHistories.value.length === 0) {
-    showHistory.value = false
-  }
 }
 
 const displayContent = (text: string) => {
@@ -1466,6 +1577,7 @@ const typewriterEffect = (fullText: string, onComplete?: () => void | Promise<vo
       
       ;(async () => {
         if (onComplete) await onComplete()
+        saveCurrentToHistory({ force: true, syncBackend: false })
         await syncCurrentConversationToBackend()
       })()
     }
@@ -1701,6 +1813,12 @@ const goToBrowse = (type: string) => {
 
 const sendMessage = async () => {
   if (isLoading.value || isTyping.value) return
+  if (inlineEditingKey.value) {
+    ElMessage.warning('请先完成或取消当前消息编辑')
+    await nextTick()
+    inlineEditTextareaRef.value?.focus()
+    return
+  }
   if (isUploadingFiles.value) {
     ElMessage.warning('文件仍在上传中，请稍候再发送')
     return
@@ -1733,6 +1851,7 @@ const sendMessage = async () => {
     submittedFiles.value.push(...pendingFiles)
     uploadedFiles.value = []
   }
+  saveCurrentToHistory({ force: true, syncBackend: false })
   logger.logAction('AI', 'send_message', { mode: selectedMode.value, textLength: userText.length, fileCount: pendingFiles.length })
   
   if (textareaRef.value) {
@@ -2730,6 +2849,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  position: relative;
 }
 
 .assistant-wrapper {
@@ -2752,6 +2872,19 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   align-items: center;
   gap: 8px;
   margin-top: 6px;
+  min-height: 18px;
+  opacity: 0;
+  transform: translateY(-2px);
+  pointer-events: none;
+  transition: opacity 0.18s ease 0.22s, transform 0.18s ease 0.22s;
+}
+
+.user-col:hover .user-message-actions,
+.user-col:focus-within .user-message-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition-delay: 0s;
 }
 
 .msg-action-btn {
@@ -2771,6 +2904,77 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .msg-action-btn.danger:hover {
   color: #b42318;
+}
+
+.inline-message-edit {
+  width: min(520px, 72vw);
+  min-width: 280px;
+  max-width: 100%;
+  background: #ffffff;
+  border: 1px solid #d8dde6;
+  border-radius: 12px 12px 0 12px;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.08);
+  padding: 10px;
+}
+
+.inline-message-edit-textarea {
+  width: 100%;
+  min-height: 72px;
+  max-height: 220px;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #1a1c1c;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.inline-message-edit-textarea::placeholder {
+  color: #9aa0a6;
+}
+
+.inline-message-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.inline-edit-btn {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  height: 28px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.inline-edit-btn.secondary {
+  background: #f6f7f8;
+  border-color: #e5e7eb;
+  color: #3f4652;
+}
+
+.inline-edit-btn.secondary:hover {
+  background: #eef0f3;
+}
+
+.inline-edit-btn.primary {
+  background: #0d99ff;
+  color: #ffffff;
+}
+
+.inline-edit-btn.primary:hover {
+  background: #087bd3;
 }
 
 .message-attachment-grid {

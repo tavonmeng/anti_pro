@@ -12,6 +12,25 @@
           <div class="ai-mock-btn">发送 ✨</div>
         </div>
       </div>
+
+      <div v-if="recentSessions.length > 0" class="recent-chat-section">
+        <div class="recent-chat-header">
+          <span>最近对话</span>
+          <button v-if="recentSessions.length > 4" class="recent-chat-toggle" @click.stop="showAllChats = !showAllChats">
+            {{ showAllChats ? '收起' : '更多' }}
+          </button>
+        </div>
+        <button
+          v-for="session in visibleRecentSessions"
+          :key="session.id"
+          class="recent-chat-item"
+          :class="{ 'is-active': session.id === uiStore.activeAIChatSessionId }"
+          @click.stop="openChatSession(session.id)"
+        >
+          <span class="recent-chat-title">{{ session.title || '新的对话' }}</span>
+          <span class="recent-chat-meta">{{ session.agentLabel || 'AI 对话' }}</span>
+        </button>
+      </div>
     </div>
 
     <!-- 贯穿首尾的无空隙分割线 -->
@@ -77,22 +96,52 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUiStore } from '@/stores/ui'
-import { ArrowDown, Right } from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
+import { ArrowDown } from '@element-plus/icons-vue'
 import { logger } from '@/utils/logger'
+import { AI_CHAT_HISTORY_EVENT, loadAiChatSessions, type AiChatSavedSession } from '@/utils/aiChatSessions'
 
 const router = useRouter()
 const uiStore = useUiStore()
+const authStore = useAuthStore()
 
 const currentModule = computed(() => uiStore.activeModule)
+const recentSessions = ref<AiChatSavedSession[]>([])
+const showAllChats = ref(false)
+
+const visibleRecentSessions = computed(() => {
+  return showAllChats.value ? recentSessions.value : recentSessions.value.slice(0, 4)
+})
+
+const loadRecentSessions = () => {
+  recentSessions.value = loadAiChatSessions(authStore.user?.id || 'anonymous')
+}
+
+const openChatSession = async (sessionId: string) => {
+  uiStore.requestAIChatSessionRestore(sessionId)
+  await router.push('/user/workspace')
+}
+
+onMounted(() => {
+  loadRecentSessions()
+  window.addEventListener(AI_CHAT_HISTORY_EVENT, loadRecentSessions)
+})
+
+onUnmounted(() => {
+  window.removeEventListener(AI_CHAT_HISTORY_EVENT, loadRecentSessions)
+})
+
+watch(() => uiStore.aiChatHistoryVersion, loadRecentSessions)
+watch(() => authStore.user?.id, loadRecentSessions)
 
 const goToService = async (type: string) => {
   logger.logAction('Workspace', 'sidebar_navigate', { target: type })
   if (type === 'ai_agent') {
     uiStore.setIsAiExpanded(true)
-    uiStore.setSecondarySidebar(false)
+    uiStore.setSecondarySidebar(true)
     await router.push('/user/workspace')
     return
   }
@@ -224,6 +273,95 @@ const goToService = async (type: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.recent-chat-section {
+  margin: 8px 4px 0;
+  padding: 8px 0 4px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.recent-chat-header {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  font-size: 11px;
+  color: #7a808a;
+  font-weight: 500;
+}
+
+.recent-chat-toggle {
+  border: none;
+  background: transparent;
+  color: #0d99ff;
+  font-size: 11px;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.recent-chat-toggle:hover {
+  background: rgba(13, 153, 255, 0.08);
+}
+
+.recent-chat-item {
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  padding: 7px 8px 7px 10px;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  position: relative;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.recent-chat-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 2px;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.recent-chat-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.recent-chat-item.is-active {
+  background: #e5f4ff;
+}
+
+.recent-chat-item.is-active::before {
+  background: #0d99ff;
+}
+
+.recent-chat-title {
+  font-size: 12px;
+  line-height: 16px;
+  color: #25282d;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.recent-chat-meta {
+  font-size: 10px;
+  line-height: 14px;
+  color: #8a9099;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .module-group {

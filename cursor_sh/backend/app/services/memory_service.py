@@ -5,6 +5,7 @@
 
 import uuid
 import asyncio
+import re
 from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,23 @@ from app.config import settings
 _crawl_tasks: set[str] = set()
 _crawl_semaphore: asyncio.Semaphore | None = None
 _background_semaphore: asyncio.Semaphore | None = None
+
+_AGENT_NOTE_PRIORITY_KEYWORDS = (
+    "注意", "禁忌", "避免", "不要", "必须", "偏好", "风格", "主题", "创意",
+    "审核", "交付", "预算", "屏幕", "点位", "规格", "格式", "时间", "周期",
+    "品牌", "客户", "合作", "要求",
+)
+
+_PREFERENCE_NOTE_KEYWORDS = (
+    "偏好", "风格", "主题", "创意", "目标", "定位", "调性", "禁用", "避免",
+    "规避", "预算", "时长", "交付", "审核", "观看", "动线", "视角", "客流",
+    "城市形象", "科技创新", "节日", "节庆",
+)
+
+_PROJECT_LOCATION_HINTS = (
+    "项目为", "点位", "位置", "屏幕", "大屏", "裸眼3D大屏", "万象", "主广场",
+    "购物中心", "商场", "大厦", "广场",
+)
 
 
 def _get_crawl_semaphore() -> asyncio.Semaphore:
@@ -53,6 +71,229 @@ def _pending_crawl_is_fresh(company_info: dict) -> bool:
     return (datetime.now() - started).total_seconds() < ttl
 
 
+def _compact_agent_notes(notes: str, max_lines: int = 8, max_chars: int = 700) -> str:
+    """压缩管理员/资料导入备注，仅用于 prompt 注入，不修改原始 memory。"""
+    if not notes:
+        return ""
+
+    seen = set()
+    candidates: list[str] = []
+    for raw_line in notes.replace("\r", "\n").split("\n"):
+        line = raw_line.strip().strip("-•* \t")
+        if not line:
+            continue
+        if line.startswith("【") and line.endswith("】"):
+            continue
+        line = " ".join(line.split())
+        if line in seen:
+            continue
+        seen.add(line)
+        candidates.append(line)
+
+    if not candidates:
+        return ""
+
+    prioritized = [line for line in candidates if any(k in line for k in _AGENT_NOTE_PRIORITY_KEYWORDS)]
+    remaining = [line for line in candidates if line not in prioritized]
+    selected = (prioritized + remaining)[:max_lines]
+
+    compact_lines = []
+    total = 0
+    for line in selected:
+        if len(line) > 120:
+            line = line[:117].rstrip() + "..."
+        projected = total + len(line) + 3
+        if compact_lines and projected > max_chars:
+            break
+        compact_lines.append(f"- {line}")
+        total = projected
+
+    return "\n".join(compact_lines)
+
+
+def _compact_preference_notes(notes: str, max_items: int = 6, max_chars: int = 360) -> str:
+    """压缩历史偏好备注，保留可自然带出的关键线索，避免长文本重复注入。"""
+    if not notes:
+        return ""
+
+    fragments: list[str] = []
+    buffer = notes.replace("\r", "\n")
+    for mark in ("；", ";", "。", "\n", "，", ","):
+        buffer = buffer.replace(mark, "|")
+
+    seen = set()
+    project_keys = set()
+    for raw_fragment in buffer.split("|"):
+        fragment = " ".join(raw_fragment.strip().split())
+        if not fragment:
+            continue
+
+        has_project_location = any(k in fragment for k in _PROJECT_LOCATION_HINTS)
+        if not any(k in fragment for k in _PREFERENCE_NOTE_KEYWORDS + _PROJECT_LOCATION_HINTS):
+            continue
+        if has_project_location:
+            project_key = fragment.split("的", 1)[0]
+            for suffix in ("裸眼3D", "大屏", "屏幕", "项目", "视频"):
+                project_key = project_key.replace(suffix, "")
+            project_key = project_key.replace("项目为", "").strip(" ：:，,；;。")
+            if project_key in project_keys:
+                continue
+            project_keys.add(project_key)
+
+        fragment = fragment.replace("项目为", "历史项目线索：")
+        fragment = fragment.replace("项目主题为", "主题为")
+        fragment = fragment.replace("主题聚焦", "主题为")
+        fragment = fragment.replace("定位侧重", "媒体定位侧重")
+        fragment = fragment.replace("定位偏", "媒体定位偏")
+        fragment = fragment.strip(" ：:，,；;。")
+        if not fragment or fragment in seen:
+            continue
+        seen.add(fragment)
+        fragments.append(fragment)
+
+        if len(fragments) >= max_items:
+            break
+
+    if not fragments:
+        return ""
+
+    compact = "；".join(fragments)
+    if len(compact) > max_chars:
+        compact = compact[: max_chars - 3].rstrip("；,， ") + "..."
+    return compact
+
+
+def _stable_memory_values(values: list, *, exclude_project_specific: bool = False) -> list[str]:
+    """过滤空值、占位值，以及容易被误用为本次项目的单次项目文本。"""
+    if not values:
+        return []
+    if isinstance(values, str):
+        values = [values]
+
+    skipped_values = {"未提供", "未知", "暂无", "无", "不清楚"}
+    stable: list[str] = []
+    seen = set()
+    for value in values:
+        text = str(value).strip()
+        if not text or text in skipped_values:
+            continue
+        if exclude_project_specific and any(k in text for k in _PROJECT_LOCATION_HINTS):
+            continue
+        if text in seen:
+            continue
+        seen.add(text)
+        stable.append(text)
+    return stable
+
+
+def _stable_memory_scalar(value) -> str:
+    text = str(value or "").strip()
+    if text in {"未提供", "未知", "暂无", "无", "不清楚"}:
+        return ""
+    return text
+
+
+def _migrate_legacy_preference_notes(memory: UserMemory) -> bool:
+    """将旧版 project_preferences.notes 中的屏幕线索迁到 screen_resources。"""
+    pp = dict(memory.project_preferences or {})
+    notes = str(pp.get("notes") or "").strip()
+    if not notes:
+        return False
+
+    fragments = [
+        part.strip()
+        for part in re.split(r"[；;。\n]", notes)
+        if part.strip()
+    ]
+    if not fragments:
+        return False
+
+    migrated_screens: list[dict] = []
+    remaining_notes: list[str] = []
+    for fragment in fragments:
+        screen = _screen_from_legacy_note_fragment(fragment)
+        if screen:
+            migrated_screens.append(screen)
+        else:
+            remaining_notes.append(fragment)
+
+    if not migrated_screens:
+        return False
+
+    memory.screen_resources = _merge_screen_resources(
+        memory.screen_resources or [],
+        migrated_screens,
+    )[-50:]
+
+    compact_remaining = _compact_preference_notes("；".join(remaining_notes))
+    if compact_remaining:
+        pp["notes"] = compact_remaining
+    else:
+        pp.pop("notes", None)
+    memory.project_preferences = pp
+    return True
+
+
+def _screen_from_legacy_note_fragment(fragment: str) -> dict | None:
+    """从旧 notes 的单个片段中保守抽取屏幕资源。"""
+    text = str(fragment or "").strip()
+    if not _note_looks_screen_specific(text):
+        return None
+
+    name_patterns = [
+        r"(?:投放点位?为|项目点位为|点位为|项目为)([^，；。]+?(?:大屏|屏幕|点位))",
+        r"([\u4e00-\u9fa5A-Za-z0-9·（）()×xX:：/+-]+?(?:大屏|屏幕))",
+    ]
+    name = ""
+    for pattern in name_patterns:
+        match = re.search(pattern, text)
+        if match:
+            name = match.group(1).strip(" ，。；")
+            break
+    if not name:
+        return None
+
+    city = _extract_city_from_text(text) or _extract_city_from_text(name)
+    specs = "；".join(
+        part for part in [
+            _first_match(text, r"\d+(?:\.\d+)?\s*(?:m|米)?\s*[×xX]\s*\d+(?:\.\d+)?\s*(?:m|米)?"),
+            _first_match(text, r"\d+\s*[:：]\s*\d+\s*比例?"),
+            _first_match(text, r"\d{3,5}\s*[xX×]\s*\d{3,5}"),
+        ]
+        if part
+    )
+    screen = {
+        "city": city,
+        "name": name,
+        "notes": text,
+        "source": {
+            "type": "conversation",
+            "migrated_from": "project_preferences.notes",
+            "updated_at": datetime.now().isoformat(),
+        },
+    }
+    if specs:
+        screen["specs"] = specs
+    return screen
+
+
+def _extract_city_from_text(text: str) -> str:
+    cities = (
+        "北京", "上海", "深圳", "广州", "成都", "杭州", "重庆", "南京", "武汉",
+        "西安", "苏州", "天津", "长沙", "郑州", "青岛", "厦门", "宁波",
+    )
+    for city in cities:
+        if city in text:
+            return city
+    match = re.search(r"([\u4e00-\u9fa5]{2,6})市", text)
+    return match.group(1) if match else ""
+
+
+def _first_match(text: str, pattern: str) -> str:
+    match = re.search(pattern, text)
+    return match.group(0).strip() if match else ""
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # CRUD
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -62,11 +303,19 @@ async def get_memory(user_id: str, db: AsyncSession | None = None) -> UserMemory
     """获取用户 Memory"""
     if db:
         result = await db.execute(select(UserMemory).where(UserMemory.user_id == user_id))
-        return result.scalar_one_or_none()
+        memory = result.scalar_one_or_none()
+        if memory and _migrate_legacy_preference_notes(memory):
+            await db.commit()
+            await db.refresh(memory)
+        return memory
     else:
         async with async_session_maker() as session:
             result = await session.execute(select(UserMemory).where(UserMemory.user_id == user_id))
-            return result.scalar_one_or_none()
+            memory = result.scalar_one_or_none()
+            if memory and _migrate_legacy_preference_notes(memory):
+                await session.commit()
+                await session.refresh(memory)
+            return memory
 
 
 async def get_or_create_memory(user_id: str, db: AsyncSession | None = None) -> UserMemory:
@@ -75,6 +324,9 @@ async def get_or_create_memory(user_id: str, db: AsyncSession | None = None) -> 
         result = await session.execute(select(UserMemory).where(UserMemory.user_id == user_id))
         memory = result.scalar_one_or_none()
         if memory:
+            if _migrate_legacy_preference_notes(memory):
+                await session.commit()
+                await session.refresh(memory)
             return memory
 
         memory = UserMemory(
@@ -290,15 +542,21 @@ def build_memory_context(memory: UserMemory | None) -> str:
     if screens:
         lines = []
         for s in screens:
-            parts = [s.get("city", ""), s.get("location", "")]
+            parts = [s.get("city", ""), s.get("name", "") or s.get("location", "")]
+            if s.get("specs"):
+                parts.append(s["specs"])
             if s.get("type"):
                 parts.append(s["type"])
             if s.get("size"):
                 parts.append(s["size"])
             if s.get("resolution"):
                 parts.append(s["resolution"])
+            if s.get("notes"):
+                parts.append(s["notes"])
             if s.get("daily_traffic"):
                 parts.append(f"日均客流{s['daily_traffic']}")
+            if s.get("viewing_path"):
+                parts.append(f"观看动线{s['viewing_path']}")
             lines.append(f"  • {' | '.join(p for p in parts if p)}")
 
         sections.append(
@@ -307,11 +565,17 @@ def build_memory_context(memory: UserMemory | None) -> str:
             "提示：第一轮开场不要主动提及这些屏幕。等客户描述完本次大方向后，"
             "可以用“我们了解到您这边有……”这类自然措辞提出候选屏幕，让客户确认本次项目是否针对其中某块屏。"
             "不要说“留存过”“记忆里”“Memory”等会让客户有压力的表达。"
+            "不要对客户复述本段标题或“提示”这类内部说明。"
             "客户确认后，再把对应点位、尺寸、分辨率、客流等信息带入需求整理。\n"
         )
 
     # 项目偏好
     pp = memory.project_preferences or {}
+    screen_names = {
+        str(s.get("name") or s.get("location") or "").strip()
+        for s in screens
+        if isinstance(s, dict) and str(s.get("name") or s.get("location") or "").strip()
+    }
     if (
         pp.get("preferred_styles") or pp.get("creative_goals") or
         pp.get("theme_concepts") or pp.get("content_taboos") or
@@ -328,20 +592,32 @@ def build_memory_context(memory: UserMemory | None) -> str:
             pref_lines.append(f"历史内容主题：{', '.join(pp['theme_concepts'])}")
         if pp.get("content_taboos"):
             pref_lines.append(f"内容禁忌/规避项：{', '.join(pp['content_taboos'])}")
-        if pp.get("reference_cases"):
-            pref_lines.append(f"参考案例偏好：{', '.join(pp['reference_cases'])}")
-        if pp.get("budget_range"):
-            pref_lines.append(f"预算范围：{pp['budget_range']}")
-        if pp.get("typical_duration"):
-            pref_lines.append(f"常用时长：{pp['typical_duration']}")
+        reference_cases = [
+            item for item in _stable_memory_values(pp.get("reference_cases", []))
+            if item not in screen_names
+        ]
+        if reference_cases:
+            pref_lines.append(f"历史参考案例/点位：{', '.join(reference_cases)}")
+        budget_range = _stable_memory_scalar(pp.get("budget_range"))
+        if budget_range:
+            pref_lines.append(f"预算范围：{budget_range}")
+        typical_duration = _stable_memory_scalar(pp.get("typical_duration"))
+        if typical_duration:
+            pref_lines.append(f"常用时长：{typical_duration}")
         if pp.get("notes"):
-            pref_lines.append(f"备注：{pp['notes']}")
+            compact_pref_notes = _compact_preference_notes(str(pp["notes"]))
+            if compact_pref_notes:
+                pref_lines.append(f"历史偏好摘要：{compact_pref_notes}")
         # 显示数据新鲜度
         freshness = ""
         if pp.get("last_updated"):
             freshness = f"（更新于 {pp['last_updated'][:10]}）"
         sections.append(
             f"\n【客户历史偏好{freshness}】\n" + "\n".join(pref_lines) + "\n"
+            "这些线索要自然用于减少客户输入成本。可以用“我们了解到您这边有……”带出具体屏幕、点位或偏好，"
+            "但它们不代表本次项目已确定。不要暗示双方已经有过该项目合作，除非客户在当前对话明确这样表述。"
+            "使用前需要自然确认，客户确认前不要写入本次需求。"
+            "不要对客户复述本段标题或内部说明。\n"
         )
 
     # 历史项目
@@ -365,7 +641,9 @@ def build_memory_context(memory: UserMemory | None) -> str:
             lines.append(f"  • {name} ({city}) — {status}{extra}")
         sections.append(
             f"\n【近期项目（{len(past)} 个）】\n" + "\n".join(lines) + "\n"
-            "如涉及相似项目，可以引用历史经验提升专业度。\n"
+            "这些只是历史参考，不能预设为客户本次项目。第一轮开场不要主动提及具体近期项目、点位或历史主题；"
+            "只有当客户先描述了相似方向，或你需要降低客户输入成本时，才可以用自然语气提出候选并请客户确认。"
+            "客户确认前，不要把近期项目内容写入本次需求。不要对客户复述本段标题或内部说明。\n"
         )
 
     # 管理员导入资料中抽取的过往案例
@@ -387,12 +665,18 @@ def build_memory_context(memory: UserMemory | None) -> str:
             sections.append(
                 f"\n【客户资料中的过往案例 — 共 {len(doc_cases)} 个】\n"
                 + "\n".join(lines) + "\n"
-                "可作为理解客户业务和创意偏好的参考；如果要用于本次需求，仍需自然询问客户确认。\n"
+                "可作为理解客户业务和创意偏好的参考；如果要用于本次需求，仍需自然询问客户确认。不要对客户复述本段标题或内部说明。\n"
             )
 
     # Agent 备忘
     if memory.agent_notes:
-        sections.append(f"\n【Agent 备忘录】\n{memory.agent_notes}\n")
+        compact_notes = _compact_agent_notes(memory.agent_notes)
+        if compact_notes:
+            sections.append(
+                "\n【Agent 备忘录摘要】\n"
+                + compact_notes + "\n"
+                "以上为压缩摘要，仅作内部参考；不要对客户复述本段标题或内部说明。\n"
+            )
 
     return "\n".join(sections)
 
@@ -432,6 +716,13 @@ async def learn_from_conversation(user_id: str, conversation: list[dict]):
         # 合并到现有偏好
         async with async_session_maker() as session:
             memory = await get_or_create_memory(user_id, db=session)
+            new_screens = _normalize_conversation_screens(extracted.pop("screen_resources", []))
+            if new_screens:
+                memory.screen_resources = _merge_screen_resources(
+                    memory.screen_resources or [],
+                    new_screens,
+                )[-50:]
+
             existing = memory.project_preferences or {}
             merged = _merge_preferences(existing, extracted)
 
@@ -439,6 +730,9 @@ async def learn_from_conversation(user_id: str, conversation: list[dict]):
                 memory.project_preferences = merged
                 await session.commit()
                 print(f"[MemoryService] 对话学习完成: user={user_id}, 更新了偏好")
+            elif new_screens:
+                await session.commit()
+                print(f"[MemoryService] 对话学习完成: user={user_id}, 更新了屏幕资源")
             else:
                 print(f"[MemoryService] 对话学习完成: 无新偏好")
 
@@ -460,6 +754,7 @@ async def _extract_preferences(conversation: list[dict]) -> dict:
             "budget_range": "20-30万",
             "typical_duration": "30秒",
             "screen_preferences": ["L型大屏"],
+            "screen_resources": [{"city": "深圳", "name": "万象天地主广场大屏", "specs": "30m×20m，3:2比例", "notes": "中轴步行道正向视角，需规避左右立柱遮挡"}],
             "content_taboos": ["过度商业广告化"],
             "notes": "客户对交付时间比较敏感"
         }
@@ -487,8 +782,10 @@ async def _extract_preferences(conversation: list[dict]) -> dict:
         "- budget_range (string): 预算范围，如'20-30万'\n"
         "- typical_duration (string): 视频时长偏好，如'30秒'\n"
         "- screen_preferences (list[string]): 偏好的屏幕类型，如'L型大屏'、'曲面屏'\n"
-        "- notes (string): 其他值得记录的关键信息，一句话概括\n\n"
+        "- screen_resources (list[object]): 客户明确提到的具体屏幕资源，尽量简短；只使用 city, name, specs, notes 四个字段。city 是城市；name 是点位/屏幕名称，如'万象天地主广场大屏'；specs 是屏幕参数摘要，如'L型屏，3840x2160，约20m x 8m'；notes 是这块屏幕的观看动线、客流、遮挡、亮点、审核/上刊节点等屏幕相关补充。只有出现具体点位/屏幕名称/屏幕参数时才提取，不要只因为提到城市就生成屏幕资源\n"
+        "- notes (string): 其他值得后续对话自然复用的非屏幕类线索，一句话概括；不要记录具体点位、屏幕参数、观看动线、遮挡、上刊节点等屏幕相关内容，这些应写入 screen_resources[].notes\n\n"
         "重要：只提取客户（user）明确提到的信息，不要推测。\n"
+        "如果信息只属于某一次具体屏幕/点位，应优先放进 screen_resources；不要写成长段项目复述。\n"
         "如果整段对话没有任何可提取的偏好信息，返回空对象 {}"
     )
 
@@ -525,6 +822,165 @@ async def _extract_preferences(conversation: list[dict]) -> dict:
         return {}
 
 
+def _normalize_conversation_screens(value) -> list[dict]:
+    """规范化从对话中抽取的屏幕资源，避免把泛泛城市写成屏幕。"""
+    if not isinstance(value, list):
+        return []
+
+    allowed_fields = {"city", "name", "specs", "notes"}
+    normalized: list[dict] = []
+    now = datetime.now().isoformat()
+
+    for raw in value:
+        if not isinstance(raw, dict):
+            continue
+        item = {}
+        for key in allowed_fields:
+            text = str(raw.get(key) or "").strip()
+            if text and text not in {"未知", "未提供", "暂无", "无", "不清楚"}:
+                item[key] = text
+
+        legacy_name = " ".join(
+            str(raw.get(k) or "").strip()
+            for k in ("location", "name")
+            if str(raw.get(k) or "").strip()
+        )
+        if legacy_name and not item.get("name"):
+            item["name"] = legacy_name
+
+        legacy_specs = "，".join(
+            str(raw.get(k) or "").strip()
+            for k in ("type", "size", "resolution")
+            if str(raw.get(k) or "").strip()
+        )
+        if legacy_specs and not item.get("specs"):
+            item["specs"] = legacy_specs
+
+        legacy_notes = "；".join(
+            str(raw.get(k) or "").strip()
+            for k in ("daily_traffic", "viewing_path", "highlights")
+            if str(raw.get(k) or "").strip()
+        )
+        if legacy_notes and not item.get("notes"):
+            item["notes"] = legacy_notes
+
+        # 至少要有具体点位/屏幕名/参数之一，单独城市不算屏幕资源。
+        if not any(item.get(k) for k in ("name", "specs")):
+            continue
+
+        item["source"] = {
+            "type": "conversation",
+            "updated_at": now,
+        }
+        normalized.append(item)
+
+    return normalized
+
+
+def _merge_screen_resources(existing: list, incoming: list) -> list[dict]:
+    """按点位/名称合并屏幕资源；新对话补充的参数会更新旧记录。"""
+    merged = [dict(item) for item in existing or [] if isinstance(item, dict)]
+    index = {_screen_resource_key(item): i for i, item in enumerate(merged) if _screen_resource_key(item)}
+
+    for item in incoming:
+        key = _screen_resource_key(item)
+        match_index = index.get(key) if key else None
+        if match_index is None:
+            match_index = _find_similar_screen_resource_index(merged, item)
+
+        if match_index is not None:
+            current = dict(merged[match_index])
+            for field, value in item.items():
+                if field == "source":
+                    current["source"] = {
+                        **(current.get("source") if isinstance(current.get("source"), dict) else {}),
+                        **value,
+                    }
+                elif field == "name" and current.get("name"):
+                    current[field] = _prefer_richer_text(current.get("name"), value)
+                elif field in {"specs", "notes"} and current.get(field):
+                    current[field] = _merge_text_fragments(str(current.get(field) or ""), str(value or ""))
+                elif value:
+                    current[field] = value
+            merged[match_index] = current
+            if key:
+                index[key] = match_index
+            continue
+
+        merged.append(item)
+        if key:
+            index[key] = len(merged) - 1
+
+    return merged
+
+
+def _screen_resource_key(item: dict) -> str:
+    city = str(item.get("city") or "").strip().lower()
+    location = str(item.get("location") or "").strip().lower()
+    name = _normalize_screen_name(str(item.get("name") or ""))
+    screen_type = str(item.get("type") or "").strip().lower()
+    specs = str(item.get("specs") or "").strip().lower()
+    primary = "|".join(part for part in [city, name or location] if part)
+    return primary or "|".join(part for part in [city, specs or screen_type] if part)
+
+
+def _normalize_screen_name(name: str) -> str:
+    """轻量规范化屏幕名称，帮助同一屏幕的多次描述合并。"""
+    text = str(name or "").strip().lower()
+    for token in ("深圳", "裸眼3d", "裸眼3D", "led", "LED", "屏幕", "大屏", "户外"):
+        text = text.replace(token.lower(), "")
+    text = text.replace("主广场", "广场")
+    text = "".join(ch for ch in text if ch.isalnum() or "\u4e00" <= ch <= "\u9fff")
+    return text
+
+
+def _find_similar_screen_resource_index(existing: list[dict], incoming: dict) -> int | None:
+    incoming_city = str(incoming.get("city") or "").strip().lower()
+    incoming_name = _normalize_screen_name(str(incoming.get("name") or incoming.get("location") or ""))
+    if not incoming_name or len(incoming_name) < 4:
+        return None
+
+    for idx, item in enumerate(existing):
+        city = str(item.get("city") or "").strip().lower()
+        if incoming_city and city and incoming_city != city:
+            continue
+        existing_name = _normalize_screen_name(str(item.get("name") or item.get("location") or ""))
+        if len(existing_name) < 4:
+            continue
+        if incoming_name in existing_name or existing_name in incoming_name:
+            return idx
+    return None
+
+
+def _prefer_richer_text(current, incoming) -> str:
+    current_text = str(current or "").strip()
+    incoming_text = str(incoming or "").strip()
+    if not current_text:
+        return incoming_text
+    if not incoming_text:
+        return current_text
+    return current_text if len(current_text) >= len(incoming_text) else incoming_text
+
+
+def _merge_text_fragments(current: str, incoming: str, max_items: int = 8) -> str:
+    fragments: list[str] = []
+    for text in (current, incoming):
+        for part in str(text or "").replace("；", "|").replace("，", "|").replace(",", "|").split("|"):
+            fragment = part.strip()
+            if fragment and fragment not in fragments:
+                fragments.append(fragment)
+    return "；".join(fragments[:max_items])
+
+
+def _note_looks_screen_specific(note: str) -> bool:
+    note = str(note or "")
+    screen_markers = (
+        "点位", "屏幕", "大屏", "分辨率", "尺寸", "比例", "观看动线", "观看方向",
+        "视角", "客流", "遮挡", "立柱", "上刊", "终审", "报审", "万象天地",
+    )
+    return any(marker in note for marker in screen_markers)
+
+
 def _merge_preferences(existing: dict, new: dict) -> dict:
     """智能合并偏好：累加列表项，更新标量值，记录时间戳
 
@@ -558,15 +1014,18 @@ def _merge_preferences(existing: dict, new: dict) -> dict:
                 changed_fields.append(field)
 
     # notes 追加
-    if new.get("notes"):
-        old_notes = merged.get("notes", "")
-        if old_notes:
-            if new["notes"] not in old_notes:
-                merged["notes"] = f"{old_notes}；{new['notes']}"
+    if new.get("notes") and not _note_looks_screen_specific(new["notes"]):
+        new_notes = _compact_preference_notes(str(new["notes"]))
+        if new_notes:
+            old_notes = merged.get("notes", "")
+            if old_notes:
+                compact_notes = _compact_preference_notes(f"{old_notes}；{new_notes}")
+                if compact_notes != old_notes:
+                    merged["notes"] = compact_notes
+                    changed_fields.append("notes")
+            else:
+                merged["notes"] = new_notes
                 changed_fields.append("notes")
-        else:
-            merged["notes"] = new["notes"]
-            changed_fields.append("notes")
 
     # 记录时间戳
     if changed_fields:

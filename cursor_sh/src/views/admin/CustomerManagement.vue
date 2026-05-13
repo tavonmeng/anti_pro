@@ -202,12 +202,15 @@
           <h4>📺 屏幕资源（{{ profileData.screen_resources.length }} 块）</h4>
           <el-table :data="profileData.screen_resources" size="small" border stripe>
             <el-table-column prop="city" label="城市" width="80" />
-            <el-table-column prop="location" label="位置" min-width="120" />
-            <el-table-column prop="name" label="屏幕名" min-width="110" show-overflow-tooltip />
-            <el-table-column prop="type" label="类型" width="100" />
-            <el-table-column prop="size" label="尺寸" width="80" />
-            <el-table-column prop="resolution" label="分辨率" width="110" />
-            <el-table-column prop="daily_traffic" label="日均客流" width="90" />
+            <el-table-column label="屏幕/点位" min-width="160" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.name || row.location || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="参数摘要" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.specs || [row.type, row.size, row.resolution].filter(Boolean).join('，') || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="备注" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.notes || [row.daily_traffic && `日均客流${row.daily_traffic}`, row.viewing_path && `观看动线${row.viewing_path}`, row.highlights].filter(Boolean).join('；') || '-' }}</template>
+            </el-table-column>
           </el-table>
         </div>
 
@@ -328,17 +331,14 @@
               <el-table-column label="城市" width="90">
                 <template #default="{ row }"><el-input v-model="row.city" size="small" /></template>
               </el-table-column>
-              <el-table-column label="点位" min-width="150">
-                <template #default="{ row }"><el-input v-model="row.location" size="small" /></template>
-              </el-table-column>
-              <el-table-column label="屏幕名" min-width="130">
+              <el-table-column label="屏幕/点位" min-width="150">
                 <template #default="{ row }"><el-input v-model="row.name" size="small" /></template>
               </el-table-column>
-              <el-table-column label="类型" width="110">
-                <template #default="{ row }"><el-input v-model="row.type" size="small" /></template>
+              <el-table-column label="参数摘要" min-width="170">
+                <template #default="{ row }"><el-input v-model="row.specs" size="small" placeholder="如 30m×20m，3:2比例" /></template>
               </el-table-column>
-              <el-table-column label="尺寸" width="100">
-                <template #default="{ row }"><el-input v-model="row.size" size="small" /></template>
+              <el-table-column label="备注" min-width="200">
+                <template #default="{ row }"><el-input v-model="row.notes" size="small" placeholder="观看动线、客流、遮挡等" /></template>
               </el-table-column>
               <el-table-column label="操作" width="70">
                 <template #default="{ $index }">
@@ -558,7 +558,7 @@ const approveDocument = async () => {
 
 const addScreenResource = () => {
   reviewForm.value.screen_resources.push({
-    city: '', location: '', name: '', type: '', size: '', resolution: '', daily_traffic: '', highlights: ''
+    city: '', name: '', specs: '', notes: ''
   })
 }
 
@@ -603,7 +603,12 @@ function buildReviewedPayload() {
     .map((note) => note.trim())
     .filter(Boolean)
     .map((note) => ({ note }))
-  data.screen_resources = (data.screen_resources || []).filter((s: any) => s.city || s.location || s.name || s.type)
+  data.screen_resources = (data.screen_resources || []).map((s: any) => ({
+    ...s,
+    name: s.name || s.location || '',
+    specs: s.specs || [s.type, s.size, s.resolution].filter(Boolean).join('，'),
+    notes: s.notes || [s.daily_traffic && `日均客流${s.daily_traffic}`, s.viewing_path && `观看动线${s.viewing_path}`, s.highlights].filter(Boolean).join('；'),
+  })).filter((s: any) => s.city || s.name || s.specs)
   data.past_cases = (data.past_cases || []).filter((c: any) => c.title || c.brand)
   return data
 }

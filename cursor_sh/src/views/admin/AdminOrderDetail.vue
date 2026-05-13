@@ -554,11 +554,15 @@
             <h4>屏幕资源（{{ memoryData.screen_resources.length }} 块）</h4>
             <el-table :data="memoryData.screen_resources" size="small" border stripe>
               <el-table-column prop="city" label="城市" width="80" />
-              <el-table-column prop="location" label="位置" min-width="120" />
-              <el-table-column prop="type" label="类型" width="120" />
-              <el-table-column prop="size" label="尺寸" width="80" />
-              <el-table-column prop="resolution" label="分辨率" width="100" />
-              <el-table-column prop="daily_traffic" label="日均客流" width="100" />
+              <el-table-column label="屏幕/点位" min-width="160" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.name || row.location || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="参数摘要" min-width="180" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.specs || [row.type, row.size, row.resolution].filter(Boolean).join('，') || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="备注" min-width="220" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.notes || [row.daily_traffic && `日均客流${row.daily_traffic}`, row.viewing_path && `观看动线${row.viewing_path}`, row.highlights].filter(Boolean).join('；') || '-' }}</template>
+              </el-table-column>
             </el-table>
           </div>
 
@@ -1914,4 +1918,3 @@ const handleAdminCancel = async () => {
   margin-top: 10px;
 }
 </style>
-
