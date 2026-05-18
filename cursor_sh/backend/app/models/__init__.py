@@ -16,6 +16,7 @@ from app.models.announcement import Announcement
 from app.models.security_event import SecurityEvent, SecurityEventType
 from app.models.user_memory import UserMemory
 from app.models.ai_chat import AIChatSession, AIChatMessage
+from app.models.human_handoff import HumanHandoff
 from app.models.homepage_bar import HomepageBar
 from app.models.customer_document import CustomerDocument, CustomerDocumentExtraction
 
@@ -32,7 +33,7 @@ __all__ = [
     "Announcement",
     "SecurityEvent", "SecurityEventType",
     "UserMemory",
-    "AIChatSession", "AIChatMessage",
+    "AIChatSession", "AIChatMessage", "HumanHandoff",
     "HomepageBar",
     "CustomerDocument", "CustomerDocumentExtraction",
 ]

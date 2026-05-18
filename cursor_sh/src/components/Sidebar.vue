@@ -46,6 +46,11 @@
         <el-icon><ChatLineSquare /></el-icon>
         <template #title>AI 聊天记录</template>
       </el-menu-item>
+
+      <el-menu-item index="human-handoffs">
+        <el-icon><ChatLineSquare /></el-icon>
+        <template #title>转人工客户</template>
+      </el-menu-item>
       
       <el-menu-item index="customers">
         <el-icon><UserFilled /></el-icon>
@@ -160,6 +165,8 @@ const activeMenu = computed(() => {
     return 'workflow-config'
   } else if (path.includes('/chat-records') && isAdmin.value) {
     return 'chat-records'
+  } else if (path.includes('/human-handoffs') && isAdmin.value) {
+    return 'human-handoffs'
   } else if (path.includes('/customers') && isAdmin.value) {
     return 'customers'
   } else if (path.includes('/assignments') && isContractor.value) {
@@ -209,6 +216,8 @@ const handleMenuSelect = (index: string) => {
     router.push('/admin/workflow-config')
   } else if (index === 'chat-records') {
     router.push('/admin/chat-records')
+  } else if (index === 'human-handoffs') {
+    router.push('/admin/human-handoffs')
   } else if (index === 'customers') {
     router.push('/admin/customers')
   } else if (index === 'assignments') {
@@ -281,4 +290,3 @@ const handleLogout = async () => {
   }
 }
 </style>
-

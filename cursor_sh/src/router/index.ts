@@ -145,6 +145,12 @@ const router = createRouter({
           meta: { requiresAuth: true, role: 'admin' }
         },
         {
+          path: 'human-handoffs',
+          name: 'HumanHandoffs',
+          component: () => import('../views/admin/HumanHandoffs.vue'),
+          meta: { requiresAuth: true, role: 'admin' }
+        },
+        {
           path: 'customers',
           name: 'CustomerManagement',
           component: () => import('../views/admin/CustomerManagement.vue'),
@@ -317,4 +323,3 @@ router.beforeEach((to, from, next) => {
 })
 
 export default router
-

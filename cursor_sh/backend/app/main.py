@@ -11,6 +11,7 @@ from app.config import settings
 from app.database import init_db, engine
 from app.audit_database import init_audit_db
 from app.api import auth, orders, staff, notifications, ai, logs, announcements, enterprise, asr
+from app.models.human_handoff import HumanHandoff  # noqa: F401 - ensure table is registered before create_all
 from app.api import contractor as contractor_api
 from app.api import contractor_admin as contractor_admin_api
 from app.api import workflow_config as workflow_config_api
@@ -97,6 +98,8 @@ if deploy_mode in ("all", "internal"):
     # 客户资料导入（管理员端）
     from app.api import admin_documents
     app.include_router(admin_documents.router, prefix="/api")
+    from app.api import human_handoffs
+    app.include_router(human_handoffs.router, prefix="/api")
 
 # 挂载审计日志中间件（放在路由注册之后，确保能拦截所有请求）
 if settings.LOG_ENABLED:

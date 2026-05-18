@@ -851,6 +851,35 @@ const buildUserMessageContent = (text: string, files: UploadedFile[]) => {
   return [text, buildFileSummaryText(files)].filter(Boolean).join('\n')
 }
 
+const HUMAN_HANDOFF_MARKER = '【转人工】'
+const HUMAN_HANDOFF_FALLBACK_REPLY = '已识别到您希望转人工，但当前系统未能完成草稿保存和管理员通知。请稍后重试。'
+
+const isHumanHandoffRequest = (text: string = '') => {
+  const normalized = text.toLowerCase().replace(/\s+/g, '')
+  if (!normalized) return false
+  const negativePatterns = [
+    '不需要人工', '不用人工', '无需人工', '不要人工', '别转人工',
+    '不转人工', '暂不转人工', '先不转人工', '不是要人工', '不是找人工',
+    '不是转人工', '不用真人', '不需要真人',
+  ]
+  if (negativePatterns.some(pattern => normalized.includes(pattern))) return false
+  const handoffText = normalized.replace(/人工智能/g, '')
+  const explicitPatterns = [
+    '转人工', '接人工', '切人工', '换人工', '找人工', '人工客服',
+    '人工服务', '人工顾问', '人工接待', '真人客服', '真人顾问',
+    '真人服务', '找真人', '联系人工', '联系顾问', '联系销售',
+    '客服介入', '销售联系', '顾问联系', '人工',
+  ]
+  if (explicitPatterns.some(pattern => handoffText.includes(pattern))) return true
+  const noAiPatterns = [
+    '不想用ai', '不使用ai', '不用ai', '不要ai', '别用ai',
+    '不想用智能体', '不使用智能体', '不用智能体', '不要智能体', '别用智能体',
+    '不想和机器人聊', '不跟机器人聊', '不要机器人', '不用机器人',
+    '不想和agent聊', '不用agent', '不要agent',
+  ]
+  return noAiPatterns.some(pattern => normalized.includes(pattern))
+}
+
 const displayUserMessageText = (text: string = '') => {
   return text
     .replace(/\n?\[已上传文件: [^\]]+\]/g, '')
@@ -1024,7 +1053,7 @@ const displayedMessages = computed(() => {
   return messages.value.filter(m => {
     // 包含文本，或者是有卡片内容的特殊气泡
     if (m.content && m.content.toLowerCase().includes(q)) return true
-    if (m.isOrderList || m.isCaseList || m.isGuideToOrder || m.isPurchasePrompt || m.isCompletePrompt) return true
+    if (m.isOrderList || m.isCaseList || m.isGuideToOrder || m.isPurchasePrompt || m.isCompletePrompt || m.isHumanHandoff) return true
     return false
   })
 })
@@ -2074,13 +2103,29 @@ const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
 
     const data = await response.json()
     const replyContent = data.message || data.answer || '处理成功';
-    const cleanContent = replyContent.replace('【需求收集完成】', '').trim();
+    const isHumanHandoff = Boolean(data.handoff) || replyContent.includes(HUMAN_HANDOFF_MARKER);
+    const cleanContent = replyContent
+      .replace('【需求收集完成】', '')
+      .replace(HUMAN_HANDOFF_MARKER, '')
+      .trim();
     
     // 前端兜底：至少3轮用户对话才允许触发完成
     const userMsgCount = messages.value.filter(m => m.role === 'user').length;
-    const shouldComplete = replyContent.includes('【需求收集完成】') && userMsgCount >= 3;
+    const shouldComplete = !isHumanHandoff && replyContent.includes('【需求收集完成】') && userMsgCount >= 3;
     
     typewriterEffect(cleanContent, async () => {
+      if (isHumanHandoff) {
+        const lastMsg = messages.value[messages.value.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant') {
+          lastMsg.isHumanHandoff = true
+          lastMsg.formHidden = true
+        }
+        if (data.draft_order_id) {
+          draftSavedOrderId.value = data.draft_order_id
+          await orderStore.fetchOrders()
+        }
+        return
+      }
       if (shouldComplete) {
         const lastMsg = messages.value[messages.value.length - 1]
         if (lastMsg && lastMsg.role === 'assistant') {
@@ -2093,6 +2138,16 @@ const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
   } catch (error) {
     // 降级兜底：前端 Mock 模拟对话收集需求（按一轮一个问题推进）
     const userMsgCount = messages.value.filter(m => m.role === 'user').length;
+    if (isHumanHandoffRequest(userText)) {
+      typewriterEffect(HUMAN_HANDOFF_FALLBACK_REPLY, () => {
+        const lastMsg = messages.value[messages.value.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant') {
+          lastMsg.isHumanHandoff = true
+          lastMsg.formHidden = true
+        }
+      })
+      return
+    }
     
     const mockReplies: Record<number, string> = isMediaMode ? {
       1: '收到。接下来补一下基础信息：这块屏位于哪个城市和具体位置？',

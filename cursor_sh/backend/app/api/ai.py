@@ -53,6 +53,96 @@ def _strip_completion_marker(message: str) -> str:
     return message.replace("【需求收集完成】", "").strip()
 
 
+_HUMAN_HANDOFF_MARKER = "【转人工】"
+
+_HUMAN_HANDOFF_REPLY = (
+    "已收到您的诉求。我会先把当前已经沟通的项目信息整理并保存到草稿箱，同时转入人工项目顾问跟进。\n\n"
+    "专属顾问会根据当前聊天记录继续对接。"
+)
+
+_HUMAN_HANDOFF_APPEND_REPLY = "已收到，我已将这条补充内容追加到人工对接记录中，专属顾问跟进时会一并查看。"
+
+
+def _is_human_handoff_request(message: str) -> bool:
+    """识别用户明确希望停止 AI 引导并转人工的表达。"""
+    text = re.sub(r"\s+", "", (message or "").lower())
+    if not text:
+        return False
+
+    negative_patterns = [
+        "不需要人工", "不用人工", "无需人工", "不要人工", "别转人工",
+        "不转人工", "暂不转人工", "先不转人工", "不是要人工", "不是找人工",
+        "不是转人工", "不用真人", "不需要真人",
+    ]
+    if any(pattern in text for pattern in negative_patterns):
+        return False
+
+    handoff_text = text.replace("人工智能", "")
+
+    explicit_patterns = [
+        "转人工", "接人工", "切人工", "换人工", "找人工", "人工客服",
+        "人工服务", "人工顾问", "人工接待", "真人客服", "真人顾问",
+        "真人服务", "找真人", "联系人工", "联系顾问", "联系销售",
+        "客服介入", "销售联系", "顾问联系", "人工",
+    ]
+    if any(pattern in handoff_text for pattern in explicit_patterns):
+        return True
+
+    no_ai_patterns = [
+        "不想用ai", "不使用ai", "不用ai", "不要ai", "别用ai",
+        "不想用智能体", "不使用智能体", "不用智能体", "不要智能体", "别用智能体",
+        "不想和机器人聊", "不跟机器人聊", "不要机器人", "不用机器人",
+        "不想和agent聊", "不用agent", "不要agent",
+    ]
+    return any(pattern in text for pattern in no_ai_patterns)
+
+
+async def _record_handoff(
+    *,
+    user_id: str,
+    username: str,
+    session_id: str,
+    business_type: str,
+    history: list,
+    user_msg: str,
+    assistant_msg: str,
+) -> dict:
+    from app.services.human_handoff_service import record_handoff
+
+    return await record_handoff(
+        user_id=user_id,
+        username=username,
+        session_id=session_id,
+        business_type=business_type,
+        history=history,
+        user_msg=user_msg,
+        assistant_msg=assistant_msg,
+    )
+
+
+async def _append_handoff_message(
+    *,
+    user_id: str,
+    username: str,
+    session_id: str,
+    business_type: str,
+    history: list,
+    user_msg: str,
+    assistant_msg: str,
+) -> dict | None:
+    from app.services.human_handoff_service import append_handoff_message
+
+    return await append_handoff_message(
+        user_id=user_id,
+        username=username,
+        session_id=session_id,
+        business_type=business_type,
+        history=history,
+        user_msg=user_msg,
+        assistant_msg=assistant_msg,
+    )
+
+
 def _uploaded_file_names(message: str) -> list[str]:
     names: list[str] = []
     for match in re.findall(r"\[已上传文件:\s*([^\]]+)\]", message or ""):
@@ -155,19 +245,23 @@ _DIALOG_RULES = (
     "才可以提前结束。此时总结已收集的信息，指出哪些重要项还缺失，然后加上【需求收集完成】标记。"
     "客户正常回答问题时，不要主动结束。\n\n"
 
-    "7. 保持专业节奏，语言干练精准，不要寒暄客套。\n\n"
+    "7. 【转人工】如果客户明确表示不想使用 AI、想找人工/真人/客服/销售/项目顾问，"
+    "立即停止继续追问需求，不要输出【需求收集完成】，不要生成表单总结。"
+    "只需简短确认已为其转入人工项目顾问处理，并在回复末尾加上标记：【转人工】。\n\n"
 
-    "8. 【上传环节放在最后】文件上传（现场实拍图/参考文件）是需求收集的最后一步。"
+    "8. 保持专业节奏，语言干练精准，不要寒暄客套。\n\n"
+
+    "9. 【上传环节放在最后】文件上传（现场实拍图/参考文件）是需求收集的最后一步。"
     "在核心业务信息都已收集之后，再主动询问客户是否有现场实拍图或参考文件需要上传。"
     "告知客户：'核心需求信息已基本收集完毕。最后一步——如果您有现场实拍图、屏幕照片或其他参考素材，"
     "可以通过输入框左侧的上传按钮直接上传。如果暂时没有，我们就可以整理信息了。'\n\n"
 
-    "9. 【文件上传确认】当客户上传了文件（消息中包含'已上传文件'或'已上传'字样）时，"
+    "10. 【文件上传确认】当客户上传了文件（消息中包含'已上传文件'或'已上传'字样）时，"
     "先确认收到文件，然后询问是否还有其他文件需要上传。"
     "如果客户表示没有更多文件了，直接总结所有已收集的信息并输出【需求收集完成】标记。"
     "示例回复：'已收到您上传的文件。请问还有其他参考素材需要上传吗？没有的话，我来为您整理需求信息。'\n\n"
 
-    "10. 如果客户提供的补充内容无法归入上述任何结构化字段，将其完整记录，"
+    "11. 如果客户提供的补充内容无法归入上述任何结构化字段，将其完整记录，"
     "在最终提取时归入'备注'字段，确保不遗漏任何客户诉求。"
 )
 
@@ -274,6 +368,8 @@ _MEDIA_DIALOG_RULES = (
     "- 仅当至少 8 项核心信息已有实质回答后，才可以在总结末尾输出【需求收集完成】；预算不作为硬性完成条件。\n"
     "- 信息不足时继续自然追问，不要主动结束。\n"
     "- 客户明确表示不想继续时，可以提前总结；需说明缺失项，并在末尾输出【需求收集完成】。\n"
+    "- 客户明确表示不想使用 AI、想找人工/真人/客服/销售/项目顾问时，立即停止需求追问，"
+    "不要输出【需求收集完成】，不要生成表单总结；只确认已转入人工项目顾问处理，并在回复末尾输出【转人工】。\n"
 )
 
 _PROMPT_MEDIA_3D = (
@@ -398,6 +494,44 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
         except Exception as e:
             print(f"[AI Chat] Memory 加载失败（不影响对话）: {e}")
 
+    existing_handoff = await _append_handoff_message(
+        user_id=user_id,
+        username=username,
+        session_id=request.session_id,
+        business_type=request.business_type,
+        history=request.history,
+        user_msg=request.message,
+        assistant_msg=_HUMAN_HANDOFF_APPEND_REPLY,
+    )
+    if existing_handoff:
+        _save_session_file(
+            session_id=request.session_id, user_id=user_id, username=username,
+            history=request.history, user_msg=request.message, assistant_msg=_HUMAN_HANDOFF_APPEND_REPLY,
+            business_type=request.business_type,
+            user_message_id=request.user_message_id,
+            assistant_message_id=request.assistant_message_id,
+        )
+        return {"message": _HUMAN_HANDOFF_APPEND_REPLY, "handoff": True, **existing_handoff}
+
+    if _is_human_handoff_request(request.message):
+        handoff_meta = await _record_handoff(
+            user_id=user_id,
+            username=username,
+            session_id=request.session_id,
+            business_type=request.business_type,
+            history=request.history,
+            user_msg=request.message,
+            assistant_msg=_HUMAN_HANDOFF_REPLY,
+        )
+        _save_session_file(
+            session_id=request.session_id, user_id=user_id, username=username,
+            history=request.history, user_msg=request.message, assistant_msg=_HUMAN_HANDOFF_REPLY,
+            business_type=request.business_type,
+            user_message_id=request.user_message_id,
+            assistant_message_id=request.assistant_message_id,
+        )
+        return {"message": _HUMAN_HANDOFF_REPLY, "handoff": True, **handoff_meta}
+
     if not settings.AI_API_KEY:
         mock_reply = "【真实后端接口调试中】"
         if _is_mock_completion_message(request.message):
@@ -437,10 +571,25 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
 
         if settings.AGENT_MODE == "media":
             reply = _sanitize_upload_reply(request.message, reply)
+        handoff = _HUMAN_HANDOFF_MARKER in reply
+        if handoff:
+            reply = reply.replace(_HUMAN_HANDOFF_MARKER, "").strip()
+        handoff_meta = {}
+        if handoff:
+            handoff_meta = await _record_handoff(
+                user_id=user_id,
+                username=username,
+                session_id=request.session_id,
+                business_type=request.business_type,
+                history=request.history,
+                user_msg=request.message,
+                assistant_msg=reply,
+            )
 
         _save_session_file(
             session_id=request.session_id, user_id=user_id, username=username,
             history=request.history, user_msg=request.message, assistant_msg=reply,
+            business_type=request.business_type,
             user_message_id=request.user_message_id,
             assistant_message_id=request.assistant_message_id,
         )
@@ -459,7 +608,7 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
             except Exception:
                 pass
 
-        return {"message": reply}
+        return {"message": reply, "handoff": handoff, **handoff_meta}
 
     except HTTPException:
         raise

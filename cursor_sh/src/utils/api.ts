@@ -1291,3 +1291,23 @@ export const chatHistoryApi = {
     return request.get(`/ai/chat-history/admin/sessions/${sessionId}/messages`)
   },
 }
+
+// ========== 转人工客户 API ==========
+export const humanHandoffApi = {
+  async list(params: {
+    page?: number
+    pageSize?: number
+    status?: string
+    keyword?: string
+  } = {}): Promise<any> {
+    return request.get('/human-handoffs', { params })
+  },
+
+  async detail(id: string): Promise<any> {
+    return request.get(`/human-handoffs/${id}`)
+  },
+
+  async updateStatus(id: string, status: 'pending' | 'followed'): Promise<any> {
+    return request.put(`/human-handoffs/${id}/status`, { status })
+  },
+}
