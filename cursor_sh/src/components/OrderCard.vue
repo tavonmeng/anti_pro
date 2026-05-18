@@ -1,5 +1,13 @@
 <template>
-  <el-card class="order-card" shadow="hover">
+  <el-card
+    class="order-card"
+    shadow="hover"
+    role="button"
+    tabindex="0"
+    @click="emitView"
+    @keydown.enter.self.prevent="emitView"
+    @keydown.space.self.prevent="emitView"
+  >
     <div class="order-header">
       <div class="order-info">
         <div class="order-number">{{ order.orderNumber }}</div>
@@ -41,7 +49,7 @@
           {{ formatTime(order.createdAt) }}
         </span>
       </div>
-      <el-button type="primary" text @click="$emit('view', order)">
+      <el-button type="primary" text @click.stop="emitView">
         查看详情
         <el-icon><ArrowRight /></el-icon>
       </el-button>
@@ -61,9 +69,13 @@ interface Props {
 
 const props = defineProps<Props>()
 
-defineEmits<{
+const emit = defineEmits<{
   view: [order: Order]
 }>()
+
+const emitView = () => {
+  emit('view', props.order)
+}
 
 const orderTypeMap: Record<string, string> = {
   video_purchase: '裸眼3D成片购买',
@@ -135,6 +147,7 @@ const formatTime = (timeString: string) => {
 <style lang="scss" scoped>
 .order-card {
   border-radius: 12px;
+  cursor: pointer;
   transition: all 0.3s ease;
   
   &:hover {
@@ -212,4 +225,3 @@ const formatTime = (timeString: string) => {
   }
 }
 </style>
-

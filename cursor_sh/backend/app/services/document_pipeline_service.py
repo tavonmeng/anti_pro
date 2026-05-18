@@ -13,6 +13,11 @@ from app.services.document_parser_service import parse_document, build_llm_text
 from app.services.document_extract_service import extract_customer_knowledge, empty_extraction
 from app.services.memory_service import get_or_create_memory
 from app.services.memory_merge_service import merge_document_knowledge
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+
+
+logger = get_module_logger("ai")
 
 
 async def process_document(document_id: str):
@@ -45,7 +50,13 @@ async def process_document(document_id: str):
     except Exception as exc:
         error = str(exc)
         summary = "抽取失败，已生成空白审核模板，可由管理员手动填写。"
-        print(f"[DocumentPipeline] 处理失败 document={document_id}: {exc}")
+        log_business_event(
+            logger,
+            "document_pipeline_failed",
+            level="error",
+            document_id=document_id,
+            error=str(exc),
+        )
     finally:
         if temp_file_path:
             try:

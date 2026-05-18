@@ -17,8 +17,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_client import post_chat_completion
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
 
 intro_router = APIRouter()
+logger = get_module_logger("ai")
 
 
 class BusinessIntroRequest(BaseModel):
@@ -50,7 +53,7 @@ def _load_business_knowledge() -> Tuple[str, list]:
 
         return intro_text, cases_data
     except Exception as e:
-        print(f"读取业务介绍文件失败: {e}")
+        log_business_event(logger, "business_knowledge_load_failed", level="warning", error=str(e))
         return "暂无法读取详细业务介绍", cases_data
 
 
@@ -292,5 +295,11 @@ async def ai_business_intro(request: BusinessIntroRequest):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"业务介绍 LLM 调用失败: {e}")
+        log_business_event(
+            logger,
+            "ai_business_intro_failed",
+            level="error",
+            history_count=len(request.history or []),
+            error=str(e),
+        )
         raise HTTPException(status_code=500, detail=str(e))

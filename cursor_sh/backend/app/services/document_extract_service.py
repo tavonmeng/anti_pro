@@ -3,6 +3,11 @@
 import json
 import re
 from app.config import settings
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+
+
+logger = get_module_logger("ai")
 
 
 EMPTY_EXTRACTION = {
@@ -75,7 +80,14 @@ async def extract_customer_knowledge(document_text: str, filename: str = "") -> 
             parsed = _parse_json(content)
             return normalize_extraction(parsed, filename)
     except Exception as exc:
-        print(f"[DocumentExtract] 抽取失败: {exc}")
+        log_business_event(
+            logger,
+            "document_extract_failed",
+            level="warning",
+            filename=filename,
+            text_length=len(document_text or ""),
+            error=str(exc),
+        )
         return empty_extraction()
 
 

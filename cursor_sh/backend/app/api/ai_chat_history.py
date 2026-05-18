@@ -19,8 +19,11 @@ from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.utils.security import decode_access_token
 from app.utils.dependencies import require_admin, AnyUser
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
 
 router = APIRouter(prefix="/ai/chat-history", tags=["AI 聊天记录"])
+logger = get_module_logger("ai")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -180,7 +183,15 @@ async def save_message(
         return {"code": 200, "message": "ok"}
 
     except Exception as e:
-        print(f"[ChatHistory] 保存消息失败: {e}")
+        log_business_event(
+            logger,
+            "ai_chat_history_save_failed",
+            level="warning",
+            session_id=getattr(data, "session_id", None),
+            role=getattr(data, "role", None),
+            business_type=getattr(data, "business_type", None),
+            error=str(e),
+        )
         # 不抛异常，不阻断聊天流程
         return {"code": 200, "message": "save skipped"}
 
@@ -308,7 +319,15 @@ async def sync_session(
         return {"code": 200, "message": "ok", "data": {"synced": len(new_messages)}}
 
     except Exception as e:
-        print(f"[ChatHistory] 同步会话失败: {e}")
+        log_business_event(
+            logger,
+            "ai_chat_history_sync_failed",
+            level="warning",
+            session_id=getattr(data, "session_id", None),
+            business_type=getattr(data, "business_type", None),
+            message_count=len(getattr(data, "messages", []) or []),
+            error=str(e),
+        )
         return {"code": 200, "message": "sync skipped"}
 
 
@@ -346,7 +365,13 @@ async def get_user_sessions(
 
         return {"code": 200, "data": items}
     except Exception as e:
-        print(f"[ChatHistory] 获取会话列表失败: {e}")
+        log_business_event(
+            logger,
+            "ai_chat_history_sessions_failed",
+            level="warning",
+            user_id=user_id,
+            error=str(e),
+        )
         return {"code": 200, "data": []}
 
 
@@ -390,7 +415,14 @@ async def get_session_messages(
 
         return {"code": 200, "data": items}
     except Exception as e:
-        print(f"[ChatHistory] 获取消息失败: {e}")
+        log_business_event(
+            logger,
+            "ai_chat_history_messages_failed",
+            level="warning",
+            user_id=user_id,
+            session_id=session_id,
+            error=str(e),
+        )
         return {"code": 200, "data": []}
 
 

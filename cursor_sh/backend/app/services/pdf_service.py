@@ -15,6 +15,11 @@ from reportlab.platypus import (
 )
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+
+
+logger = get_module_logger("order")
 
 
 # ========== 中文字体注册 ==========
@@ -100,7 +105,7 @@ def _register_chinese_fonts():
     for path in candidates:
         if _try_register_ttfont(path, "Chinese"):
             _try_register_ttfont(path, "ChineseBold")
-            print(f"  📝 PDF 字体: {path}")
+            log_business_event(logger, "pdf_font_registered", font_type="ttf", font_path=path)
             return "ttf"
     
     # 第二层：通过 fc-list 动态查找（仅 Linux）
@@ -109,20 +114,20 @@ def _register_chinese_fonts():
         if fc_path:
             if _try_register_ttfont(fc_path, "Chinese"):
                 _try_register_ttfont(fc_path, "ChineseBold")
-                print(f"  📝 PDF 字体 (fc-list): {fc_path}")
+                log_business_event(logger, "pdf_font_registered", font_type="ttf", font_path=fc_path, source="fc-list")
                 return "ttf"
     
     # 第三层：使用 ReportLab 内置 CID 字体（不需要任何外部文件）
     try:
         from reportlab.pdfbase.cidfonts import UnicodeCIDFont
         pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light'))
-        print("  📝 PDF 字体: STSong-Light (CID 内置)")
+        log_business_event(logger, "pdf_font_registered", font_type="cid", font_name="STSong-Light")
         return "cid"
     except Exception:
         pass
     
     # 全部失败
-    print("  ⚠️  未找到中文字体，PDF 将无法正确显示中文")
+    log_business_event(logger, "pdf_font_missing", level="warning")
     return "none"
 
 

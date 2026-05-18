@@ -14,9 +14,12 @@ from app.models.human_handoff import HANDOFF_STATUSES, HumanHandoff
 from app.models.order import Order
 from app.models.user import User
 from app.schemas.response import ApiResponse
+from app.utils.business_log import log_business_event
 from app.utils.dependencies import AnyUser, require_admin
+from app.utils.log_setup import get_module_logger
 
 router = APIRouter(prefix="/human-handoffs", tags=["转人工客户"])
+logger = get_module_logger("ai")
 
 
 class HandoffStatusUpdate(BaseModel):
@@ -130,6 +133,7 @@ async def update_handoff_status(
     if not handoff:
         raise HTTPException(status_code=404, detail="转人工记录不存在")
 
+    old_status = handoff.status
     handoff.status = payload.status
     handoff.updated_at = datetime.now(timezone.utc)
     handoff.followed_at = datetime.now(timezone.utc) if payload.status == "followed" else None
@@ -145,4 +149,15 @@ async def update_handoff_status(
 
     await db.commit()
     await db.refresh(handoff)
+    log_business_event(
+        logger,
+        "human_handoff_status_updated",
+        admin_id=current_user.id,
+        handoff_id=handoff.id,
+        user_id=handoff.user_id,
+        session_id=handoff.session_id,
+        draft_order_id=handoff.draft_order_id,
+        status_from=old_status,
+        status_to=handoff.status,
+    )
     return ApiResponse(code=200, message="更新成功", data={"id": handoff.id, "status": handoff.status})

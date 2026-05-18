@@ -19,8 +19,11 @@ from app.schemas.response import ApiResponse
 from app.utils.dependencies import require_admin, AnyUser
 from app.utils.validators import generate_id
 from app.config import settings
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
 
 router = APIRouter(prefix="/contractor-admin", tags=["承包商管理（管理端）"])
+logger = get_module_logger("contractor")
 
 
 # ========== Schemas ==========
@@ -81,6 +84,14 @@ async def create_invitation(
         db.add(invitation)
         await db.commit()
         await db.refresh(invitation)
+        log_business_event(
+            logger,
+            "contractor_invitation_created",
+            admin_id=current_user.id,
+            invitation_id=invitation.id,
+            expires_at=invitation.expires_at.isoformat() if invitation.expires_at else None,
+            has_note=bool(data.note),
+        )
         
         # 生成完整的邀请链接
         base_url = getattr(settings, 'CONTRACTOR_BASE_URL', '') or f"http://localhost:3000"
@@ -460,6 +471,7 @@ async def assign_order_to_contractor(
         
         # 6. 更新订单状态为「制作中」
         from app.models.order import OrderStatus
+        old_order_status = order.status
         if order.status in (
             OrderStatus.DRAFT,
             OrderStatus.PENDING_ASSIGN,
@@ -469,6 +481,19 @@ async def assign_order_to_contractor(
         
         await db.commit()
         await db.refresh(assignment)
+        log_business_event(
+            logger,
+            "contractor_assignment_created",
+            admin_id=current_user.id,
+            assignment_id=assignment.id,
+            order_id=order.id,
+            order_number=order.order_number,
+            contractor_id=contractor.id,
+            workflow_type=data.workflow_type,
+            stage_count=len(schedule),
+            order_status_from=old_order_status,
+            order_status_to=order.status,
+        )
         
         # ====== 发送通知 ======
         notification_status = {"email": "skipped", "inApp": "sent"}
@@ -505,7 +530,17 @@ async def assign_order_to_contractor(
                 )
                 notification_status["email"] = "sent" if email_sent else "failed"
             except Exception as e:
-                print(f"派单邮件发送失败: {e}")
+                log_business_event(
+                    logger,
+                    "contractor_assignment_email_failed",
+                    level="warning",
+                    admin_id=current_user.id,
+                    assignment_id=assignment.id,
+                    order_id=order.id,
+                    contractor_id=contractor.id,
+                    email=contractor.email,
+                    error=str(e),
+                )
                 notification_status["email"] = "failed"
         
         return ApiResponse(code=201, message="派单成功", data={
@@ -686,6 +721,17 @@ async def review_deliverable(
         
         await db.commit()
         await db.refresh(deliverable)
+        log_business_event(
+            logger,
+            "contractor_deliverable_reviewed",
+            admin_id=current_user.id,
+            deliverable_id=deliverable.id,
+            assignment_id=deliverable.assignment_id,
+            stage_name=deliverable.stage_name,
+            version=deliverable.version,
+            approved=data.approved,
+            status=deliverable.status,
+        )
         
         # 通知承包商审核结果
         try:
@@ -765,6 +811,17 @@ async def publish_deliverable_to_user(
         
         await db.commit()
         await db.refresh(deliverable)
+        log_business_event(
+            logger,
+            "contractor_deliverable_published",
+            admin_id=current_user.id,
+            deliverable_id=deliverable.id,
+            assignment_id=deliverable.assignment_id,
+            stage_name=deliverable.stage_name,
+            version=deliverable.version,
+            status=deliverable.status,
+            has_published_note=bool(data.published_note),
+        )
         
         # 通知用户有新的交付物可查看
         try:
@@ -887,6 +944,18 @@ async def advance_to_next_stage(
         
         await db.commit()
         await db.refresh(assignment)
+        log_business_event(
+            logger,
+            "contractor_assignment_advanced",
+            admin_id=current_user.id,
+            assignment_id=assignment.id,
+            order_id=assignment.order_id,
+            contractor_id=assignment.contractor_id,
+            stage_from=current_order,
+            stage_to=next_order if has_next else None,
+            has_next=has_next,
+            assignment_status=assignment.status,
+        )
         
         # 通知承包商环节推进
         try:
@@ -982,6 +1051,14 @@ async def add_admin_comment(
         
         await db.commit()
         await db.refresh(deliverable)
+        log_business_event(
+            logger,
+            "contractor_deliverable_commented",
+            admin_id=current_user.id,
+            deliverable_id=deliverable.id,
+            assignment_id=deliverable.assignment_id,
+            comment_count=len(deliverable.admin_comments or []),
+        )
         
         # 通知承包商有新评论
         try:
@@ -1021,4 +1098,3 @@ async def add_admin_comment(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

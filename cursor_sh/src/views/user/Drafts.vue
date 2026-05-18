@@ -20,7 +20,11 @@
         v-for="order in draftOrders"
         :key="order.id"
         class="draft-card"
+        role="button"
+        tabindex="0"
         @click="viewDraft(order)"
+        @keydown.enter.self.prevent="viewDraft(order)"
+        @keydown.space.self.prevent="viewDraft(order)"
       >
         <div class="draft-card-header">
           <div class="draft-type">
@@ -114,12 +118,23 @@ const formatTime = (timeString: string) => {
   })
 }
 
-const viewDraft = (order: Order) => {
-  router.push(`/user/orders/${order.id}`)
+const resetNavigationLayout = () => {
+  uiStore.setSecondarySidebar(false)
+  uiStore.toggleSidebar(false)
+  uiStore.setActiveModule('')
+  uiStore.setIsAiExpanded(false)
 }
 
-const handleEdit = (order: Order) => {
-  router.push(`/user/edit-order/${order.id}`)
+const viewDraft = async (order: Order) => {
+  if (!order.id) return
+  resetNavigationLayout()
+  await router.push(`/user/orders/${order.id}`)
+}
+
+const handleEdit = async (order: Order) => {
+  if (!order.id) return
+  resetNavigationLayout()
+  await router.push(`/user/edit-order/${order.id}`)
 }
 
 const handleSubmit = async (order: Order) => {
@@ -299,5 +314,7 @@ const goToWorkspace = () => {
   gap: 8px;
   padding-top: 12px;
   border-top: 1px solid rgba(0, 0, 0, 0.04);
+  position: relative;
+  z-index: 1;
 }
 </style>

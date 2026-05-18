@@ -13,8 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user_memory import UserMemory
 from app.database import async_session_maker
 from app.config import settings
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
 
 
+logger = get_module_logger("ai")
 _crawl_tasks: set[str] = set()
 _crawl_semaphore: asyncio.Semaphore | None = None
 _background_semaphore: asyncio.Semaphore | None = None
@@ -479,7 +482,13 @@ async def _background_crawl(user_id: str, company_name: str, task_key: str = "")
         from app.services.crawl_service import crawl_and_extract
 
         async with _get_crawl_semaphore():
-            print(f"[MemoryService] 开始后台爬取: user={user_id}, company={company_name}")
+            log_business_event(
+                logger,
+                "memory_crawl_started",
+                user_id=user_id,
+                company_name=company_name,
+                task_key=task_key,
+            )
             result = await crawl_and_extract(company_name)
 
         await update_memory(user_id, {
@@ -489,10 +498,26 @@ async def _background_crawl(user_id: str, company_name: str, task_key: str = "")
 
         status = result.get("company_info", {}).get("crawl_status", "unknown")
         screens = len(result.get("screen_resources", []))
-        print(f"[MemoryService] 爬取完成: status={status}, screens={screens}")
+        log_business_event(
+            logger,
+            "memory_crawl_completed",
+            user_id=user_id,
+            company_name=company_name,
+            task_key=task_key,
+            crawl_status=status,
+            screen_count=screens,
+        )
 
     except Exception as e:
-        print(f"[MemoryService] 后台爬取失败: {e}")
+        log_business_event(
+            logger,
+            "memory_crawl_failed",
+            level="error",
+            user_id=user_id,
+            company_name=company_name,
+            task_key=task_key,
+            error=str(e),
+        )
         # 记录失败状态
         try:
             await update_memory(user_id, {
@@ -705,7 +730,13 @@ async def learn_from_conversation(user_id: str, conversation: list[dict]):
     try:
         await asyncio.wait_for(semaphore.acquire(), timeout=0.1)
     except asyncio.TimeoutError:
-        print(f"[MemoryService] 对话学习队列繁忙，跳过: user={user_id}")
+        log_business_event(
+            logger,
+            "memory_learning_skipped",
+            level="warning",
+            user_id=user_id,
+            reason="queue_busy",
+        )
         return
 
     try:
@@ -729,15 +760,39 @@ async def learn_from_conversation(user_id: str, conversation: list[dict]):
             if merged != existing:
                 memory.project_preferences = merged
                 await session.commit()
-                print(f"[MemoryService] 对话学习完成: user={user_id}, 更新了偏好")
+                log_business_event(
+                    logger,
+                    "memory_learning_completed",
+                    user_id=user_id,
+                    updated_preferences=True,
+                    updated_screens=bool(new_screens),
+                )
             elif new_screens:
                 await session.commit()
-                print(f"[MemoryService] 对话学习完成: user={user_id}, 更新了屏幕资源")
+                log_business_event(
+                    logger,
+                    "memory_learning_completed",
+                    user_id=user_id,
+                    updated_preferences=False,
+                    updated_screens=True,
+                )
             else:
-                print(f"[MemoryService] 对话学习完成: 无新偏好")
+                log_business_event(
+                    logger,
+                    "memory_learning_completed",
+                    user_id=user_id,
+                    updated_preferences=False,
+                    updated_screens=False,
+                )
 
     except Exception as e:
-        print(f"[MemoryService] 对话学习失败: {e}")
+        log_business_event(
+            logger,
+            "memory_learning_failed",
+            level="error",
+            user_id=user_id,
+            error=str(e),
+        )
     finally:
         semaphore.release()
 
@@ -818,7 +873,13 @@ async def _extract_preferences(conversation: list[dict]) -> dict:
             return json.loads(json_match.group(0))
         return {}
     except Exception as e:
-        print(f"[MemoryService] LLM 提取偏好失败: {e}")
+        log_business_event(
+            logger,
+            "memory_preference_extract_failed",
+            level="warning",
+            message_count=len(conversation or []),
+            error=str(e),
+        )
         return {}
 
 

@@ -8,8 +8,11 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_client import post_chat_completion
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
 
 general_router = APIRouter()
+logger = get_module_logger("ai")
 
 
 class GeneralRequest(BaseModel):
@@ -55,5 +58,12 @@ async def ai_general(request: GeneralRequest, raw_request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"通用问答 LLM 调用失败: {e}")
+        log_business_event(
+            logger,
+            "ai_general_failed",
+            level="error",
+            session_id=request.session_id,
+            history_count=len(request.history or []),
+            error=str(e),
+        )
         raise HTTPException(status_code=500, detail=str(e))

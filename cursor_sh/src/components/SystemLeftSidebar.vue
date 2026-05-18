@@ -56,7 +56,7 @@
                   {{ getStatusText(order.status) }}
                 </div>
               </div>
-              <button class="card-action-btn" @click.stop="router.push(`/user/orders/${order.id}`)">View order</button>
+              <button class="card-action-btn" type="button" @click.stop="goToOrder(order)">View order</button>
             </div>
 
             <!-- Pagination dots over stack -->
@@ -270,8 +270,25 @@ const getStackStyle = (order: any) => {
   }
 }
 
+const resetUserNavigationState = () => {
+  uiStore.setSecondarySidebar(false)
+  uiStore.toggleSidebar(false)
+  uiStore.setActiveModule('')
+  uiStore.setIsAiExpanded(false)
+}
+
+const goToOrder = async (order: any) => {
+  if (!order?.id) return
+  resetUserNavigationState()
+  await router.push(`/user/orders/${order.id}`)
+}
+
 const handleStackClick = (order: any) => {
   const vIndex = getVisualIndex(order);
+  if (vIndex === 0) {
+    void goToOrder(order)
+    return
+  }
   if (vIndex === 1 || vIndex === 2) {
     advanceToNext();
   }
@@ -316,16 +333,13 @@ const activeMenu = computed(() => {
 })
 
 const navigate = async (name: string) => {
+  resetUserNavigationState()
   if (name === 'workspace') {
-    uiStore.setSecondarySidebar(false)
-    uiStore.toggleSidebar(false)
-    uiStore.setActiveModule('')
-    uiStore.setIsAiExpanded(false)
     await router.push('/user/workspace')
   }
-  else if (name === 'orders') router.push('/user/orders')
-  else if (name === 'drafts') router.push('/user/drafts')
-  else if (name === 'profile') router.push('/user/profile')
+  else if (name === 'orders') await router.push('/user/orders')
+  else if (name === 'drafts') await router.push('/user/drafts')
+  else if (name === 'profile') await router.push('/user/profile')
 }
 
 const showHelp = () => {
@@ -341,7 +355,7 @@ const showHelp = () => {
 
 const handleAuthClick = () => {
   // Enterprise authentication logic can be implemented here
-  router.push('/user/profile') // Navigate to profile or specific auth page
+  void navigate('profile') // Navigate to profile or specific auth page
 }
 
 const handleLogout = async () => {

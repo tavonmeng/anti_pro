@@ -18,6 +18,11 @@ from app.schemas.user import UserResponse
 from app.utils.security import verify_password, get_password_hash, create_access_token
 from app.utils.validators import generate_id
 from app.services.sms_service import verify_sms_code
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+
+
+logger = get_module_logger("auth")
 
 
 def _get_model_for_role(role: UserRole):
@@ -57,12 +62,30 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
     if login_data.sms_code:
         # ---- 手机号 + 验证码登录 ----
         if not user:
+            log_business_event(
+                logger,
+                "login_failed",
+                role=login_data.role,
+                phone=login_data.phone,
+                method="sms",
+                reason="user_not_found",
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="尚未注册或角色不匹配"
             )
         is_valid = await verify_sms_code(login_data.phone, login_data.sms_code)
         if not is_valid:
+            log_business_event(
+                logger,
+                "login_failed",
+                user_id=user.id,
+                username=user.username,
+                role=login_data.role,
+                phone=login_data.phone,
+                method="sms",
+                reason="invalid_sms_code",
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="验证码错误或已过期"
@@ -70,6 +93,14 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
     elif login_data.password:
         # ---- 手机号 + 密码登录 ----
         if not user or not verify_password(login_data.password, user.password_hash):
+            log_business_event(
+                logger,
+                "login_failed",
+                role=login_data.role,
+                phone=login_data.phone,
+                method="password",
+                reason="invalid_credentials",
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="手机号或密码错误"
@@ -81,6 +112,16 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
         )
     
     if not user.is_active:
+        log_business_event(
+            logger,
+            "login_failed",
+            user_id=user.id,
+            username=user.username,
+            role=login_data.role,
+            phone=login_data.phone,
+            method="sms" if login_data.sms_code else "password",
+            reason="inactive",
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="用户已被禁用"
@@ -96,6 +137,15 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
         "role": role_value
     }
     token = create_access_token(token_data)
+    log_business_event(
+        logger,
+        "login_success",
+        user_id=user.id,
+        username=user.username,
+        role=role_value,
+        phone=login_data.phone,
+        method="sms" if login_data.sms_code else "password",
+    )
     
     # 构造统一响应
     user_response = UserResponse(
@@ -148,14 +198,29 @@ async def register(db: AsyncSession, register_data: RegisterRequest, client_ip: 
             db.add(event)
             await db.flush()  # 写入但不单独 commit，跟随主事务
         except Exception as e:
-            print(f"[SecurityEvent] 写入失败: {e}")
+            log_business_event(
+                logger,
+                "security_event_write_failed",
+                level="warning",
+                event_type=event_type,
+                user_id=user_id,
+                phone=register_data.phone,
+                error=str(e),
+            )
     
     try:
         # ========== 反注册机检测 ==========
         
         # 0a. 蜜罐字段检查（前端隐藏，正常用户不会填写）
         if register_data.website:
-            print(f"[AntiBot] 蜜罐触发 IP={client_ip} phone={register_data.phone}")
+            log_business_event(
+                logger,
+                "register_bot_blocked",
+                phone=register_data.phone,
+                username=register_data.username,
+                client_ip=client_ip,
+                reason="honeypot_filled",
+            )
             await _log_event(SecurityEventType.REGISTER_BOT_BLOCKED, block_reason="honeypot_filled")
             await db.commit()
             raise HTTPException(
@@ -185,9 +250,25 @@ async def register(db: AsyncSession, register_data: RegisterRequest, client_ip: 
                 await db.commit()
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="操作异常，请重新注册")
             
-            print(f"[AntiBot] 行为正常: 耗时={total_time_sec:.1f}s 按键={behavior.key_press_count} 聚焦={behavior.field_focus_count} IP={client_ip}")
+            log_business_event(
+                logger,
+                "register_behavior_checked",
+                phone=register_data.phone,
+                username=register_data.username,
+                client_ip=client_ip,
+                total_duration_sec=round(total_time_sec, 1),
+                key_press_count=behavior.key_press_count,
+                field_focus_count=behavior.field_focus_count,
+            )
         else:
-            print(f"[AntiBot] 警告: 无行为数据 IP={client_ip} phone={register_data.phone}")
+            log_business_event(
+                logger,
+                "register_behavior_missing",
+                level="warning",
+                phone=register_data.phone,
+                username=register_data.username,
+                client_ip=client_ip,
+            )
         
         # ========== 正常注册流程 ==========
         
@@ -240,14 +321,29 @@ async def register(db: AsyncSession, register_data: RegisterRequest, client_ip: 
         
         await db.commit()
         await db.refresh(new_user)
+        log_business_event(
+            logger,
+            "register_success",
+            user_id=new_user.id,
+            username=new_user.username,
+            phone=new_user.phone,
+            email=new_user.email,
+            client_ip=client_ip,
+        )
         
         return {"success": True}
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        error_detail = f"{str(e)}\n{traceback.format_exc()}"
-        print(f"注册服务错误: {error_detail}")
+        log_business_event(
+            logger,
+            "register_failed",
+            level="error",
+            phone=register_data.phone,
+            username=register_data.username,
+            client_ip=client_ip,
+            error=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"注册失败: {str(e)}"
@@ -285,7 +381,14 @@ async def reset_password(db: AsyncSession, data: ResetPasswordRequest) -> dict:
     await db.commit()
     await db.refresh(user)
     
-    print(f"✅ 用户 {user.username} (手机号 {data.phone[:3]}****{data.phone[7:]}) 密码重置成功")
+    log_business_event(
+        logger,
+        "password_reset",
+        user_id=user.id,
+        username=user.username,
+        role=getattr(user, "role", ""),
+        phone=data.phone,
+    )
     return {"success": True, "message": "密码重置成功"}
 
 
@@ -435,15 +538,29 @@ async def register_contractor(db: AsyncSession, register_data: dict) -> dict:
         
         await db.commit()
         await db.refresh(new_contractor)
+        log_business_event(
+            logger,
+            "contractor_register_success",
+            contractor_id=new_contractor.id,
+            username=new_contractor.username,
+            phone=new_contractor.phone,
+            email=new_contractor.email,
+            invitation_id=invitation.id,
+        )
         
         return {"success": True, "contractor_id": new_contractor.id}
     
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        error_detail = f"{str(e)}\n{traceback.format_exc()}"
-        print(f"承包商注册错误: {error_detail}")
+        log_business_event(
+            logger,
+            "contractor_register_failed",
+            level="error",
+            phone=register_data.get("phone"),
+            invite_token=register_data.get("invite_token"),
+            error=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"注册失败: {str(e)}"

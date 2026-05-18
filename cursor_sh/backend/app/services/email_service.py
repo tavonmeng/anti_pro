@@ -8,6 +8,11 @@ from email.mime.application import MIMEApplication
 from typing import List, Optional, Dict
 
 from app.config import settings
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+
+
+logger = get_module_logger("notification")
 
 
 class EmailService:
@@ -26,7 +31,14 @@ class EmailService:
         attachments 格式: [{"filename": "xxx.pdf", "content": b"..."}]
         """
         if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-            print(f"邮件服务未配置，跳过发送邮件: {subject}")
+            log_business_event(
+                logger,
+                "email_send_skipped",
+                level="warning",
+                subject=subject,
+                to_emails=to_emails,
+                reason="smtp_not_configured",
+            )
             return
         
         # 创建邮件
@@ -72,10 +84,24 @@ class EmailService:
                 use_tls=True,
                 tls_context=tls_context
             )
-            print(f"邮件发送成功: {subject} -> {to_emails}")
+            log_business_event(
+                logger,
+                "email_sent",
+                subject=subject,
+                to_emails=to_emails,
+                attachment_count=len(attachments or []),
+            )
             return True
         except Exception as e:
-            print(f"邮件发送失败: {e}")
+            log_business_event(
+                logger,
+                "email_send_failed",
+                level="error",
+                subject=subject,
+                to_emails=to_emails,
+                attachment_count=len(attachments or []),
+                error=str(e),
+            )
     
     @staticmethod
     async def send_order_confirmation(
@@ -290,5 +316,12 @@ class EmailService:
             await EmailService.send_email([contractor_email], subject, html_content)
             return True
         except Exception as e:
-            print(f"派单通知邮件发送失败: {e}")
+            log_business_event(
+                logger,
+                "assignment_email_send_failed",
+                level="error",
+                order_number=order_number,
+                contractor_email=contractor_email,
+                error=str(e),
+            )
             return False

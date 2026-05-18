@@ -16,7 +16,12 @@ from app.models.notification import Notification, NotificationType
 from app.models.order import Order, OrderStatus, OrderType
 from app.models.user import User
 from app.services.ai_client import post_chat_completion
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
 from app.utils.validators import generate_id, generate_order_number
+
+
+logger = get_module_logger("ai")
 
 
 def _messages_snapshot(history: list[dict], user_msg: str, assistant_msg: str = "") -> list[dict]:
@@ -145,7 +150,14 @@ async def _extract_requirement_data(messages: list[dict], business_type: str) ->
         parsed = json.loads(content)
         return parsed if isinstance(parsed, dict) else {}
     except Exception as e:
-        print(f"[HumanHandoff] 需求整理失败: {e}")
+        log_business_event(
+            logger,
+            "human_handoff_extract_failed",
+            level="warning",
+            business_type=business_type,
+            message_count=len(messages),
+            error=str(e),
+        )
         return {}
 
 
@@ -186,6 +198,8 @@ async def record_handoff(
 ) -> dict[str, Any]:
     messages = _messages_snapshot(history, user_msg, assistant_msg)
     extracted = await _extract_requirement_data(messages, business_type)
+    draft_order_created = False
+    admin_count = 0
 
     async with async_session_maker() as db:
         user = None
@@ -236,6 +250,7 @@ async def record_handoff(
                 )
                 db.add(draft_order)
                 handoff.draft_order_id = draft_order.id
+                draft_order_created = True
 
             base_data = draft_order.order_data or _empty_order_data(business_type)
             if not base_data:
@@ -246,6 +261,7 @@ async def record_handoff(
         if is_new:
             admin_result = await db.execute(select(Admin).where(Admin.is_active == True))
             admins = admin_result.scalars().all()
+            admin_count = len(admins)
             customer_label = (user.enterprise_name or user.company or user.username) if user else (username or user_id or "匿名用户")
             for admin in admins:
                 db.add(Notification(
@@ -258,6 +274,23 @@ async def record_handoff(
 
         await db.commit()
         await db.refresh(handoff)
+
+        log_business_event(
+            logger,
+            "human_handoff_recorded",
+            user_id=user_id,
+            username=username,
+            session_id=session_id,
+            business_type=business_type,
+            handoff_id=handoff.id,
+            draft_order_id=handoff.draft_order_id,
+            draft_order_created=draft_order_created,
+            is_new=is_new,
+            status=handoff.status,
+            message_count=len(messages),
+            extracted_field_count=len(extracted or {}),
+            admin_count=admin_count,
+        )
 
         return {
             "handoff_id": handoff.id,
@@ -280,6 +313,15 @@ async def append_handoff_message(
         result = await db.execute(select(HumanHandoff).where(HumanHandoff.session_id == session_id))
         handoff = result.scalar_one_or_none()
         if not handoff:
+            log_business_event(
+                logger,
+                "human_handoff_append_skipped",
+                level="debug",
+                user_id=user_id,
+                session_id=session_id,
+                business_type=business_type,
+                reason="not_found",
+            )
             return None
 
     return await record_handoff(

@@ -8,8 +8,11 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_client import post_chat_completion
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
 
 classify_router = APIRouter()
+logger = get_module_logger("ai")
 
 
 class ClassifyRequest(BaseModel):
@@ -83,7 +86,13 @@ async def ai_classify(request: ClassifyRequest):
             intent = result if result in _VALID_INTENTS else "order_create"
             return {"intent": intent}
         except Exception as e:
-            print(f"意图分类 LLM 调用失败: {e}")
+            log_business_event(
+                logger,
+                "ai_intent_classify_failed",
+                level="warning",
+                history_count=len(request.history or []),
+                error=str(e),
+            )
 
     # ── 3. 默认兜底 ──
     return {"intent": "order_create"}

@@ -12,8 +12,11 @@ from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_client import post_chat_completion
 from app.utils.security import decode_access_token
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
 
 order_router = APIRouter()
+logger = get_module_logger("ai")
 
 
 # ───────────────────────────────────────────────────────
@@ -417,7 +420,13 @@ async def _llm_understand_query(user_msg: str, history: list, orders_summary: st
         import json as _json
         return _json.loads(raw)
     except Exception as e:
-        print(f"LLM 订单意图分析失败: {e}")
+        log_business_event(
+            logger,
+            "ai_order_intent_failed",
+            level="warning",
+            history_count=len(history or []),
+            error=str(e),
+        )
     return None
 
 
@@ -474,7 +483,13 @@ async def ai_query_orders(request: QueryOrdersRequest, raw_request: Request):
 
                 orders_data = (active + drafts)[:10]
     except Exception as e:
-        print(f"查询订单失败: {e}")
+        log_business_event(
+            logger,
+            "ai_order_query_failed",
+            level="error",
+            user_id=user_id,
+            error=str(e),
+        )
         return {"message": "非常抱歉，查询订单时遇到了问题，请稍后再试。", "orders": []}
 
     if not orders_data:

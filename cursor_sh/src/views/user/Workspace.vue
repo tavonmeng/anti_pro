@@ -34,7 +34,14 @@
           <!-- 服务入口卡片 -->
           <div class="service-cards">
             <!-- Card 1 -->
-            <div class="service-card" @click="triggerChoreography('video_purchase')">
+            <div
+              class="service-card"
+              role="button"
+              tabindex="0"
+              @click="triggerChoreography('video_purchase')"
+              @keydown.enter.self.prevent="triggerChoreography('video_purchase')"
+              @keydown.space.self.prevent="triggerChoreography('video_purchase')"
+            >
               <div class="card-image-wrapper">
                 <div class="card-img" style="background: linear-gradient(to bottom, #111, #333);">
                   <!-- Placeholder Character -->
@@ -59,7 +66,14 @@
             </div>
 
             <!-- Card 2 -->
-            <div class="service-card" @click="triggerChoreography('ai_3d_custom')">
+            <div
+              class="service-card"
+              role="button"
+              tabindex="0"
+              @click="triggerChoreography('ai_3d_custom')"
+              @keydown.enter.self.prevent="triggerChoreography('ai_3d_custom')"
+              @keydown.space.self.prevent="triggerChoreography('ai_3d_custom')"
+            >
               <div class="card-image-wrapper">
                 <div class="card-img" style="background: linear-gradient(to bottom, #001f3f, #004080);">
                    <!-- Placeholder Typography -->
@@ -79,7 +93,14 @@
             </div>
 
             <!-- Card 3 -->
-            <div class="service-card" @click="triggerChoreography('digital_art')">
+            <div
+              class="service-card"
+              role="button"
+              tabindex="0"
+              @click="triggerChoreography('digital_art')"
+              @keydown.enter.self.prevent="triggerChoreography('digital_art')"
+              @keydown.space.self.prevent="triggerChoreography('digital_art')"
+            >
               <div class="card-image-wrapper">
                 <div class="card-img" style="background: linear-gradient(to bottom, #4a0000, #ff1a1a);">
                    <!-- Placeholder Abstract -->
@@ -228,14 +249,18 @@ const handleModeChange = (mode: string) => {
   logger.logAction('Workspace', 'switch_ai_mode', { mode })
 }
 
-const triggerChoreography = (targetType: OrderType | string | null) => {
+const triggerChoreography = async (targetType: OrderType | string | null) => {
   // B2B direct routing layout shift: instantly navigate and apply system states
   if (targetType) {
     logger.logAction('Workspace', 'click_service_card', { targetType })
+    uiStore.setIsAiExpanded(false)
+    uiStore.setSecondarySidebar(true)
+    uiStore.toggleSidebar(true)
+    uiStore.setActiveModule(targetType)
     if (targetType === 'video_purchase') {
-      router.push('/user/video-marketplace')
+      await router.push('/user/video-marketplace')
     } else {
-      router.push(`/user/create-order/${targetType}`)
+      await router.push(`/user/create-order/${targetType}`)
     }
   } else {
     handleAiExpand(true)

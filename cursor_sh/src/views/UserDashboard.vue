@@ -27,6 +27,7 @@ watch(() => route.path, (newPath) => {
     newPath.includes('/create-order') || 
     newPath.includes('/video-marketplace')
   ) {
+    uiStore.setIsAiExpanded(false)
     uiStore.setSecondarySidebar(true)
     uiStore.toggleSidebar(true) // Squish primary sidebar
     
@@ -38,6 +39,7 @@ watch(() => route.path, (newPath) => {
       uiStore.setActiveModule('digital_art')
     }
   } else if (!newPath.includes('/workspace')) {
+    uiStore.setIsAiExpanded(false)
     uiStore.setSecondarySidebar(false)
     uiStore.toggleSidebar(false)
     uiStore.setActiveModule('')
@@ -78,4 +80,3 @@ watch(() => route.path, (newPath) => {
   transform: translateY(-10px);
 }
 </style>
-

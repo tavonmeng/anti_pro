@@ -12,6 +12,8 @@ from app.schemas.response import ApiResponse
 from app.services.auth_service import login, register, change_password, reset_password
 from app.services.sms_service import send_sms_verify_code, verify_sms_code
 from app.utils.dependencies import get_current_user, AnyUser
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
 from pydantic import BaseModel, EmailStr
 
 class VerifySmsRequest(BaseModel):
@@ -26,6 +28,7 @@ class ProfileUpdate(BaseModel):
     address: Optional[str] = None
 
 router = APIRouter(prefix="/auth", tags=["认证"])
+logger = get_module_logger("auth")
 
 
 @router.post("/login", response_model=ApiResponse[LoginResponse])
@@ -91,9 +94,14 @@ async def api_register(
     except HTTPException as e:
         raise e
     except Exception as e:
-        import traceback
-        error_detail = f"{str(e)}\n{traceback.format_exc()}"
-        print(f"注册接口错误: {error_detail}")
+        log_business_event(
+            logger,
+            "register_api_failed",
+            level="error",
+            phone=register_data.phone,
+            username=register_data.username,
+            error=str(e),
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -17,8 +17,11 @@ from app.schemas.response import ApiResponse
 from app.utils.dependencies import get_current_user, require_admin, AnyUser
 from app.services.notification_service import NotificationService
 from app.models.notification import NotificationType
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
 
 router = APIRouter(prefix="/enterprise", tags=["企业认证"])
+logger = get_module_logger("system")
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 BUSINESS_LICENSE_MAX_SIZE = 10 * 1024 * 1024
@@ -161,6 +164,16 @@ async def submit_enterprise_auth(
     
     await db.commit()
     await db.refresh(current_user)
+    log_business_event(
+        logger,
+        "enterprise_auth_submitted",
+        user_id=current_user.id,
+        username=current_user.username,
+        phone=current_user.phone,
+        enterprise_name=enterprise_name,
+        status=current_user.enterprise_status,
+        has_license=bool(current_user.business_license_url),
+    )
     
     # 获取所有管理员，发送系统通知
     try:
@@ -178,7 +191,14 @@ async def submit_enterprise_auth(
                 content=f"用户 {current_user.username} ({current_user.phone}) 提交了「{enterprise_name}」的企业认证申请，请及时审核。"
             )
     except Exception as e:
-        print(f"[Enterprise] 发送管理员通知失败: {e}")
+        log_business_event(
+            logger,
+            "enterprise_admin_notification_failed",
+            level="warning",
+            user_id=current_user.id,
+            enterprise_name=enterprise_name,
+            error=str(e),
+        )
     
     return ApiResponse(code=200, message="企业认证申请已提交，请等待审核", data={
         "enterprise_status": "pending",
@@ -247,6 +267,17 @@ async def review_enterprise_auth(
         
         await db.commit()
         await db.refresh(target_user)
+        log_business_event(
+            logger,
+            "enterprise_auth_reviewed",
+            admin_id=current_user.id,
+            user_id=target_user.id,
+            username=target_user.username,
+            phone=target_user.phone,
+            enterprise_name=target_user.enterprise_name,
+            action="approve",
+            status=target_user.enterprise_status,
+        )
         
         # 发送通知
         try:
@@ -257,7 +288,15 @@ async def review_enterprise_auth(
                 content=f"恭喜！您的企业「{target_user.enterprise_name}」已通过认证，现在可以使用全部功能。"
             )
         except Exception as e:
-            print(f"[Enterprise] 发送通知失败: {e}")
+            log_business_event(
+                logger,
+                "enterprise_user_notification_failed",
+                level="warning",
+                admin_id=current_user.id,
+                user_id=target_user.id,
+                action="approve",
+                error=str(e),
+            )
         
         return ApiResponse(code=200, message="企业认证已通过", data={
             "enterprise_status": "approved",
@@ -275,6 +314,18 @@ async def review_enterprise_auth(
         
         await db.commit()
         await db.refresh(target_user)
+        log_business_event(
+            logger,
+            "enterprise_auth_reviewed",
+            admin_id=current_user.id,
+            user_id=target_user.id,
+            username=target_user.username,
+            phone=target_user.phone,
+            enterprise_name=target_user.enterprise_name,
+            action="reject",
+            status=target_user.enterprise_status,
+            reject_reason_present=bool(reject_reason),
+        )
         
         # 发送通知
         try:
@@ -285,7 +336,15 @@ async def review_enterprise_auth(
                 content=f"您的企业认证申请未通过，原因：{reject_reason}。请修正后重新提交。"
             )
         except Exception as e:
-            print(f"[Enterprise] 发送通知失败: {e}")
+            log_business_event(
+                logger,
+                "enterprise_user_notification_failed",
+                level="warning",
+                admin_id=current_user.id,
+                user_id=target_user.id,
+                action="reject",
+                error=str(e),
+            )
         
         return ApiResponse(code=200, message="已拒绝企业认证", data={
             "enterprise_status": "rejected",

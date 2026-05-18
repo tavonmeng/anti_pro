@@ -10,6 +10,11 @@ from datetime import datetime
 from typing import Optional
 
 from app.config import settings
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+
+
+logger = get_module_logger("order")
 
 
 # ============ OSS 客户端初始化 ============
@@ -100,9 +105,10 @@ def delete_object(object_key: str) -> bool:
     try:
         bucket = _get_bucket()
         bucket.delete_object(object_key)
+        log_business_event(logger, "oss_object_deleted", object_key=object_key)
         return True
     except Exception as e:
-        print("OSS 删除失败: %s" % str(e))
+        log_business_event(logger, "oss_object_delete_failed", level="warning", object_key=object_key, error=str(e))
         return False
 
 

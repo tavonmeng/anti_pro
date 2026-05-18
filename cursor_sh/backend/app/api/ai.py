@@ -16,9 +16,12 @@ from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from app.config import settings
 from app.services.ai_client import post_chat_completion
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
 from app.utils.security import decode_access_token
 
 router = APIRouter(prefix="/ai", tags=["AI 智能体对话"])
+logger = get_module_logger("ai")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -492,7 +495,15 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
             import asyncio
             asyncio.create_task(update_interaction_stats(user_id))
         except Exception as e:
-            print(f"[AI Chat] Memory 加载失败（不影响对话）: {e}")
+            log_business_event(
+                logger,
+                "ai_memory_context_failed",
+                level="warning",
+                user_id=user_id,
+                session_id=request.session_id,
+                business_type=request.business_type,
+                error=str(e),
+            )
 
     existing_handoff = await _append_handoff_message(
         user_id=user_id,
@@ -504,6 +515,17 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
         assistant_msg=_HUMAN_HANDOFF_APPEND_REPLY,
     )
     if existing_handoff:
+        log_business_event(
+            logger,
+            "ai_handoff_message_appended",
+            user_id=user_id,
+            username=username,
+            session_id=request.session_id,
+            business_type=request.business_type,
+            handoff_id=existing_handoff.get("handoff_id"),
+            draft_order_id=existing_handoff.get("draft_order_id"),
+            history_count=len(request.history or []),
+        )
         _save_session_file(
             session_id=request.session_id, user_id=user_id, username=username,
             history=request.history, user_msg=request.message, assistant_msg=_HUMAN_HANDOFF_APPEND_REPLY,
@@ -522,6 +544,18 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
             history=request.history,
             user_msg=request.message,
             assistant_msg=_HUMAN_HANDOFF_REPLY,
+        )
+        log_business_event(
+            logger,
+            "ai_handoff_triggered",
+            user_id=user_id,
+            username=username,
+            session_id=request.session_id,
+            business_type=request.business_type,
+            trigger_source="user_direct",
+            handoff_id=handoff_meta.get("handoff_id"),
+            draft_order_id=handoff_meta.get("draft_order_id"),
+            history_count=len(request.history or []),
         )
         _save_session_file(
             session_id=request.session_id, user_id=user_id, username=username,
@@ -585,6 +619,18 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
                 user_msg=request.message,
                 assistant_msg=reply,
             )
+            log_business_event(
+                logger,
+                "ai_handoff_triggered",
+                user_id=user_id,
+                username=username,
+                session_id=request.session_id,
+                business_type=request.business_type,
+                trigger_source="llm_marker",
+                handoff_id=handoff_meta.get("handoff_id"),
+                draft_order_id=handoff_meta.get("draft_order_id"),
+                history_count=len(request.history or []),
+            )
 
         _save_session_file(
             session_id=request.session_id, user_id=user_id, username=username,
@@ -608,12 +654,35 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
             except Exception:
                 pass
 
+        log_business_event(
+            logger,
+            "ai_chat_completed",
+            user_id=user_id,
+            username=username,
+            session_id=request.session_id,
+            business_type=request.business_type,
+            handoff=handoff,
+            handoff_id=handoff_meta.get("handoff_id"),
+            draft_order_id=handoff_meta.get("draft_order_id"),
+            history_count=len(request.history or []),
+            reply_length=len(reply or ""),
+        )
         return {"message": reply, "handoff": handoff, **handoff_meta}
 
     except HTTPException:
         raise
     except Exception as e:
-        print(f"大模型调用失败: {e}")
+        log_business_event(
+            logger,
+            "ai_chat_failed",
+            level="error",
+            user_id=user_id,
+            username=username,
+            session_id=request.session_id,
+            business_type=request.business_type,
+            history_count=len(request.history or []),
+            error=str(e),
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -694,7 +763,13 @@ async def ai_extract(request: ExtractRequest):
         return parsed
 
     except Exception as e:
-        print(f"提取信息失败: {e}")
+        log_business_event(
+            logger,
+            "ai_extract_failed",
+            level="warning",
+            history_count=len(request.history or []),
+            error=str(e),
+        )
         return {}
 
 
@@ -735,7 +810,14 @@ async def ai_assess(request: AssessRequest):
                 return {"assessment": assessment}
             return {"assessment": ""}
         except Exception as e:
-            print(f"媒体方项目评估失败: {e}")
+            log_business_event(
+                logger,
+                "ai_assess_failed",
+                level="warning",
+                agent_mode=settings.AGENT_MODE,
+                extracted_field_count=len(request.extracted or {}),
+                error=str(e),
+            )
             return {"assessment": ""}
 
     # ── 品牌方原逻辑 ──
@@ -799,7 +881,14 @@ async def ai_assess(request: AssessRequest):
         assessment = data["choices"][0]["message"]["content"]
         return {"assessment": assessment}
     except Exception as e:
-        print(f"项目评估生成失败: {e}")
+        log_business_event(
+            logger,
+            "ai_assess_failed",
+            level="warning",
+            agent_mode=settings.AGENT_MODE,
+            extracted_field_count=len(request.extracted or {}),
+            error=str(e),
+        )
         return {"assessment": "**项目评估**\n\n需求信息已整理完毕。以下是需求明细，请确认或修改："}
 
 
@@ -819,7 +908,13 @@ async def ai_get_cases(category: str = None):
             cases = [c for c in cases if c.get("category") == category]
         return {"cases": cases}
     except Exception as e:
-        print(f"读取案例数据失败: {e}")
+        log_business_event(
+            logger,
+            "ai_cases_load_failed",
+            level="warning",
+            category=category,
+            error=str(e),
+        )
         return {"cases": []}
 
 
@@ -916,10 +1011,29 @@ async def _save_to_db(
 
             try:
                 await db.commit()
+                log_business_event(
+                    logger,
+                    "ai_chat_messages_saved",
+                    session_id=session_id,
+                    user_id=user_id,
+                    username=username,
+                    business_type=business_type,
+                    added_count=added_count,
+                    message_count=session.message_count,
+                )
             except IntegrityError:
                 await db.rollback()
     except Exception as e:
-        print(f"[AI Chat] 数据库保存失败（不影响对话）: {e}")
+        log_business_event(
+            logger,
+            "ai_chat_messages_save_failed",
+            level="warning",
+            session_id=session_id,
+            user_id=user_id,
+            username=username,
+            business_type=business_type,
+            error=str(e),
+        )
 
 
 def _save_session_file(
@@ -955,7 +1069,16 @@ def _save_session_file(
                 user_message_id, assistant_message_id
             ))
     except Exception as e:
-        print(f"[AI Chat] 数据库保存调度失败: {e}")
+        log_business_event(
+            logger,
+            "ai_chat_save_schedule_failed",
+            level="warning",
+            session_id=session_id,
+            user_id=user_id,
+            username=username,
+            business_type=business_type,
+            error=str(e),
+        )
 
     # 同时保留 JSON 文件日志（兼容）
     try:
@@ -990,4 +1113,13 @@ def _save_session_file(
             json.dump(session_data, f, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        print(f"AI 会话 JSON 保存失败: {e}")
+        log_business_event(
+            logger,
+            "ai_chat_json_save_failed",
+            level="warning",
+            session_id=session_id,
+            user_id=user_id,
+            username=username,
+            business_type=business_type,
+            error=str(e),
+        )

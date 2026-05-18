@@ -13,9 +13,12 @@ from datetime import datetime
 import aiofiles
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request, Query
 from app.config import settings
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
 from app.utils.security import decode_access_token
 
 router = APIRouter(prefix="/upload", tags=["文件上传"])
+logger = get_module_logger("order")
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 
@@ -89,6 +92,45 @@ def _get_user_id_from_request(request: Request) -> str:
     return "anonymous"
 
 
+def _log_upload_rejected(endpoint: str, user_id: str, filename: str | None, ext: str, reason: str) -> None:
+    log_business_event(
+        logger,
+        "file_upload_rejected",
+        level="warning",
+        endpoint=endpoint,
+        user_id=user_id,
+        filename=filename,
+        ext=ext,
+        reason=reason,
+    )
+
+
+def _log_upload_success(
+    endpoint: str,
+    user_id: str,
+    prefix: str,
+    storage: str,
+    filename: str,
+    size: int,
+    mime_type: str,
+    object_key: str | None = None,
+    url: str | None = None,
+) -> None:
+    log_business_event(
+        logger,
+        "file_uploaded",
+        endpoint=endpoint,
+        user_id=user_id,
+        prefix=prefix,
+        storage=storage,
+        filename=filename,
+        size=size,
+        mime_type=mime_type,
+        object_key=object_key,
+        url=url,
+    )
+
+
 @router.post("/site-photo")
 async def upload_site_photo(
     request: Request,
@@ -103,10 +145,11 @@ async def upload_site_photo(
         '.mp4', '.mov', '.avi',
     }
     ext = os.path.splitext(file.filename or '')[1].lower()
+    user_id = _get_user_id_from_request(request)
     if ext not in allowed_ext:
+        _log_upload_rejected("site_photo", user_id, file.filename, ext, "unsupported_ext")
         raise HTTPException(status_code=400, detail="不支持的文件类型: %s" % ext)
 
-    user_id = _get_user_id_from_request(request)
     filename = _safe_filename(file.filename, "upload%s" % ext)
     tmp_path, size = await _stream_upload_to_temp(file, 20 * 1024 * 1024, "文件大小不能超过20MB")
 
@@ -120,6 +163,16 @@ async def upload_site_photo(
                 filename=filename,
                 content_type=file.content_type or "",
             )
+            _log_upload_success(
+                "site_photo",
+                user_id,
+                "site_photos",
+                "oss",
+                result["filename"],
+                result["size"],
+                file.content_type or "",
+                object_key=result["object_key"],
+            )
             return {
                 "url": result["url"],
                 "file_url": result["url"],
@@ -130,6 +183,16 @@ async def upload_site_photo(
             }
         _safe_name, file_url = _store_local_temp_file(tmp_path, "site_photos", user_id, filename)
         tmp_path = ""
+        _log_upload_success(
+            "site_photo",
+            user_id,
+            "site_photos",
+            "local",
+            filename,
+            size,
+            file.content_type or "",
+            url=file_url,
+        )
         return {
             "url": file_url,
             "file_url": file_url,
@@ -166,10 +229,11 @@ async def upload_generic_file(
         '.zip', '.rar', '.7z',
     }
     ext = os.path.splitext(file.filename or '')[1].lower()
+    user_id = _get_user_id_from_request(request)
     if ext not in allowed_ext:
+        _log_upload_rejected("generic_file", user_id, file.filename, ext, "unsupported_ext")
         raise HTTPException(status_code=400, detail="不支持的文件类型: %s" % ext)
 
-    user_id = _get_user_id_from_request(request)
     filename = _safe_filename(file.filename, "upload%s" % ext)
     tmp_path, size = await _stream_upload_to_temp(file, 50 * 1024 * 1024, "文件大小不能超过50MB")
 
@@ -182,6 +246,16 @@ async def upload_generic_file(
                 user_id=user_id,
                 filename=filename,
                 content_type=file.content_type or "",
+            )
+            _log_upload_success(
+                "generic_file",
+                user_id,
+                "deliverables",
+                "oss",
+                result["filename"],
+                result["size"],
+                file.content_type or "",
+                object_key=result["object_key"],
             )
             return {
                 "code": 200,
@@ -197,6 +271,16 @@ async def upload_generic_file(
             }
         _safe_name, file_url = _store_local_temp_file(tmp_path, "deliverables", user_id, filename)
         tmp_path = ""
+        _log_upload_success(
+            "generic_file",
+            user_id,
+            "deliverables",
+            "local",
+            filename,
+            size,
+            file.content_type or "",
+            url=file_url,
+        )
         return {
             "code": 200,
             "message": "上传成功",
@@ -252,11 +336,12 @@ async def upload_showcase_video(
     # 限制文件类型（仅视频）
     allowed_ext = {'.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm'}
     ext = os.path.splitext(file.filename or '')[1].lower()
+    user_id = _get_user_id_from_request(request)
     if ext not in allowed_ext:
+        _log_upload_rejected("showcase_video", user_id, file.filename, ext, "unsupported_ext")
         raise HTTPException(status_code=400, detail="仅支持视频文件格式: %s" % ', '.join(allowed_ext))
 
     max_size = 200 * 1024 * 1024
-    user_id = _get_user_id_from_request(request)
     filename = _safe_filename(file.filename, "showcase%s" % ext)
     tmp_path, size = await _stream_upload_to_temp(file, max_size, "视频文件大小不能超过200MB")
 
@@ -269,6 +354,16 @@ async def upload_showcase_video(
                 user_id=user_id,
                 filename=filename,
                 content_type=file.content_type or "video/mp4",
+            )
+            _log_upload_success(
+                "showcase_video",
+                user_id,
+                "showcase_cases",
+                "oss",
+                result["filename"],
+                result["size"],
+                file.content_type or "video/mp4",
+                object_key=result["object_key"],
             )
             return {
                 "code": 200,
@@ -284,6 +379,16 @@ async def upload_showcase_video(
             }
         _safe_name, file_url = _store_local_temp_file(tmp_path, "showcase_cases", user_id, filename)
         tmp_path = ""
+        _log_upload_success(
+            "showcase_video",
+            user_id,
+            "showcase_cases",
+            "local",
+            filename,
+            size,
+            file.content_type or "video/mp4",
+            url=file_url,
+        )
         return {
             "code": 200,
             "message": "上传成功",

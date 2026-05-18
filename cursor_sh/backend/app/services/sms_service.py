@@ -13,6 +13,11 @@ from typing import Dict, Tuple
 from fastapi import HTTPException, status
 
 from app.config import settings
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+
+
+logger = get_module_logger("auth")
 
 
 # ============ 内存验证码缓存（仅本地测试模式使用） ============
@@ -106,11 +111,18 @@ async def _send_via_dypnsapi(phone: str) -> dict:
 
         body = resp.body
         if body and body.code == "OK":
-            print(f"✅ 短信验证码已通过阿里云发送至 {phone[:3]}****{phone[7:]}")
+            log_business_event(logger, "sms_sent", phone=phone, provider="aliyun")
             return {"success": True, "message": "验证码已发送"}
         else:
             error_msg = body.message if body else "未知错误"
-            print(f"❌ 阿里云短信发送失败: {error_msg}")
+            log_business_event(
+                logger,
+                "sms_send_failed",
+                level="error",
+                phone=phone,
+                provider="aliyun",
+                error=error_msg,
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"短信发送失败: {error_msg}"
@@ -118,9 +130,16 @@ async def _send_via_dypnsapi(phone: str) -> dict:
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ 阿里云短信服务异常: {str(e)}")
+        log_business_event(
+            logger,
+            "sms_send_failed",
+            level="error",
+            phone=phone,
+            provider="aliyun",
+            error=str(e),
+        )
         # 回退到本地模式
-        print("⚠️ 回退到本地验证码模式")
+        log_business_event(logger, "sms_send_fallback", level="warning", phone=phone, fallback="local")
         return _send_local(phone)
 
 
@@ -129,7 +148,13 @@ def _send_local(phone: str) -> dict:
     code = _generate_code(settings.SMS_CODE_LENGTH)
     expire_at = time.time() + settings.SMS_VALID_TIME
     _sms_code_cache[phone] = (code, expire_at)
-    print(f"📱 [本地测试] 手机号 {phone} 的验证码是: {code} (有效期 {settings.SMS_VALID_TIME}秒)")
+    log_business_event(
+        logger,
+        "sms_sent",
+        phone=phone,
+        provider="local",
+        valid_seconds=settings.SMS_VALID_TIME,
+    )
     return {"success": True, "message": "验证码已发送（测试模式）"}
 
 
@@ -185,13 +210,20 @@ async def _verify_via_dypnsapi(phone: str, code: str) -> bool:
         body = resp.body
         if body and body.code == "OK":
             if body.model and body.model.verify_result:
-                print(f"✅ 验证码校验通过: {phone[:3]}****{phone[7:]}")
+                log_business_event(logger, "sms_verified", phone=phone, provider="aliyun")
                 return True
         
-        print(f"❌ 验证码校验失败: {phone}")
+        log_business_event(logger, "sms_verify_failed", level="warning", phone=phone, provider="aliyun")
         return False
     except Exception as e:
-        print(f"❌ 阿里云验证码校验异常: {str(e)}")
+        log_business_event(
+            logger,
+            "sms_verify_failed",
+            level="error",
+            phone=phone,
+            provider="aliyun",
+            error=str(e),
+        )
         # 回退到本地校验
         return _verify_local(phone, code)
 
@@ -200,13 +232,17 @@ def _verify_local(phone: str, code: str, consume: bool = True) -> bool:
     """本地校验"""
     cached = _sms_code_cache.get(phone)
     if not cached:
+        log_business_event(logger, "sms_verify_failed", level="warning", phone=phone, provider="local", reason="not_found")
         return False
     stored_code, expire_at = cached
     if time.time() > expire_at:
         del _sms_code_cache[phone]
+        log_business_event(logger, "sms_verify_failed", level="warning", phone=phone, provider="local", reason="expired")
         return False
     if stored_code == code:
         if consume:
             del _sms_code_cache[phone]
+        log_business_event(logger, "sms_verified", phone=phone, provider="local", consume=consume)
         return True
+    log_business_event(logger, "sms_verify_failed", level="warning", phone=phone, provider="local", reason="mismatch")
     return False

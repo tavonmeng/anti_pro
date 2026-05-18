@@ -5,7 +5,15 @@
     </div>
     <div class="module-list">
       <!-- AI Agent Entry (Banner Style) -->
-      <div class="ai-agent-banner" :class="{ active: uiStore.isAiExpanded }" @click="goToService('ai_agent')">
+      <div
+        class="ai-agent-banner"
+        :class="{ active: uiStore.isAiExpanded }"
+        role="button"
+        tabindex="0"
+        @click="goToService('ai_agent')"
+        @keydown.enter.self.prevent="goToService('ai_agent')"
+        @keydown.space.self.prevent="goToService('ai_agent')"
+      >
         <h4 class="ai-banner-title">✨您的7×24小时AI创意合伙人</h4>
         <div class="ai-banner-input-mock">
           <span class="ai-mock-placeholder">有什么想法...</span>
@@ -42,7 +50,15 @@
         class="module-group"
         :class="{ active: currentModule === 'video_purchase' }"
       >
-        <div class="module-pill" :class="{ 'is-active': currentModule === 'video_purchase' }" @click="goToService('video_purchase')">
+        <div
+          class="module-pill"
+          :class="{ 'is-active': currentModule === 'video_purchase' }"
+          role="button"
+          tabindex="0"
+          @click="goToService('video_purchase')"
+          @keydown.enter.self.prevent="goToService('video_purchase')"
+          @keydown.space.self.prevent="goToService('video_purchase')"
+        >
           <span class="module-name">裸眼3D成片购买</span>
           <el-icon class="expand-icon" :class="{ rotated: currentModule === 'video_purchase', 'is-active-icon': currentModule === 'video_purchase' }"><ArrowDown /></el-icon>
         </div>
@@ -60,7 +76,15 @@
         class="module-group"
         :class="{ active: currentModule === 'ai_3d_custom' }"
       >
-        <div class="module-pill" :class="{ 'is-active': currentModule === 'ai_3d_custom' }" @click="goToService('ai_3d_custom')">
+        <div
+          class="module-pill"
+          :class="{ 'is-active': currentModule === 'ai_3d_custom' }"
+          role="button"
+          tabindex="0"
+          @click="goToService('ai_3d_custom')"
+          @keydown.enter.self.prevent="goToService('ai_3d_custom')"
+          @keydown.space.self.prevent="goToService('ai_3d_custom')"
+        >
           <span class="module-name">AI裸眼3D内容定制</span>
           <el-icon class="expand-icon" :class="{ rotated: currentModule === 'ai_3d_custom', 'is-active-icon': currentModule === 'ai_3d_custom' }"><ArrowDown /></el-icon>
         </div>
@@ -78,7 +102,15 @@
         class="module-group"
         :class="{ active: currentModule === 'digital_art' }"
       >
-        <div class="module-pill" :class="{ 'is-active': currentModule === 'digital_art' }" @click="goToService('digital_art')">
+        <div
+          class="module-pill"
+          :class="{ 'is-active': currentModule === 'digital_art' }"
+          role="button"
+          tabindex="0"
+          @click="goToService('digital_art')"
+          @keydown.enter.self.prevent="goToService('digital_art')"
+          @keydown.space.self.prevent="goToService('digital_art')"
+        >
           <span class="module-name">数字艺术内容定制</span>
           <el-icon class="expand-icon" :class="{ rotated: currentModule === 'digital_art', 'is-active-icon': currentModule === 'digital_art' }"><ArrowDown /></el-icon>
         </div>
@@ -142,10 +174,16 @@ const goToService = async (type: string) => {
   if (type === 'ai_agent') {
     uiStore.setIsAiExpanded(true)
     uiStore.setSecondarySidebar(true)
+    uiStore.toggleSidebar(true)
+    uiStore.setActiveModule('ai_agent')
     await router.push('/user/workspace')
     return
   }
 
+  uiStore.setIsAiExpanded(false)
+  uiStore.setSecondarySidebar(true)
+  uiStore.toggleSidebar(true)
+  uiStore.setActiveModule(type)
   if (type === 'video_purchase') {
     await router.push('/user/video-marketplace')
   } else {

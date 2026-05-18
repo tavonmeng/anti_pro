@@ -9,6 +9,11 @@ from fastapi import HTTPException, status
 
 from app.models.notification import Notification, NotificationType
 from app.schemas.notification import NotificationCreate, NotificationResponse
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+
+
+logger = get_module_logger("notification")
 
 
 class NotificationService:
@@ -49,6 +54,15 @@ class NotificationService:
         db.add(notification)
         await db.commit()
         await db.refresh(notification)
+        log_business_event(
+            logger,
+            "notification_created",
+            notification_id=notification.id,
+            user_id=user_id,
+            notification_type=notification_type,
+            order_id=order_id,
+            title=title,
+        )
         
         return notification
 
@@ -91,6 +105,15 @@ class NotificationService:
         await db.commit()
         for notification in notifications:
             await db.refresh(notification)
+        log_business_event(
+            logger,
+            "notifications_created",
+            notification_type=notification_type,
+            order_id=order_id,
+            title=title,
+            user_count=len(user_ids),
+            notification_ids=[notification.id for notification in notifications],
+        )
         
         return notifications
 
@@ -262,4 +285,3 @@ class NotificationService:
         
         await db.delete(notification)
         await db.commit()
-

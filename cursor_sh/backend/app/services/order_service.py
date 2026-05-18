@@ -23,6 +23,11 @@ from app.services.email_service import EmailService
 from app.services.notification_service import NotificationService
 from app.services.pdf_service import PDFService
 from app.config import settings
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+
+
+logger = get_module_logger("order")
 
 
 async def _get_order_assignee_ids(db: AsyncSession, order_id: str) -> List[str]:
@@ -196,6 +201,18 @@ class OrderService:
         
         await db.commit()
         await db.refresh(new_order)
+        log_business_event(
+            logger,
+            "order_created",
+            order_id=new_order.id,
+            order_number=new_order.order_number,
+            user_id=user.id,
+            username=user.username,
+            order_type=new_order.order_type,
+            status=new_order.status,
+            is_draft=is_draft,
+            file_count=len(files_to_create),
+        )
         
         # 构造响应
         order_response = await OrderService._build_order_response(db, new_order, user)
@@ -208,6 +225,14 @@ class OrderService:
                     user.email,
                     new_order.order_number,
                     pdf_bytes
+                )
+                log_business_event(
+                    logger,
+                    "order_confirmation_email_sent",
+                    order_id=new_order.id,
+                    order_number=new_order.order_number,
+                    user_id=user.id,
+                    email=user.email,
                 )
             
             # 通知所有管理员有新订单提交
@@ -226,7 +251,15 @@ class OrderService:
                         order_id=new_order.id
                     )
             except Exception as e:
-                print(f"[Order] 发送管理员新订单通知失败: {e}")
+                log_business_event(
+                    logger,
+                    "order_admin_notification_failed",
+                    level="warning",
+                    order_id=new_order.id,
+                    order_number=new_order.order_number,
+                    user_id=user.id,
+                    error=str(e),
+                )
 
         return order_response
     
@@ -340,6 +373,19 @@ class OrderService:
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "order_updated",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            order_type=order.order_type,
+            status=order.status,
+            file_count=len(files_to_create),
+            deleted_file_count=len(files_to_delete),
+        )
         
         # 构造响应
         return await OrderService._build_order_response(db, order, current_user)
@@ -500,6 +546,19 @@ class OrderService:
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "order_status_updated",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            status_from=old_status,
+            status_to=order.status,
+            is_draft_submit=is_draft_submit,
+            is_draft_delete=is_draft_delete,
+        )
         
         # 发送邮件通知（获取用户邮箱）
         user_result = await db.execute(select(User).where(User.id == order.user_id))
@@ -514,6 +573,14 @@ class OrderService:
                     order.order_number,
                     pdf_bytes
                 )
+                log_business_event(
+                    logger,
+                    "order_confirmation_email_sent",
+                    order_id=order.id,
+                    order_number=order.order_number,
+                    user_id=order.user_id,
+                    email=user.email,
+                )
             else:
                 # 发送普通的状态变更邮件
                 await EmailService.send_order_status_notification(
@@ -521,6 +588,16 @@ class OrderService:
                     order.order_number,
                     old_status.value,
                     new_status.value
+                )
+                log_business_event(
+                    logger,
+                    "order_status_email_sent",
+                    order_id=order.id,
+                    order_number=order.order_number,
+                    user_id=order.user_id,
+                    status_from=old_status,
+                    status_to=new_status,
+                    email=user.email,
                 )
         
         # 创建系统内消息通知
@@ -580,7 +657,17 @@ class OrderService:
                         order_id=order.id
                     )
             except Exception as e:
-                print(f"[Order] 发送管理员状态变更通知失败: {e}")
+                log_business_event(
+                    logger,
+                    "order_admin_notification_failed",
+                    level="warning",
+                    order_id=order.id,
+                    order_number=order.order_number,
+                    user_id=order.user_id,
+                    status_from=old_status,
+                    status_to=new_status,
+                    error=str(e),
+                )
         
         return await OrderService._build_order_response(db, order, current_user)
     
@@ -641,12 +728,26 @@ class OrderService:
             )
             db.add(order_assignee)
         
+        old_status = order.status
         # 如果订单是旧的待分配状态，自动转为制作中（合同与付款状态下分配负责人不改变订单状态）
         if order.status == OrderStatus.PENDING_ASSIGN:
             order.status = OrderStatus.IN_PRODUCTION
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "order_assigned",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            status_from=old_status,
+            status_to=order.status,
+            old_assignee_ids=sorted(old_assignee_ids),
+            new_assignee_ids=sorted(new_assignee_ids),
+        )
         
         # 创建系统内消息通知
         # 判断是新分配还是重新分配
@@ -772,6 +873,7 @@ class OrderService:
             # 同时保存最新备注，方便快速访问
             order_data["previewNote"] = note
         
+        old_status = order.status
         # 验证状态转换
         OrderStateMachine.validate_transition(order.status, OrderStatus.PENDING_REVIEW)
         
@@ -780,6 +882,20 @@ class OrderService:
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "preview_uploaded",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            preview_id=preview_history_entry["id"],
+            preview_type=preview_type_value,
+            file_count=len(preview_files),
+            status_from=old_status,
+            status_to=order.status,
+        )
         
         # 通知管理员有新的预览待审核（从 admins 表查询）
         admin_result = await db.execute(select(Admin))
@@ -871,6 +987,21 @@ class OrderService:
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "preview_reviewed",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            preview_id=target_preview["id"],
+            preview_type=target_preview.get("previewType"),
+            action=review_data.action,
+            review_status=target_preview.get("reviewStatus"),
+            status_from=old_status,
+            status_to=order.status,
+        )
         
         # 审核通过：通知用户与负责人员
         preview_type_text = "终稿" if target_preview.get("previewType") == "final" else "初稿"
@@ -882,6 +1013,15 @@ class OrderService:
                     user.email,
                     order.order_number,
                     preview_type_text
+                )
+                log_business_event(
+                    logger,
+                    "preview_ready_email_sent",
+                    order_id=order.id,
+                    order_number=order.order_number,
+                    user_id=order.user_id,
+                    preview_id=target_preview["id"],
+                    email=user.email,
                 )
             
             await NotificationService.create_notification(
@@ -961,6 +1101,7 @@ class OrderService:
         db.add(feedback)
         
         # 仅订单级别反馈时才更新订单状态（交付物级别反馈不影响订单状态）
+        old_status = order.status
         if not feedback_data.deliverableId:
             if feedback_data.type == FeedbackType.REVISION:
                 # 需要修改
@@ -977,6 +1118,21 @@ class OrderService:
         
         await db.commit()
         await db.refresh(feedback)
+        log_business_event(
+            logger,
+            "feedback_submitted",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            feedback_id=feedback.id,
+            feedback_type=feedback.type,
+            deliverable_id=feedback.deliverable_id,
+            status_from=old_status,
+            status_to=order.status,
+            revision_count=order.revision_count,
+        )
         
         # 构建通知描述
         feedback_type_text = "需要修改" if feedback_data.type == FeedbackType.REVISION else "确认通过"
@@ -1012,7 +1168,16 @@ class OrderService:
                     order_id=order.id
                 )
         except Exception as e:
-            print(f"[Feedback] 发送管理员反馈通知失败: {e}")
+            log_business_event(
+                logger,
+                "feedback_admin_notification_failed",
+                level="warning",
+                order_id=order.id,
+                order_number=order.order_number,
+                user_id=order.user_id,
+                feedback_id=feedback.id,
+                error=str(e),
+            )
         
         # 确保时间包含时区信息（UTC）
         feedback_created_at = feedback.created_at
@@ -1077,6 +1242,19 @@ class OrderService:
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "order_contract_advanced",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            contract_number=contract_number,
+            payment_amount=payment_amount,
+            status_from=old_status,
+            status_to=order.status,
+        )
         
         # 通知用户：订单已进入制作阶段
         user_result = await db.execute(select(User).where(User.id == order.user_id))
@@ -1087,6 +1265,16 @@ class OrderService:
                 order.order_number,
                 old_status.value,
                 OrderStatus.IN_PRODUCTION.value
+            )
+            log_business_event(
+                logger,
+                "order_status_email_sent",
+                order_id=order.id,
+                order_number=order.order_number,
+                user_id=order.user_id,
+                status_from=old_status,
+                status_to=OrderStatus.IN_PRODUCTION,
+                email=user.email,
             )
         
         await NotificationService.create_notification(
@@ -1157,6 +1345,18 @@ class OrderService:
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "order_cancelled_by_admin",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            status_from=old_status,
+            status_to=order.status,
+            reason_present=bool(reason),
+        )
         
         # 通知用户订单已取消
         user_result = await db.execute(select(User).where(User.id == order.user_id))
@@ -1169,6 +1369,16 @@ class OrderService:
                 order.order_number,
                 old_status.value,
                 OrderStatus.CANCELLED.value
+            )
+            log_business_event(
+                logger,
+                "order_status_email_sent",
+                order_id=order.id,
+                order_number=order.order_number,
+                user_id=order.user_id,
+                status_from=old_status,
+                status_to=OrderStatus.CANCELLED,
+                email=user.email,
             )
         
         await NotificationService.create_notification(
