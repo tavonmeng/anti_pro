@@ -860,7 +860,7 @@ curl -sS http://127.0.0.1/api/health || curl -sS http://127.0.0.1:8080/api/healt
 Expected:
 
 ```json
-{"status":"ok","app":"AI设计任务管理系统"}
+{"status":"ok","app":"Unique Vision AI"}
 ```
 
 ### 10. Confirm New RDS Row Counts

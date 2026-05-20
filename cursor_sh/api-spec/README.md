@@ -1,4 +1,4 @@
-# AI设计任务管理系统 API 文档
+# Unique Vision AI API 文档
 
 ## 概述
 
@@ -87,7 +87,7 @@ openapi lint api-spec/openapi.yaml
 
 系统支持三种订单类型：
 
-### 1. 裸眼3D成片购买适配 (video_purchase)
+### 1. 3D OOH数字内容资源库 (video_purchase)
 
 客户选择现有3D视频内容进行屏幕适配。
 
@@ -100,7 +100,7 @@ openapi lint api-spec/openapi.yaml
 - 屏幕尺寸 (size)
 - 曲率 (curvature)
 
-### 2. AI裸眼3D内容定制 (ai_3d_custom)
+### 2. AI驱动3D OOH内容定制 (ai_3d_custom)
 
 使用 AI 技术定制裸眼3D内容。
 
@@ -111,7 +111,7 @@ openapi lint api-spec/openapi.yaml
 
 **制作周期：** 5-7 个工作日
 
-### 3. 数字艺术内容定制 (digital_art)
+### 3. 数字艺术与沉浸式视觉设计 (digital_art)
 
 定制数字艺术作品。
 
@@ -380,6 +380,5 @@ MIT License
 ## 联系方式
 
 如有问题，请联系：
-- Email: support@example.com
+- Email: service@uniquevisionx.com
 - 文档问题: 提交 Issue
-

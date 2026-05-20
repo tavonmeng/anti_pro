@@ -27,93 +27,37 @@
           <div class="section-header">
             <div class="section-titles">
               <h2 class="section-title">业务菜单</h2>
-              <p class="section-subtitle">高质量3D视频内容交付，让每一个户外屏都有优质的内容</p>
+              <p class="section-subtitle">PLATFORM SERVICES｜平台服务体系</p>
             </div>
           </div>
           
           <!-- 服务入口卡片 -->
           <div class="service-cards">
-            <!-- Card 1 -->
             <div
+              v-for="service in platformServices"
+              :key="service.type"
               class="service-card"
               role="button"
               tabindex="0"
-              @click="triggerChoreography('video_purchase')"
-              @keydown.enter.self.prevent="triggerChoreography('video_purchase')"
-              @keydown.space.self.prevent="triggerChoreography('video_purchase')"
+              @click="triggerChoreography(service.type)"
+              @keydown.enter.self.prevent="triggerChoreography(service.type)"
+              @keydown.space.self.prevent="triggerChoreography(service.type)"
             >
               <div class="card-image-wrapper">
-                <div class="card-img" style="background: linear-gradient(to bottom, #111, #333);">
-                  <!-- Placeholder Character -->
-                </div>
-                <div class="overlay-badge premium" style="background: #0070eb; color: #fff;">PREMIUM 3D</div>
+                <div class="card-img" :style="{ background: service.gradient }"></div>
+                <div class="overlay-badge">{{ service.badge }}</div>
               </div>
               <div class="card-body">
-                <h3 class="service-title">裸眼3D成片购买</h3>
+                <h3 class="service-title">{{ service.title }}</h3>
+                <p class="service-subtitle">{{ service.subtitle }}</p>
                 <p class="service-description">
-                  专业的裸眼3D视频内容库，根据您的屏幕参数精准适配，快速交付高质量成片。支持多种行业应用和视觉风格选择。
+                  {{ service.description }}
                 </p>
                 <div class="service-features">
-                  <span class="outline-tag">快速交付</span>
-                  <span class="outline-tag">专业适配</span>
-                  <span class="outline-tag">多种风格</span>
+                  <span v-for="feature in service.features" :key="feature" class="outline-tag">{{ feature }}</span>
                 </div>
                 <div class="card-footer">
-                  <span class="price-text">From $2,499</span>
-                  <el-icon class="arrow-right"><Right /></el-icon>
-                </div>
-              </div>
-            </div>
-
-            <!-- Card 2 -->
-            <div
-              class="service-card"
-              role="button"
-              tabindex="0"
-              @click="triggerChoreography('ai_3d_custom')"
-              @keydown.enter.self.prevent="triggerChoreography('ai_3d_custom')"
-              @keydown.space.self.prevent="triggerChoreography('ai_3d_custom')"
-            >
-              <div class="card-image-wrapper">
-                <div class="card-img" style="background: linear-gradient(to bottom, #001f3f, #004080);">
-                   <!-- Placeholder Typography -->
-                </div>
-                <div class="overlay-badge creative" style="background: #0070eb; color: #fff;">AI CREATIVE</div>
-              </div>
-              <div class="card-body">
-                <h3 class="service-title">AI裸眼3D内容定制</h3>
-                <p class="service-description">
-                  基于AI技术的定制化3D内容创作，从创意构思到成品落地的全流程服务。上传现场照片，描述您的想法，我们将AI技术转化为震撼的裸眼3D效果。
-                </p>
-                <div class="card-footer">
-                  <span class="price-text">Custom Quote</span>
-                  <el-icon class="arrow-right"><Right /></el-icon>
-                </div>
-              </div>
-            </div>
-
-            <!-- Card 3 -->
-            <div
-              class="service-card"
-              role="button"
-              tabindex="0"
-              @click="triggerChoreography('digital_art')"
-              @keydown.enter.self.prevent="triggerChoreography('digital_art')"
-              @keydown.space.self.prevent="triggerChoreography('digital_art')"
-            >
-              <div class="card-image-wrapper">
-                <div class="card-img" style="background: linear-gradient(to bottom, #4a0000, #ff1a1a);">
-                   <!-- Placeholder Abstract -->
-                </div>
-                <div class="overlay-badge art" style="background: #0070eb; color: #fff;">DIGITAL ART</div>
-              </div>
-              <div class="card-body">
-                <h3 class="service-title">数字艺术内容定制</h3>
-                <p class="service-description">
-                  专业数字艺术创作服务，涵盖抽象、写实、装置、动态艺术等多种风格。由资深艺术家团队倾力打造，3天内提供初稿预览。
-                </p>
-                <div class="card-footer">
-                  <span class="price-text">From $1,200</span>
+                  <span class="price-text">{{ service.footer }}</span>
                   <el-icon class="arrow-right"><Right /></el-icon>
                 </div>
               </div>
@@ -143,7 +87,7 @@ import { useRouter } from 'vue-router'
 import { Right } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { useUiStore } from '@/stores/ui'
-import type { OrderType } from '@/types'
+import { platformServices, type ServiceType } from '@/data/platformServices'
 import AIChatAssistant from '@/components/AIChatAssistant.vue'
 import StyleInspirationSidebar from '@/components/StyleInspirationSidebar.vue'
 import { logger } from '@/utils/logger'
@@ -249,7 +193,7 @@ const handleModeChange = (mode: string) => {
   logger.logAction('Workspace', 'switch_ai_mode', { mode })
 }
 
-const triggerChoreography = async (targetType: OrderType | string | null) => {
+const triggerChoreography = async (targetType: ServiceType | null) => {
   // B2B direct routing layout shift: instantly navigate and apply system states
   if (targetType) {
     logger.logAction('Workspace', 'click_service_card', { targetType })
@@ -474,8 +418,9 @@ const triggerChoreography = async (targetType: OrderType | string | null) => {
 
 .service-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 288px), 288px));
   gap: 20px;
+  justify-content: start;
   margin-bottom: 24px;
 }
 
@@ -487,6 +432,8 @@ const triggerChoreography = async (targetType: OrderType | string | null) => {
   flex-direction: column;
   box-shadow: none;
   gap: 12px;
+  width: 288px;
+  max-width: 100%;
 }
 
 .card-image-wrapper {
@@ -512,6 +459,7 @@ const triggerChoreography = async (targetType: OrderType | string | null) => {
   position: absolute;
   bottom: 8px;
   left: 8px;
+  right: 8px;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 10px;
@@ -520,6 +468,11 @@ const triggerChoreography = async (targetType: OrderType | string | null) => {
   text-transform: uppercase;
   color: #fff;
   background: #0070eb;
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-body {
@@ -534,6 +487,14 @@ const triggerChoreography = async (targetType: OrderType | string | null) => {
   font-weight: 500;
   color: #1b1b1c;
   margin: 0 0 6px 0;
+}
+
+.service-subtitle {
+  color: #414754;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  margin: 0 0 8px 0;
 }
 
 .service-description {
@@ -633,21 +594,12 @@ const triggerChoreography = async (targetType: OrderType | string | null) => {
   .overview-state {
     padding: 0 32px 24px 32px;
   }
-  .card-image-wrapper {
-    height: 180px;
-  }
 }
 
 /* Tier 3: 4K at 150% scale = 2560px CSS pixels */
 @media screen and (min-width: 2560px) {
   .overview-state {
     padding: 0 48px 32px 48px;
-  }
-  .card-image-wrapper {
-    height: 200px;
-  }
-  .service-cards {
-    gap: 24px;
   }
 }
 </style>

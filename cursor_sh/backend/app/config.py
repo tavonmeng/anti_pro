@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     """应用配置类"""
     
     # 应用配置
-    APP_NAME: str = "AI设计任务管理系统"
+    APP_NAME: str = "Unique Vision AI"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
     SECRET_KEY: str = "dev-secret-key-change-in-production"
@@ -144,7 +144,7 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = ""
-    SMTP_FROM_NAME: str = "AI设计任务管理系统"
+    SMTP_FROM_NAME: str = "Unique Vision AI"
     
     # API 限流配置
     RATE_LIMIT_ENABLED: bool = True

@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "AI设计任务管理系统 API",
+    "name": "Unique Vision AI API",
     "description": "VR+AI 裸眼3D内容定制管理系统 API 集合",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "1"
@@ -185,7 +185,7 @@
           }
         },
         {
-          "name": "创建订单 - 裸眼3D成片购买",
+          "name": "创建订单 - 3D OOH数字内容资源库",
           "request": {
             "method": "POST",
             "header": [
@@ -203,11 +203,11 @@
               "host": ["{{baseUrl}}"],
               "path": ["orders"]
             },
-            "description": "创建裸眼3D成片购买订单"
+            "description": "创建3D OOH数字内容资源库订单"
           }
         },
         {
-          "name": "创建订单 - AI裸眼3D定制",
+          "name": "创建订单 - AI驱动3D OOH内容定制",
           "request": {
             "method": "POST",
             "header": [
@@ -225,11 +225,11 @@
               "host": ["{{baseUrl}}"],
               "path": ["orders"]
             },
-            "description": "创建AI裸眼3D内容定制订单（5-7天制作周期）"
+            "description": "创建AI驱动3D OOH内容定制订单（5-7天制作周期）"
           }
         },
         {
-          "name": "创建订单 - 数字艺术定制",
+          "name": "创建订单 - 数字艺术与沉浸式视觉设计",
           "request": {
             "method": "POST",
             "header": [
@@ -247,7 +247,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["orders"]
             },
-            "description": "创建数字艺术内容定制订单（3天初稿）"
+            "description": "创建数字艺术与沉浸式视觉设计订单（3天初稿）"
           }
         },
         {

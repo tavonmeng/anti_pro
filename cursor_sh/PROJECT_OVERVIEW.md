@@ -1,4 +1,4 @@
-# AI设计任务管理系统 - 项目全貌
+# Unique Vision AI - 项目全貌
 
 ## 🎉 项目完成总览
 
@@ -52,9 +52,9 @@
 - 管理员 - 分配、管理、监控
 
 ✅ **三种订单类型**
-- 裸眼3D成片购买适配
-- AI裸眼3D内容定制（5-7天）
-- 数字艺术内容定制（3天初稿）
+- 3D OOH数字内容资源库
+- AI驱动3D OOH内容定制（5-7天）
+- 数字艺术与沉浸式视觉设计（3天初稿）
 
 ✅ **完整状态机**
 - 7 种订单状态
@@ -532,9 +532,9 @@ npm run dev
 
 ### 团队联系
 
-- **产品团队**: product@example.com
-- **技术团队**: tech@example.com
-- **运维团队**: ops@example.com
+- **产品团队**: service@uniquevisionx.com
+- **技术团队**: service@uniquevisionx.com
+- **运维团队**: service@uniquevisionx.com
 
 ---
 
@@ -564,5 +564,4 @@ _项目版本: v1.0.0_
 _完成日期: 2025-11-05_  
 _开发团队: Full Stack Team_
 
-**🎉 感谢使用 AI设计任务管理系统！**
-
+**🎉 感谢使用 Unique Vision AI！**

@@ -124,12 +124,12 @@ class EmailService:
                 <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 20px 0;">
                     <p style="margin: 0; color: #27ae60; font-weight: bold;">✅ 订单即将进入排期并开始制作！</p>
                 </div>
-                <p>为方便您的留档与核对，我们随信附上了本次订单的<strong>《需求告知函》PDF文件</strong>（见附件），里面包含了所有的需求细节及预计制作周期。</p>
+                <p>为方便您的留档与核对，我们随信附上了本次订单的<strong>《订单需求确认函》PDF文件</strong>（见附件），里面包含了所有的需求细节及预计制作周期。</p>
                 <p>在制作过程中如果您有任何问题，可以随时登录系统查看订单进度状态。</p>
                 <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
                 <p style="color: #7f8c8d; font-size: 12px;">
                     此邮件由系统自动发送，请勿回复。<br>
-                    AI设计任务管理系统
+                    Unique Vision AI
                 </p>
             </div>
         </body>
@@ -144,16 +144,16 @@ class EmailService:
         您的订单 {order_number} 的需求内容我们已收到并确认。
         ✅ 订单即将进入排期并开始制作！
         
-        为方便您的留档与核对，我们随信附上了本次订单的《需求告知函》PDF文件（见附件），里面包含了所有的需求细节及预计制作周期。
+        为方便您的留档与核对，我们随信附上了本次订单的《订单需求确认函》PDF文件（见附件），里面包含了所有的需求细节及预计制作周期。
         
         在制作过程中如果您有任何问题，可以随时登录系统查看订单进度状态。
         
         此邮件由系统自动发送，请勿回复。
-        AI设计任务管理系统
+        Unique Vision AI
         """
         
         attachments = [{
-            "filename": f"订单需求告知函_{order_number}.pdf",
+            "filename": f"订单需求确认函_{order_number}.pdf",
             "content": pdf_bytes
         }]
         
@@ -211,7 +211,7 @@ class EmailService:
                 <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
                 <p style="color: #7f8c8d; font-size: 12px;">
                     此邮件由系统自动发送，请勿回复。<br>
-                    AI设计任务管理系统
+                    Unique Vision AI
                 </p>
             </div>
         </body>
@@ -230,7 +230,7 @@ class EmailService:
         请登录系统查看详情。
         
         此邮件由系统自动发送，请勿回复。
-        AI设计任务管理系统
+        Unique Vision AI
         """
         
         await EmailService.send_email([user_email], subject, html_content, text_content)
@@ -259,7 +259,7 @@ class EmailService:
                 <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
                 <p style="color: #7f8c8d; font-size: 12px;">
                     此邮件由系统自动发送，请勿回复。<br>
-                    AI设计任务管理系统
+                    Unique Vision AI
                 </p>
             </div>
         </body>
@@ -305,7 +305,7 @@ class EmailService:
                 <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
                 <p style="color: #7f8c8d; font-size: 12px;">
                     此邮件由系统自动发送，请勿回复。<br>
-                    AI设计任务管理系统
+                    Unique Vision AI
                 </p>
             </div>
         </body>

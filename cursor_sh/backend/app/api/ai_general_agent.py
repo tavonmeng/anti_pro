@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_client import post_chat_completion
+from app.services.platform_service_catalog import VALID_BUSINESS_TYPES
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
 
@@ -19,7 +20,6 @@ general_router = APIRouter()
 logger = get_module_logger("ai")
 
 VALID_INTENTS = {"order_create", "order_query", "business_intro", "general"}
-VALID_BUSINESS_TYPES = {"ai_3d_custom", "video_purchase", "digital_art"}
 ROUTE_MESSAGES = {
     "order_create": "好的，我来为您进入需求梳理流程。",
     "order_query": "好的，我来为您查询订单信息。",
@@ -37,11 +37,24 @@ def _detect_business_type(message: str) -> str | None:
     text = message.strip()
     lower = text.lower()
     direct_names = {
+        "3d ooh数字内容资源库": "video_purchase",
+        "3dooh数字内容资源库": "video_purchase",
+        "ai驱动3d ooh内容定制": "ai_3d_custom",
+        "ai驱动3dooh内容定制": "ai_3d_custom",
+        "数字艺术与沉浸式视觉设计": "digital_art",
+        "广告视觉与动态影像制作": "motion_content",
+        "广告视觉": "motion_content",
+        "动态影像制作": "motion_content",
+        "户外媒体后期制作服务": "media_post_production",
+        "户外媒体后期": "media_post_production",
+        "广告投放分析与效果报告": "campaign_analytics",
+        "投放分析": "campaign_analytics",
+        "效果报告": "campaign_analytics",
         "ai裸眼3d内容定制": "ai_3d_custom",
         "裸眼3d内容定制": "ai_3d_custom",
-        "裸眼3d成片购买适配": "video_purchase",
-        "成片购买适配": "video_purchase",
-        "数字艺术内容定制": "digital_art",
+        "裸眼3d3D OOH数字内容资源库": "video_purchase",
+        "3D OOH数字内容资源库": "video_purchase",
+        "数字艺术与沉浸式视觉设计": "digital_art",
     }
     for name, business_type in direct_names.items():
         if name in lower:
@@ -49,6 +62,12 @@ def _detect_business_type(message: str) -> str | None:
 
     if re.search(r"成片|购买|模板|现成|成品|买", text):
         return "video_purchase"
+    if re.search(r"tvc|fooh|vj|动态影像|动态视觉|广告视觉|广告影片|平面广告|motion", text, re.I):
+        return "motion_content"
+    if re.search(r"后期|精修|修图|视频精修|cgi|商业摄影|拍摄|航拍|drone|retouch", text, re.I):
+        return "media_post_production"
+    if re.search(r"投放分析|效果报告|数据报告|受众分析|传播效果|campaign|analytics|report", text, re.I):
+        return "campaign_analytics"
     if re.search(r"数字艺术|数字.*艺术|沉浸|互动|装置|投影", text):
         return "digital_art"
     if re.search(r"裸眼3d|裸眼3D|3d定制|3D定制|3d内容|3D内容|裸眼.*定制", text):
@@ -92,16 +111,18 @@ async def _classify_general_route(request: GeneralRequest) -> dict[str, Any]:
         return quick
 
     route_prompt = (
-        "你是 Unique Video AI 的后端意图路由器。请根据用户最新消息和少量历史，判断应该交给哪个 agent。\n"
+        "你是 Unique Vision AI 的后端意图路由器。请根据用户最新消息和少量历史，判断应该交给哪个 agent。\n"
         "只返回 JSON，不要输出 Markdown，不要解释。\n\n"
         "intent 只能是以下之一：\n"
         "- order_create: 用户想下单、开始项目、定制内容、描述项目需求、希望有人协助梳理需求\n"
         "- order_query: 用户想查看订单、进度、状态、历史订单\n"
         "- business_intro: 用户想了解公司、业务、案例、服务范围\n"
         "- general: 其他闲聊或通用问题\n\n"
-        "business_type 只能是 ai_3d_custom、video_purchase、digital_art 或 null。\n"
+        "business_type 只能是 ai_3d_custom、video_purchase、digital_art、motion_content、media_post_production、campaign_analytics 或 null。\n"
         "如果 intent=order_create 但无法判断具体业务，在媒体端默认使用 ai_3d_custom。\n"
-        "业务判断：成片/模板/现成/购买 => video_purchase；数字艺术/沉浸/互动/装置/投影 => digital_art；裸眼3D定制/3D内容/一般下单 => ai_3d_custom。\n\n"
+        "业务判断：成片/模板/现成/购买 => video_purchase；数字艺术/沉浸/互动/装置/投影 => digital_art；"
+        "裸眼3D定制/3D内容/一般下单 => ai_3d_custom；TVC/FOOH/VJ/广告视觉/动态影像 => motion_content；"
+        "后期/精修/CGI/商业摄影/航拍 => media_post_production；投放分析/效果报告/受众分析/数据报告 => campaign_analytics。\n\n"
         "返回格式：{\"intent\":\"general\",\"business_type\":null,\"confidence\":0.0}"
     )
     messages = [{"role": "system", "content": route_prompt}]
@@ -140,7 +161,7 @@ async def ai_general(request: GeneralRequest, raw_request: Request):
     route = _quick_route(request.message) or {"intent": "general", "business_type": None}
     if not settings.AI_API_KEY:
         reply = (
-            "我是 Unique Video AI 的项目顾问。\n\n"
+            "我是 Unique Vision AI 的项目顾问。\n\n"
             "我们是国内裸眼3D视觉内容领域的头部服务商，专注于为品牌提供高品质视觉解决方案。\n\n"
             "我可以协助您：\n"
             "- 咨询下单 — 梳理项目需求并创建订单\n"
@@ -169,7 +190,7 @@ async def ai_general(request: GeneralRequest, raw_request: Request):
             }
 
         system_prompt = (
-            "你是 Unique Video AI 公司的项目顾问。\n"
+            "你是 Unique Vision AI 公司的项目顾问。\n"
             "公司是国内裸眼3D视觉内容和数字艺术创意领域的头部服务商。\n"
             "当用户的问题不属于下单、查订单、了解业务时，简洁专业地回答，并自然引导用户了解公司业务或开始下单。\n"
             "语气专业沉稳，不使用表情符号，不过度寒暄。"

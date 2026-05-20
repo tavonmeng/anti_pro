@@ -56,7 +56,7 @@
         :closable="false"
       >
         <template #default>
-          <p>数字艺术内容定制服务将在 <strong>3个工作日内</strong> 提供初稿预览。</p>
+          <p>数字艺术与沉浸式视觉设计服务将在 <strong>3个工作日内</strong> 提供初稿预览。</p>
           <p>初稿确认后，根据您的反馈意见进行调整和完善。</p>
           <p>我们致力于为您打造独特的数字艺术作品。</p>
         </template>

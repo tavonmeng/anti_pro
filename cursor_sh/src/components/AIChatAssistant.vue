@@ -250,9 +250,9 @@
                   <div v-if="msg.isGuideToOrder" class="guide-order-section">
                     <div class="guide-order-label">您可以选择感兴趣的业务板块开始需求梳理：</div>
                     <div class="guide-btns">
-                      <button class="comp-btn comp-btn-primary" @click="switchToOrderCreate('ai_3d_custom')">AI裸眼3D内容定制</button>
-                      <button class="comp-btn comp-btn-outline" @click="switchToOrderCreate('video_purchase')">裸眼3D成片购买适配</button>
-                      <button class="comp-btn comp-btn-outline" @click="switchToOrderCreate('digital_art')">数字艺术内容定制</button>
+                      <button class="comp-btn comp-btn-primary" @click="switchToOrderCreate('ai_3d_custom')">AI驱动3D OOH内容定制</button>
+                      <button class="comp-btn comp-btn-outline" @click="switchToOrderCreate('video_purchase')">3D OOH数字内容资源库</button>
+                      <button class="comp-btn comp-btn-outline" @click="switchToOrderCreate('digital_art')">数字艺术与沉浸式视觉设计</button>
                     </div>
                     <div class="guide-btns" style="margin-top: 6px;">
                       <button class="comp-btn comp-btn-ghost" @click="goToBrowse('ai_3d_custom')">或手动填写表单</button>
@@ -268,17 +268,28 @@
             <div class="assistant-wrapper">
                <div class="assistant-tag"><span class="engine-name">Catalyst Engine</span></div>
                <div class="message-bubble glass-ai typing">
-                 <span>正在思考中</span>
-                 <span class="thinking-dots" aria-hidden="true">
-                   <span></span>
-                   <span></span>
-                   <span></span>
+                 <span>agent思考中</span>
+                 <span class="thinking-ellipsis" aria-hidden="true">
+                   <span>.</span>
+                   <span>.</span>
+                   <span>.</span>
+                   <span>.</span>
+                   <span>.</span>
+                   <span>.</span>
                  </span>
                </div>
             </div>
           </div>
           <div v-if="isTyping && !isLoading" class="typing-cursor-indicator">
-            <span class="cursor-blink">▍</span>
+            <span>agent思考中</span>
+            <span class="thinking-ellipsis" aria-hidden="true">
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
           </div>
         </div>
       </div>
@@ -695,7 +706,7 @@ const getAuthHeaders = () => {
 const agentMode = import.meta.env.VITE_AGENT_MODE || 'media'
 const isMediaMode = agentMode === 'media'
 
-const welcomeTitleFull = '您好，我是 Unique Video AI 的项目顾问。'
+const welcomeTitleFull = '您好，我是 Unique Vision AI 的项目顾问。'
 const welcomeDescFull = isMediaMode
   ? '我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多媒体方客户提供过高品质的裸眼3D视觉内容解决方案。'
   : '我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多一线品牌提供过高品质视觉解决方案。'
@@ -1072,9 +1083,9 @@ const agentRegistry: Record<string, { label: string; sessionType: string; select
   business_intro: { label: '业务介绍', sessionType: 'business_intro', selectedMode: 'business_intro' },
   case_intro: { label: '案例介绍', sessionType: 'case_intro', selectedMode: 'business_intro' },
   order_query: { label: '订单查询', sessionType: 'order_query', selectedMode: 'order_query' },
-  requirement_ai_3d_custom: { label: 'AI裸眼3D内容定制', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'ai_3d_custom' },
-  requirement_video_purchase: { label: '裸眼3D成片购买', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'video_purchase' },
-  requirement_digital_art: { label: '数字艺术内容定制', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'digital_art' },
+  requirement_ai_3d_custom: { label: 'AI驱动3D OOH内容定制', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'ai_3d_custom' },
+  requirement_video_purchase: { label: '3D OOH数字内容资源库', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'video_purchase' },
+  requirement_digital_art: { label: '数字艺术与沉浸式视觉设计', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'digital_art' },
 }
 
 const savedHistories = ref<SavedSession[]>([])
@@ -1644,9 +1655,12 @@ const getStatusText = (status: string) => {
 
 const getTypeText = (type: string) => {
   const map: Record<string, string> = {
-    video_purchase: '裸眼3D成片购买适配',
-    ai_3d_custom: 'AI裸眼3D内容定制',
-    digital_art: '数字艺术内容定制'
+    video_purchase: '3D OOH数字内容资源库',
+    ai_3d_custom: 'AI驱动3D OOH内容定制',
+    digital_art: '数字艺术与沉浸式视觉设计',
+    motion_content: '广告视觉与动态影像制作',
+    media_post_production: '户外媒体后期制作服务',
+    campaign_analytics: '广告投放分析与效果报告'
   }
   return map[type] || type
 }
@@ -1697,9 +1711,12 @@ const switchToOrderCreate = (type: string = 'ai_3d_custom', requirementSummary: 
   emit('mode-change', 'order_create')
 
   const typeLabels: Record<string, string> = {
-    ai_3d_custom: 'AI裸眼3D内容定制',
-    video_purchase: '裸眼3D成片购买适配',
-    digital_art: '数字艺术内容定制',
+    ai_3d_custom: 'AI驱动3D OOH内容定制',
+    video_purchase: '3D OOH数字内容资源库',
+    digital_art: '数字艺术与沉浸式视觉设计',
+    motion_content: '广告视觉与动态影像制作',
+    media_post_production: '户外媒体后期制作服务',
+    campaign_analytics: '广告投放分析与效果报告',
   }
   const label = typeLabels[type] || typeLabels.ai_3d_custom
 
@@ -1750,7 +1767,7 @@ const selectMode = async (mode: string) => {
       const result = await response.json()
       if (result.reply) typewriterEffect(result.reply)
     } catch (e) {
-      const fallback = '您好，我是 Unique Video AI 的项目顾问。\n\n请描述您的项目需求，包括品牌名称、内容方向、预算和时间节点等关键信息。我将协助您完成完整的需求梳理。\n\n**首先，请告知您的项目背景。**'
+      const fallback = '您好，我是 Unique Vision AI 的项目顾问。\n\n我可以协助您梳理项目需求、确认关键制作信息，并在信息完整后生成需求单。\n\n请先简单介绍这次项目的背景、投放场景或内容方向。'
       typewriterEffect(fallback)
     } finally {
       isLoading.value = false
@@ -1797,7 +1814,7 @@ const selectMode = async (mode: string) => {
       const cleanMsg = (data.message || '').replace('【引导下单】', '').trim()
       typewriterEffect(cleanMsg)
     } catch (e) {
-      const fallback = 'Unique Video AI 提供三大核心业务板块：\n\n**裸眼3D成片购买适配** — 上百款精选模板，5个工作日交付\n**AI裸眼3D内容定制** — 品牌专属定制，15个工作日交付\n**数字艺术内容定制** — 沉浸式互动体验，7个工作日交付\n\n如需了解某个板块的详细信息或过往案例，请直接告知。'
+      const fallback = 'Unique Vision AI 提供六大平台服务：\n\n**3D OOH数字内容资源库**\nReady-to-Deploy 3D DOOH Assets：即用型裸眼3D数字内容资产\nScreen-Adaptive Content Packages：多屏适配内容方案\nGlobal Landmark Screen Formats：全球地标大屏内容规格适配\n\n**AI驱动3D OOH内容定制**\nAI-Based Creative Development：AI创意内容开发\nSite-Specific 3D Screen Adaptation：场景化裸眼3D空间适配\nReal-World Playback Simulation：真实环境播放模拟\nEnd-to-End DOOH Content Production：一站式DOOH内容制作\n\n**数字艺术与沉浸式视觉设计**\nArt Direction & Visual Design：艺术指导与视觉设计\nVirtual Installation Art：虚拟装置艺术\nImmersive Spatial Visuals：沉浸式空间视觉\nExperimental Digital Art Content：实验性数字艺术内容\n\n**广告视觉与动态影像制作**\nStatic Advertising Visuals：平面广告视觉设计\nTVC Production：TVC广告影片制作\nFOOH Campaign Content：FOOH数字传播内容\nVJ Visual Performance Content：VJ视觉演出内容\nMotion Graphic Design：动态视觉设计\n\n**户外媒体后期制作服务**\nHigh-End Retouching：高端精修图像处理\nCinematic Video Finishing：电影级视频精修\nCGI Enhancement：CGI视觉增强\nCommercial Photography & Filming：商业摄影与视频拍摄\nDrone Cinematography：航拍影像制作\n\n**广告投放分析与效果报告**\nDOOH Campaign Analytics：DOOH广告投放数据分析\nAudience Performance Reports：受众效果分析报告\nVisual Impact Assessment：视觉传播效果评估\nDownloadable Data Reports：可下载数据报告系统\n\n如需了解某个板块的详细信息或过往案例，请直接告知。'
       typewriterEffect(fallback)
     } finally {
       isLoading.value = false
@@ -1904,6 +1921,13 @@ const sendMessage = async () => {
     return
   }
 
+  if (isHumanHandoffRequest(messageContent)) {
+    selectedMode.value = 'order_create'
+    emit('mode-change', 'order_create')
+    await handleCustomAiChat(messageContent, userMessageId)
+    return
+  }
+
   if (selectedMode.value === 'order_create') {
     await handleCustomAiChat(messageContent, userMessageId)
   } else if (selectedMode.value === 'order_query') {
@@ -1968,6 +1992,7 @@ const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = fal
     })
     if (!response.ok) throw new Error('intro failed')
     const data = await response.json()
+    if (data.business_type) businessType.value = data.business_type
     const replyContent = data.message || ''
     // 显示时清洗掉内部标记
     const cleanMsg = replyContent.replace(/【推荐案例:case_\w+】/g, '').replace('【引导下单】', '').trim()
@@ -2065,7 +2090,7 @@ const handleGeneral = async (userText: string, userMessageId?: string) => {
     if (await routeByBackendIntent(data, userText, userMessageId)) return
     typewriterEffect(data.message || '感谢您的提问！')
   } catch (e) {
-    const fallback = '我是 Unique Video AI 的项目顾问。\n\n我可以协助您咨询下单、查看订单或了解我们的业务。请问您需要哪方面的支持？'
+    const fallback = '我是 Unique Vision AI 的项目顾问。\n\n我可以协助您梳理项目需求、查询订单进展，或介绍 PLATFORM SERVICES 平台服务体系。请问您需要哪方面的支持？'
     typewriterEffect(fallback)
   } finally {
     isLoading.value = false
@@ -2491,20 +2516,14 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   border-radius: 2px;
   padding: 0 2px;
 }
-/* 打字机光标动画 */
 .typing-cursor-indicator {
-  display: inline-block;
-  margin-left: 4px;
-  margin-top: -8px;
-}
-.cursor-blink {
-  animation: blink-cursor 0.8s step-end infinite;
-  color: #0071e3;
-  font-size: 16px;
-  font-weight: 600;
-}
-@keyframes blink-cursor {
-  50% { opacity: 0; }
+  display: inline-flex;
+  align-items: center;
+  margin: -4px 0 0 0;
+  padding-left: 12px;
+  color: rgba(0, 0, 0, 0.4);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* \u9700\u6c42\u6536\u96c6\u5b8c\u6210\u540e\u7684\u5185\u8054\u64cd\u4f5c\u6309\u94ae */
@@ -3336,40 +3355,40 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   gap: 2px;
 }
 
-.thinking-dots {
+.thinking-ellipsis {
   display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  width: 22px;
-  margin-left: 2px;
+  width: 3em;
+  margin-left: 1px;
 }
 
-.thinking-dots span {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.35;
-  animation: thinking-dot-bounce 1.05s ease-in-out infinite;
+.thinking-ellipsis span {
+  opacity: 0;
+  animation: thinking-dot-reveal 1.4s steps(1, end) infinite;
 }
 
-.thinking-dots span:nth-child(2) {
-  animation-delay: 0.15s;
+.thinking-ellipsis span:nth-child(2) {
+  animation-delay: 0.16s;
 }
 
-.thinking-dots span:nth-child(3) {
-  animation-delay: 0.3s;
+.thinking-ellipsis span:nth-child(3) {
+  animation-delay: 0.32s;
 }
 
-@keyframes thinking-dot-bounce {
-  0%, 80%, 100% {
-    opacity: 0.35;
-    transform: translateY(0);
-  }
-  40% {
-    opacity: 0.9;
-    transform: translateY(-3px);
-  }
+.thinking-ellipsis span:nth-child(4) {
+  animation-delay: 0.48s;
+}
+
+.thinking-ellipsis span:nth-child(5) {
+  animation-delay: 0.64s;
+}
+
+.thinking-ellipsis span:nth-child(6) {
+  animation-delay: 0.8s;
+}
+
+@keyframes thinking-dot-reveal {
+  0%, 72%, 100% { opacity: 0; }
+  12%, 60% { opacity: 1; }
 }
 
 /* Stitch Input Bar styling */

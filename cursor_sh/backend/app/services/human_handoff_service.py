@@ -16,6 +16,10 @@ from app.models.notification import Notification, NotificationType
 from app.models.order import Order, OrderStatus, OrderType
 from app.models.user import User
 from app.services.ai_client import post_chat_completion
+from app.services.platform_service_catalog import (
+    get_business_type_label,
+    is_orderable_business_type,
+)
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
 from app.utils.validators import generate_id, generate_order_number
@@ -231,7 +235,7 @@ async def record_handoff(
         handoff.message_count = len(messages)
         handoff.updated_at = datetime.now(timezone.utc)
 
-        if user:
+        if user and is_orderable_business_type(business_type):
             order_type = _order_type_from_business_type(business_type)
             draft_order = None
             if handoff.draft_order_id:
@@ -263,12 +267,13 @@ async def record_handoff(
             admins = admin_result.scalars().all()
             admin_count = len(admins)
             customer_label = (user.enterprise_name or user.company or user.username) if user else (username or user_id or "匿名用户")
+            business_label = get_business_type_label(business_type)
             for admin in admins:
                 db.add(Notification(
                     user_id=admin.id,
                     type=NotificationType.SYSTEM_NOTICE,
                     title="新转人工客户",
-                    content=f"{customer_label} 触发了转人工，请在“转人工客户”中跟进。",
+                    content=f"{customer_label} 咨询了「{business_label}」并触发转人工，请在“转人工客户”中跟进。",
                     is_read=False,
                 ))
 

@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_client import post_chat_completion
+from app.services.platform_service_catalog import VALID_BUSINESS_TYPES
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
 
@@ -50,11 +51,24 @@ def _detect_business_type(message: str) -> str | None:
     text = message.strip()
     lower = text.lower()
     direct_names = {
+        "3d ooh数字内容资源库": "video_purchase",
+        "3dooh数字内容资源库": "video_purchase",
+        "ai驱动3d ooh内容定制": "ai_3d_custom",
+        "ai驱动3dooh内容定制": "ai_3d_custom",
+        "数字艺术与沉浸式视觉设计": "digital_art",
+        "广告视觉与动态影像制作": "motion_content",
+        "广告视觉": "motion_content",
+        "动态影像制作": "motion_content",
+        "户外媒体后期制作服务": "media_post_production",
+        "户外媒体后期": "media_post_production",
+        "广告投放分析与效果报告": "campaign_analytics",
+        "投放分析": "campaign_analytics",
+        "效果报告": "campaign_analytics",
         "ai裸眼3d内容定制": "ai_3d_custom",
         "裸眼3d内容定制": "ai_3d_custom",
-        "裸眼3d成片购买适配": "video_purchase",
-        "成片购买适配": "video_purchase",
-        "数字艺术内容定制": "digital_art",
+        "裸眼3d3D OOH数字内容资源库": "video_purchase",
+        "3D OOH数字内容资源库": "video_purchase",
+        "数字艺术与沉浸式视觉设计": "digital_art",
     }
     for name, business_type in direct_names.items():
         if name in lower:
@@ -62,6 +76,12 @@ def _detect_business_type(message: str) -> str | None:
 
     if re.search(r"成片|购买|模板|现成|成品|买", text):
         return "video_purchase"
+    if re.search(r"tvc|fooh|vj|动态影像|动态视觉|广告视觉|广告影片|平面广告|motion", text, re.I):
+        return "motion_content"
+    if re.search(r"后期|精修|修图|视频精修|cgi|商业摄影|拍摄|航拍|drone|retouch", text, re.I):
+        return "media_post_production"
+    if re.search(r"投放分析|效果报告|数据报告|受众分析|传播效果|campaign|analytics|report", text, re.I):
+        return "campaign_analytics"
     if re.search(r"数字艺术|数字.*艺术|沉浸|互动|装置|投影", text):
         return "digital_art"
     if re.search(r"裸眼3d|裸眼3D|3d定制|3D定制|3d内容|3D内容|裸眼.*定制", text):
@@ -118,6 +138,8 @@ async def ai_classify(request: ClassifyRequest):
             result = data["choices"][0]["message"]["content"].strip().lower()
             intent = result if result in _VALID_INTENTS else "order_create"
             business_type = _detect_business_type(msg)
+            if business_type not in VALID_BUSINESS_TYPES:
+                business_type = None
             if intent == "order_create" and not business_type:
                 business_type = "ai_3d_custom"
             return {"intent": intent, "business_type": business_type}

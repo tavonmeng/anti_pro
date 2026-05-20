@@ -124,7 +124,7 @@ export interface BaseOrder {
   revisionCount: number        // 修改次数
 }
 
-// 裸眼3D成片购买订单
+// 3D OOH数字内容资源库订单
 export interface VideoPurchaseOrder extends BaseOrder {
   orderType: 'video_purchase'
   industryType: IndustryType
@@ -138,7 +138,7 @@ export interface VideoPurchaseOrder extends BaseOrder {
   curvature?: string
 }
 
-// AI裸眼3D内容定制订单（兼容品牌方 & 媒体方）
+// AI驱动3D OOH内容定制订单（兼容品牌方 & 媒体方）
 export interface AI3DCustomOrder extends BaseOrder {
   orderType: 'ai_3d_custom'
   // ── 品牌方字段 ──
@@ -176,7 +176,7 @@ export interface AI3DCustomOrder extends BaseOrder {
   remarks?: string             // 备注
 }
 
-// 数字艺术内容定制订单
+// 数字艺术与沉浸式视觉设计订单
 export interface DigitalArtOrder extends BaseOrder {
   orderType: 'digital_art'
   artDirection: ArtDirection

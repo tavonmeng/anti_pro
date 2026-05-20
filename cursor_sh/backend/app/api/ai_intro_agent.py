@@ -17,11 +17,23 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_client import post_chat_completion
+from app.services.platform_service_catalog import get_consultation_intro
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
 
 intro_router = APIRouter()
 logger = get_module_logger("ai")
+
+
+def _detect_consultation_business_type(message: str) -> str | None:
+    text = (message or "").strip()
+    if re.search(r"tvc|fooh|vj|动态影像|动态视觉|广告视觉|广告影片|平面广告|motion", text, re.I):
+        return "motion_content"
+    if re.search(r"后期|精修|修图|视频精修|cgi|商业摄影|拍摄|航拍|drone|retouch", text, re.I):
+        return "media_post_production"
+    if re.search(r"投放分析|效果报告|数据报告|受众分析|传播效果|campaign|analytics|report", text, re.I):
+        return "campaign_analytics"
+    return None
 
 
 class BusinessIntroRequest(BaseModel):
@@ -137,6 +149,10 @@ def _inject_case_into_reply(reply: str, cases_data: list, shown_ids: Set[str]) -
 async def ai_business_intro(request: BusinessIntroRequest):
     """业务介绍对话"""
     business_knowledge, cases_data = _load_business_knowledge()
+    consultation_type = _detect_consultation_business_type(request.message)
+
+    if consultation_type:
+        return {"message": get_consultation_intro(consultation_type), "cases": [], "business_type": consultation_type}
 
     if not settings.AI_API_KEY:
         msg = request.message.lower()
@@ -146,22 +162,61 @@ async def ai_business_intro(request: BusinessIntroRequest):
                      "\n\n每个案例均附有对应的视频展示，可直接点击查看。")
             return {"message": reply, "cases": cases_data[:3]}
         elif "裸眼" in msg or "3d" in msg or "成片" in msg:
-            reply = ("裸眼3D是我们的核心业务，提供两种交付模式：\n\n"
-                     "**成片购买适配** — 精选模板库，5个工作日交付，万元级预算\n\n"
-                     "**AI内容定制** — 品牌专属定制，15个工作日交付，十万级起\n\n"
+            reply = ("3D OOH是我们的核心服务方向，提供两种主要交付模式：\n\n"
+                     "**3D OOH数字内容资源库**\n"
+                     "Ready-to-Deploy 3D DOOH Assets：即用型裸眼3D数字内容资产\n"
+                     "Screen-Adaptive Content Packages：多屏适配内容方案\n"
+                     "Global Landmark Screen Formats：全球地标大屏内容规格适配\n\n"
+                     "**AI驱动3D OOH内容定制**\n"
+                     "AI-Based Creative Development：AI创意内容开发\n"
+                     "Site-Specific 3D Screen Adaptation：场景化裸眼3D空间适配\n"
+                     "Real-World Playback Simulation：真实环境播放模拟\n"
+                     "End-to-End DOOH Content Production：一站式DOOH内容制作\n\n"
                      "请问您倾向于哪种模式？")
             relevant = [c for c in cases_data if c.get("category") == "ai_3d_custom"]
             return {"message": reply, "cases": relevant[:2]}
         elif "数字" in msg or "艺术" in msg:
-            reply = ("数字艺术内容定制涵盖数字装置、沉浸式互动体验、创意视觉内容等方向。\n\n"
-                     "交付周期约7个工作日，报价根据项目复杂度评估。")
+            reply = ("数字艺术与沉浸式视觉设计包含：\n"
+                     "Art Direction & Visual Design：艺术指导与视觉设计\n"
+                     "Virtual Installation Art：虚拟装置艺术\n"
+                     "Immersive Spatial Visuals：沉浸式空间视觉\n"
+                     "Experimental Digital Art Content：实验性数字艺术内容\n\n"
+                     "我们会根据空间、媒介、内容主题和交付规格评估制作方案。")
             relevant = [c for c in cases_data if c.get("category") == "digital_art"]
             return {"message": reply, "cases": relevant[:2]}
         else:
-            reply = ("Unique Video AI 提供三大核心业务板块：\n\n"
-                     "**裸眼3D成片购买适配** — 万元级预算，5个工作日交付\n"
-                     "**AI裸眼3D内容定制** — 十万级起，15个工作日交付\n"
-                     "**数字艺术内容定制** — 沉浸式互动体验，按项目报价\n\n"
+            reply = ("Unique Vision AI 提供六大平台服务：\n\n"
+                     "**3D OOH数字内容资源库**\n"
+                     "Ready-to-Deploy 3D DOOH Assets：即用型裸眼3D数字内容资产\n"
+                     "Screen-Adaptive Content Packages：多屏适配内容方案\n"
+                     "Global Landmark Screen Formats：全球地标大屏内容规格适配\n\n"
+                     "**AI驱动3D OOH内容定制**\n"
+                     "AI-Based Creative Development：AI创意内容开发\n"
+                     "Site-Specific 3D Screen Adaptation：场景化裸眼3D空间适配\n"
+                     "Real-World Playback Simulation：真实环境播放模拟\n"
+                     "End-to-End DOOH Content Production：一站式DOOH内容制作\n\n"
+                     "**数字艺术与沉浸式视觉设计**\n"
+                     "Art Direction & Visual Design：艺术指导与视觉设计\n"
+                     "Virtual Installation Art：虚拟装置艺术\n"
+                     "Immersive Spatial Visuals：沉浸式空间视觉\n"
+                     "Experimental Digital Art Content：实验性数字艺术内容\n\n"
+                     "**广告视觉与动态影像制作**\n"
+                     "Static Advertising Visuals：平面广告视觉设计\n"
+                     "TVC Production：TVC广告影片制作\n"
+                     "FOOH Campaign Content：FOOH数字传播内容\n"
+                     "VJ Visual Performance Content：VJ视觉演出内容\n"
+                     "Motion Graphic Design：动态视觉设计\n\n"
+                     "**户外媒体后期制作服务**\n"
+                     "High-End Retouching：高端精修图像处理\n"
+                     "Cinematic Video Finishing：电影级视频精修\n"
+                     "CGI Enhancement：CGI视觉增强\n"
+                     "Commercial Photography & Filming：商业摄影与视频拍摄\n"
+                     "Drone Cinematography：航拍影像制作\n\n"
+                     "**广告投放分析与效果报告**\n"
+                     "DOOH Campaign Analytics：DOOH广告投放数据分析\n"
+                     "Audience Performance Reports：受众效果分析报告\n"
+                     "Visual Impact Assessment：视觉传播效果评估\n"
+                     "Downloadable Data Reports：可下载数据报告系统\n\n"
                      "如需了解某个板块的详细信息或过往案例，请直接告知。")
             return {"message": reply, "cases": []}
 
@@ -183,7 +238,7 @@ async def ai_business_intro(request: BusinessIntroRequest):
             case_status = f"\n当前案例库中还有 {remaining_count} 个未展示的案例可用。\n"
 
         system_prompt = (
-            "你是 Unique Video AI 公司的资深项目顾问。\n"
+            "你是 Unique Vision AI 公司的资深项目顾问。\n"
             "你代表公司向客户介绍业务，语气应专业、沉稳、自信，体现行业头部服务商的格调。\n"
             "不使用emoji表情，不使用'哦''呢''呀'等语气词，不过度寒暄客套。\n"
             "以下是公司的业务资料：\n\n"
@@ -203,7 +258,7 @@ async def ai_business_intro(request: BusinessIntroRequest):
             "1. 当你完成业务板块介绍后，主动询问客户是否想看案例，例如：\n"
             "   '以上是我们核心服务的概览。我们在多个行业均有成功落地案例，需要我为您展示几个代表性的项目吗？'\n"
             "2. 客户确认要看案例后，使用【展示案例】标记让系统展示。\n"
-            "3. 只介绍裸眼3D成片购买适配、AI裸眼3D内容定制、数字艺术内容定制三个业务板块，不要编造不存在的服务。\n\n"
+            "3. 只介绍业务资料中列出的六个业务板块，不要编造不存在的服务。\n\n"
 
             "【引导下单规则 — 核心】\n"
             "只有在以下明确信号出现时，才在回复的最后一行加上标记：【引导下单】\n"
@@ -230,7 +285,7 @@ async def ai_business_intro(request: BusinessIntroRequest):
 
             "引导方式要自然、不生硬，像顾问做完介绍后的自然收尾。示例：\n"
             "  - '如果您已有初步的项目构想，我可以直接进入需求梳理环节，帮您快速推进。'\n"
-            "  - '从您描述的场景来看，AI裸眼3D内容定制会是比较匹配的方案。我们可以进一步聊聊具体需求。'\n"
+            "  - '从您描述的场景来看，AI驱动3D OOH内容定制会是比较匹配的方案。我们可以进一步聊聊具体需求。'\n"
             "注意：引导语要融入回答的结尾，不要单独一行突兀地出现。标记放在全文最后即可。\n"
         )
 

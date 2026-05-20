@@ -1,4 +1,4 @@
-# AI设计任务管理系统 - 部署指南
+# Unique Vision AI - 部署指南
 
 ## 📋 目录
 
@@ -152,7 +152,7 @@ nano .env  # 或使用你喜欢的编辑器
 
 ```env
 # 应用基础配置
-APP_NAME=AI设计任务管理系统
+APP_NAME=Unique Vision AI
 DEBUG=True
 
 # JWT 密钥（必须修改！）
@@ -252,7 +252,7 @@ curl http://localhost:8000/health
 ```json
 {
   "status": "ok",
-  "app": "AI设计任务管理系统"
+  "app": "Unique Vision AI"
 }
 ```
 
@@ -322,7 +322,7 @@ curl -X POST http://localhost:8000/api/auth/login \
 ```
 1. 以 user 身份登录 (user/123456)
 2. 进入工作台
-3. 点击"裸眼3D成片购买适配"
+3. 点击"3D OOH数字内容资源库"
 4. 填写表单：
    - 行业类型: 电影
    - 视觉风格: 科幻
@@ -1125,14 +1125,14 @@ docker-compose logs -f backend
 
 ### 技术支持渠道
 
-- **邮件**: support@example.com
+- **邮件**: service@uniquevisionx.com
 - **文档**: https://docs.your-domain.com
 - **问题跟踪**: https://github.com/your-repo/issues
 
 ### 紧急联系
 
-- **系统管理员**: admin@example.com
-- **开发负责人**: dev@example.com
+- **系统管理员**: service@uniquevisionx.com
+- **开发负责人**: service@uniquevisionx.com
 - **值班电话**: 123-4567-8901（工作时间）
 
 ---
@@ -1140,4 +1140,3 @@ docker-compose logs -f backend
 **版本**: v1.0.0  
 **更新日期**: 2025-11-05  
 **文档维护**: 运维团队
-

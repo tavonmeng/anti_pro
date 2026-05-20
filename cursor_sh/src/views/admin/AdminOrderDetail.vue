@@ -41,7 +41,7 @@
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="confirmation">需求告知函</el-dropdown-item>
+                <el-dropdown-item command="confirmation">订单需求确认函</el-dropdown-item>
                 <el-dropdown-item command="detail">订单详情报告</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -925,9 +925,9 @@ const cancelForm = ref({
 })
 
 const orderTypeMap: Record<string, string> = {
-  video_purchase: '裸眼3D成片购买适配',
-  ai_3d_custom: 'AI裸眼3D内容定制',
-  digital_art: '数字艺术内容定制'
+  video_purchase: '3D OOH数字内容资源库',
+  ai_3d_custom: 'AI驱动3D OOH内容定制',
+  digital_art: '数字艺术与沉浸式视觉设计'
 }
 
 const orderTypeText = computed(() => {

@@ -78,9 +78,9 @@ const emitView = () => {
 }
 
 const orderTypeMap: Record<string, string> = {
-  video_purchase: '裸眼3D成片购买',
-  ai_3d_custom: 'AI裸眼3D定制',
-  digital_art: '数字艺术定制'
+  video_purchase: '3D OOH数字内容资源库',
+  ai_3d_custom: 'AI驱动3D OOH内容定制',
+  digital_art: '数字艺术与沉浸式视觉设计'
 }
 
 const orderTypeText = computed(() => orderTypeMap[props.order.orderType] || props.order.orderType)

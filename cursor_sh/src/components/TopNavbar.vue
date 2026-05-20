@@ -6,7 +6,7 @@
           <circle cx="50" cy="50" r="45" fill="none" stroke="#1D1D1F" stroke-width="2" />
           <path d="M 30 50 L 45 65 L 70 35" fill="none" stroke="#1D1D1F" stroke-width="3" />
         </svg>
-        <span class="logo-text">AI设计任务管理系统</span>
+        <span class="logo-text">Unique Vision AI</span>
       </div>
       <el-menu
         :default-active="activeMenu"

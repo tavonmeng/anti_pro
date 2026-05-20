@@ -46,81 +46,35 @@
 
     <div class="module-list" style="margin-top: 16px;">
 
-      <div 
+      <div
+        v-for="service in platformServices"
+        :key="service.type"
         class="module-group"
-        :class="{ active: currentModule === 'video_purchase' }"
+        :class="{ active: currentModule === service.type }"
       >
         <div
           class="module-pill"
-          :class="{ 'is-active': currentModule === 'video_purchase' }"
+          :class="{ 'is-active': currentModule === service.type }"
           role="button"
           tabindex="0"
-          @click="goToService('video_purchase')"
-          @keydown.enter.self.prevent="goToService('video_purchase')"
-          @keydown.space.self.prevent="goToService('video_purchase')"
+          @click="goToService(service.type)"
+          @keydown.enter.self.prevent="goToService(service.type)"
+          @keydown.space.self.prevent="goToService(service.type)"
         >
-          <span class="module-name">裸眼3D成片购买</span>
-          <el-icon class="expand-icon" :class="{ rotated: currentModule === 'video_purchase', 'is-active-icon': currentModule === 'video_purchase' }"><ArrowDown /></el-icon>
+          <span class="module-name">{{ service.title }}</span>
+          <el-icon class="expand-icon" :class="{ rotated: currentModule === service.type, 'is-active-icon': currentModule === service.type }"><ArrowDown /></el-icon>
         </div>
-        <div class="module-intro" v-show="currentModule === 'video_purchase'">
-          <div class="intro-image" style="background: linear-gradient(to bottom right, #111, #333);">
-            <div class="badge">Premium 3D</div>
+        <div class="module-intro" v-show="currentModule === service.type">
+          <div class="intro-image" :style="{ background: service.gradient }">
+            <div class="badge">{{ service.badge }}</div>
           </div>
+          <div class="intro-subtitle">{{ service.subtitle }}</div>
           <p class="intro-desc">
-            专业的裸眼3D视频内容库。海量高质量成片，基于您屏幕参数快速二次适配，最快48小时极速交付。
+            {{ service.description }}
           </p>
-        </div>
-      </div>
-
-      <div 
-        class="module-group"
-        :class="{ active: currentModule === 'ai_3d_custom' }"
-      >
-        <div
-          class="module-pill"
-          :class="{ 'is-active': currentModule === 'ai_3d_custom' }"
-          role="button"
-          tabindex="0"
-          @click="goToService('ai_3d_custom')"
-          @keydown.enter.self.prevent="goToService('ai_3d_custom')"
-          @keydown.space.self.prevent="goToService('ai_3d_custom')"
-        >
-          <span class="module-name">AI裸眼3D内容定制</span>
-          <el-icon class="expand-icon" :class="{ rotated: currentModule === 'ai_3d_custom', 'is-active-icon': currentModule === 'ai_3d_custom' }"><ArrowDown /></el-icon>
-        </div>
-        <div class="module-intro" v-show="currentModule === 'ai_3d_custom'">
-          <div class="intro-image" style="background: linear-gradient(to bottom right, #001f3f, #004080);">
-            <div class="badge creative">AI Creative</div>
+          <div class="intro-tags">
+            <span v-for="feature in service.features" :key="feature">{{ feature }}</span>
           </div>
-          <p class="intro-desc">
-            基于前沿AI技术的定制化3D内容创作。提供创意文字即可生成震撼视觉，将灵感快速转化为高品质展出作品。
-          </p>
-        </div>
-      </div>
-
-      <div 
-        class="module-group"
-        :class="{ active: currentModule === 'digital_art' }"
-      >
-        <div
-          class="module-pill"
-          :class="{ 'is-active': currentModule === 'digital_art' }"
-          role="button"
-          tabindex="0"
-          @click="goToService('digital_art')"
-          @keydown.enter.self.prevent="goToService('digital_art')"
-          @keydown.space.self.prevent="goToService('digital_art')"
-        >
-          <span class="module-name">数字艺术内容定制</span>
-          <el-icon class="expand-icon" :class="{ rotated: currentModule === 'digital_art', 'is-active-icon': currentModule === 'digital_art' }"><ArrowDown /></el-icon>
-        </div>
-        <div class="module-intro" v-show="currentModule === 'digital_art'">
-          <div class="intro-image" style="background: linear-gradient(to bottom right, #4a0000, #ff1a1a);">
-            <div class="badge art">Digital Art</div>
-          </div>
-          <p class="intro-desc">
-            专属资深艺术家团队人工精雕。涵盖抽象、写实等定制艺术流派，为您定制独一无二的线下屏幕地标数字艺术品。
-          </p>
         </div>
       </div>
     </div>
@@ -135,6 +89,7 @@ import { useAuthStore } from '@/stores/auth'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { logger } from '@/utils/logger'
 import { AI_CHAT_HISTORY_EVENT, loadAiChatSessions, type AiChatSavedSession } from '@/utils/aiChatSessions'
+import { isOrderableServiceType, platformServices, type ServiceType } from '@/data/platformServices'
 
 const router = useRouter()
 const uiStore = useUiStore()
@@ -169,7 +124,7 @@ onUnmounted(() => {
 watch(() => uiStore.aiChatHistoryVersion, loadRecentSessions)
 watch(() => authStore.user?.id, loadRecentSessions)
 
-const goToService = async (type: string) => {
+const goToService = async (type: ServiceType | 'ai_agent') => {
   logger.logAction('Workspace', 'sidebar_navigate', { target: type })
   if (type === 'ai_agent') {
     uiStore.setIsAiExpanded(true)
@@ -186,6 +141,8 @@ const goToService = async (type: string) => {
   uiStore.setActiveModule(type)
   if (type === 'video_purchase') {
     await router.push('/user/video-marketplace')
+  } else if (isOrderableServiceType(type)) {
+    await router.push(`/user/create-order/${type}`)
   } else {
     await router.push(`/user/create-order/${type}`)
   }
@@ -487,16 +444,42 @@ const goToService = async (type: string) => {
   border-radius: 4px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .intro-image .badge.creative { background: rgba(0, 112, 235, 0.9); }
 .intro-image .badge.art { background: rgba(0, 112, 235, 0.9); }
+
+.intro-subtitle {
+  color: #1f2329;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
 
 .intro-desc {
   margin: 0;
   font-size: 12px;
   color: #6c707d;
   line-height: 1.6;
+}
+
+.intro-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.intro-tags span {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+  color: #414754;
+  font-size: 10px;
+  line-height: 1;
+  padding: 4px 6px;
 }
 
 </style>

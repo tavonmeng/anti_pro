@@ -104,9 +104,9 @@ API 响应示例大全，包含：
 - **负责人模块**: 2 个接口（列表、创建）
 
 ### 订单类型
-1. **video_purchase** - 裸眼3D成片购买适配
-2. **ai_3d_custom** - AI裸眼3D内容定制（5-7天）
-3. **digital_art** - 数字艺术内容定制（3天初稿）
+1. **video_purchase** - 3D OOH数字内容资源库
+2. **ai_3d_custom** - AI驱动3D OOH内容定制（5-7天）
+3. **digital_art** - 数字艺术与沉浸式视觉设计（3天初稿）
 
 ### 订单状态
 1. `pending_assign` - 待分配

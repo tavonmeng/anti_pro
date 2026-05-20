@@ -206,7 +206,7 @@
         :closable="false"
       >
         <template #default>
-          <p>AI裸眼3D内容定制服务预计制作周期为 <strong>15个工作日</strong>。</p>
+          <p>AI驱动3D OOH内容定制服务预计制作周期为 <strong>15个工作日</strong>。</p>
           <p>制作完成后，我们将上传初版预览供您确认。您可以提出修改意见，我们将根据反馈进行调整。</p>
         </template>
       </el-alert>

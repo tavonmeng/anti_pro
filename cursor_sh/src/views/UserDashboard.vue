@@ -33,10 +33,8 @@ watch(() => route.path, (newPath) => {
     
     if (newPath.includes('/video-marketplace')) {
       uiStore.setActiveModule('video_purchase')
-    } else if (newPath.includes('/create-order/ai_3d_custom')) {
-      uiStore.setActiveModule('ai_3d_custom')
-    } else if (newPath.includes('/create-order/digital_art')) {
-      uiStore.setActiveModule('digital_art')
+    } else if (newPath.includes('/create-order/')) {
+      uiStore.setActiveModule(String(route.params.type || ''))
     }
   } else if (!newPath.includes('/workspace')) {
     uiStore.setIsAiExpanded(false)

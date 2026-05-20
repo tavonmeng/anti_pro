@@ -34,7 +34,7 @@ fetch('/api/health')
   .catch(console.error)
 ```
 
-应该返回：`{status: "ok", app: "AI设计任务管理系统"}`
+应该返回：`{status: "ok", app: "Unique Vision AI"}`
 
 ### 4. 如果代理仍然不工作
 

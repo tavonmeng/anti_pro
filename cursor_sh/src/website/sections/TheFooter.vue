@@ -41,7 +41,7 @@
               <img src="/landing/icon/Tiktok_icon.svg" alt="TikTok" class="social-img" />
             </a>
             <!-- 邮箱 -->
-            <a href="mailto:contact@uniquevision.cn" class="social-icon" aria-label="邮箱" title="邮箱">
+            <a href="mailto:service@uniquevisionx.com" class="social-icon" aria-label="邮箱" title="邮箱">
               <img src="/landing/icon/email-download-svgrepo-com.svg" alt="邮箱" class="social-img" />
             </a>
             <!-- 微信 -->

@@ -17,6 +17,11 @@ from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from app.config import settings
 from app.services.ai_client import post_chat_completion, stream_chat_completion, stream_responses_completion
+from app.services.platform_service_catalog import (
+    get_business_type_label,
+    get_consultation_intro,
+    is_consultation_business_type,
+)
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
 from app.utils.security import decode_access_token
@@ -48,7 +53,7 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
     history: list = Field(default_factory=list)
-    business_type: str = "ai_3d_custom"  # ai_3d_custom / video_purchase / digital_art
+    business_type: str = "ai_3d_custom"
     user_message_id: str | None = None
     assistant_message_id: str | None = None
 
@@ -202,6 +207,13 @@ _HUMAN_HANDOFF_REPLY = (
 )
 
 _HUMAN_HANDOFF_APPEND_REPLY = "已收到，我已将这条补充内容追加到人工对接记录中，专属顾问跟进时会一并查看。"
+
+
+def _handoff_reply_for_business_type(business_type: str) -> str:
+    if is_consultation_business_type(business_type):
+        label = get_business_type_label(business_type)
+        return f"已收到，我已把您关于「{label}」的咨询内容和聊天记录同步给后台项目顾问。\n\n专属顾问会继续跟进需求、报价和排期。"
+    return _HUMAN_HANDOFF_REPLY
 
 
 def _is_human_handoff_request(message: str) -> bool:
@@ -437,7 +449,7 @@ async def _finalize_ai_chat_reply(
 async def ai_start(session_id: str):
     """获取对话的初始欢迎语"""
     if settings.AGENT_MODE == "media":
-        reply = """您好，我是 Unique Video AI 的项目顾问。
+        reply = """您好，我是 Unique Vision AI 的项目顾问。
 
 我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，核心团队深耕行业多年，已为众多媒体方客户提供过高品质的裸眼3D视觉内容解决方案。
 
@@ -449,7 +461,7 @@ async def ai_start(session_id: str):
 
 请直接告知您的需求，或通过下方快捷入口进入对应流程。"""
     else:
-        reply = """您好，我是 Unique Video AI 的项目顾问。
+        reply = """您好，我是 Unique Vision AI 的项目顾问。
 
 我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，核心团队深耕行业多年，已为众多一线品牌提供过高品质的视觉解决方案。
 
@@ -523,7 +535,7 @@ _DIALOG_RULES = (
 )
 
 _PROMPT_AI_3D = (
-    "你是 Unique Video AI 的资深项目顾问，专注于AI裸眼3D视觉内容定制领域。"
+    "你是 Unique Vision AI 的资深项目顾问，专注于AI驱动3D OOH内容定制领域。"
     "你的任务是通过结构化的对话，高效地收集客户的裸眼3D项目需求信息。\n\n"
     + _TONE_RULES +
     "【你需要收集的字段清单】\n"
@@ -547,10 +559,10 @@ _PROMPT_AI_3D = (
 )
 
 _PROMPT_VIDEO_PURCHASE = (
-    "你是 Unique Video AI 的资深项目顾问，专注于裸眼3D成片购买适配服务。"
+    "你是 Unique Vision AI 的资深项目顾问，专注于3D OOH数字内容资源库服务。"
     "你的任务是通过结构化的对话，高效地收集客户的成片选购与适配需求。\n\n"
     "【业务背景】\n"
-    "成片购买适配是从我们的精选模板库中挑选现成的裸眼3D视频，"
+    "3D OOH数字内容资源库是从我们的精选模板库中挑选现成的裸眼3D视频，"
     "再根据客户的屏幕尺寸和品牌需求进行适配调整。交付周期约5个工作日，预算万元级。\n\n"
     + _TONE_RULES +
     "【你需要收集的字段清单】\n"
@@ -571,10 +583,10 @@ _PROMPT_VIDEO_PURCHASE = (
 )
 
 _PROMPT_DIGITAL_ART = (
-    "你是 Unique Video AI 的资深项目顾问，专注于数字艺术内容定制领域。"
+    "你是 Unique Vision AI 的资深项目顾问，专注于数字艺术与沉浸式视觉设计领域。"
     "你的任务是通过结构化的对话，高效地收集客户的数字艺术项目需求信息。\n\n"
     "【业务背景】\n"
-    "数字艺术内容定制涵盖数字装置、沉浸式互动体验、创意视觉内容等方向，"
+    "数字艺术与沉浸式视觉设计涵盖数字装置、沉浸式互动体验、创意视觉内容等方向，"
     "适用于展览、发布会、品牌快闪活动、商业空间等场景。交付周期约7个工作日。\n\n"
     + _TONE_RULES +
     "【你需要收集的字段清单】\n"
@@ -630,7 +642,7 @@ _MEDIA_DIALOG_RULES = (
 )
 
 _PROMPT_MEDIA_3D = (
-    "你是 Unique Video AI 的资深项目顾问，在裸眼3D户外媒体内容定制领域有多年的项目经验。"
+    "你是 Unique Vision AI 的资深项目顾问，在裸眼3D户外媒体内容定制领域有多年的项目经验。"
     "你的任务是通过自然、专业的对话，高效地收集媒体方客户的裸眼3D项目需求信息。\n\n"
     "【目标】\n"
     "媒体方客户通常拥有户外大屏、交通枢纽屏幕等媒体资源。你的目标是帮助客户把本次裸眼3D内容需求梳理清楚，"
@@ -790,6 +802,7 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
         return {"message": _HUMAN_HANDOFF_APPEND_REPLY, "handoff": True, **existing_handoff}
 
     if _is_human_handoff_request(request.message):
+        handoff_reply = _handoff_reply_for_business_type(request.business_type)
         handoff_meta = await _record_handoff(
             user_id=user_id,
             username=username,
@@ -797,7 +810,7 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
             business_type=request.business_type,
             history=request.history,
             user_msg=request.message,
-            assistant_msg=_HUMAN_HANDOFF_REPLY,
+            assistant_msg=handoff_reply,
         )
         log_business_event(
             logger,
@@ -813,12 +826,23 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
         )
         _save_session_file(
             session_id=request.session_id, user_id=user_id, username=username,
-            history=request.history, user_msg=request.message, assistant_msg=_HUMAN_HANDOFF_REPLY,
+            history=request.history, user_msg=request.message, assistant_msg=handoff_reply,
             business_type=request.business_type,
             user_message_id=request.user_message_id,
             assistant_message_id=request.assistant_message_id,
         )
-        return {"message": _HUMAN_HANDOFF_REPLY, "handoff": True, **handoff_meta}
+        return {"message": handoff_reply, "handoff": True, **handoff_meta}
+
+    if is_consultation_business_type(request.business_type):
+        reply = get_consultation_intro(request.business_type)
+        _save_session_file(
+            session_id=request.session_id, user_id=user_id, username=username,
+            history=request.history, user_msg=request.message, assistant_msg=reply,
+            business_type=request.business_type,
+            user_message_id=request.user_message_id,
+            assistant_message_id=request.assistant_message_id,
+        )
+        return {"message": reply, "handoff": False, "business_type": request.business_type}
 
     if not settings.AI_API_KEY:
         mock_reply = "【真实后端接口调试中】"
@@ -968,6 +992,7 @@ async def ai_chat_stream(request: ChatRequest, raw_request: Request):
         return StreamingResponse(one_shot(payload), media_type="text/event-stream", headers=stream_headers)
 
     if _is_human_handoff_request(request.message):
+        handoff_reply = _handoff_reply_for_business_type(request.business_type)
         handoff_meta = await _record_handoff(
             user_id=user_id,
             username=username,
@@ -975,7 +1000,7 @@ async def ai_chat_stream(request: ChatRequest, raw_request: Request):
             business_type=request.business_type,
             history=request.history,
             user_msg=request.message,
-            assistant_msg=_HUMAN_HANDOFF_REPLY,
+            assistant_msg=handoff_reply,
         )
         log_business_event(
             logger,
@@ -991,12 +1016,24 @@ async def ai_chat_stream(request: ChatRequest, raw_request: Request):
         )
         _save_session_file(
             session_id=request.session_id, user_id=user_id, username=username,
-            history=request.history, user_msg=request.message, assistant_msg=_HUMAN_HANDOFF_REPLY,
+            history=request.history, user_msg=request.message, assistant_msg=handoff_reply,
             business_type=request.business_type,
             user_message_id=request.user_message_id,
             assistant_message_id=request.assistant_message_id,
         )
-        payload = {"message": _HUMAN_HANDOFF_REPLY, "handoff": True, **handoff_meta}
+        payload = {"message": handoff_reply, "handoff": True, **handoff_meta}
+        return StreamingResponse(one_shot(payload), media_type="text/event-stream", headers=stream_headers)
+
+    if is_consultation_business_type(request.business_type):
+        reply = get_consultation_intro(request.business_type)
+        _save_session_file(
+            session_id=request.session_id, user_id=user_id, username=username,
+            history=request.history, user_msg=request.message, assistant_msg=reply,
+            business_type=request.business_type,
+            user_message_id=request.user_message_id,
+            assistant_message_id=request.assistant_message_id,
+        )
+        payload = {"message": reply, "handoff": False, "business_type": request.business_type}
         return StreamingResponse(one_shot(payload), media_type="text/event-stream", headers=stream_headers)
 
     if not settings.AI_API_KEY:
@@ -1281,13 +1318,13 @@ async def ai_assess(request: AssessRequest):
         if budget and ("万" in budget):
             try:
                 num = int(''.join(filter(str.isdigit, budget.split("万")[0])))
-                recommend_mode = "AI裸眼3D内容定制" if num >= 8 else "裸眼3D成片购买适配"
+                recommend_mode = "AI驱动3D OOH内容定制" if num >= 8 else "3D OOH数字内容资源库"
                 timeline = "约15个工作日" if num >= 8 else "约5个工作日"
             except Exception:
-                recommend_mode = "AI裸眼3D内容定制" if has_custom_need else "裸眼3D成片购买适配"
+                recommend_mode = "AI驱动3D OOH内容定制" if has_custom_need else "3D OOH数字内容资源库"
                 timeline = "约15个工作日" if has_custom_need else "约5个工作日"
         else:
-            recommend_mode = "AI裸眼3D内容定制" if has_custom_need else "裸眼3D成片购买适配"
+            recommend_mode = "AI驱动3D OOH内容定制" if has_custom_need else "3D OOH数字内容资源库"
             timeline = "约15个工作日" if has_custom_need else "约5个工作日"
 
         assessment = f"**项目评估**\n\n"
@@ -1307,7 +1344,7 @@ async def ai_assess(request: AssessRequest):
     try:
         system_prompt = (
             "你是一位资深的裸眼3D视觉项目顾问。根据以下客户需求信息，给出简洁专业的项目评估。\n"
-            "评估应包含：推荐方案（成片购买适配 / AI内容定制 / 数字艺术定制）、预计制作周期、"
+            "评估应包含：推荐方案（3D OOH数字内容资源库 / AI驱动3D OOH内容定制 / 数字艺术与沉浸式视觉设计）、预计制作周期、"
             "预算合理性分析、投放建议、时间节点建议。\n"
             "语气专业沉稳，不用emoji，不寒暄，用要点式列出。\n"
             "最后一行固定写：\n以下是整理后的需求明细，请确认或修改：\n"

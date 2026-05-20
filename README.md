@@ -1,4 +1,4 @@
-# Unique Video AI — 全栈系统
+# Unique Vision AI — 全栈系统
 
 裸眼3D视觉内容与数字艺术创意技术服务平台，包含官网、业务管理系统（订单/AI 助手/企业认证）和后端 API。
 

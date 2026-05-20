@@ -258,9 +258,12 @@ const statusLabel = (status: string) => {
 
 const bizTypeLabel = (t: string) => {
   const m: Record<string, string> = {
-    ai_3d_custom: '裸眼3D定制',
-    video_purchase: '成片购买',
-    digital_art: '数字艺术',
+    ai_3d_custom: 'AI驱动3D OOH内容定制',
+    video_purchase: '3D OOH数字内容资源库',
+    digital_art: '数字艺术与沉浸式视觉设计',
+    motion_content: '广告视觉与动态影像制作',
+    media_post_production: '户外媒体后期制作服务',
+    campaign_analytics: '广告投放分析与效果报告',
   }
   return m[t] || t || '未知'
 }

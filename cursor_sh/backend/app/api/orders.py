@@ -275,7 +275,7 @@ async def download_confirmation_pdf(
     current_user: AnyUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """下载需求告知函 PDF（用户可用）"""
+    """下载订单需求确认函 PDF（用户可用）"""
     try:
         order = await OrderService.get_order_detail(db, order_id, current_user)
         

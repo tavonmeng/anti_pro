@@ -752,7 +752,7 @@ export const orderApi = {
     }
   },
   
-  // 下载需求告知函 PDF
+  // 下载订单需求确认函 PDF
   async downloadConfirmationPdf(orderId: string): Promise<void> {
     const token = localStorage.getItem('token')
     const response = await fetch(`/api/orders/${orderId}/pdf/confirmation`, {

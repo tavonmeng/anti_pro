@@ -565,7 +565,7 @@ class OrderService:
         user = user_result.scalar_one_or_none()
         if user and user.email:
             if is_draft_submit:
-                # 生成需求告知函 PDF 并作为附件发送
+                # 生成订单需求确认函 PDF 并作为附件发送
                 order_response_for_pdf = await OrderService._build_order_response(db, order, user)
                 pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response_for_pdf)
                 await EmailService.send_order_confirmation(

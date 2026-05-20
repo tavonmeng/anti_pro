@@ -2,7 +2,7 @@
   <div class="system-sidebar" :class="{ 'is-collapsed': uiStore.isSidebarCollapsed }">
     <div class="sidebar-header">
       <div class="logo">
-        <span class="logo-text">欢迎来到Unique Video<br>AI设计平台</span>
+        <span class="logo-text">欢迎来到Unique Vision<br>AI设计平台</span>
       </div>
     </div>
     
@@ -311,9 +311,9 @@ const getStatusText = (status: string) => {
 const getOrderName = (order: any) => {
   if (order.title) return order.title
   const typeMap: Record<string, string> = {
-    'video_purchase': '裸眼3D成片购买',
-    'ai_3d_custom': 'AI裸眼3D定制',
-    'digital_art': '数字艺术定制'
+    'video_purchase': '3D OOH数字内容资源库',
+    'ai_3d_custom': 'AI驱动3D OOH内容定制',
+    'digital_art': '数字艺术与沉浸式视觉设计'
   }
   return typeMap[order.orderType] || order.id.slice(0, 8)
 }
@@ -344,7 +344,7 @@ const navigate = async (name: string) => {
 
 const showHelp = () => {
   ElMessageBox.alert(
-    '请您联系我们的设计专家<br>电话：400-888-8888<br>邮件：support@uniquevideo.com',
+    '请您联系我们的设计专家<br>电话：400-888-8888<br>邮件：service@uniquevisionx.com',
     '帮助与支持',
     {
       dangerouslyUseHTMLString: true,

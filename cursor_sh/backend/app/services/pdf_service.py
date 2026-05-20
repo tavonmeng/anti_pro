@@ -1,4 +1,4 @@
-"""PDF 生成服务 - 需求告知函 / 订单确认函"""
+"""PDF 生成服务 - 订单需求确认函 / 订单确认函"""
 
 import io
 import os
@@ -222,9 +222,9 @@ def _get_styles():
 # ========== 文本映射 ==========
 
 ORDER_TYPE_MAP = {
-    "video_purchase": "裸眼3D成片购买适配",
-    "ai_3d_custom": "AI裸眼3D内容定制",
-    "digital_art": "数字艺术内容定制",
+    "video_purchase": "3D OOH数字内容资源库",
+    "ai_3d_custom": "AI驱动3D OOH内容定制",
+    "digital_art": "数字艺术与沉浸式视觉设计",
 }
 
 STATUS_MAP = {
@@ -428,8 +428,8 @@ class PDFService:
         # 根据订单类型生成标题
         title_map = {
             "ai_3d_custom": "户外大屏裸眼3D内容制作确认函",
-            "video_purchase": "裸眼3D成片购买适配确认函",
-            "digital_art": "数字艺术内容定制确认函",
+            "video_purchase": "3D OOH数字内容资源库确认函",
+            "digital_art": "数字艺术与沉浸式视觉设计确认函",
         }
         doc_title = title_map.get(order_type, "内容制作确认函")
         
@@ -497,7 +497,7 @@ class PDFService:
         
         # ---- 开场段 ----
         opening = (
-            f"&nbsp;&nbsp;&nbsp;&nbsp;贵司与我司（Unique Video科技有限公司）就"
+            f"&nbsp;&nbsp;&nbsp;&nbsp;贵司与我司（北京数艺光程数字科技有限责任公司）就"
         )
         # 根据订单类型拼接合作描述
         if order_type == "ai_3d_custom":
@@ -506,9 +506,9 @@ class PDFService:
             else:
                 opening += "户外大屏裸眼3D视频制作事宜，"
         elif order_type == "video_purchase":
-            opening += "裸眼3D成片购买适配事宜，"
+            opening += "3D OOH数字内容资源库事宜，"
         elif order_type == "digital_art":
-            opening += "数字艺术内容定制事宜，"
+            opening += "数字艺术与沉浸式视觉设计事宜，"
         else:
             opening += "内容制作事宜，"
         opening += "经过初步协商，双方达成如下合作："
@@ -626,7 +626,7 @@ class PDFService:
             styles["BodyCN"]
         ))
         elements.append(Paragraph(
-            "&nbsp;&nbsp;&nbsp;&nbsp;乙方：<b>Unique Video科技有限公司</b>",
+            "&nbsp;&nbsp;&nbsp;&nbsp;乙方：<b>北京数艺光程数字科技有限责任公司</b>",
             styles["BodyCN"]
         ))
         
@@ -648,7 +648,7 @@ class PDFService:
             "RightAlign", fontName=_FONT_BOLD, fontSize=10, leading=16,
             alignment=TA_RIGHT, textColor=colors.HexColor("#1a1c1c"),
         )
-        elements.append(Paragraph("Unique Video科技有限公司", right_style))
+        elements.append(Paragraph("北京数艺光程数字科技有限责任公司", right_style))
         elements.append(Paragraph(start_date_str, right_style))
         
         elements.append(Spacer(1, 20))
@@ -663,7 +663,7 @@ class PDFService:
         
         now_beijing = datetime.now(timezone(timedelta(hours=8)))
         elements.append(Paragraph(
-            f"Unique Video科技有限公司 · 本文件由系统自动生成 · {now_beijing.strftime('%Y-%m-%d %H:%M')}",
+            f"北京数艺光程数字科技有限责任公司 · 本文件由系统自动生成 · {now_beijing.strftime('%Y-%m-%d %H:%M')}",
             styles["Footer"]
         ))
         
@@ -839,7 +839,7 @@ class PDFService:
         elements.append(HRFlowable(width="100%", thickness=0.3, color=colors.HexColor("#d0d0d0"), spaceAfter=6))
         now_beijing = datetime.now(timezone(timedelta(hours=8)))
         elements.append(Paragraph(
-            f"Unique Video AI · 内部订单详情 · 导出时间：{now_beijing.strftime('%Y-%m-%d %H:%M')} · 仅供内部使用",
+            f"Unique Vision AI · 内部订单详情 · 导出时间：{now_beijing.strftime('%Y-%m-%d %H:%M')} · 仅供内部使用",
             styles["Footer"]
         ))
         

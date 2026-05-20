@@ -13,9 +13,9 @@
         <el-form-item label="订单类型">
           <el-select v-model="filters.orderType" placeholder="全部类型" clearable style="width: 200px" @change="handleFilter">
             <el-option label="全部" value="" />
-            <el-option label="裸眼3D成片购买" value="video_purchase" />
-            <el-option label="AI裸眼3D定制" value="ai_3d_custom" />
-            <el-option label="数字艺术定制" value="digital_art" />
+            <el-option label="3D OOH数字内容资源库" value="video_purchase" />
+            <el-option label="AI驱动3D OOH内容定制" value="ai_3d_custom" />
+            <el-option label="数字艺术与沉浸式视觉设计" value="digital_art" />
           </el-select>
         </el-form-item>
         

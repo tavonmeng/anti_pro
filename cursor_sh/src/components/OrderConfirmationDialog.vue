@@ -11,7 +11,7 @@
     <div class="confirmation-letter">
       <!-- 正式信函头部 -->
       <div class="letter-header">
-        <div class="letter-stamp">需求告知函</div>
+        <div class="letter-stamp">订单需求确认函</div>
         <div class="letter-number">编号：{{ orderNumber }}</div>
       </div>
 
@@ -21,7 +21,7 @@
       <div class="letter-greeting">
         <p>尊敬的客户：</p>
         <p class="greeting-body">
-          感谢您选择 <strong>Unique Video AI 设计平台</strong>。以下是您提交的需求确认摘要，
+          感谢您选择 <strong>北京数艺光程数字科技有限责任公司（Unique Vision AI）</strong>。以下是您提交的需求确认摘要，
           请您仔细核对并确认，确认后我们将立即进入制作流程。
         </p>
       </div>
@@ -228,9 +228,9 @@ const isFormValid = computed(() => {
 // --- 订单类型文本 ---
 const orderTypeText = computed(() => {
   const map: Record<OrderType, string> = {
-    video_purchase: '裸眼3D成片购买适配',
-    ai_3d_custom: 'AI裸眼3D内容定制',
-    digital_art: '数字艺术内容定制'
+    video_purchase: '3D OOH数字内容资源库',
+    ai_3d_custom: 'AI驱动3D OOH内容定制',
+    digital_art: '数字艺术与沉浸式视觉设计'
   }
   return map[props.orderType] || props.orderType
 })

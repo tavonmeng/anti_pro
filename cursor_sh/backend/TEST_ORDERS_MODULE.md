@@ -41,7 +41,7 @@ Swagger UI 是一个交互式的 API 文档界面，提供以下功能：
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  AI设计任务管理系统 API          [Authorize] [🔍]    │
+│  Unique Vision AI API          [Authorize] [🔍]    │
 ├─────────────────────────────────────────────────────┤
 │                                                       │
 │  📦 订单                                             │
@@ -93,7 +93,7 @@ Swagger UI 是一个交互式的 API 文档界面，提供以下功能：
 
 **订单类型**:
 
-1. **裸眼3D成片购买** (`video_purchase`)
+1. **3D OOH数字内容资源库** (`video_purchase`)
    ```json
    {
      "orderType": "video_purchase",
@@ -110,7 +110,7 @@ Swagger UI 是一个交互式的 API 文档界面，提供以下功能：
    }
    ```
 
-2. **AI裸眼3D定制** (`ai_3d_custom`)
+2. **AI驱动3D OOH内容定制** (`ai_3d_custom`)
    ```json
    {
      "orderType": "ai_3d_custom",
@@ -128,7 +128,7 @@ Swagger UI 是一个交互式的 API 文档界面，提供以下功能：
    }
    ```
 
-3. **数字艺术定制** (`digital_art`)
+3. **数字艺术与沉浸式视觉设计** (`digital_art`)
    ```json
    {
      "orderType": "digital_art",
@@ -361,7 +361,7 @@ preview_ready (初稿预览)
 
 ## 4. 订单模块测试用例
 
-### 测试用例 1: 创建裸眼3D成片购买订单
+### 测试用例 1: 创建3D OOH数字内容资源库订单
 
 **请求**:
 ```json
