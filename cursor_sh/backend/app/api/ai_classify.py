@@ -4,6 +4,7 @@
 """
 
 import httpx
+import re
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from app.config import settings
@@ -25,6 +26,11 @@ class ClassifyRequest(BaseModel):
 # ───────────────────────────────────────────────────────
 
 _QUICK_MAP = {
+    "order_create": [
+        "下单", "想下单", "咨询下单", "创建需求", "提交需求",
+        "想做", "要做", "做一个", "做个", "定制", "想定制", "要定制",
+        "需要做", "想要做", "可以开始", "买", "购买", "成片", "模板",
+    ],
     "order_query": [
         "订单", "进度", "状态", "查看", "查询", "我的单", "下过的",
         "怎么样了", "什么情况",
@@ -37,6 +43,30 @@ _QUICK_MAP = {
 
 # 支持的意图列表
 _VALID_INTENTS = ["order_create", "order_query", "business_intro", "general"]
+
+
+def _detect_business_type(message: str) -> str | None:
+    """根据用户原话判断业务类型。只在后端做路由判断，前端只消费结果。"""
+    text = message.strip()
+    lower = text.lower()
+    direct_names = {
+        "ai裸眼3d内容定制": "ai_3d_custom",
+        "裸眼3d内容定制": "ai_3d_custom",
+        "裸眼3d成片购买适配": "video_purchase",
+        "成片购买适配": "video_purchase",
+        "数字艺术内容定制": "digital_art",
+    }
+    for name, business_type in direct_names.items():
+        if name in lower:
+            return business_type
+
+    if re.search(r"成片|购买|模板|现成|成品|买", text):
+        return "video_purchase"
+    if re.search(r"数字艺术|数字.*艺术|沉浸|互动|装置|投影", text):
+        return "digital_art"
+    if re.search(r"裸眼3d|裸眼3D|3d定制|3D定制|3d内容|3D内容|裸眼.*定制", text):
+        return "ai_3d_custom"
+    return None
 
 
 # ───────────────────────────────────────────────────────
@@ -58,7 +88,10 @@ async def ai_classify(request: ClassifyRequest):
     # ── 1. 关键词快速匹配（零成本） ──
     for intent, keywords in _QUICK_MAP.items():
         if any(kw in msg for kw in keywords):
-            return {"intent": intent}
+            business_type = _detect_business_type(msg)
+            if intent == "order_create" and not business_type:
+                business_type = "ai_3d_custom"
+            return {"intent": intent, "business_type": business_type}
 
     # ── 2. LLM 分类（关键词未命中时） ──
     if settings.AI_API_KEY:
@@ -84,7 +117,10 @@ async def ai_classify(request: ClassifyRequest):
             )
             result = data["choices"][0]["message"]["content"].strip().lower()
             intent = result if result in _VALID_INTENTS else "order_create"
-            return {"intent": intent}
+            business_type = _detect_business_type(msg)
+            if intent == "order_create" and not business_type:
+                business_type = "ai_3d_custom"
+            return {"intent": intent, "business_type": business_type}
         except Exception as e:
             log_business_event(
                 logger,
@@ -95,4 +131,4 @@ async def ai_classify(request: ClassifyRequest):
             )
 
     # ── 3. 默认兜底 ──
-    return {"intent": "order_create"}
+    return {"intent": "order_create", "business_type": _detect_business_type(msg) or "ai_3d_custom"}

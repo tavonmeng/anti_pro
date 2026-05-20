@@ -267,7 +267,14 @@
           <div v-if="isLoading" class="message assistant">
             <div class="assistant-wrapper">
                <div class="assistant-tag"><span class="engine-name">Catalyst Engine</span></div>
-               <div class="message-bubble glass-ai typing">正在思考中...</div>
+               <div class="message-bubble glass-ai typing">
+                 <span>正在思考中</span>
+                 <span class="thinking-dots" aria-hidden="true">
+                   <span></span>
+                   <span></span>
+                   <span></span>
+                 </span>
+               </div>
             </div>
           </div>
           <div v-if="isTyping && !isLoading" class="typing-cursor-indicator">
@@ -1644,40 +1651,6 @@ const getTypeText = (type: string) => {
   return map[type] || type
 }
 
-// 从用户文字中检测下单意图，返回对应的 businessType 或 null
-const _detectBusinessTypeFromText = (text: string): string | null => {
-  const lower = text.toLowerCase()
-
-  // 必须有下单意愿信号词
-  const intentWords = [
-    '想做', '想定制', '想下单', '要做', '要定制', '开始', '下单',
-    '定制', '做一个', '做个', '需要', '想要', '来一个', '搞一个',
-    '试试', '选', '就这个', '就选', '可以开始',
-  ]
-  const hasIntent = intentWords.some(w => lower.includes(w))
-
-  // 即使没有明确意愿词，直接说业务名称也算（如"AI裸眼3D内容定制"）
-  const directNames: Record<string, string> = {
-    'ai裸眼3d内容定制': 'ai_3d_custom',
-    '裸眼3d成片购买适配': 'video_purchase',
-    '数字艺术内容定制': 'digital_art',
-    '裸眼3d内容定制': 'ai_3d_custom',
-    '成片购买适配': 'video_purchase',
-  }
-  for (const [name, type] of Object.entries(directNames)) {
-    if (lower.includes(name)) return type
-  }
-
-  if (!hasIntent) return null
-
-  // 业务类型关键词匹配
-  if (/裸眼3d|裸眼3D|3d定制|3D定制|3d内容|3D内容|裸眼.*定制/.test(text)) return 'ai_3d_custom'
-  if (/成片|购买|模板|现成|成品|买/.test(text)) return 'video_purchase'
-  if (/数字艺术|数字.*艺术|沉浸|互动|装置|投影/.test(text)) return 'digital_art'
-
-  return null
-}
-
 const getOrderStep = (status: string) => {
   if (status === 'cancelled') return -1
   const map: Record<string, number> = {
@@ -1897,7 +1870,8 @@ const sendMessage = async () => {
         body: JSON.stringify({ message: messageContent })
       })
       if (classifyRes.ok) {
-        const { intent } = await classifyRes.json()
+        const { intent, business_type } = await classifyRes.json()
+        if (business_type) businessType.value = business_type
         selectedMode.value = intent
         emit('mode-change', intent)
       } else {
@@ -1927,20 +1901,17 @@ const sendMessage = async () => {
     const lastUserMsg = messages.value[messages.value.length - 1]
     if (lastUserMsg && lastUserMsg.role === 'user') lastUserMsg.isCaseDetour = true
     await handleBusinessIntro(messageContent, true)
-  } else if (selectedMode.value === 'order_create') {
+    return
+  }
+
+  if (selectedMode.value === 'order_create') {
     await handleCustomAiChat(messageContent, userMessageId)
   } else if (selectedMode.value === 'order_query') {
     await handleOrderQuery(messageContent)
   } else if (selectedMode.value === 'business_intro') {
-    // 检测用户是否通过文字表达了下单意图，自动切换到对应业务的需求收集
-    const detectedType = _detectBusinessTypeFromText(messageContent)
-    if (detectedType) {
-      switchToOrderCreate(detectedType)
-    } else {
-      await handleBusinessIntro(messageContent)
-    }
+    await handleBusinessIntro(messageContent)
   } else {
-    await handleGeneral(messageContent)
+    await handleGeneral(messageContent, userMessageId)
   }
 }
 
@@ -2050,7 +2021,35 @@ const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = fal
 }
 
 // ===== 通用问答 handler =====
-const handleGeneral = async (userText: string) => {
+const routeByBackendIntent = async (data: any, userText: string, userMessageId?: string) => {
+  const intent = data?.intent
+  const routedBusinessType = data?.business_type
+  if (intent === 'order_create') {
+    businessType.value = routedBusinessType || businessType.value || 'ai_3d_custom'
+    selectedMode.value = 'order_create'
+    emit('mode-change', 'order_create')
+    logger.logAction('AI', 'backend_route_detected', { intent, businessType: businessType.value, sessionId: session_id.value })
+    await handleCustomAiChat(userText, userMessageId)
+    return true
+  }
+  if (intent === 'order_query') {
+    selectedMode.value = 'order_query'
+    emit('mode-change', 'order_query')
+    logger.logAction('AI', 'backend_route_detected', { intent, sessionId: session_id.value })
+    await handleOrderQuery(userText)
+    return true
+  }
+  if (intent === 'business_intro') {
+    selectedMode.value = 'business_intro'
+    emit('mode-change', 'business_intro')
+    logger.logAction('AI', 'backend_route_detected', { intent, sessionId: session_id.value })
+    await handleBusinessIntro(userText)
+    return true
+  }
+  return false
+}
+
+const handleGeneral = async (userText: string, userMessageId?: string) => {
   isLoading.value = true
   try {
     const historyMsgs = messages.value
@@ -2063,6 +2062,7 @@ const handleGeneral = async (userText: string) => {
     })
     if (!response.ok) throw new Error('general failed')
     const data = await response.json()
+    if (await routeByBackendIntent(data, userText, userMessageId)) return
     typewriterEffect(data.message || '感谢您的提问！')
   } catch (e) {
     const fallback = '我是 Unique Video AI 的项目顾问。\n\n我可以协助您咨询下单、查看订单或了解我们的业务。请问您需要哪方面的支持？'
@@ -2072,72 +2072,228 @@ const handleGeneral = async (userText: string) => {
   }
 }
 
-const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
-  isLoading.value = true
-  try {
-    // 提取所有除当前这句（即最后一条）以外的历史记录
-    // 过滤掉案例浏览的消息，避免污染需求收集上下文
-    const historyMessages = messages.value.slice(0, messages.value.length - 1);
-    const formattedHistory = historyMessages
-      .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.isCaseDetour)
-      .map(m => ({ role: m.role, content: m.content }));
+const cleanRequirementReply = (text: string = '') => {
+  const controlMarkers = ['【需求收集完成】', HUMAN_HANDOFF_MARKER]
+  let cleaned = text
+  for (const marker of controlMarkers) {
+    cleaned = cleaned.replace(new RegExp(marker, 'g'), '')
+  }
+  for (const marker of controlMarkers) {
+    for (let i = 1; i < marker.length; i += 1) {
+      const prefix = marker.slice(0, i)
+      if (cleaned.endsWith(prefix)) {
+        cleaned = cleaned.slice(0, -prefix.length)
+        break
+      }
+    }
+  }
+  return cleaned.trim()
+}
 
-    const assistantMessageId = createMessageId('assistant')
-    const response = await fetch('/ai/chat', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ 
-        session_id: session_id.value, 
-        message: userText,
-        history: formattedHistory,
-        business_type: businessType.value,
-        user_message_id: userMessageId,
-        assistant_message_id: assistantMessageId
-      })
-    })
-    
-    // 如果线上环境 Nginx 把请求拦截并回退给了 index.html 导致没报错而是 200 OK，我们需要手动抛出异常去触发降级
-    if (!response.ok || (response.headers.get('content-type') && response.headers.get('content-type')?.includes('text/html'))) {
-      throw new Error('API not available, fallback to mock')
+const findAssistantMessage = (assistantMessageId?: string) => {
+  if (assistantMessageId) {
+    const byId = messages.value.find(m => m.client_message_id === assistantMessageId)
+    if (byId && byId.role === 'assistant') return byId
+  }
+  const lastMsg = messages.value[messages.value.length - 1]
+  return lastMsg && lastMsg.role === 'assistant' ? lastMsg : null
+}
+
+const applyCustomAiChatFinalState = async (data: any, replyContent: string, assistantMessageId?: string) => {
+  const isHumanHandoff = Boolean(data?.handoff) || replyContent.includes(HUMAN_HANDOFF_MARKER)
+  const userMsgCount = messages.value.filter(m => m.role === 'user').length
+  const shouldComplete = !isHumanHandoff && replyContent.includes('【需求收集完成】') && userMsgCount >= 3
+  const assistantMsg = findAssistantMessage(assistantMessageId)
+
+  if (assistantMsg) {
+    assistantMsg.content = cleanRequirementReply(replyContent)
+  }
+
+  if (isHumanHandoff) {
+    if (assistantMsg) {
+      assistantMsg.isHumanHandoff = true
+      assistantMsg.formHidden = true
+    }
+    if (data?.draft_order_id) {
+      draftSavedOrderId.value = data.draft_order_id
+      await orderStore.fetchOrders()
+    }
+    return
+  }
+
+  if (shouldComplete) {
+    if (assistantMsg) {
+      assistantMsg.isCompletePrompt = true
+    }
+    await autoExtractAndSaveDraft()
+  }
+}
+
+const buildRequirementChatPayload = (userText: string, userMessageId?: string, assistantMessageId?: string) => {
+  const historyMessages = messages.value.slice(0, messages.value.length - 1)
+  const formattedHistory = historyMessages
+    .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.isCaseDetour)
+    .map(m => ({ role: m.role, content: m.content }))
+
+  return {
+    session_id: session_id.value,
+    message: userText,
+    history: formattedHistory,
+    business_type: businessType.value,
+    user_message_id: userMessageId,
+    assistant_message_id: assistantMessageId
+  }
+}
+
+const handleCustomAiChatJson = async (userText: string, userMessageId?: string, assistantMessageId?: string) => {
+  const response = await fetch('/ai/chat', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(buildRequirementChatPayload(userText, userMessageId, assistantMessageId))
+  })
+
+  if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
+    throw new Error('API not available, fallback to user-visible error')
+  }
+
+  const data = await response.json()
+  const replyContent = data.message || data.answer || '处理成功'
+  typewriterEffect(cleanRequirementReply(replyContent), async () => {
+    await applyCustomAiChatFinalState(data, replyContent, assistantMessageId)
+  }, assistantMessageId)
+}
+
+const handleCustomAiChatStream = async (userText: string, userMessageId?: string, assistantMessageId?: string) => {
+  const response = await fetch('/ai/chat/stream', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(buildRequirementChatPayload(userText, userMessageId, assistantMessageId))
+  })
+
+  if (!response.ok || response.headers.get('content-type')?.includes('text/html') || !response.body) {
+    throw new Error('stream API not available')
+  }
+
+  const msgIndex = messages.value.length
+  messages.value.push({
+    client_message_id: assistantMessageId || createMessageId('assistant'),
+    role: 'assistant',
+    content: '',
+    timestamp: getCurrentTime()
+  })
+  isLoading.value = false
+  isTyping.value = true
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let rawReply = ''
+  let sawDelta = false
+  let finalReceived = false
+
+  const dispatchEvent = async (block: string) => {
+    if (!block.trim()) return
+    let eventName = 'message'
+    const dataLines: string[] = []
+    for (const line of block.split(/\r?\n/)) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim()
+      if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart())
+    }
+    if (dataLines.length === 0) return
+    const data = JSON.parse(dataLines.join('\n'))
+
+    if (eventName === 'delta') {
+      const chunk = data.content || ''
+      if (!chunk) return
+      rawReply += chunk
+      sawDelta = true
+      const msg = messages.value[msgIndex]
+      if (msg && msg.role === 'assistant') {
+        msg.content = cleanRequirementReply(rawReply)
+      }
+      scrollToBottom()
+      return
     }
 
-    const data = await response.json()
-    const replyContent = data.message || data.answer || '处理成功';
-    const isHumanHandoff = Boolean(data.handoff) || replyContent.includes(HUMAN_HANDOFF_MARKER);
-    const cleanContent = replyContent
-      .replace('【需求收集完成】', '')
-      .replace(HUMAN_HANDOFF_MARKER, '')
-      .trim();
-    
-    // 前端兜底：至少3轮用户对话才允许触发完成
-    const userMsgCount = messages.value.filter(m => m.role === 'user').length;
-    const shouldComplete = !isHumanHandoff && replyContent.includes('【需求收集完成】') && userMsgCount >= 3;
-    
-    typewriterEffect(cleanContent, async () => {
-      if (isHumanHandoff) {
-        const lastMsg = messages.value[messages.value.length - 1]
-        if (lastMsg && lastMsg.role === 'assistant') {
-          lastMsg.isHumanHandoff = true
-          lastMsg.formHidden = true
-        }
-        if (data.draft_order_id) {
-          draftSavedOrderId.value = data.draft_order_id
-          await orderStore.fetchOrders()
-        }
+    if (eventName === 'final') {
+      const replyContent = data.message || rawReply
+      const msg = messages.value[msgIndex]
+      if (msg && msg.role === 'assistant') {
+        msg.content = cleanRequirementReply(replyContent)
+      }
+      await applyCustomAiChatFinalState(data, replyContent, assistantMessageId)
+      finalReceived = true
+      return
+    }
+
+    if (eventName === 'error') {
+      throw new Error(data.detail || 'stream failed')
+    }
+  }
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const blocks = buffer.split(/\n\n/)
+      buffer = blocks.pop() || ''
+      for (const block of blocks) {
+        await dispatchEvent(block)
+      }
+    }
+    buffer += decoder.decode()
+    if (buffer.trim()) {
+      await dispatchEvent(buffer)
+    }
+    if (!finalReceived) {
+      throw new Error('stream ended before final event')
+    }
+    isTyping.value = false
+    scrollToBottom()
+    nextTick(() => textareaRef.value?.focus())
+    saveCurrentToHistory({ force: true, syncBackend: false })
+    await syncCurrentConversationToBackend()
+    return true
+  } catch (error) {
+    isTyping.value = false
+    isLoading.value = false
+    logger.logAction('AI', 'chat_stream_failed', { mode: selectedMode.value, businessType: businessType.value, sessionId: session_id.value })
+    if (!sawDelta) {
+      const msg = messages.value[msgIndex]
+      if (msg && msg.role === 'assistant' && !msg.content) {
+        messages.value.splice(msgIndex, 1)
+      }
+      return false
+    }
+    const msg = messages.value[msgIndex]
+    if (msg && msg.role === 'assistant') {
+      msg.content = `${cleanRequirementReply(rawReply)}\n\n模型响应中断，请重新发送上一条内容，我会继续从当前上下文往下梳理。`.trim()
+    }
+    saveCurrentToHistory({ force: true, syncBackend: false })
+    await syncCurrentConversationToBackend()
+    return true
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
+  isLoading.value = true
+  const assistantMessageId = createMessageId('assistant')
+  try {
+    try {
+      const streamHandled = await handleCustomAiChatStream(userText, userMessageId, assistantMessageId)
+      if (streamHandled) {
         return
       }
-      if (shouldComplete) {
-        const lastMsg = messages.value[messages.value.length - 1]
-        if (lastMsg && lastMsg.role === 'assistant') {
-          lastMsg.isCompletePrompt = true
-        }
-        await autoExtractAndSaveDraft()
-      }
-    }, assistantMessageId)
+    } catch (streamError) {
+      logger.logAction('AI', 'chat_stream_unavailable', { mode: selectedMode.value, businessType: businessType.value, sessionId: session_id.value })
+    }
+    isLoading.value = true
+    await handleCustomAiChatJson(userText, userMessageId, assistantMessageId)
 
   } catch (error) {
-    // 降级兜底：前端 Mock 模拟对话收集需求（按一轮一个问题推进）
-    const userMsgCount = messages.value.filter(m => m.role === 'user').length;
     if (isHumanHandoffRequest(userText)) {
       typewriterEffect(HUMAN_HANDOFF_FALLBACK_REPLY, () => {
         const lastMsg = messages.value[messages.value.length - 1]
@@ -2148,77 +2304,15 @@ const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
       })
       return
     }
-    
-    const mockReplies: Record<number, string> = isMediaMode ? {
-      1: '收到。接下来补一下基础信息：这块屏位于哪个城市和具体位置？',
-      2: '了解。这个媒体的基本情况如何？比如位置特点、日均客流或主要目标客群。',
-      3: '明白。这个媒体主要面向什么样的受众或场景？',
-      4: '清楚了。观众主要从哪个方向观看？有没有比较理想的观看点？',
-      5: '在视觉方向上，您期望什么样的艺术风格？比如未来科技、自然生态、城市文化或抽象艺术。',
-      6: '屏幕的分辨率和物理尺寸是多少？',
-      7: '预计什么时候需要上刊？',
-      8: '关于项目预算这块，目前有一个大致的范围吗？这样我可以帮您匹配更合适的制作方案。',
-      9: '核心需求信息已基本收集完毕。最后，如果您有现场实拍图、屏幕照片或其他参考素材，可以通过输入框左侧的上传按钮直接上传；如果暂时没有，我们就可以整理信息了。',
-    } : {
-      1: '好的，产品很有意思。为了让最终视觉效果更匹配，您期望这支视频想要打动哪类年轻受众呢？（比如在校学生、或者职场新人等）',
-      2: '明白。在视觉呈现上，您大概有什么特定的风格倾向吗？（比如赛博朋克、极简风，或者写实拟真都可以）',
-      3: '非常清晰。接下来想了解一下，您准备把这支内容具体投放在哪个城市或站点呢？',
-      4: '最后一个项目信息：您期望这支内容什么时候上线？',
-      5: '关于制作预算，目前有一个大致范围吗？这样我可以帮您推荐更合适的方案。',
-      6: '核心需求信息已基本收集完毕。最后，如果您有现场实拍图、屏幕照片或其他参考素材，可以通过输入框左侧的上传按钮直接上传；如果暂时没有，我们就可以整理信息了。',
-    }
-    
-    setTimeout(() => {
-      if (mockReplies[userMsgCount]) {
-        messages.value.push({ 
-          role: 'assistant', 
-          content: mockReplies[userMsgCount], 
-          timestamp: getCurrentTime() 
-        })
-        void syncCurrentConversationToBackend()
-      } else {
-        const summaryMsg = '需求信息收集完毕，正在为您生成项目评估...'
-        messages.value.push({ 
-          role: 'assistant', 
-          content: summaryMsg, 
-          timestamp: getCurrentTime(),
-          isCompletePrompt: true
-        })
-        // mock 数据填充表单
-        if (isMediaMode) {
-          inlineFormData.value = {
-            project_name: '示例媒体项目 (Mock)',
-            resource_background: '',
-            audience_scene: '',
-            city_location: '成都春熙路',
-            viewing_path: '',
-            art_direction: '未来科技',
-            theme_concept: '',
-            media_specs: '',
-            tech_delivery: '',
-            content_review: '',
-            budget: '60万',
-            online_time: '2026年6月',
-            special_requirements: ''
-          }
-        } else {
-          inlineFormData.value = {
-            brand: '示例品牌 (Mock)',
-            target_group: '年轻群体',
-            content: '裸眼3D视觉创意内容',
-            city: '北京',
-            budget: '10万以上',
-            online_time: '2026年6月',
-            background: '',
-            style: '科技感设计',
-            media_size: '',
-            technology: ''
-          }
-        }
-        void syncCurrentConversationToBackend()
-      }
-      isLoading.value = false
-    }, 1000)
+
+    logger.logAction('AI', 'chat_request_failed', { mode: selectedMode.value, businessType: businessType.value, sessionId: session_id.value })
+    messages.value.push({
+      role: 'assistant',
+      content: '模型响应超时或暂时不可用，这条需求还没有成功记录。请稍后重新发送上一条内容，我会继续从当前上下文往下梳理。',
+      timestamp: getCurrentTime()
+    })
+    void syncCurrentConversationToBackend()
+    isLoading.value = false
   }
 }
 
@@ -2243,9 +2337,15 @@ const autoExtractAndSaveDraft = async () => {
     } catch (e) {
       console.error('extract failed:', e)
     }
-    if (Object.keys(extracted).length === 0) {
-      const brandMatch = messages.value.find(m => m.role === 'user')?.content.slice(0, 15) || '';
-      extracted = { brand: brandMatch, target_group: '', content: '', city: '', budget: '', online_time: '', background: '', style: '', media_size: '', technology: '' }
+    const hasExtractedValue = Object.values(extracted).some(v => String(v || '').trim())
+    if (!hasExtractedValue) {
+      messages.value.push({
+        role: 'assistant',
+        content: '需求整理暂时失败，未生成草稿。请稍后点击继续对话补充或重新发送上一条信息，我会重新整理。',
+        timestamp: getCurrentTime()
+      })
+      void syncCurrentConversationToBackend()
+      return
     }
     for (const field of formFields) {
       if (!extracted[field.key]) extracted[field.key] = ''
@@ -3231,6 +3331,45 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .typing {
   color: rgba(0, 0, 0, 0.4);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  width: 22px;
+  margin-left: 2px;
+}
+
+.thinking-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+  animation: thinking-dot-bounce 1.05s ease-in-out infinite;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes thinking-dot-bounce {
+  0%, 80%, 100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 0.9;
+    transform: translateY(-3px);
+  }
 }
 
 /* Stitch Input Bar styling */

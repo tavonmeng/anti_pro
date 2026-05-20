@@ -174,8 +174,9 @@ class Settings(BaseSettings):
     # 大模型 API 配置 
     AI_API_KEY: str = ""
     AI_BASE_URL: str = "https://api.openai.com/v1"
+    AI_RESPONSES_BASE_URL: str = ""
     AI_MODEL_NAME: str = "gpt-3.5-turbo"
-    AI_HTTP_TIMEOUT: float = 30.0
+    AI_HTTP_TIMEOUT: float = 120.0
     AI_MAX_CONCURRENT_REQUESTS: int = 4
     AI_REQUEST_QUEUE_TIMEOUT: float = 5.0
     AI_BACKGROUND_MAX_CONCURRENT: int = 2

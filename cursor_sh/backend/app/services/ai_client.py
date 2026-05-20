@@ -1,6 +1,8 @@
 """Shared AI provider client with local concurrency protection."""
 
 import asyncio
+import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -18,6 +20,25 @@ def _get_ai_semaphore() -> asyncio.Semaphore:
     if _ai_semaphore is None:
         _ai_semaphore = asyncio.Semaphore(limit)
     return _ai_semaphore
+
+
+def _responses_url() -> str:
+    base_url = (settings.AI_RESPONSES_BASE_URL or settings.AI_BASE_URL or "").rstrip("/")
+    if base_url.endswith("/responses"):
+        return base_url
+    return f"{base_url}/responses"
+
+
+def _extract_response_completed_text(response_payload: dict[str, Any]) -> str:
+    output = response_payload.get("output") or []
+    parts: list[str] = []
+    for item in output:
+        for content in item.get("content") or []:
+            if content.get("type") in {"output_text", "text"}:
+                text = content.get("text") or ""
+                if text:
+                    parts.append(text)
+    return "".join(parts)
 
 
 async def post_chat_completion(
@@ -69,3 +90,148 @@ async def post_chat_completion(
     finally:
         semaphore.release()
 
+
+async def stream_chat_completion(
+    payload: dict[str, Any],
+    *,
+    timeout: float | None = None,
+) -> AsyncIterator[str]:
+    """Stream chat-completion text deltas behind the same bounded queue."""
+    if not settings.AI_API_KEY:
+        raise HTTPException(status_code=503, detail="AI 服务未配置")
+
+    semaphore = _get_ai_semaphore()
+    queue_timeout = max(0.1, float(settings.AI_REQUEST_QUEUE_TIMEOUT or 5.0))
+
+    try:
+        await asyncio.wait_for(semaphore.acquire(), timeout=queue_timeout)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=429, detail="AI 请求繁忙，请稍后再试")
+
+    try:
+        stream_payload = dict(payload)
+        stream_payload["stream"] = True
+        async with httpx.AsyncClient() as client:
+            async with client.stream(
+                "POST",
+                f"{settings.AI_BASE_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.AI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=stream_payload,
+                timeout=timeout if timeout is not None else settings.AI_HTTP_TIMEOUT,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    if not line.startswith("data:"):
+                        continue
+                    data = line.removeprefix("data:").strip()
+                    if not data or data == "[DONE]":
+                        continue
+                    try:
+                        chunk = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = chunk.get("choices") or []
+                    if not choices:
+                        continue
+                    choice = choices[0] or {}
+                    delta = choice.get("delta") or {}
+                    content = delta.get("content") or ""
+                    if content:
+                        yield content
+    except HTTPException:
+        raise
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="AI 服务响应超时，请稍后再试")
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code if exc.response is not None else 502
+        if status_code == 429:
+            raise HTTPException(status_code=429, detail="AI 服务限流，请稍后再试")
+        raise HTTPException(status_code=502, detail="AI 服务暂时不可用")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="AI 服务暂时不可用")
+    finally:
+        semaphore.release()
+
+
+async def stream_responses_completion(
+    payload: dict[str, Any],
+    *,
+    timeout: float | None = None,
+) -> AsyncIterator[str]:
+    """Stream Responses API text deltas behind the same bounded queue."""
+    if not settings.AI_API_KEY:
+        raise HTTPException(status_code=503, detail="AI 服务未配置")
+
+    semaphore = _get_ai_semaphore()
+    queue_timeout = max(0.1, float(settings.AI_REQUEST_QUEUE_TIMEOUT or 5.0))
+
+    try:
+        await asyncio.wait_for(semaphore.acquire(), timeout=queue_timeout)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=429, detail="AI 请求繁忙，请稍后再试")
+
+    try:
+        stream_payload = dict(payload)
+        stream_payload["stream"] = True
+        async with httpx.AsyncClient() as client:
+            async with client.stream(
+                "POST",
+                _responses_url(),
+                headers={
+                    "Authorization": f"Bearer {settings.AI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=stream_payload,
+                timeout=timeout if timeout is not None else settings.AI_HTTP_TIMEOUT,
+            ) as response:
+                response.raise_for_status()
+                emitted_delta = False
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data = line.removeprefix("data:").strip()
+                    if not data or data == "[DONE]":
+                        continue
+                    try:
+                        chunk = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+
+                    event_type = chunk.get("type") or ""
+                    if event_type in {"response.output_text.delta", "response.text.delta"}:
+                        delta = chunk.get("delta") or ""
+                        if delta:
+                            emitted_delta = True
+                            yield delta
+                        continue
+
+                    if event_type in {"response.output_text.done", "response.text.done"} and not emitted_delta:
+                        text = chunk.get("text") or ""
+                        if text:
+                            emitted_delta = True
+                            yield text
+                        continue
+
+                    if event_type == "response.completed" and not emitted_delta:
+                        text = _extract_response_completed_text(chunk.get("response") or {})
+                        if text:
+                            emitted_delta = True
+                            yield text
+    except HTTPException:
+        raise
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="AI 服务响应超时，请稍后再试")
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code if exc.response is not None else 502
+        if status_code == 429:
+            raise HTTPException(status_code=429, detail="AI 服务限流，请稍后再试")
+        raise HTTPException(status_code=502, detail="AI Responses 服务暂时不可用")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="AI Responses 服务暂时不可用")
+    finally:
+        semaphore.release()

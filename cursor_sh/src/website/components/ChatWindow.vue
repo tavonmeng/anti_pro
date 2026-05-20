@@ -14,7 +14,14 @@
               <div class="message-bubble">{{ msg.content }}</div>
             </div>
             <div v-if="isLoading" class="message assistant">
-              <div class="message-bubble typing">正在思考...</div>
+              <div class="message-bubble typing">
+                <span>正在思考</span>
+                <span class="thinking-dots" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </span>
+              </div>
             </div>
           </div>
           <div class="input-area">
@@ -367,6 +374,45 @@ const closeChat = () => {
 .typing {
   color: #888;
   font-style: italic;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  width: 22px;
+  margin-left: 2px;
+}
+
+.thinking-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+  animation: thinking-dot-bounce 1.05s ease-in-out infinite;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes thinking-dot-bounce {
+  0%, 80%, 100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 0.9;
+    transform: translateY(-3px);
+  }
 }
 
 .input-area {

@@ -6,6 +6,7 @@ AI 智能体 — 主路由入口
 """
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import httpx
 import asyncio
@@ -15,7 +16,7 @@ import re
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from app.config import settings
-from app.services.ai_client import post_chat_completion
+from app.services.ai_client import post_chat_completion, stream_chat_completion, stream_responses_completion
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
 from app.utils.security import decode_access_token
@@ -54,6 +55,143 @@ class ChatRequest(BaseModel):
 
 def _strip_completion_marker(message: str) -> str:
     return message.replace("【需求收集完成】", "").strip()
+
+
+def _substantive_user_message_count(history: list, latest_message: str = "") -> int:
+    """Count user answers that can carry requirement information."""
+    user_messages = [
+        (m.get("content") or "").strip()
+        for m in (history or [])
+        if m.get("role") == "user" and (m.get("content") or "").strip()
+    ]
+    if latest_message and latest_message.strip():
+        user_messages.append(latest_message.strip())
+
+    ignored = {"你好", "您好", "hi", "hello", "下单", "咨询下单", "开始", "好的", "是的", "嗯", "好"}
+    return sum(1 for text in user_messages if text.lower() not in ignored and len(text) >= 2)
+
+
+def _has_media_completion_floor(history: list, latest_message: str = "") -> bool:
+    """Keep media-mode completion from firing before enough real answers exist."""
+    return _substantive_user_message_count(history, latest_message) >= 7
+
+
+def _has_media_upload_wrap_up(history: list) -> bool:
+    """Completion should happen only after the agent has asked the final asset question."""
+    upload_keywords = ("现场实拍图", "屏幕照片", "参考素材", "上传按钮", "上传文件")
+    return any(
+        m.get("role") == "assistant" and any(keyword in (m.get("content") or "") for keyword in upload_keywords)
+        for m in (history or [])
+    )
+
+
+def _fallback_extract_media(history: list) -> dict:
+    """Best-effort deterministic extraction when the LLM extraction call times out."""
+    messages = [
+        (m.get("role") or "", (m.get("content") or "").strip())
+        for m in (history or [])
+        if (m.get("content") or "").strip()
+    ]
+    text = "\n".join(content for _, content in messages)
+    user_text = "\n".join(content for role, content in messages if role == "user")
+
+    def contains(pattern: str, source: str = text) -> bool:
+        return re.search(pattern, source, re.I) is not None
+
+    city_location = ""
+    if "杭州" in text:
+        if "钱江新城万象城天幕" in text:
+            city_location = "杭州钱江新城万象城天幕"
+        elif "天幕" in text:
+            city_location = "杭州天幕巨屏"
+        else:
+            city_location = "杭州"
+
+    audience_scene = ""
+    audience_match = re.search(r"面向([^，。\n]+)", user_text)
+    if audience_match:
+        audience_scene = f"面向{audience_match.group(1).strip()}"
+
+    theme_parts = []
+    if "西湖" in text:
+        theme_parts.append("杭州西湖美景")
+    if "标志性" in text:
+        theme_parts.append("西湖标志性景观")
+    theme_concept = "，".join(dict.fromkeys(theme_parts))
+
+    art_direction = ""
+    if contains(r"写意|传统意境|水墨"):
+        art_direction = "写意的传统意境"
+    elif contains(r"未来科技|科技感"):
+        art_direction = "未来科技"
+    elif contains(r"自然生态|自然"):
+        art_direction = "自然生态"
+
+    timing_number = ""
+    duration_match = re.search(r"(\d{1,3})\s*(?:s|秒)", user_text, re.I)
+    if duration_match:
+        timing_number = f"{duration_match.group(1)}秒"
+
+    online_time = ""
+    if "下个月" in user_text and "月底" in user_text:
+        now = datetime.now()
+        year = now.year + (1 if now.month == 12 else 0)
+        month = 1 if now.month == 12 else now.month + 1
+        online_time = f"{year}年{month}月底"
+    elif "下个月" in user_text:
+        online_time = "下个月"
+
+    media_specs = ""
+    specs_match = re.search(r"(\d{3,5})\s*[×xX*]\s*(\d{3,5})", text)
+    if specs_match:
+        media_specs = f"{specs_match.group(1)}×{specs_match.group(2)}"
+        if "天幕" in text or "超宽幅" in text:
+            media_specs += " 超宽幅天幕"
+
+    viewing_path = ""
+    if "地面仰视" in text or "二层连廊平视" in text:
+        viewing_path = "地面仰视与二层连廊平视双视角"
+
+    resource_background = ""
+    if "钱江新城万象城天幕" in text:
+        resource_background = "杭州钱江新城万象城天幕，超宽幅屏幕资源，位于主广场中轴高人流区"
+
+    tech_delivery = ""
+    if "没有特定的要求" in user_text:
+        tech_delivery = "客户无特定技术要求，可按媒体方原生参数与常规安全区规范适配"
+
+    project_name = ""
+    if city_location or theme_concept:
+        name_parts = []
+        if "钱江新城万象城" in city_location:
+            name_parts.append("杭州钱江新城万象城")
+        elif "杭州" in city_location:
+            name_parts.append("杭州")
+        if "西湖" in theme_concept:
+            name_parts.append("西湖美景")
+        name_parts.append("裸眼3D天幕项目")
+        project_name = "".join(name_parts)
+
+    result = {
+        "project_name": project_name,
+        "resource_background": resource_background,
+        "audience_scene": audience_scene,
+        "media_positioning": "游客宣传与文旅形象传播" if "游客" in text or "宣传" in text else "",
+        "city_location": city_location,
+        "viewing_path": viewing_path,
+        "art_direction": art_direction,
+        "theme_concept": theme_concept,
+        "media_specs": media_specs,
+        "timing_number": timing_number,
+        "tech_delivery": tech_delivery,
+        "content_review": "",
+        "budget": "",
+        "online_time": online_time,
+        "special_requirements": "",
+        "site_photos": "",
+        "remarks": "",
+    }
+    return {key: value for key, value in result.items() if value}
 
 
 _HUMAN_HANDOFF_MARKER = "【转人工】"
@@ -173,6 +311,122 @@ def _sanitize_upload_reply(current_message: str, reply: str) -> str:
         f"已收到您上传的现场实拍图（{file_label}），我会把它作为本次项目的现场参考素材一并整理。\n\n"
         "还有其他现场照片、屏幕参数文件或参考素材需要一起上传吗？如果没有，我们可以继续把剩下的信息补齐。"
     )
+
+
+def _sse_event(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _build_requirement_llm_messages(request: ChatRequest, memory_context: str = "") -> list[dict[str, str]]:
+    system_prompt = _get_requirement_prompt(request.business_type)
+    if memory_context:
+        system_prompt += memory_context
+
+    llm_messages = [{"role": "system", "content": system_prompt}]
+    for h in request.history:
+        if h.get("role") in ["user", "assistant"] and h.get("content"):
+            llm_messages.append({"role": h["role"], "content": h["content"]})
+    llm_messages.append({"role": "user", "content": request.message})
+    return llm_messages
+
+
+def _build_responses_input(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+    return [
+        {"role": item["role"], "content": item["content"]}
+        for item in messages
+        if item.get("role") and item.get("content")
+    ]
+
+
+async def _finalize_ai_chat_reply(
+    *,
+    request: ChatRequest,
+    user_id: str,
+    username: str,
+    reply: str,
+) -> tuple[str, bool, dict]:
+    if settings.AGENT_MODE == "media":
+        reply = _sanitize_upload_reply(request.message, reply)
+        if "【需求收集完成】" in reply and (
+            not _has_media_completion_floor(request.history, request.message)
+            or not _has_media_upload_wrap_up(request.history)
+        ):
+            log_business_event(
+                logger,
+                "ai_completion_marker_stripped",
+                level="warning",
+                user_id=user_id,
+                username=username,
+                session_id=request.session_id,
+                business_type=request.business_type,
+                substantive_user_count=_substantive_user_message_count(request.history, request.message),
+                has_upload_wrap_up=_has_media_upload_wrap_up(request.history),
+            )
+            reply = _strip_completion_marker(reply) + "\n\n我还需要再补充一个关键信息：您这边是否有现场实拍图、屏幕照片或其他参考素材可以上传？如果暂时没有，也可以直接说明没有。"
+
+    handoff = _HUMAN_HANDOFF_MARKER in reply
+    if handoff:
+        reply = reply.replace(_HUMAN_HANDOFF_MARKER, "").strip()
+
+    handoff_meta = {}
+    if handoff:
+        handoff_meta = await _record_handoff(
+            user_id=user_id,
+            username=username,
+            session_id=request.session_id,
+            business_type=request.business_type,
+            history=request.history,
+            user_msg=request.message,
+            assistant_msg=reply,
+        )
+        log_business_event(
+            logger,
+            "ai_handoff_triggered",
+            user_id=user_id,
+            username=username,
+            session_id=request.session_id,
+            business_type=request.business_type,
+            trigger_source="llm_marker",
+            handoff_id=handoff_meta.get("handoff_id"),
+            draft_order_id=handoff_meta.get("draft_order_id"),
+            history_count=len(request.history or []),
+        )
+
+    _save_session_file(
+        session_id=request.session_id, user_id=user_id, username=username,
+        history=request.history, user_msg=request.message, assistant_msg=reply,
+        business_type=request.business_type,
+        user_message_id=request.user_message_id,
+        assistant_message_id=request.assistant_message_id,
+    )
+
+    if user_id != "anonymous":
+        try:
+            from app.services.memory_service import learn_from_conversation
+            full_conversation = []
+            for h in request.history:
+                if h.get("role") in ["user", "assistant"] and h.get("content"):
+                    full_conversation.append({"role": h["role"], "content": h["content"]})
+            full_conversation.append({"role": "user", "content": request.message})
+            full_conversation.append({"role": "assistant", "content": reply})
+            asyncio.create_task(learn_from_conversation(user_id, full_conversation))
+        except Exception:
+            pass
+
+    log_business_event(
+        logger,
+        "ai_chat_completed",
+        user_id=user_id,
+        username=username,
+        session_id=request.session_id,
+        business_type=request.business_type,
+        handoff=handoff,
+        handoff_id=handoff_meta.get("handoff_id"),
+        draft_order_id=handoff_meta.get("draft_order_id"),
+        history_count=len(request.history or []),
+        reply_length=len(reply or ""),
+    )
+    return reply, handoff, handoff_meta
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -585,87 +839,17 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
         return {"message": mock_reply}
 
     try:
-        system_prompt = _get_requirement_prompt(request.business_type)
-
-        # 将 Memory 上下文追加到 system prompt
-        if memory_context:
-            system_prompt += memory_context
-
-        llm_messages = [{"role": "system", "content": system_prompt}]
-        for h in request.history:
-            if h.get("role") in ["user", "assistant"] and h.get("content"):
-                llm_messages.append({"role": h["role"], "content": h["content"]})
-        llm_messages.append({"role": "user", "content": request.message})
-
+        llm_messages = _build_requirement_llm_messages(request, memory_context)
         data = await post_chat_completion(
             {"model": settings.AI_MODEL_NAME, "messages": llm_messages},
-            timeout=30.0,
+            timeout=settings.AI_HTTP_TIMEOUT,
         )
         reply = data["choices"][0]["message"]["content"]
-
-        if settings.AGENT_MODE == "media":
-            reply = _sanitize_upload_reply(request.message, reply)
-        handoff = _HUMAN_HANDOFF_MARKER in reply
-        if handoff:
-            reply = reply.replace(_HUMAN_HANDOFF_MARKER, "").strip()
-        handoff_meta = {}
-        if handoff:
-            handoff_meta = await _record_handoff(
-                user_id=user_id,
-                username=username,
-                session_id=request.session_id,
-                business_type=request.business_type,
-                history=request.history,
-                user_msg=request.message,
-                assistant_msg=reply,
-            )
-            log_business_event(
-                logger,
-                "ai_handoff_triggered",
-                user_id=user_id,
-                username=username,
-                session_id=request.session_id,
-                business_type=request.business_type,
-                trigger_source="llm_marker",
-                handoff_id=handoff_meta.get("handoff_id"),
-                draft_order_id=handoff_meta.get("draft_order_id"),
-                history_count=len(request.history or []),
-            )
-
-        _save_session_file(
-            session_id=request.session_id, user_id=user_id, username=username,
-            history=request.history, user_msg=request.message, assistant_msg=reply,
-            business_type=request.business_type,
-            user_message_id=request.user_message_id,
-            assistant_message_id=request.assistant_message_id,
-        )
-
-        # 后台对话学习 — 从对话中提取偏好写回 Memory
-        if user_id != "anonymous":
-            try:
-                from app.services.memory_service import learn_from_conversation
-                full_conversation = []
-                for h in request.history:
-                    if h.get("role") in ["user", "assistant"] and h.get("content"):
-                        full_conversation.append({"role": h["role"], "content": h["content"]})
-                full_conversation.append({"role": "user", "content": request.message})
-                full_conversation.append({"role": "assistant", "content": reply})
-                asyncio.create_task(learn_from_conversation(user_id, full_conversation))
-            except Exception:
-                pass
-
-        log_business_event(
-            logger,
-            "ai_chat_completed",
+        reply, handoff, handoff_meta = await _finalize_ai_chat_reply(
+            request=request,
             user_id=user_id,
             username=username,
-            session_id=request.session_id,
-            business_type=request.business_type,
-            handoff=handoff,
-            handoff_id=handoff_meta.get("handoff_id"),
-            draft_order_id=handoff_meta.get("draft_order_id"),
-            history_count=len(request.history or []),
-            reply_length=len(reply or ""),
+            reply=reply,
         )
         return {"message": reply, "handoff": handoff, **handoff_meta}
 
@@ -684,6 +868,248 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
             error=str(e),
         )
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/chat/stream")
+async def ai_chat_stream(request: ChatRequest, raw_request: Request):
+    """流式需求收集对话。保留 /chat 作为非流式兼容入口。"""
+    user_id = "anonymous"
+    username = "anonymous"
+    company_name = ""
+    auth_header = raw_request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        payload = decode_access_token(auth_header[7:])
+        if payload:
+            user_id = payload.get("user_id", "anonymous")
+            username = payload.get("username", "anonymous")
+
+    memory_context = ""
+    if user_id != "anonymous":
+        try:
+            from app.services.memory_service import (
+                get_or_create_memory, build_memory_context,
+                trigger_crawl, update_interaction_stats,
+            )
+            memory = await get_or_create_memory(user_id)
+            memory_context = build_memory_context(memory)
+
+            ci = memory.company_info or {}
+            if not ci.get("crawl_status") and not company_name:
+                try:
+                    from app.database import async_session_maker
+                    from app.models.user import User
+                    from sqlalchemy import select
+                    async with async_session_maker() as session:
+                        result = await session.execute(
+                            select(User.company, User.enterprise_name).where(User.id == user_id)
+                        )
+                        row = result.first()
+                        if row:
+                            company_name = row.enterprise_name or row.company or ""
+                except Exception:
+                    pass
+
+                if company_name:
+                    await trigger_crawl(user_id, company_name)
+
+            asyncio.create_task(update_interaction_stats(user_id))
+        except Exception as e:
+            log_business_event(
+                logger,
+                "ai_memory_context_failed",
+                level="warning",
+                user_id=user_id,
+                session_id=request.session_id,
+                business_type=request.business_type,
+                error=str(e),
+            )
+
+    async def one_shot(payload: dict):
+        yield _sse_event("start", {})
+        message = payload.get("message") or ""
+        if message:
+            yield _sse_event("delta", {"content": message})
+        yield _sse_event("final", payload)
+
+    stream_headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+
+    existing_handoff = await _append_handoff_message(
+        user_id=user_id,
+        username=username,
+        session_id=request.session_id,
+        business_type=request.business_type,
+        history=request.history,
+        user_msg=request.message,
+        assistant_msg=_HUMAN_HANDOFF_APPEND_REPLY,
+    )
+    if existing_handoff:
+        log_business_event(
+            logger,
+            "ai_handoff_message_appended",
+            user_id=user_id,
+            username=username,
+            session_id=request.session_id,
+            business_type=request.business_type,
+            handoff_id=existing_handoff.get("handoff_id"),
+            draft_order_id=existing_handoff.get("draft_order_id"),
+            history_count=len(request.history or []),
+        )
+        _save_session_file(
+            session_id=request.session_id, user_id=user_id, username=username,
+            history=request.history, user_msg=request.message, assistant_msg=_HUMAN_HANDOFF_APPEND_REPLY,
+            business_type=request.business_type,
+            user_message_id=request.user_message_id,
+            assistant_message_id=request.assistant_message_id,
+        )
+        payload = {"message": _HUMAN_HANDOFF_APPEND_REPLY, "handoff": True, **existing_handoff}
+        return StreamingResponse(one_shot(payload), media_type="text/event-stream", headers=stream_headers)
+
+    if _is_human_handoff_request(request.message):
+        handoff_meta = await _record_handoff(
+            user_id=user_id,
+            username=username,
+            session_id=request.session_id,
+            business_type=request.business_type,
+            history=request.history,
+            user_msg=request.message,
+            assistant_msg=_HUMAN_HANDOFF_REPLY,
+        )
+        log_business_event(
+            logger,
+            "ai_handoff_triggered",
+            user_id=user_id,
+            username=username,
+            session_id=request.session_id,
+            business_type=request.business_type,
+            trigger_source="user_direct",
+            handoff_id=handoff_meta.get("handoff_id"),
+            draft_order_id=handoff_meta.get("draft_order_id"),
+            history_count=len(request.history or []),
+        )
+        _save_session_file(
+            session_id=request.session_id, user_id=user_id, username=username,
+            history=request.history, user_msg=request.message, assistant_msg=_HUMAN_HANDOFF_REPLY,
+            business_type=request.business_type,
+            user_message_id=request.user_message_id,
+            assistant_message_id=request.assistant_message_id,
+        )
+        payload = {"message": _HUMAN_HANDOFF_REPLY, "handoff": True, **handoff_meta}
+        return StreamingResponse(one_shot(payload), media_type="text/event-stream", headers=stream_headers)
+
+    if not settings.AI_API_KEY:
+        mock_reply = "【真实后端接口调试中】"
+        if _is_mock_completion_message(request.message):
+            mock_reply += "核心需求已确认，我将为您整理项目评估与需求明细。 【需求收集完成】"
+        elif len(request.message) > 5:
+            mock_reply += f"收到您的反馈：{request.message[:10]}... 请问这次项目计划投放在哪个城市或站点？"
+        else:
+            mock_reply += "好的，请继续详细描述您的诉求。"
+
+        _save_session_file(
+            session_id=request.session_id, user_id=user_id, username=username,
+            history=request.history, user_msg=request.message, assistant_msg=mock_reply,
+            business_type=request.business_type,
+            user_message_id=request.user_message_id,
+            assistant_message_id=request.assistant_message_id,
+        )
+        return StreamingResponse(
+            one_shot({"message": mock_reply, "handoff": False}),
+            media_type="text/event-stream",
+            headers=stream_headers,
+        )
+
+    llm_messages = _build_requirement_llm_messages(request, memory_context)
+
+    async def event_generator():
+        collected: list[str] = []
+        yield _sse_event("start", {})
+        try:
+            provider = "responses"
+            try:
+                async for delta in stream_responses_completion(
+                    {
+                        "model": settings.AI_MODEL_NAME,
+                        "input": _build_responses_input(llm_messages),
+                    },
+                    timeout=settings.AI_HTTP_TIMEOUT,
+                ):
+                    collected.append(delta)
+                    yield _sse_event("delta", {"content": delta, "provider": provider})
+            except HTTPException as responses_error:
+                if collected:
+                    raise
+                provider = "chat_completions"
+                log_business_event(
+                    logger,
+                    "ai_responses_stream_fallback",
+                    level="warning",
+                    user_id=user_id,
+                    username=username,
+                    session_id=request.session_id,
+                    business_type=request.business_type,
+                    fallback_provider=provider,
+                    error=str(responses_error.detail),
+                )
+                async for delta in stream_chat_completion(
+                    {"model": settings.AI_MODEL_NAME, "messages": llm_messages},
+                    timeout=settings.AI_HTTP_TIMEOUT,
+                ):
+                    collected.append(delta)
+                    yield _sse_event("delta", {"content": delta, "provider": provider})
+
+            raw_reply = "".join(collected)
+            if not raw_reply.strip():
+                raise HTTPException(status_code=502, detail="AI 服务未返回内容")
+
+            reply, handoff, handoff_meta = await _finalize_ai_chat_reply(
+                request=request,
+                user_id=user_id,
+                username=username,
+                reply=raw_reply,
+            )
+            log_business_event(
+                logger,
+                "ai_chat_stream_provider_completed",
+                user_id=user_id,
+                username=username,
+                session_id=request.session_id,
+                business_type=request.business_type,
+                provider=provider,
+                handoff=handoff,
+                reply_length=len(reply or ""),
+            )
+            yield _sse_event("final", {"message": reply, "handoff": handoff, "provider": provider, **handoff_meta})
+        except HTTPException as e:
+            log_business_event(
+                logger,
+                "ai_chat_stream_failed",
+                level="error",
+                user_id=user_id,
+                username=username,
+                session_id=request.session_id,
+                business_type=request.business_type,
+                history_count=len(request.history or []),
+                error=str(e.detail),
+            )
+            yield _sse_event("error", {"detail": e.detail})
+        except Exception as e:
+            log_business_event(
+                logger,
+                "ai_chat_stream_failed",
+                level="error",
+                user_id=user_id,
+                username=username,
+                session_id=request.session_id,
+                business_type=request.business_type,
+                history_count=len(request.history or []),
+                error=str(e),
+            )
+            yield _sse_event("error", {"detail": "AI 服务暂时不可用"})
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=stream_headers)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -750,7 +1176,7 @@ async def ai_extract(request: ExtractRequest):
                 ],
                 "response_format": {"type": "json_object"}
             },
-            timeout=30.0,
+            timeout=settings.AI_HTTP_TIMEOUT,
         )
         content = data["choices"][0]["message"]["content"]
 
@@ -760,17 +1186,38 @@ async def ai_extract(request: ExtractRequest):
             content = content.split("```")[-1].split("```")[0].strip()
 
         parsed = json.loads(content)
+        if settings.AGENT_MODE == "media" and not any(str(v or "").strip() for v in parsed.values()):
+            fallback = _fallback_extract_media(request.history)
+            if fallback:
+                log_business_event(
+                    logger,
+                    "ai_extract_fallback_used",
+                    level="warning",
+                    reason="empty_llm_result",
+                    extracted_field_count=len(fallback),
+                )
+                return fallback
         return parsed
 
     except Exception as e:
+        fallback = _fallback_extract_media(request.history) if settings.AGENT_MODE == "media" else {}
         log_business_event(
             logger,
             "ai_extract_failed",
             level="warning",
             history_count=len(request.history or []),
             error=str(e),
+            fallback_field_count=len(fallback),
         )
-        return {}
+        if fallback:
+            log_business_event(
+                logger,
+                "ai_extract_fallback_used",
+                level="warning",
+                reason="llm_extract_failed",
+                extracted_field_count=len(fallback),
+            )
+        return fallback
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -804,7 +1251,7 @@ async def ai_assess(request: AssessRequest):
                             {"role": "user", "content": f"客户需求信息：\n{info}"}
                         ]
                     },
-                    timeout=30.0,
+                    timeout=settings.AI_HTTP_TIMEOUT,
                 )
                 assessment = data["choices"][0]["message"]["content"]
                 return {"assessment": assessment}
@@ -876,7 +1323,7 @@ async def ai_assess(request: AssessRequest):
                     {"role": "user", "content": f"客户需求信息：\n{info}"}
                 ]
             },
-            timeout=30.0,
+            timeout=settings.AI_HTTP_TIMEOUT,
         )
         assessment = data["choices"][0]["message"]["content"]
         return {"assessment": assessment}

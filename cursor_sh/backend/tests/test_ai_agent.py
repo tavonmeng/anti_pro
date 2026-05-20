@@ -155,3 +155,51 @@ async def test_ai_chat_existing_handoff_appends_followup(monkeypatch):
     assert response["is_new"] is False
     assert "追加到人工对接记录" in response["message"]
     assert "【需求收集完成】" not in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_media_ai_chat_strips_early_completion_without_upload_wrapup(monkeypatch):
+    async def _mock_completion(payload, *, timeout=None):
+        assert timeout == 120
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": "需求已经足够，我来整理。【需求收集完成】"
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "test-key")
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+    monkeypatch.setattr(ai_module.settings, "AI_HTTP_TIMEOUT", 120)
+    monkeypatch.setattr(ai_module, "post_chat_completion", _mock_completion)
+    monkeypatch.setattr(ai_module, "_save_session_file", lambda **_: None)
+    monkeypatch.setattr(ai_module, "_append_handoff_message", _no_existing_handoff)
+
+    response = await ai_module.ai_chat(
+        ai_module.ChatRequest(
+            session_id="test-session",
+            message="下个月月底",
+            history=[
+                {"role": "user", "content": "我想在杭州天幕巨屏投放3D视频"},
+                {"role": "assistant", "content": "面向什么受众？"},
+                {"role": "user", "content": "面向游客宣传"},
+                {"role": "assistant", "content": "主题是什么？"},
+                {"role": "user", "content": "杭州西湖美景"},
+                {"role": "assistant", "content": "风格怎么呈现？"},
+                {"role": "user", "content": "写意的传统意境"},
+                {"role": "assistant", "content": "需要哪些元素？"},
+                {"role": "user", "content": "西湖标志性景观"},
+                {"role": "assistant", "content": "时长多少？"},
+                {"role": "user", "content": "30s"},
+                {"role": "assistant", "content": "技术要求？"},
+                {"role": "user", "content": "没有特定要求"},
+            ],
+        ),
+        _request_without_auth(),
+    )
+
+    assert "【需求收集完成】" not in response["message"]
+    assert "现场实拍图" in response["message"]

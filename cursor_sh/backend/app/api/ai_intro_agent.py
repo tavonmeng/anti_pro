@@ -242,7 +242,7 @@ async def ai_business_intro(request: BusinessIntroRequest):
 
         data = await post_chat_completion(
             {"model": settings.AI_MODEL_NAME, "messages": llm_messages},
-            timeout=30.0,
+            timeout=60.0,
         )
         reply = data["choices"][0]["message"]["content"]
 
