@@ -124,7 +124,7 @@
         </div>
         <div class="nav-item" @click="navigate('profile')" style="margin-top: 8px;">
           <div class="avatar-wrap" style="width: 16px; display: flex; justify-content: center; align-items: center; position: relative;">
-            <el-avatar :size="24" class="user-avatar" src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png">{{ userInitial }}</el-avatar>
+            <el-avatar :size="24" class="user-avatar" :src="avatarUrl">{{ userInitial }}</el-avatar>
             <span v-if="authStore.isEnterprise()" class="enterprise-star">★</span>
           </div>
           <span v-if="!uiStore.isSidebarCollapsed">{{ authStore.user?.username || '用户' }}</span>
@@ -322,6 +322,8 @@ const userInitial = computed(() => {
   const name = authStore.user?.username || 'U'
   return name.charAt(0).toUpperCase()
 })
+
+const avatarUrl = computed(() => authStore.user?.avatar || '')
 
 const activeMenu = computed(() => {
   const path = route.path

@@ -28,7 +28,13 @@
       <h4>已上传文件</h4>
       <div class="file-list">
         <div v-for="file in uploadedFiles" :key="file.id" class="file-item">
-          <el-icon class="file-icon"><Document /></el-icon>
+          <img
+            v-if="isPreviewableImage(file)"
+            class="file-thumb"
+            :src="getPreviewSrc(file)"
+            :alt="file.name"
+          />
+          <el-icon v-else class="file-icon"><Document /></el-icon>
           <div class="file-info">
             <div class="file-name">{{ file.name }}</div>
             <div class="file-meta">{{ formatFileSize(file.size) }} · {{ formatTime(file.uploadTime) }}</div>
@@ -83,18 +89,23 @@ watch(() => props.modelValue, (newVal) => {
 const simulateUpload = (file: File): Promise<UploadedFile> => {
   return new Promise((resolve) => {
     setTimeout(() => {
+      const isImage = isImageFile(file.name, file.type)
       const uploadedFile: UploadedFile = {
         id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         name: file.name,
         size: file.size,
         type: file.type,
+        isImage,
+        previewUrl: isImage ? URL.createObjectURL(file) : undefined,
         uploadTime: new Date().toISOString(),
         url: `mock://files/${file.name}` // 模拟URL
       }
       
       // 保存文件元数据到localStorage
       const existingFiles = JSON.parse(localStorage.getItem('mockFiles') || '[]')
-      existingFiles.push(uploadedFile)
+      const storedFile = { ...uploadedFile }
+      delete storedFile.previewUrl
+      existingFiles.push(storedFile)
       localStorage.setItem('mockFiles', JSON.stringify(existingFiles))
       
       resolve(uploadedFile)
@@ -126,6 +137,10 @@ const handleRemove = (uploadFile: UploadFile) => {
 }
 
 const removeUploadedFile = (fileId: string) => {
+  const removedFile = uploadedFiles.value.find(f => f.id === fileId)
+  if (removedFile?.previewUrl?.startsWith('blob:')) {
+    URL.revokeObjectURL(removedFile.previewUrl)
+  }
   uploadedFiles.value = uploadedFiles.value.filter(f => f.id !== fileId)
   emit('update:modelValue', uploadedFiles.value)
   
@@ -135,6 +150,19 @@ const removeUploadedFile = (fileId: string) => {
   localStorage.setItem('mockFiles', JSON.stringify(updatedFiles))
   
   ElMessage.success('文件已删除')
+}
+
+const isImageFile = (name = '', type = '') => {
+  return type.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(name)
+}
+
+const getPreviewSrc = (file: UploadedFile) => {
+  const src = file.previewUrl || file.file_url || file.url || ''
+  return src.startsWith('mock://') ? '' : src
+}
+
+const isPreviewableImage = (file: UploadedFile) => {
+  return isImageFile(file.name, file.type) && !!getPreviewSrc(file)
 }
 
 const beforeUpload = (rawFile: File) => {
@@ -213,6 +241,16 @@ const formatTime = (timeString: string): string => {
   flex-shrink: 0;
 }
 
+.file-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+}
+
 .file-info {
   flex: 1;
   min-width: 0;
@@ -272,4 +310,3 @@ const formatTime = (timeString: string): string => {
   margin-top: 8px;
 }
 </style>
-

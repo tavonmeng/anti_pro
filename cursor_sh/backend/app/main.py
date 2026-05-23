@@ -43,7 +43,8 @@ if settings.RATE_LIMIT_ENABLED:
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # 挂载静态文件目录（仅本地存储模式；OSS 模式下文件通过签名 URL 直接从云端加载）
-if not settings.OSS_ENABLED and os.path.exists(settings.UPLOAD_DIR):
+if not settings.OSS_ENABLED:
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
 # 挂载案例视频/封面图静态目录（仅用户端需要，官网 Landing Page 使用）

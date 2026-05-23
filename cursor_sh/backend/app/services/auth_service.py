@@ -18,6 +18,7 @@ from app.schemas.user import UserResponse
 from app.utils.security import verify_password, get_password_hash, create_access_token
 from app.utils.validators import generate_id
 from app.services.sms_service import verify_sms_code
+from app.services.oss_service import maybe_sign_url
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
 
@@ -155,7 +156,7 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
         email=getattr(user, 'email', None),
         phone=getattr(user, 'phone', None),
         real_name=getattr(user, 'real_name', None),
-        avatar=getattr(user, 'avatar', None),
+        avatar=maybe_sign_url(getattr(user, 'avatar', None) or "", expires=7 * 24 * 3600),
         is_active=user.is_active,
         enterprise_status=(lambda e: e.value if hasattr(e, 'value') else str(e or 'none').lower())(getattr(user, 'enterprise_status', None) or 'none'),
         enterprise_name=getattr(user, 'enterprise_name', None),

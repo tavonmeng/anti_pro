@@ -112,7 +112,10 @@
                     </div>
                     <span class="msg-time" v-if="!isInlineEditingMessage(msg) && msg.timestamp">{{ msg.timestamp }}</span>
                   </div>
-                  <div class="user-avatar">t</div>
+                  <div class="user-avatar" :class="{ 'has-image': !!currentUserAvatar }">
+                    <img v-if="currentUserAvatar" :src="currentUserAvatar" :alt="currentUserName" />
+                    <span v-else>{{ currentUserInitial }}</span>
+                  </div>
                 </div>
               </div>
             </template>
@@ -306,7 +309,7 @@
                 type="file"
                 ref="fileInputRef"
                 multiple
-                accept="image/*,.pdf,.doc,.docx,.zip"
+                :accept="supportingFileAccept"
                 style="display: none;"
                 @change="handleFileSelected"
               />
@@ -314,7 +317,7 @@
                 type="file"
                 ref="genericFileInputRef"
                 multiple
-                accept=".pdf,.doc,.docx,.zip,.rar,.ppt,.pptx,.xls,.xlsx,.txt,.mp4,.mov,.avi"
+                :accept="supportingFileAccept"
                 style="display: none;"
                 @change="handleFileSelected"
               />
@@ -788,6 +791,23 @@ const uploadedFiles = ref<UploadedFile[]>([])
 const submittedFiles = ref<UploadedFile[]>([])
 const isUploadingFiles = ref(false)
 const failedUploadNames = ref<string[]>([])
+const supportingFileAccept = [
+  'image/*',
+  '.pdf',
+  '.ppt',
+  '.pptx',
+  '.key',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+  '.zip',
+  '.rar',
+  '.7z',
+  '.mp4',
+  '.mov',
+  '.avi',
+].join(',')
 
 const triggerFileUpload = () => {
   fileInputRef.value?.click()
@@ -1064,6 +1084,10 @@ const startNewSession = () => {
 // --- 历史聊天记录 ---
 // 使用用户 ID 隔离存储，防止不同用户看到彼此的聊天记录
 const getCurrentUserId = () => authStore.user?.id || 'anonymous'
+
+const currentUserName = computed(() => authStore.user?.username || '用户')
+const currentUserAvatar = computed(() => authStore.user?.avatar || '')
+const currentUserInitial = computed(() => currentUserName.value.charAt(0).toUpperCase())
 
 const displayedMessages = computed(() => {
   if (!searchQuery.value.trim()) return messages.value
@@ -3202,7 +3226,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .user-avatar {
-  background: #65a30d; 
+  background: #0058bc;
   color: #fff;
   width: 32px;
   height: 32px;
@@ -3214,6 +3238,18 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   font-weight: 500;
   flex-shrink: 0;
   margin-top: 24px;
+  overflow: hidden;
+}
+
+.user-avatar.has-image {
+  background: #ffffff;
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .assistant-wrapper {

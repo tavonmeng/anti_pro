@@ -177,7 +177,7 @@
               <p class="description-text">{{ order.prohibited_content || '-' }}</p>
             </template>
             <div v-if="order.scenePhotos && order.scenePhotos.length > 0">
-              <p><strong>现场实拍图（{{ order.scenePhotos.length }}张）：</strong></p>
+              <p><strong>现场实拍图和其他文件（{{ order.scenePhotos.length }}个）：</strong></p>
               <div class="file-list">
                 <div v-for="file in order.scenePhotos" :key="file.id" class="file-item">
                   <el-icon><Picture /></el-icon>
@@ -797,4 +797,3 @@ const goBack = () => {
   margin: 0;
 }
 </style>
-

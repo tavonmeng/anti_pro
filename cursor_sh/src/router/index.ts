@@ -233,13 +233,24 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   
   // 检查是否需要认证
   if (to.meta.requiresAuth && !authStore.isAuthenticated()) {
     next({ name: 'Login', query: { redirect: to.fullPath } })
     return
+  }
+
+  if (authStore.isAuthenticated()) {
+    try {
+      await authStore.refreshCurrentUser()
+    } catch (error) {
+      if (to.meta.requiresAuth) {
+        next({ name: 'Login', query: { redirect: to.fullPath } })
+        return
+      }
+    }
   }
   
   // 检查角色权限

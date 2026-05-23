@@ -27,7 +27,23 @@
         <el-row :gutter="24">
           <el-col :span="12">
             <el-form-item label="投放城市 & 媒体位置" prop="city_location">
-              <el-input v-model="formData.city_location" placeholder="例如：成都市锦江区春熙路步行街" />
+              <div class="city-location-field">
+                <el-cascader
+                  v-model="citySelection"
+                  :options="cityCascaderOptions"
+                  :props="cityCascaderProps"
+                  clearable
+                  filterable
+                  placeholder="省份 / 城市"
+                  @change="syncCityLocation"
+                />
+                <el-input
+                  v-model="mediaLocationInput"
+                  clearable
+                  placeholder="媒体位置，如锦江区春熙路步行街"
+                  @blur="syncCityLocation"
+                />
+              </div>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -99,12 +115,12 @@
           <el-input v-model="formData.special_requirements" type="textarea" :rows="2" placeholder="选填，特殊定制效果等" />
         </el-form-item>
 
-        <el-form-item label="现场实拍图" prop="scenePhotos">
+        <el-form-item label="现场实拍图和其他文件上传" prop="scenePhotos">
           <FileUpload 
             v-model="formData.scenePhotos"
-            accept="image/*"
+            :accept="supportingFileAccept"
             :limit="10"
-            tip-text="支持上传现场照片，最多10张，支持 JPG、PNG 格式"
+            tip-text="支持现场图片、PDF、PPT/PPTX、Word、Excel、压缩包、视频等文件，最多10个，单个不超过50MB"
           />
         </el-form-item>
       </template>
@@ -188,12 +204,12 @@
           </el-col>
         </el-row>
 
-        <el-form-item label="现场实拍图" prop="scenePhotos">
+        <el-form-item label="现场实拍图和其他文件上传" prop="scenePhotos">
           <FileUpload 
             v-model="formData.scenePhotos"
-            accept="image/*"
+            :accept="supportingFileAccept"
             :limit="10"
-            tip-text="支持上传现场照片，最多10张，支持 JPG、PNG 格式"
+            tip-text="支持现场图片、PDF、PPT/PPTX、Word、Excel、压缩包、视频等文件，最多10个，单个不超过50MB"
           />
         </el-form-item>
       </template>
@@ -221,8 +237,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import provinceCityData from '@/data/chinaProvinceCities.json'
 import FileUpload from './FileUpload.vue'
 import type { UploadedFile, Order } from '@/types'
 
@@ -239,6 +256,215 @@ const emit = defineEmits<{
 }>()
 
 const formRef = ref<FormInstance>()
+const supportingFileAccept = [
+  'image/*',
+  '.pdf',
+  '.ppt',
+  '.pptx',
+  '.key',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+  '.zip',
+  '.rar',
+  '.7z',
+  '.mp4',
+  '.mov',
+  '.avi',
+].join(',')
+type RegionNode = {
+  code: string
+  name: string
+  children?: RegionNode[]
+}
+
+type CascaderOption = {
+  value: string
+  label: string
+  children?: CascaderOption[]
+}
+
+type CityPathCandidate = {
+  text: string
+  selection: string[]
+  requireNonAdministrativeNext?: boolean
+}
+
+const citySelection = ref<string[]>([])
+const mediaLocationInput = ref('')
+
+const directAdminProvinceNames = new Set(['北京市', '天津市', '上海市', '重庆市', '香港特别行政区', '澳门特别行政区'])
+
+const supplementalProvinceCities: RegionNode[] = [
+  {
+    code: '71',
+    name: '台湾省',
+    children: [
+      { code: '7101', name: '台北市' },
+      { code: '7102', name: '新北市' },
+      { code: '7103', name: '桃园市' },
+      { code: '7104', name: '台中市' },
+      { code: '7105', name: '台南市' },
+      { code: '7106', name: '高雄市' },
+      { code: '7107', name: '基隆市' },
+      { code: '7108', name: '新竹市' },
+      { code: '7109', name: '嘉义市' },
+      { code: '7110', name: '新竹县' },
+      { code: '7111', name: '苗栗县' },
+      { code: '7112', name: '彰化县' },
+      { code: '7113', name: '南投县' },
+      { code: '7114', name: '云林县' },
+      { code: '7115', name: '嘉义县' },
+      { code: '7116', name: '屏东县' },
+      { code: '7117', name: '宜兰县' },
+      { code: '7118', name: '花莲县' },
+      { code: '7119', name: '台东县' },
+      { code: '7120', name: '澎湖县' },
+      { code: '7121', name: '金门县' },
+      { code: '7122', name: '连江县' },
+    ],
+  },
+  {
+    code: '81',
+    name: '香港特别行政区',
+    children: [{ code: '810000', name: '香港特别行政区' }],
+  },
+  {
+    code: '82',
+    name: '澳门特别行政区',
+    children: [{ code: '820000', name: '澳门特别行政区' }],
+  },
+]
+
+const provinceCitySource = [...(provinceCityData as RegionNode[]), ...supplementalProvinceCities]
+
+const getCityChildren = (province: RegionNode) => {
+  if (directAdminProvinceNames.has(province.name)) {
+    return [{ code: `${province.code}0000`, name: province.name }]
+  }
+  return province.children || []
+}
+
+const cityCascaderOptions: CascaderOption[] = provinceCitySource.map(province => ({
+  value: province.code,
+  label: province.name,
+  children: getCityChildren(province).map(city => ({
+    value: city.code,
+    label: city.name,
+  })),
+}))
+
+const cityCascaderProps = {
+  expandTrigger: 'hover' as const,
+}
+
+const normalizeLocationPart = (value = '') => value.trim().replace(/\s+/g, ' ')
+
+const getSelectedCityLabels = () => {
+  const [provinceCode, cityCode] = citySelection.value
+  const province = cityCascaderOptions.find(option => option.value === provinceCode)
+  const city = province?.children?.find(option => option.value === cityCode)
+
+  return {
+    province: province?.label || '',
+    city: city?.label || '',
+  }
+}
+
+const formatCitySelection = () => {
+  const { province, city } = getSelectedCityLabels()
+  if (!province) return ''
+  if (!city || city === province) return province
+  return `${province} ${city}`
+}
+
+const composeCityLocation = () => {
+  return [formatCitySelection(), mediaLocationInput.value]
+    .map(normalizeLocationPart)
+    .filter(Boolean)
+    .join(' ')
+}
+
+const getNameAliases = (name: string) => {
+  const aliases = new Set([name])
+  aliases.add(name.replace(/省$/, ''))
+  aliases.add(name.replace(/市$/, ''))
+  aliases.add(name.replace(/特别行政区$/, ''))
+  aliases.add(name.replace(/自治区$/, '').replace(/(壮族|回族|维吾尔|藏族)$/, ''))
+  return Array.from(aliases).filter(Boolean)
+}
+
+const cleanLocationRemainder = (value: string) => {
+  return value.replace(/^[\s,，、/|｜&-]+/, '').trim()
+}
+
+const getCityPathCandidates = () => {
+  return cityCascaderOptions.flatMap(province => {
+    return (province.children || []).flatMap(city => {
+      const provinceAliases = getNameAliases(province.label)
+      const cityAliases = getNameAliases(city.label)
+      const combinedCandidates: CityPathCandidate[] = city.label === province.label
+        ? provinceAliases.map(text => ({ text, selection: [province.value, city.value] }))
+        : provinceAliases.flatMap(provinceAlias => cityAliases.flatMap(cityAlias => [
+            { text: `${provinceAlias} ${cityAlias}`, selection: [province.value, city.value] },
+            { text: `${provinceAlias}${cityAlias}`, selection: [province.value, city.value] },
+          ]))
+
+      const cityOnlyCandidates: CityPathCandidate[] = city.label === province.label
+        ? []
+        : [
+            { text: city.label, selection: [province.value, city.value] },
+            ...cityAliases
+              .filter(alias => alias !== city.label)
+              .map(alias => ({
+                text: alias,
+                selection: [province.value, city.value],
+                requireNonAdministrativeNext: true,
+              })),
+          ]
+
+      return [...combinedCandidates, ...cityOnlyCandidates]
+        .filter(Boolean)
+    })
+  })
+    .filter((candidate, index, candidates) => {
+      return candidates.findIndex(item => item.text === candidate.text && item.selection.join('/') === candidate.selection.join('/')) === index
+    })
+    .sort((a, b) => b.text.length - a.text.length)
+}
+
+const cityPathCandidates = getCityPathCandidates()
+const administrativeNextChars = new Set(['区', '县', '市', '州', '盟'])
+
+const splitCityLocation = (value = '') => {
+  const location = normalizeLocationPart(value)
+  if (!location) {
+    return { selection: [] as string[], mediaLocation: '' }
+  }
+
+  for (const candidate of cityPathCandidates) {
+    const nextChar = location.charAt(candidate.text.length)
+    if (
+      location.startsWith(candidate.text) &&
+      (!candidate.requireNonAdministrativeNext || !administrativeNextChars.has(nextChar))
+    ) {
+      return {
+        selection: candidate.selection,
+        mediaLocation: cleanLocationRemainder(location.slice(candidate.text.length)),
+      }
+    }
+  }
+
+  return { selection: [] as string[], mediaLocation: location }
+}
+
+const syncCityLocation = () => {
+  formData.city_location = composeCityLocation()
+  if (citySelection.value.length >= 2) {
+    formRef.value?.clearValidate('city_location')
+  }
+}
 
 const formData = reactive({
   // 品牌方字段
@@ -301,14 +527,29 @@ onMounted(() => {
       sessionStorage.removeItem('ai_draft_order')
     }
   }
+  const parts = splitCityLocation(formData.city_location)
+  citySelection.value = parts.selection
+  mediaLocationInput.value = parts.mediaLocation
+  syncCityLocation()
 })
+
+watch([citySelection, mediaLocationInput], syncCityLocation, { deep: true })
 
 const formRules: FormRules = isMediaMode ? {
   project_name: [
     { required: true, message: '请填写项目名称', trigger: 'blur' }
   ],
   city_location: [
-    { required: true, message: '请填写投放城市和媒体位置', trigger: 'blur' }
+    {
+      validator: (_rule, _value, callback) => {
+        if (citySelection.value.length < 2) {
+          callback(new Error('请选择投放省份和城市'))
+          return
+        }
+        callback()
+      },
+      trigger: ['change', 'blur'],
+    }
   ],
 } : {
   brand: [
@@ -334,10 +575,10 @@ const handleSubmit = async () => {
         const isEdit = !!props.order
         const confirmItems = isMediaMode
           ? `<li>项目名称及媒体位置已明确</li>
-             <li>已上传 ${formData.scenePhotos.length} 张现场实拍图</li>
+             <li>已上传 ${formData.scenePhotos.length} 个现场/参考文件</li>
              <li>预计制作周期：15个工作日</li>`
           : `<li>品牌与内容要求已明确</li>
-             <li>已上传 ${formData.scenePhotos.length} 张现场实拍图</li>
+             <li>已上传 ${formData.scenePhotos.length} 个现场/参考文件</li>
              <li>预计制作周期：15个工作日</li>`
         await ElMessageBox.confirm(
           `
@@ -381,18 +622,28 @@ const handleSaveDraft = () => {
 }
 
 .form-stage-label {
-  font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
-  font-size: 11px;
-  font-weight: 500;
-  color: #0071e3;
+  font-size: 16px;
+  font-weight: 700;
+  color: #005ecb;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin: 28px 0 16px 0;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(0, 113, 227, 0.12);
+  letter-spacing: 0.02em;
+  margin: 32px 0 18px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(0, 94, 203, 0.18);
 
   &:first-child {
     margin-top: 0;
+  }
+}
+
+.city-location-field {
+  display: grid;
+  grid-template-columns: minmax(118px, 0.38fr) minmax(180px, 0.62fr);
+  gap: 10px;
+  width: 100%;
+
+  :deep(.el-cascader) {
+    width: 100%;
   }
 }
 
@@ -518,5 +769,11 @@ const handleSaveDraft = () => {
 :deep(.el-input__wrapper:focus-within),
 :deep(.el-textarea__inner:focus) {
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15) !important;
+}
+
+@media (max-width: 720px) {
+  .city-location-field {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

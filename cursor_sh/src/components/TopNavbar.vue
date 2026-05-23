@@ -29,7 +29,7 @@
       
       <el-dropdown trigger="click" @command="handleCommand">
         <div class="user-profile">
-          <el-avatar :size="36" class="user-avatar">{{ userInitial }}</el-avatar>
+          <el-avatar :size="36" class="user-avatar" :src="avatarUrl">{{ userInitial }}</el-avatar>
           <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
           <el-icon class="dropdown-icon"><CaretBottom /></el-icon>
         </div>
@@ -64,6 +64,8 @@ const userInitial = computed(() => {
   const name = authStore.user?.username || 'U'
   return name.charAt(0).toUpperCase()
 })
+
+const avatarUrl = computed(() => authStore.user?.avatar || '')
 
 const activeMenu = computed(() => {
   const path = route.path

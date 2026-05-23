@@ -313,7 +313,7 @@ const summaryItems = computed(() => {
       if (d.tech_delivery) items.push({ label: '技术需求', value: d.tech_delivery })
       if (d.budget) items.push({ label: '项目预算', value: d.budget })
       if (d.online_time) items.push({ label: '预计上刊时间', value: d.online_time })
-      if (d.scenePhotos?.length) items.push({ label: '现场实拍图', value: `${d.scenePhotos.length} 张` })
+      if (d.scenePhotos?.length) items.push({ label: '现场实拍图和其他文件', value: `${d.scenePhotos.length} 个文件` })
     } else {
       if (d.brand) items.push({ label: '品牌关键词', value: d.brand })
       if (d.target_group) items.push({ label: '目标受众', value: d.target_group })
@@ -324,7 +324,7 @@ const summaryItems = computed(() => {
       if (d.media_size) items.push({ label: '投放媒体尺寸', value: d.media_size })
       if (d.budget) items.push({ label: '制作预算', value: d.budget })
       if (d.online_time) items.push({ label: '预计上刊时间', value: d.online_time })
-      if (d.scenePhotos?.length) items.push({ label: '现场实拍图', value: `${d.scenePhotos.length} 张` })
+      if (d.scenePhotos?.length) items.push({ label: '现场实拍图和其他文件', value: `${d.scenePhotos.length} 个文件` })
     }
   } else if (props.orderType === 'digital_art') {
     const artMap: Record<string, string> = { abstract: '抽象', realistic: '写实', installation: '装置', dynamic: '动态艺术', custom: d.customDirection || '自定义' }

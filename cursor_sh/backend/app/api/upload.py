@@ -139,10 +139,10 @@ async def upload_site_photo(
     """上传现场实拍图或参考文件"""
     # 限制文件类型
     allowed_ext = {
-        '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp',
-        '.pdf', '.doc', '.docx', '.zip', '.rar',
+        '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.svg',
+        '.pdf', '.doc', '.docx', '.zip', '.rar', '.7z',
         '.ppt', '.pptx', '.xls', '.xlsx', '.txt',
-        '.mp4', '.mov', '.avi',
+        '.key', '.mp4', '.mov', '.avi',
     }
     ext = os.path.splitext(file.filename or '')[1].lower()
     user_id = _get_user_id_from_request(request)
@@ -151,7 +151,7 @@ async def upload_site_photo(
         raise HTTPException(status_code=400, detail="不支持的文件类型: %s" % ext)
 
     filename = _safe_filename(file.filename, "upload%s" % ext)
-    tmp_path, size = await _stream_upload_to_temp(file, 20 * 1024 * 1024, "文件大小不能超过20MB")
+    tmp_path, size = await _stream_upload_to_temp(file, 50 * 1024 * 1024, "文件大小不能超过50MB")
 
     try:
         if settings.OSS_ENABLED:
@@ -220,7 +220,7 @@ async def upload_generic_file(
         # 视频
         '.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm',
         # 文档
-        '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt',
+        '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.key', '.txt',
         # 设计文件
         '.psd', '.ai', '.eps', '.sketch', '.fig',
         # 3D 文件

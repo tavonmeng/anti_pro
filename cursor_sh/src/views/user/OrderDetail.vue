@@ -101,7 +101,7 @@
               <p><strong>品牌禁忌内容：</strong></p>
               <p class="description-text">{{ order.prohibited_content || '-' }}</p>
             </template>
-            <p v-if="order.scenePhotos && order.scenePhotos.length"><strong>现场实拍图：</strong>{{ order.scenePhotos.length }}张</p>
+            <p v-if="order.scenePhotos && order.scenePhotos.length"><strong>现场实拍图和其他文件：</strong>{{ order.scenePhotos.length }}个文件</p>
           </div>
           <div v-else-if="order.orderType === 'digital_art'">
             <p><strong>艺术方向：</strong>{{ getArtDirectionText() }}</p>

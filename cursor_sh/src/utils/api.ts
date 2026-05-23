@@ -119,6 +119,11 @@ export interface HomepageBarConfig {
 }
 
 export const authApi = {
+  // 获取当前登录用户资料
+  async getMe(): Promise<User> {
+    return request.get('/auth/me', { silent: true })
+  },
+
   // 登录
   async login(data: LoginRequest, silent = false): Promise<LoginResponse> {
     if (ENABLE_MOCK) {
@@ -426,6 +431,18 @@ export const userApi = {
       return Promise.resolve({ success: true })
     }
     return request.put('/auth/profile', data)
+  },
+
+  // 企业认证通过后更新头像
+  updateAvatar(formData: FormData): Promise<any> {
+    return request.post('/auth/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+
+  // 修改手机号：旧手机号验证码 + 新手机号
+  changePhone(data: { new_phone: string; old_phone_code: string }): Promise<any> {
+    return request.post('/auth/change-phone', data)
   }
 }
 
