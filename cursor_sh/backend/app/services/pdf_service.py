@@ -11,7 +11,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    HRFlowable, KeepTogether
+    HRFlowable, KeepTogether, Image
 )
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -20,6 +20,11 @@ from app.utils.log_setup import get_module_logger
 
 
 logger = get_module_logger("order")
+
+
+def _get_pdf_logo_path() -> str:
+    """返回 PDF 可用的官方 logo 图片路径。"""
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "official-mark-black.png")
 
 
 # ========== 中文字体注册 ==========
@@ -480,6 +485,13 @@ class PDFService:
         
         # ========== 开始构建 PDF ==========
         
+        logo_path = _get_pdf_logo_path()
+        if os.path.exists(logo_path):
+            logo = Image(logo_path, width=11 * mm, height=20 * mm)
+            logo.hAlign = "CENTER"
+            elements.append(logo)
+            elements.append(Spacer(1, 5))
+
         # ---- 标题 ----
         elements.append(Paragraph(doc_title, styles["DocTitle"]))
         elements.append(Paragraph(f"编号：{order_number}", styles["DocSubtitle"]))

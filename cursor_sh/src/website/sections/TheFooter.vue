@@ -12,14 +12,7 @@
         <!-- 左侧：Logo + 口号 + 社交图标 -->
         <div class="footer-left">
           <div class="footer-logo">
-            <!-- Unique Vision Logo: 盾牌形图标 -->
-            <svg class="logo-icon" viewBox="0 0 32 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <!-- 盾牌外框 -->
-              <path d="M16 1L2 7V17C2 25.5 8 32 16 35C24 32 30 25.5 30 17V7L16 1Z" stroke="#111" stroke-width="2" fill="none"/>
-              <!-- 内部 U 形条纹 -->
-              <path d="M9 12V22C9 25.5 12 28 16 28C20 28 23 25.5 23 22V12" stroke="#111" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-              <line x1="16" y1="12" x2="16" y2="24" stroke="#111" stroke-width="2" stroke-linecap="round"/>
-            </svg>
+            <img class="logo-icon" src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
             <div class="logo-text">
               <span class="logo-line">Unique</span>
               <span class="logo-line">Vision</span>
@@ -166,9 +159,11 @@
 }
 
 .logo-icon {
-  width: 34px;
-  height: 38px;
+  width: 32px;
+  height: 48px;
+  display: block;
   flex-shrink: 0;
+  object-fit: contain;
 }
 
 .logo-text {

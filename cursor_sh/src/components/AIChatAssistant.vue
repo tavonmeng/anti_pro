@@ -17,8 +17,8 @@
         </div>
 
         <div class="header-right">
-          <button class="icon-toggle" title="Help"><el-icon><QuestionFilled /></el-icon></button>
-          <button class="new-session-btn" @click="startNewSession">New Session</button>
+          <button class="icon-toggle" title="帮助"><el-icon><QuestionFilled /></el-icon></button>
+          <button class="new-session-btn" @click="startNewSession">新建会话</button>
           <button class="icon-toggle collapse-btn" @click="collapse"><el-icon><Close /></el-icon></button>
         </div>
       </header>
@@ -30,7 +30,7 @@
           <!-- Welcome + Quick Actions -->
           <div v-if="!selectedMode" class="welcome-section message assistant">
             <div class="assistant-wrapper">
-              <div class="assistant-tag"><span class="engine-name">Catalyst Engine</span> <span class="pro-badge">PRO</span></div>
+              <div class="assistant-tag"><span class="engine-name">智能引擎</span> <span class="pro-badge">专业版</span></div>
               <div class="message-bubble glass-ai welcome-bubble">
                 <p class="welcome-text">
                   {{ welcomeTitleText }}<span v-if="!showWelcomeOptions && welcomeTitleText.length < welcomeTitleFull.length" class="typing-cursor">|</span>
@@ -69,7 +69,7 @@
               <div class="user-message-container">
                 <div class="user-content-row">
                   <div class="user-col">
-                    <span class="user-tag">You</span>
+                    <span class="user-tag">你</span>
                     <div v-if="isInlineEditingMessage(msg)" class="inline-message-edit">
                       <textarea
                         :ref="setInlineEditTextareaRef"
@@ -122,10 +122,10 @@
 
             <template v-else>
               <div class="assistant-wrapper">
-                <div class="assistant-tag"><span class="engine-name">Catalyst Engine</span></div>
+                <div class="assistant-tag"><span class="engine-name">智能引擎</span></div>
                 <div class="message-bubble glass-ai">
                   <div v-if="index > 0 && msg.role === 'assistant' && !msg.isPurchasePrompt" class="reasoning-mock">
-                    <span class="reasoning-text">Reasoning <el-icon><Right /></el-icon></span>
+                    <span class="reasoning-text">思考过程 <el-icon><Right /></el-icon></span>
                   </div>
                   <p class="bubble-text" v-html="highlightSearch(displayContent(msg.content))"></p>
                   <!-- Special button for 'purchase' mode in the AI msg -->
@@ -269,9 +269,9 @@
           
           <div v-if="isLoading" class="message assistant">
             <div class="assistant-wrapper">
-               <div class="assistant-tag"><span class="engine-name">Catalyst Engine</span></div>
+               <div class="assistant-tag"><span class="engine-name">智能引擎</span></div>
                <div class="message-bubble glass-ai typing">
-                 <span>agent思考中</span>
+                 <span>智能体思考中</span>
                  <span class="thinking-ellipsis" aria-hidden="true">
                    <span>.</span>
                    <span>.</span>
@@ -284,7 +284,7 @@
             </div>
           </div>
           <div v-if="isTyping && !isLoading" class="typing-cursor-indicator">
-            <span>agent思考中</span>
+            <span>智能体思考中</span>
             <span class="thinking-ellipsis" aria-hidden="true">
               <span>.</span>
               <span>.</span>
@@ -331,7 +331,7 @@
                 <span class="file-status">待发送</span>
                 <span class="file-remove" @click="removeUploadedFile(idx)">&times;</span>
               </div>
-              <span class="upload-more-hint">可继续上传更多文件或图片，完成后点击 Send</span>
+              <span class="upload-more-hint">可继续上传更多文件或图片，完成后点击发送</span>
             </div>
 
           <textarea
@@ -373,7 +373,7 @@
               :class="{ disabled: isLoading || isTyping || isUploadingFiles || (!inputMsg.trim() && uploadedFiles.length === 0) }"
               @click="sendMessage"
             >
-              <span>Send</span>
+              <span>发送</span>
               <el-icon><Top /></el-icon>
             </button>
           </div>
@@ -429,10 +429,12 @@ import { useUiStore } from '@/stores/ui'
 import { logger } from '@/utils/logger'
 import { chatHistoryApi, orderApi } from '@/utils/api'
 import {
+  createAiChatSessionFromRemote,
   deleteAiChatSession,
   loadAiChatSessions,
   makeAiChatSessionTitle,
   upsertAiChatSession,
+  type AiChatRemoteSession,
   type AiChatSavedSession,
 } from '@/utils/aiChatSessions'
 import { getLatestEnterpriseStatus } from '@/utils/enterpriseGuard'
@@ -1146,6 +1148,29 @@ const loadSavedHistory = () => {
   savedHistories.value = loadAiChatSessions(getCurrentUserId())
 }
 
+const loadBackendHistoryById = async (id: string): Promise<SavedSession | null> => {
+  if (!localStorage.getItem('token')) return null
+  try {
+    const [summaries, remoteMessages] = await Promise.all([
+      chatHistoryApi.getSessions(50).catch(() => []),
+      chatHistoryApi.getSessionMessages(id),
+    ])
+    const summary = Array.isArray(summaries)
+      ? summaries.find((item: AiChatRemoteSession) => item.id === id)
+      : null
+    const session = createAiChatSessionFromRemote(
+      summary || { id, sessionType: 'general', businessType: 'ai_3d_custom' },
+      Array.isArray(remoteMessages) ? remoteMessages : [],
+    )
+    if (session.messages.length === 0) return null
+    savedHistories.value = upsertAiChatSession(getCurrentUserId(), session)
+    return session
+  } catch (error) {
+    console.warn('[ChatHistory] 从后端恢复历史失败:', error)
+    return null
+  }
+}
+
 onMounted(() => {
   playWelcomeAnimation()
   loadSavedHistory()
@@ -1565,7 +1590,10 @@ const restoreHistoryById = async (id: string) => {
 
   saveCurrentToHistory({ force: true })
   loadSavedHistory()
-  const history = savedHistories.value.find(session => session.id === id)
+  let history = savedHistories.value.find(session => session.id === id)
+  if (!history) {
+    history = await loadBackendHistoryById(id) || undefined
+  }
   if (!history) {
     uiStore.clearPendingAIChatSession()
     return
@@ -2114,7 +2142,7 @@ const handleGeneral = async (userText: string, userMessageId?: string) => {
     if (await routeByBackendIntent(data, userText, userMessageId)) return
     typewriterEffect(data.message || '感谢您的提问！')
   } catch (e) {
-    const fallback = '我是 Unique Vision AI 的项目顾问。\n\n我可以协助您梳理项目需求、查询订单进展，或介绍 PLATFORM SERVICES 平台服务体系。请问您需要哪方面的支持？'
+    const fallback = '我是 Unique Vision AI 的项目顾问。\n\n我可以协助您梳理项目需求、查询订单进展，或介绍平台服务体系。请问您需要哪方面的支持？'
     typewriterEffect(fallback)
   } finally {
     isLoading.value = false

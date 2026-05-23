@@ -27,7 +27,7 @@
           <div class="section-header">
             <div class="section-titles">
               <h2 class="section-title">业务菜单</h2>
-              <p class="section-subtitle">PLATFORM SERVICES｜平台服务体系</p>
+              <p class="section-subtitle">平台服务体系</p>
             </div>
           </div>
           
@@ -45,7 +45,7 @@
             >
               <div class="card-image-wrapper">
                 <div class="card-img" :style="{ background: service.gradient }"></div>
-                <div class="overlay-badge">{{ service.badge }}</div>
+                <div class="overlay-badge">{{ getOverlayTitle(service.badge) }}</div>
               </div>
               <div class="card-body">
                 <h3 class="service-title">{{ service.title }}</h3>
@@ -193,6 +193,10 @@ const handleModeChange = (mode: string) => {
   logger.logAction('Workspace', 'switch_ai_mode', { mode })
 }
 
+const getOverlayTitle = (badge: string) => {
+  return badge.replace(/^\d+\s*[｜|]\s*/, '')
+}
+
 const triggerChoreography = async (targetType: ServiceType | null) => {
   // B2B direct routing layout shift: instantly navigate and apply system states
   if (targetType) {
@@ -223,7 +227,8 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 }
 
 .overview-state {
-  padding: 32px 24px 24px 24px;
+  --overview-top-space: clamp(32px, 3.2vh, 48px);
+  padding: var(--overview-top-space) 24px 24px 24px;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -592,14 +597,14 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 /* Tier 2: FHD / QHD / high-res monitors (1920px+) */
 @media screen and (min-width: 1920px) {
   .overview-state {
-    padding: 0 32px 24px 32px;
+    padding: var(--overview-top-space) 32px 24px 32px;
   }
 }
 
 /* Tier 3: 4K at 150% scale = 2560px CSS pixels */
 @media screen and (min-width: 2560px) {
   .overview-state {
-    padding: 0 48px 32px 48px;
+    padding: var(--overview-top-space) 48px 32px 48px;
   }
 }
 </style>

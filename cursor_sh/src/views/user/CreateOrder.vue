@@ -41,12 +41,16 @@
           <h2>{{ activeService?.title || '平台服务咨询' }}</h2>
           <p class="service-kicker">{{ activeService?.subtitle || 'Platform Services' }}</p>
           <p class="service-desc">{{ activeService?.description || '请通过AI顾问提交您的项目需求，我们会根据业务类型安排后续对接。' }}</p>
+          <p class="service-support">
+            该业务暂未开放线上下单支持，如需咨询或定制服务，请发送邮件至
+            <a href="mailto:support@uniquevisionx.com">support@uniquevisionx.com</a>
+            ，我们的顾问会尽快与您联系。
+          </p>
           <div class="service-tags" v-if="activeService?.features.length">
             <span v-for="feature in activeService.features" :key="feature">{{ feature }}</span>
           </div>
           <div class="service-actions">
-            <el-button type="primary" @click="openServiceConsultation">联系AI顾问梳理需求</el-button>
-            <el-button @click="goBack">返回业务菜单</el-button>
+            <el-button @click="goBack">返回主页</el-button>
           </div>
         </div>
       </div>
@@ -106,7 +110,6 @@ import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
 import { orderApi } from '@/utils/api'
 import { getLatestEnterpriseStatus, showEnterpriseAuthPrompt } from '@/utils/enterpriseGuard'
-import { useUiStore } from '@/stores/ui'
 import { getServiceByType, isOrderableServiceType } from '@/data/platformServices'
 import VideoPurchaseForm from '@/components/VideoPurchaseForm.vue'
 import AI3DCustomForm from '@/components/AI3DCustomForm.vue'
@@ -118,7 +121,6 @@ const router = useRouter()
 const route = useRoute()
 const orderStore = useOrderStore()
 const authStore = useAuthStore()
-const uiStore = useUiStore()
 
 const isEditMode = computed(() => route.name === 'EditOrder')
 const orderId = computed(() => isEditMode.value ? route.params.id as string : null)
@@ -206,7 +208,7 @@ onMounted(async () => {
 // 用户点击"确认提交" → 检查企业认证 → 弹出订单需求确认函
 const handleSubmit = async (formData: any) => {
   if (!isOrderableServiceType(orderType.value)) {
-    await openServiceConsultation()
+    goBack()
     return
   }
 
@@ -296,7 +298,7 @@ const goToOrders = () => {
 
 const handleSaveDraft = async (formData: any) => {
   if (!isOrderableServiceType(orderType.value)) {
-    await openServiceConsultation()
+    goBack()
     return
   }
 
@@ -321,14 +323,6 @@ const handleSaveDraft = async (formData: any) => {
 
 const goBack = () => {
   router.push('/user/workspace')
-}
-
-const openServiceConsultation = async () => {
-  uiStore.setIsAiExpanded(true)
-  uiStore.setSecondarySidebar(true)
-  uiStore.toggleSidebar(true)
-  uiStore.setActiveModule(orderType.value)
-  await router.push('/user/workspace')
 }
 </script>
 
@@ -435,7 +429,24 @@ const openServiceConsultation = async () => {
   color: #646a78;
   font-size: 14px;
   line-height: 1.7;
+  margin: 0 0 14px 0;
+}
+
+.service-support {
+  color: #414754;
+  font-size: 13px;
+  line-height: 1.7;
   margin: 0 0 20px 0;
+}
+
+.service-support a {
+  color: #0d99ff;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.service-support a:hover {
+  text-decoration: underline;
 }
 
 .service-tags {

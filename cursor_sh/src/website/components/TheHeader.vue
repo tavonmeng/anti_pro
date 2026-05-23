@@ -8,7 +8,12 @@
   >
     <!-- 左：Logo 区域 -->
     <div class="header-logo" @click="scrollToTop">
-      <span class="logo-icon">🛡️</span>
+      <img
+        class="logo-icon"
+        :class="{ 'is-inverted': !isLightMode }"
+        src="/landing/logo/official-mark-black.svg"
+        alt="Unique Vision"
+      />
       <span class="logo-text">Unique Vision</span>
     </div>
 
@@ -289,8 +294,15 @@ onUnmounted(() => {
 }
 
 .logo-icon {
-  font-size: 20px;
-  line-height: 1;
+  width: 24px;
+  height: 38px;
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.logo-icon.is-inverted {
+  filter: invert(1);
 }
 
 .logo-text {

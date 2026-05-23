@@ -23,6 +23,16 @@ export type AiChatSavedSession = {
   updatedAt?: number
 }
 
+export type AiChatRemoteSession = {
+  id: string
+  title?: string
+  sessionType?: string
+  businessType?: string
+  messageCount?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
 export const AI_CHAT_HISTORY_EVENT = 'ai-chat-history-updated'
 
 export const getAiChatHistoryKey = (userId?: string) => {
@@ -41,6 +51,81 @@ export const makeAiChatSessionTitle = (messages: any[] = [], fallback = '新的�
     .trim()
   if (!raw) return fallback
   return raw.length > 24 ? `${raw.slice(0, 24)}...` : raw
+}
+
+const formatRemoteMessageTime = (value?: string) => {
+  if (!value) return ''
+  const time = Date.parse(value)
+  if (!Number.isFinite(time)) return value
+  return new Date(time).toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+export const getAiChatAgentMeta = (sessionType?: string, businessType?: string) => {
+  if (sessionType === 'order_query') {
+    return { agentKey: 'order_query', agentLabel: '订单查询', mode: 'order_query' }
+  }
+  if (sessionType === 'business_intro') {
+    return { agentKey: 'business_intro', agentLabel: '业务介绍', mode: 'business_intro' }
+  }
+  if (sessionType === 'case_intro') {
+    return { agentKey: 'case_intro', agentLabel: '案例介绍', mode: 'business_intro' }
+  }
+  if (sessionType === 'requirement') {
+    const type = businessType || 'ai_3d_custom'
+    const labels: Record<string, string> = {
+      ai_3d_custom: 'AI驱动3D OOH内容定制',
+      video_purchase: '3D OOH数字内容资源库',
+      digital_art: '数字艺术与沉浸式视觉设计',
+    }
+    return {
+      agentKey: `requirement_${type}`,
+      agentLabel: labels[type] || '需求收集',
+      mode: 'order_create',
+    }
+  }
+  return { agentKey: 'general', agentLabel: '通用问答', mode: null }
+}
+
+export const createAiChatSessionFromRemote = (
+  remote: AiChatRemoteSession,
+  messages: any[] = [],
+): AiChatSavedSession => {
+  const normalizedMessages = messages
+    .filter(message => message?.role === 'user' || message?.role === 'assistant')
+    .map(message => ({
+      client_message_id: message.client_message_id || message.clientMessageId,
+      role: message.role,
+      content: message.content || '',
+      timestamp: formatRemoteMessageTime(message.timestamp),
+      attachments: message.metadata?.attachments || undefined,
+    }))
+
+  const updatedAt = remote.updatedAt ? Date.parse(remote.updatedAt) : Date.now()
+  const meta = getAiChatAgentMeta(remote.sessionType, remote.businessType)
+
+  return {
+    id: remote.id,
+    title: remote.title || makeAiChatSessionTitle(normalizedMessages),
+    messages: normalizedMessages,
+    mode: meta.mode,
+    agentKey: meta.agentKey,
+    agentLabel: meta.agentLabel,
+    sessionType: remote.sessionType || 'general',
+    businessType: remote.businessType || 'ai_3d_custom',
+    stateSnapshot: null,
+    updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now(),
+    savedAt: new Date(Number.isFinite(updatedAt) ? updatedAt : Date.now()).toLocaleString('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }),
+  }
 }
 
 export const loadAiChatSessions = (userId?: string): AiChatSavedSession[] => {
@@ -62,7 +147,11 @@ export const loadAiChatSessions = (userId?: string): AiChatSavedSession[] => {
   }
 }
 
-export const saveAiChatSessions = (userId: string | undefined, sessions: AiChatSavedSession[]) => {
+export const saveAiChatSessions = (
+  userId: string | undefined,
+  sessions: AiChatSavedSession[],
+  notify = true,
+) => {
   const normalized = sessions
     .filter(session => session?.id && Array.isArray(session.messages))
     .map(session => ({
@@ -73,7 +162,9 @@ export const saveAiChatSessions = (userId: string | undefined, sessions: AiChatS
     .sort((a, b) => getSessionSortValue(b) - getSessionSortValue(a))
 
   localStorage.setItem(getAiChatHistoryKey(userId), JSON.stringify(normalized))
-  window.dispatchEvent(new CustomEvent(AI_CHAT_HISTORY_EVENT))
+  if (notify) {
+    window.dispatchEvent(new CustomEvent(AI_CHAT_HISTORY_EVENT))
+  }
   return normalized
 }
 

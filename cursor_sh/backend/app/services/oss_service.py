@@ -124,6 +124,19 @@ def download_object_to_file(object_key: str, file_path: str):
             f.write(chunk)
 
 
+def download_object_bytes(object_key: str) -> bytes:
+    """下载 OSS 私有对象并返回 bytes。适合 PDF 这类小型归档文件。"""
+    bucket = _get_bucket()
+    result = bucket.get_object(object_key)
+    chunks = []
+    while True:
+        chunk = result.read(1024 * 1024)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 # ============ 工具方法 ============
 
 def build_object_key(prefix: str, user_id: str, filename: str) -> str:

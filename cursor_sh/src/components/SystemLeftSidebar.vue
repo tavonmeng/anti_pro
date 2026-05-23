@@ -2,7 +2,8 @@
   <div class="system-sidebar" :class="{ 'is-collapsed': uiStore.isSidebarCollapsed }">
     <div class="sidebar-header">
       <div class="logo">
-        <span class="logo-text">欢迎来到Unique Vision<br>AI设计平台</span>
+        <img class="logo-mark" src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
+        <span class="logo-text">欢迎来到Unique Vision 平台</span>
       </div>
     </div>
     
@@ -16,7 +17,7 @@
           @click="navigate('workspace')"
         >
           <el-icon><House /></el-icon>
-          <span v-if="!uiStore.isSidebarCollapsed">Home</span>
+          <span v-if="!uiStore.isSidebarCollapsed">工作台</span>
         </div>
         <div 
           class="nav-item" 
@@ -24,7 +25,7 @@
           @click="navigate('orders')"
         >
           <el-icon><Grid /></el-icon>
-          <span v-if="!uiStore.isSidebarCollapsed">My Orders</span>
+          <span v-if="!uiStore.isSidebarCollapsed">我的订单</span>
         </div>
         <div 
           class="nav-item" 
@@ -32,7 +33,7 @@
           @click="navigate('drafts')"
         >
           <el-icon><EditPen /></el-icon>
-          <span v-if="!uiStore.isSidebarCollapsed">Drafts</span>
+          <span v-if="!uiStore.isSidebarCollapsed">草稿箱</span>
           <el-badge v-if="draftCount > 0 && !uiStore.isSidebarCollapsed" :value="draftCount" :max="99" class="draft-nav-badge" />
         </div>
         
@@ -56,7 +57,7 @@
                   {{ getStatusText(order.status) }}
                 </div>
               </div>
-              <button class="card-action-btn" type="button" @click.stop="goToOrder(order)">View order</button>
+              <button class="card-action-btn" type="button" @click.stop="goToOrder(order)">查看订单</button>
             </div>
 
             <!-- Pagination dots over stack -->
@@ -102,7 +103,7 @@
               <el-icon class="announcement-icon-btn" :class="{ 'is-unread': hasUnread }">
                 <ChatDotRound />
               </el-icon>
-              <span v-if="!uiStore.isSidebarCollapsed" :class="{ 'text-unread': hasUnread }">Announcements</span>
+              <span v-if="!uiStore.isSidebarCollapsed" :class="{ 'text-unread': hasUnread }">公告</span>
             </div>
           </template>
         </SystemAnnouncement>
@@ -114,13 +115,13 @@
               <el-badge :value="unreadCount" :max="99" :hidden="!unreadCount || unreadCount === 0">
                 <el-icon><Bell /></el-icon>
               </el-badge>
-              <span v-if="!uiStore.isSidebarCollapsed">Notifications</span>
+              <span v-if="!uiStore.isSidebarCollapsed">通知</span>
             </div>
           </template>
         </NotificationBell>
         <div class="nav-item" @click="showHelp">
           <el-icon><Help /></el-icon>
-          <span v-if="!uiStore.isSidebarCollapsed">Help</span>
+          <span v-if="!uiStore.isSidebarCollapsed">帮助</span>
         </div>
         <div class="nav-item" @click="navigate('profile')" style="margin-top: 8px;">
           <div class="avatar-wrap" style="width: 16px; display: flex; justify-content: center; align-items: center; position: relative;">
@@ -399,7 +400,19 @@ const handleLogout = async () => {
 }
 
 .system-sidebar.is-collapsed .sidebar-header {
-  display: none; /* Hide header completely to pull icons up */
+  display: flex;
+  padding: 0;
+  margin-bottom: 24px;
+}
+
+.system-sidebar.is-collapsed .logo {
+  width: 100%;
+  gap: 0;
+}
+
+.system-sidebar.is-collapsed .logo-mark {
+  width: 26px;
+  height: 44px;
 }
 
 
@@ -423,6 +436,20 @@ const handleLogout = async () => {
   justify-content: center;
   align-items: center;
   text-align: center;
+}
+
+.logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo-mark {
+  width: 26px;
+  height: 44px;
+  display: block;
+  object-fit: contain;
 }
 
 .logo-text {
@@ -586,6 +613,10 @@ const handleLogout = async () => {
   font-weight: 600;
   cursor: pointer;
   margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
   transition: transform 0.15s ease, background 0.2s ease;
 }
 
@@ -689,10 +720,13 @@ const handleLogout = async () => {
   color: #fff;
   border: none;
   border-radius: 6px;
-  padding: 8px 0;
-  font-size: 13px;
-  font-weight: 500;
+  padding: 6px 0;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: opacity 0.2s;
 }
 

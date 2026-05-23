@@ -2,10 +2,7 @@
   <div class="top-navbar">
     <div class="nav-left">
       <div class="logo">
-        <svg viewBox="0 0 100 100" class="logo-svg">
-          <circle cx="50" cy="50" r="45" fill="none" stroke="#1D1D1F" stroke-width="2" />
-          <path d="M 30 50 L 45 65 L 70 35" fill="none" stroke="#1D1D1F" stroke-width="3" />
-        </svg>
+        <img class="logo-svg" src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
         <span class="logo-text">Unique Vision AI</span>
       </div>
       <el-menu
@@ -120,8 +117,11 @@ const handleCommand = async (command: string) => {
   margin-right: 48px;
   
   .logo-svg {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 38px;
+    display: block;
+    flex-shrink: 0;
+    object-fit: contain;
   }
   
   .logo-text {

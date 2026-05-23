@@ -11,6 +11,7 @@
     <div class="confirmation-letter">
       <!-- 正式信函头部 -->
       <div class="letter-header">
+        <img class="letter-logo" src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
         <div class="letter-stamp">订单需求确认函</div>
         <div class="letter-number">编号：{{ orderNumber }}</div>
       </div>
@@ -433,6 +434,14 @@ watch(visible, (val) => {
 .letter-header {
   text-align: center;
   margin-bottom: 24px;
+}
+
+.letter-logo {
+  width: 32px;
+  height: 56px;
+  display: block;
+  object-fit: contain;
+  margin: 0 auto 12px;
 }
 
 .letter-stamp {

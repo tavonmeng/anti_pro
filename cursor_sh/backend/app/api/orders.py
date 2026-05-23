@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List, Union
 import io
+from urllib.parse import quote
 
 from app.database import get_db
 from app.models.order import OrderType, OrderStatus
@@ -277,20 +278,20 @@ async def download_confirmation_pdf(
 ):
     """下载订单需求确认函 PDF（用户可用）"""
     try:
-        order = await OrderService.get_order_detail(db, order_id, current_user)
-        
-        # 确保 orderData 字段存在（从 order_data 合并到响应中）
-        order_for_pdf = {**order, "orderData": order}
-        
-        pdf_bytes = PDFService.generate_order_confirmation_pdf(order_for_pdf)
-        
-        filename = f"confirmation_{order.get('orderNumber', order_id)}.pdf"
+        pdf_bytes, filename = await OrderService.get_confirmation_pdf_archive(
+            db,
+            order_id,
+            current_user,
+        )
         
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": (
+                    f'attachment; filename="confirmation_{order_id}.pdf"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                ),
                 "Content-Length": str(len(pdf_bytes)),
             }
         )

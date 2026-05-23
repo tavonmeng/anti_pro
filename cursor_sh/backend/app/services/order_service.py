@@ -1,5 +1,6 @@
 """订单服务"""
 
+import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
@@ -97,6 +98,106 @@ class OrderStateMachine:
 
 class OrderService:
     """订单服务类"""
+
+    @staticmethod
+    def _confirmation_pdf_filename(order: Order) -> str:
+        return f"订单需求确认函_{order.order_number}.pdf"
+
+    @staticmethod
+    def _confirmation_pdf_object_key(order: Order) -> str:
+        return f"confirmation_pdfs/{order.user_id}/{order.id}_{order.order_number}.pdf"
+
+    @staticmethod
+    def _confirmation_pdf_local_path(order: Order) -> str:
+        return os.path.join(
+            settings.UPLOAD_DIR,
+            "confirmation_pdfs",
+            order.user_id,
+            f"{order.id}_{order.order_number}.pdf",
+        )
+
+    @staticmethod
+    def _get_archived_confirmation_meta(order: Order) -> dict:
+        order_data = order.order_data if isinstance(order.order_data, dict) else {}
+        return order_data.get("confirmationPdf") or {}
+
+    @staticmethod
+    async def _ensure_confirmation_pdf_archive(
+        db: AsyncSession,
+        order: Order,
+        user: User,
+        order_response: Optional[dict] = None,
+    ) -> tuple[bytes, str]:
+        """确保订单需求确认函只生成并归档一次，后续邮件/下载复用同一文件。"""
+        meta = OrderService._get_archived_confirmation_meta(order)
+        filename = meta.get("filename") or OrderService._confirmation_pdf_filename(order)
+
+        if settings.OSS_ENABLED and meta.get("objectKey"):
+            from app.services.oss_service import download_object_bytes
+            try:
+                return download_object_bytes(meta["objectKey"]), filename
+            except Exception as e:
+                log_business_event(
+                    logger,
+                    "order_confirmation_pdf_archive_read_failed",
+                    level="warning",
+                    order_id=order.id,
+                    order_number=order.order_number,
+                    object_key=meta.get("objectKey", ""),
+                    error=str(e),
+                )
+
+        if not settings.OSS_ENABLED and meta.get("filePath") and os.path.exists(meta["filePath"]):
+            with open(meta["filePath"], "rb") as f:
+                return f.read(), filename
+
+        if order_response is None:
+            order_response = await OrderService._build_order_response(db, order, user)
+
+        pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response)
+        archived_at = datetime.now(timezone.utc).isoformat()
+
+        if settings.OSS_ENABLED:
+            from app.services.oss_service import upload_bytes
+            object_key = OrderService._confirmation_pdf_object_key(order)
+            upload_bytes(pdf_bytes, object_key, "application/pdf")
+            confirmation_meta = {
+                "storage": "oss",
+                "objectKey": object_key,
+                "filename": filename,
+                "contentType": "application/pdf",
+                "size": len(pdf_bytes),
+                "archivedAt": archived_at,
+            }
+        else:
+            file_path = OrderService._confirmation_pdf_local_path(order)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "wb") as f:
+                f.write(pdf_bytes)
+            confirmation_meta = {
+                "storage": "local",
+                "filePath": file_path,
+                "filename": filename,
+                "contentType": "application/pdf",
+                "size": len(pdf_bytes),
+                "archivedAt": archived_at,
+            }
+
+        next_order_data = dict(order.order_data or {})
+        next_order_data["confirmationPdf"] = confirmation_meta
+        order.order_data = next_order_data
+        await db.commit()
+        await db.refresh(order)
+        log_business_event(
+            logger,
+            "order_confirmation_pdf_archived",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            storage=confirmation_meta["storage"],
+            object_key=confirmation_meta.get("objectKey", ""),
+        )
+        return pdf_bytes, filename
 
     @staticmethod
     def _enterprise_status_value(user: AnyUser) -> str:
@@ -220,7 +321,12 @@ class OrderService:
         # 如果不是草稿（直接提交），生成 PDF 并发邮件
         if not is_draft:
             if user.email:
-                pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response)
+                pdf_bytes, _ = await OrderService._ensure_confirmation_pdf_archive(
+                    db,
+                    new_order,
+                    user,
+                    order_response,
+                )
                 await EmailService.send_order_confirmation(
                     user.email,
                     new_order.order_number,
@@ -479,6 +585,32 @@ class OrderService:
                 raise HTTPException(status_code=403, detail="无权查看此订单")
         
         return await OrderService._build_order_response(db, order, current_user)
+
+    @staticmethod
+    async def get_confirmation_pdf_archive(
+        db: AsyncSession,
+        order_id: str,
+        current_user: AnyUser,
+    ) -> tuple[bytes, str]:
+        """获取订单需求确认函归档文件；旧订单没有归档时补生成一次。"""
+        order_response = await OrderService.get_order_detail(db, order_id, current_user)
+
+        result = await db.execute(select(Order).where(Order.id == order_id))
+        order = result.scalar_one_or_none()
+        if not order:
+            raise HTTPException(status_code=404, detail="订单不存在")
+
+        user_result = await db.execute(select(User).where(User.id == order.user_id))
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=404, detail="订单用户不存在")
+
+        return await OrderService._ensure_confirmation_pdf_archive(
+            db,
+            order,
+            user,
+            order_response,
+        )
     
     @staticmethod
     async def update_order_status(
@@ -565,9 +697,14 @@ class OrderService:
         user = user_result.scalar_one_or_none()
         if user and user.email:
             if is_draft_submit:
-                # 生成订单需求确认函 PDF 并作为附件发送
+                # 生成并归档订单需求确认函 PDF，邮件和后续下载复用同一份文件
                 order_response_for_pdf = await OrderService._build_order_response(db, order, user)
-                pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response_for_pdf)
+                pdf_bytes, _ = await OrderService._ensure_confirmation_pdf_archive(
+                    db,
+                    order,
+                    user,
+                    order_response_for_pdf,
+                )
                 await EmailService.send_order_confirmation(
                     user.email,
                     order.order_number,

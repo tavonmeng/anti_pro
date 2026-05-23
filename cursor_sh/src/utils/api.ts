@@ -785,7 +785,10 @@ export const orderApi = {
     const a = document.createElement('a')
     a.href = url
     const disposition = response.headers.get('Content-Disposition')
-    const filename = disposition?.match(/filename="(.+)"/)?.[1] || `confirmation_${orderId}.pdf`
+    const utf8Filename = disposition?.match(/filename\*=UTF-8''([^;]+)/)?.[1]
+    const filename = utf8Filename
+      ? decodeURIComponent(utf8Filename)
+      : disposition?.match(/filename="(.+)"/)?.[1] || `confirmation_${orderId}.pdf`
     a.download = filename
     document.body.appendChild(a)
     a.click()

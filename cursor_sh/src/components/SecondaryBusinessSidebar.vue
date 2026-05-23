@@ -1,9 +1,6 @@
 <template>
   <div class="secondary-sidebar">
-    <div class="secondary-header">
-      <h3>业务菜单</h3>
-    </div>
-    <div class="module-list">
+    <div class="module-list top-module-list">
       <!-- AI Agent Entry (Banner Style) -->
       <div
         class="ai-agent-banner"
@@ -20,32 +17,36 @@
           <div class="ai-mock-btn">发送 ✨</div>
         </div>
       </div>
+    </div>
 
-      <div v-if="recentSessions.length > 0" class="recent-chat-section">
-        <div class="recent-chat-header">
-          <span>最近对话</span>
-          <button v-if="recentSessions.length > 4" class="recent-chat-toggle" @click.stop="showAllChats = !showAllChats">
-            {{ showAllChats ? '收起' : '更多' }}
+    <template v-if="recentSessions.length > 0">
+      <div class="figma-full-divider compact-divider"></div>
+      <div class="module-list recent-module-list">
+        <div class="recent-chat-section">
+          <div class="recent-chat-header">
+            <span>最近对话</span>
+            <button v-if="recentSessions.length > 4" class="recent-chat-toggle" @click.stop="showAllChats = !showAllChats">
+              {{ showAllChats ? '收起' : '更多' }}
+            </button>
+          </div>
+          <button
+            v-for="session in visibleRecentSessions"
+            :key="session.id"
+            class="recent-chat-item"
+            :class="{ 'is-active': session.id === uiStore.activeAIChatSessionId }"
+            @click.stop="openChatSession(session.id)"
+          >
+            <span class="recent-chat-title">{{ session.title || '新的对话' }}</span>
+            <span class="recent-chat-meta">{{ session.agentLabel || 'AI 对话' }}</span>
           </button>
         </div>
-        <button
-          v-for="session in visibleRecentSessions"
-          :key="session.id"
-          class="recent-chat-item"
-          :class="{ 'is-active': session.id === uiStore.activeAIChatSessionId }"
-          @click.stop="openChatSession(session.id)"
-        >
-          <span class="recent-chat-title">{{ session.title || '新的对话' }}</span>
-          <span class="recent-chat-meta">{{ session.agentLabel || 'AI 对话' }}</span>
-        </button>
       </div>
-    </div>
+    </template>
 
     <!-- 贯穿首尾的无空隙分割线 -->
     <div class="figma-full-divider"></div>
 
-    <div class="module-list" style="margin-top: 16px;">
-
+    <div class="module-list service-module-list">
       <div
         v-for="service in platformServices"
         :key="service.type"
@@ -88,7 +89,16 @@ import { useUiStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { logger } from '@/utils/logger'
-import { AI_CHAT_HISTORY_EVENT, loadAiChatSessions, type AiChatSavedSession } from '@/utils/aiChatSessions'
+import { chatHistoryApi } from '@/utils/api'
+import {
+  AI_CHAT_HISTORY_EVENT,
+  createAiChatSessionFromRemote,
+  getSessionSortValue,
+  loadAiChatSessions,
+  saveAiChatSessions,
+  type AiChatSavedSession,
+  type AiChatRemoteSession,
+} from '@/utils/aiChatSessions'
 import { isOrderableServiceType, platformServices, type ServiceType } from '@/data/platformServices'
 
 const router = useRouter()
@@ -103,8 +113,58 @@ const visibleRecentSessions = computed(() => {
   return showAllChats.value ? recentSessions.value : recentSessions.value.slice(0, 4)
 })
 
-const loadRecentSessions = () => {
-  recentSessions.value = loadAiChatSessions(authStore.user?.id || 'anonymous')
+const mergeRemoteSessions = (localSessions: AiChatSavedSession[], remoteSessions: AiChatSavedSession[]) => {
+  const byId = new Map<string, AiChatSavedSession>()
+  localSessions.forEach(session => byId.set(session.id, session))
+
+  remoteSessions.forEach(remote => {
+    const local = byId.get(remote.id)
+    if (!local) {
+      byId.set(remote.id, remote)
+      return
+    }
+
+    const localUpdated = getSessionSortValue(local)
+    const remoteUpdated = getSessionSortValue(remote)
+    byId.set(remote.id, remoteUpdated >= localUpdated
+      ? { ...local, ...remote, stateSnapshot: local.stateSnapshot || remote.stateSnapshot }
+      : local
+    )
+  })
+
+  return [...byId.values()].sort((a, b) => getSessionSortValue(b) - getSessionSortValue(a))
+}
+
+const fetchRemoteRecentSessions = async () => {
+  if (!localStorage.getItem('token')) return []
+  const summaries = await chatHistoryApi.getSessions(30) as AiChatRemoteSession[]
+  if (!Array.isArray(summaries) || summaries.length === 0) return []
+
+  const sessions = await Promise.all(summaries.map(async summary => {
+    try {
+      const messages = await chatHistoryApi.getSessionMessages(summary.id)
+      return createAiChatSessionFromRemote(summary, Array.isArray(messages) ? messages : [])
+    } catch (error) {
+      console.warn('[ChatHistory] 拉取历史消息失败:', summary.id, error)
+      return createAiChatSessionFromRemote(summary, [])
+    }
+  }))
+  return sessions.filter(session => session.messages.length > 0)
+}
+
+const loadRecentSessions = async () => {
+  const userId = authStore.user?.id || 'anonymous'
+  const localSessions = loadAiChatSessions(userId)
+  recentSessions.value = localSessions
+
+  try {
+    const remoteSessions = await fetchRemoteRecentSessions()
+    if (remoteSessions.length === 0) return
+    const merged = mergeRemoteSessions(localSessions, remoteSessions).slice(0, 30)
+    recentSessions.value = saveAiChatSessions(userId, merged, false)
+  } catch (error) {
+    console.warn('[ChatHistory] 拉取后端历史失败:', error)
+  }
 }
 
 const openChatSession = async (sessionId: string) => {
@@ -175,19 +235,6 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
   }
 }
 
-.secondary-header {
-  padding: 0 16px;
-  margin-bottom: 24px;
-}
-
-.secondary-header h3 {
-  font-size: 14px;
-  font-weight: 500;
-  color: #1b1b1c;
-  margin: 0;
-  letter-spacing: 0.5px;
-}
-
 .module-list {
   display: flex;
   flex-direction: column;
@@ -202,6 +249,10 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
   opacity: 0.08; /* Strict black and white system */
   margin: 12px 0 0 0;
   flex-shrink: 0;
+}
+
+.compact-divider {
+  margin-top: 8px;
 }
 
 /* AI Agent Banner Style */
@@ -233,6 +284,7 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
   color: #1b1b1c;
   margin: 0 0 12px 0;
   letter-spacing: -0.01em;
+  text-align: center;
 }
 
 .ai-banner-input-mock {
@@ -272,8 +324,11 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
 
 .recent-chat-section {
   margin: 8px 4px 0;
-  padding: 8px 0 4px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 0 0 4px;
+}
+
+.service-module-list {
+  margin-top: 16px;
 }
 
 .recent-chat-header {

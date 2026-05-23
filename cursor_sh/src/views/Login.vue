@@ -5,6 +5,7 @@
     <div class="login-wrapper">
       <div>
         <div class="login-header">
+          <img class="auth-logo" src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
           <h1 class="login-title">Unique Vision 系统</h1>
         </div>
 
@@ -480,6 +481,14 @@ const goToRegister = () => {
 .login-header {
   text-align: center;
   margin-bottom: 24px;
+}
+
+.auth-logo {
+  width: 42px;
+  height: 72px;
+  display: block;
+  object-fit: contain;
+  margin: 0 auto 12px;
 }
 
 .login-title {
