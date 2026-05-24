@@ -124,9 +124,6 @@
               <div class="assistant-wrapper">
                 <div class="assistant-tag"><span class="engine-name">智能引擎</span></div>
                 <div class="message-bubble glass-ai">
-                  <div v-if="index > 0 && msg.role === 'assistant' && !msg.isPurchasePrompt" class="reasoning-mock">
-                    <span class="reasoning-text">思考过程 <el-icon><Right /></el-icon></span>
-                  </div>
                   <p class="bubble-text" v-html="highlightSearch(displayContent(msg.content))"></p>
                   <!-- Special button for 'purchase' mode in the AI msg -->
                   <div v-if="msg.isPurchasePrompt" class="message-actions">
@@ -1756,50 +1753,43 @@ const formatOrderDate = (dateStr: string) => {
   return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-// 从业务介绍切换到下单 Agent
-const switchToOrderCreate = (type: string = 'ai_3d_custom', requirementSummary: string = '') => {
+const activateOrderCreateFromGuide = (type: string = 'ai_3d_custom', requirementSummary: string = '') => {
   businessType.value = type
   selectedMode.value = 'order_create'
   emit('mode-change', 'order_create')
 
-  const typeLabels: Record<string, string> = {
-    ai_3d_custom: 'AI驱动3D OOH内容定制',
-    video_purchase: '3D OOH数字内容资源库',
-    digital_art: '数字艺术与沉浸式视觉设计',
-    motion_content: '广告视觉与动态影像制作',
-    media_post_production: '户外媒体后期制作服务',
-    campaign_analytics: '广告投放分析与效果报告',
-  }
-  const label = typeLabels[type] || typeLabels.ai_3d_custom
-
-  let openingMsg = ''
   if (requirementSummary) {
-    // 有需求摘要：带上客户已描述的信息
-    openingMsg = `好的，根据您的描述，我为您匹配的是「${label}」服务。\n\n您已提到的需求：${requirementSummary}\n\n让我来帮您进一步完善剩余信息。`
-    // 将摘要信息也作为一条用户消息插入，让需求收集 agent 知道上下文
     messages.value.push({
       role: 'user',
       content: `[用户在业务咨询时描述的需求：${requirementSummary}]`,
       timestamp: getCurrentTime(),
-      isContextCarryOver: true  // 标记为上下文携带，不是用户真正输入
+      isContextCarryOver: true
     })
-  } else {
-    const openings: Record<string, string> = {
-      ai_3d_custom: isMediaMode
-        ? `好的，我来协助您完成这次项目的需求梳理。\n\n我们大致会从基础信息、创意方向、技术与交付三个环节来聊。我先了解一下整体想法，后面再逐步补齐点位、屏幕规格和交付要求；暂时不确定的内容也可以先跳过。\n\n您可以先说说这次大概想做什么内容，或者希望这块屏达到什么效果。`
-        : `好的，我们进入${label}的需求梳理环节。\n\n我们先从基础信息开始：这次项目是哪个品牌或产品？`,
-      video_purchase: `好的，我们进入${label}的需求梳理环节。\n\n首先想确认一下：您的品牌名称是什么？这样我们可以在成片上做对应的品牌元素适配。`,
-      digital_art: `好的，我们进入${label}的需求梳理环节。\n\n首先想了解一下：这次项目的品牌或活动名称是什么？`,
-    }
-    openingMsg = openings[type] || openings.ai_3d_custom
   }
+}
 
-  messages.value.push({
-    role: 'assistant',
-    content: openingMsg,
-    timestamp: getCurrentTime()
-  })
-  scrollToBottom()
+// 从业务介绍切换到下单 Agent。可见话术统一由后端 /ai/start 输出。
+const switchToOrderCreate = async (type: string = 'ai_3d_custom') => {
+  activateOrderCreateFromGuide(type)
+  isLoading.value = true
+  try {
+    const params = new URLSearchParams({
+      session_id: session_id.value,
+      business_type: type,
+    })
+    const response = await fetch(`/ai/start?${params.toString()}`, {
+      headers: getAuthHeaders()
+    })
+    if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
+      throw new Error('API not available')
+    }
+    const result = await response.json()
+    if (result.reply) typewriterEffect(result.reply)
+  } catch (e) {
+    typewriterEffect('已进入需求梳理流程。请先告诉我项目名称。')
+  } finally {
+    isLoading.value = false
+  }
 }
 
 const selectMode = async (mode: string) => {
@@ -1863,7 +1853,7 @@ const selectMode = async (mode: string) => {
       })
       if (!response.ok) throw new Error('intro failed')
       const data = await response.json()
-      const cleanMsg = (data.message || '').replace('【引导下单】', '').trim()
+      const cleanMsg = (data.message || '').replace(/【引导下单(?::[^】]+)?】/g, '').trim()
       typewriterEffect(cleanMsg)
     } catch (e) {
       const fallback = 'Unique Vision AI 提供六大平台服务：\n\n**3D OOH数字内容资源库**\nReady-to-Deploy 3D DOOH Assets：即用型裸眼3D数字内容资产\nScreen-Adaptive Content Packages：多屏适配内容方案\nGlobal Landmark Screen Formats：全球地标大屏内容规格适配\n\n**AI驱动3D OOH内容定制**\nAI-Based Creative Development：AI创意内容开发\nSite-Specific 3D Screen Adaptation：场景化裸眼3D空间适配\nReal-World Playback Simulation：真实环境播放模拟\nEnd-to-End DOOH Content Production：一站式DOOH内容制作\n\n**数字艺术与沉浸式视觉设计**\nArt Direction & Visual Design：艺术指导与视觉设计\nVirtual Installation Art：虚拟装置艺术\nImmersive Spatial Visuals：沉浸式空间视觉\nExperimental Digital Art Content：实验性数字艺术内容\n\n**广告视觉与动态影像制作**\nStatic Advertising Visuals：平面广告视觉设计\nTVC Production：TVC广告影片制作\nFOOH Campaign Content：FOOH数字传播内容\nVJ Visual Performance Content：VJ视觉演出内容\nMotion Graphic Design：动态视觉设计\n\n**户外媒体后期制作服务**\nHigh-End Retouching：高端精修图像处理\nCinematic Video Finishing：电影级视频精修\nCGI Enhancement：CGI视觉增强\nCommercial Photography & Filming：商业摄影与视频拍摄\nDrone Cinematography：航拍影像制作\n\n**广告投放分析与效果报告**\nDOOH Campaign Analytics：DOOH广告投放数据分析\nAudience Performance Reports：受众效果分析报告\nVisual Impact Assessment：视觉传播效果评估\nDownloadable Data Reports：可下载数据报告系统\n\n如需了解某个板块的详细信息或过往案例，请直接告知。'
@@ -2047,7 +2037,7 @@ const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = fal
     if (data.business_type) businessType.value = data.business_type
     const replyContent = data.message || ''
     // 显示时清洗掉内部标记
-    const cleanMsg = replyContent.replace(/【推荐案例:case_\w+】/g, '').replace('【引导下单】', '').trim()
+    const cleanMsg = replyContent.replace(/【推荐案例:case_\w+】/g, '').replace(/【引导下单(?::[^】]+)?】/g, '').trim()
     const cases = data.cases || []
     
     typewriterEffect(cleanMsg, () => {
@@ -2075,16 +2065,14 @@ const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = fal
       const guide = data.guide || {}
       if (guide.should_guide) {
         if (guide.business_type && guide.requirement_summary) {
-          // 有明确业务类型和需求摘要：直接跳转并携带上下文
-          switchToOrderCreate(guide.business_type, guide.requirement_summary)
+          // 后端已经输出了可见引导语，前端只切换状态并携带隐藏上下文。
+          activateOrderCreateFromGuide(guide.business_type, guide.requirement_summary)
         } else {
-          // 没有明确业务类型：展示三个快速入口供用户选择
-          messages.value.push({
-            role: 'assistant',
-            content: '如您已有初步的项目构想，可以进入需求梳理流程，由我协助您完成订单创建。',
-            isGuideToOrder: true,
-            timestamp: getCurrentTime()
-          })
+          // 后端已经输出了可见引导语，前端只把业务选择按钮挂到同一条消息上。
+          const lastGuideMsg = messages.value[messages.value.length - 1]
+          if (lastGuideMsg && lastGuideMsg.role === 'assistant') {
+            lastGuideMsg.isGuideToOrder = true
+          }
           scrollToBottom()
         }
       }

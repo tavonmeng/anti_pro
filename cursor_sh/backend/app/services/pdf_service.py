@@ -27,6 +27,52 @@ def _get_pdf_logo_path() -> str:
     return os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "official-mark-black.png")
 
 
+def _draw_confirmation_watermark(canvas, doc):
+    """在确认函页面底层绘制左右两侧的低透明度品牌水印。"""
+    logo_path = _get_pdf_logo_path()
+    if not os.path.exists(logo_path):
+        return
+
+    # 避免在不支持透明度的 ReportLab 版本里画出过重的黑色背景。
+    if not hasattr(canvas, "setFillAlpha"):
+        return
+
+    page_width, page_height = A4
+    watermark_height = 340 * mm
+    watermark_width = watermark_height * (466 / 831)
+    watermark_y = (page_height - watermark_height) / 2
+    watermark_alpha = 0.045
+
+    def draw_logo(x: float, flip_vertical: bool = False):
+        canvas.saveState()
+        canvas.setFillAlpha(watermark_alpha)
+        canvas.setStrokeAlpha(watermark_alpha)
+        if flip_vertical:
+            canvas.translate(x, watermark_y + watermark_height)
+            canvas.scale(1, -1)
+            canvas.drawImage(
+                logo_path,
+                0,
+                0,
+                width=watermark_width,
+                height=watermark_height,
+                mask="auto",
+            )
+        else:
+            canvas.drawImage(
+                logo_path,
+                x,
+                watermark_y,
+                width=watermark_width,
+                height=watermark_height,
+                mask="auto",
+            )
+        canvas.restoreState()
+
+    draw_logo(-145 * mm, flip_vertical=True)
+    draw_logo(page_width - 45 * mm, flip_vertical=False)
+
+
 # ========== 中文字体注册 ==========
 
 def _try_register_ttfont(font_path: str, font_name: str = "Chinese") -> bool:
@@ -680,7 +726,11 @@ class PDFService:
         ))
         
         # 构建 PDF
-        doc.build(elements)
+        doc.build(
+            elements,
+            onFirstPage=_draw_confirmation_watermark,
+            onLaterPages=_draw_confirmation_watermark,
+        )
         pdf_bytes = buffer.getvalue()
         buffer.close()
         return pdf_bytes

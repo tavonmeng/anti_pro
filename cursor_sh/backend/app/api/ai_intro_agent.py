@@ -36,6 +36,57 @@ def _detect_consultation_business_type(message: str) -> str | None:
     return None
 
 
+ORDERABLE_BUSINESS_LABELS = {
+    "ai_3d_custom": "AI驱动3D OOH内容定制",
+    "video_purchase": "3D OOH数字内容资源库",
+    "digital_art": "数字艺术与沉浸式视觉设计",
+}
+
+
+def _detect_orderable_business_type(message: str) -> str | None:
+    text = (message or "").strip()
+    if re.search(r"ai.*3d.*定制|3d.*定制|裸眼3d.*定制|ai驱动|ooh.*定制", text, re.I):
+        return "ai_3d_custom"
+    if re.search(r"资源库|素材库|数字内容资源|直接调用|买.*素材|采购.*素材|video_purchase", text, re.I):
+        return "video_purchase"
+    if re.search(r"数字艺术|沉浸式|装置艺术|空间视觉|digital_art", text, re.I):
+        return "digital_art"
+    return None
+
+
+def _is_order_start_intent(message: str) -> bool:
+    text = (message or "").strip()
+    return bool(re.search(r"下单|开始|立项|创建订单|需求梳理|推进|怎么做|怎么开始|报价|周期|合同|付款", text))
+
+
+def _has_order_context(history: list) -> bool:
+    recent = " ".join(
+        str(h.get("content") or "")
+        for h in (history or [])[-6:]
+        if h.get("role") in ["user", "assistant"]
+    )
+    return bool(re.search(r"下单|需求梳理|创建订单|项目构想|开始流程|推进|立项", recent))
+
+
+def _build_order_entry_reply(business_type: str, requirement_summary: str = "") -> str:
+    label = ORDERABLE_BUSINESS_LABELS.get(business_type, ORDERABLE_BUSINESS_LABELS["ai_3d_custom"])
+    summary_line = f"\n\n已记录的信息：{requirement_summary.strip()}" if requirement_summary else ""
+    return (
+        f"好的，已为您匹配「{label}」。"
+        f"{summary_line}\n\n"
+        "接下来我会帮您逐步补齐项目基础信息、创意方向、投放场景和技术交付要求。"
+        "我们先从项目基础信息开始：这次项目对应的品牌或项目名称是什么？"
+    )
+
+
+def _build_order_choice_reply() -> str:
+    return (
+        "可以，我来协助您进入需求梳理流程。\n\n"
+        "请先选择本次项目更接近的业务类型：AI驱动3D OOH内容定制、3D OOH数字内容资源库，"
+        "或数字艺术与沉浸式视觉设计。确认后我会按对应流程继续追问关键需求。"
+    )
+
+
 class BusinessIntroRequest(BaseModel):
     message: str
     history: list = Field(default_factory=list)
@@ -150,9 +201,30 @@ async def ai_business_intro(request: BusinessIntroRequest):
     """业务介绍对话"""
     business_knowledge, cases_data = _load_business_knowledge()
     consultation_type = _detect_consultation_business_type(request.message)
+    orderable_type = _detect_orderable_business_type(request.message)
 
     if consultation_type:
         return {"message": get_consultation_intro(consultation_type), "cases": [], "business_type": consultation_type}
+
+    if orderable_type and (_is_order_start_intent(request.message) or _has_order_context(request.history)):
+        summary = f"意向{ORDERABLE_BUSINESS_LABELS.get(orderable_type, '相关服务')}"
+        return {
+            "message": _build_order_entry_reply(orderable_type, summary),
+            "cases": [],
+            "business_type": orderable_type,
+            "guide": {
+                "should_guide": True,
+                "business_type": orderable_type,
+                "requirement_summary": summary,
+            },
+        }
+
+    if _is_order_start_intent(request.message) and _has_order_context(request.history):
+        return {
+            "message": _build_order_choice_reply(),
+            "cases": [],
+            "guide": {"should_guide": True},
+        }
 
     if not settings.AI_API_KEY:
         msg = request.message.lower()
@@ -330,6 +402,12 @@ async def ai_business_intro(request: BusinessIntroRequest):
                 if guide_match.group(1) and guide_match.group(2):
                     guide_info["business_type"] = guide_match.group(1).strip()
                     guide_info["requirement_summary"] = guide_match.group(2).strip()
+                    reply = _build_order_entry_reply(
+                        guide_info["business_type"],
+                        guide_info["requirement_summary"],
+                    )
+                else:
+                    reply = _build_order_choice_reply()
 
         # 兜底：用户明确问案例但 LLM 完全没输出任何案例信号
         if not all_referenced_cases:

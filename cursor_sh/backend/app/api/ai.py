@@ -446,8 +446,35 @@ async def _finalize_ai_chat_reply(
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.get("/start")
-async def ai_start(session_id: str):
+async def ai_start(session_id: str, business_type: str | None = None):
     """获取对话的初始欢迎语"""
+    if business_type:
+        business_labels = {
+            "ai_3d_custom": "AI驱动3D OOH内容定制",
+            "video_purchase": "3D OOH数字内容资源库",
+            "digital_art": "数字艺术与沉浸式视觉设计",
+        }
+        label = business_labels.get(business_type, business_labels["ai_3d_custom"])
+        if business_type == "video_purchase":
+            reply = (
+                f"好的，我们进入「{label}」需求梳理。\n\n"
+                "我会先确认品牌、内容使用场景、屏幕规格和期望上线时间。"
+                "请先告诉我品牌名称。"
+            )
+        elif business_type == "digital_art":
+            reply = (
+                f"好的，我们进入「{label}」需求梳理。\n\n"
+                "我会先确认项目场景、空间条件、艺术方向和交付要求。"
+                "请先告诉我项目或活动名称。"
+            )
+        else:
+            reply = (
+                f"好的，我们进入「{label}」需求梳理。\n\n"
+                "我会按项目基础信息、创意方向、投放场景和技术交付逐步确认。"
+                "请先告诉我品牌或项目名称。"
+            )
+        return {"reply": reply, "agent_mode": settings.AGENT_MODE, "business_type": business_type}
+
     if settings.AGENT_MODE == "media":
         reply = """您好，我是 Unique Vision AI 的项目顾问。
 
