@@ -34,7 +34,7 @@
               <img src="/landing/icon/Tiktok_icon.svg" alt="TikTok" class="social-img" />
             </a>
             <!-- 邮箱 -->
-            <a href="mailto:service@uniquevisionx.com" class="social-icon" aria-label="邮箱" title="邮箱">
+            <a href="mailto:support@uniquevisionx.com" class="social-icon" aria-label="邮箱" title="邮箱">
               <img src="/landing/icon/email-download-svgrepo-com.svg" alt="邮箱" class="social-img" />
             </a>
             <!-- 微信 -->
@@ -64,10 +64,12 @@
               业务合作
             </h5>
             <ul>
-              <li><a href="#">裸眼3D广告制作</a></li>
-              <li><a href="#">品牌视觉创意</a></li>
-              <li><a href="#">AI驱动内容生成</a></li>
-              <li><a href="#">数字媒体策划</a></li>
+              <li><a href="#intro">3D OOH数字内容资源库</a></li>
+              <li><a href="#intro">AI驱动3D OOH内容定制</a></li>
+              <li><a href="#intro">数字艺术与沉浸式视觉设计</a></li>
+              <li><a href="#intro">广告视觉与动态影像制作</a></li>
+              <li><a href="#intro">户外媒体后期制作服务</a></li>
+              <li><a href="#intro">广告投放分析与效果报告</a></li>
             </ul>
           </div>
           <div class="nav-col">
@@ -85,11 +87,10 @@
           <div class="nav-col">
             <h5 class="nav-title">
               <span class="nav-dot">■</span>
-              联系我们
+              邮件联系
             </h5>
             <ul>
-              <li><a href="#contact">项目联系</a></li>
-              <li><a href="#">地理位置</a></li>
+              <li><a href="mailto:support@uniquevisionx.com">support@uniquevisionx.com</a></li>
             </ul>
           </div>
         </nav>

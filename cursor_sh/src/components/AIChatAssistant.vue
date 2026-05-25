@@ -124,7 +124,18 @@
               <div class="assistant-wrapper">
                 <div class="assistant-tag"><span class="engine-name">智能引擎</span></div>
                 <div class="message-bubble glass-ai">
-                  <p class="bubble-text" v-html="highlightSearch(displayContent(msg.content))"></p>
+                  <div v-if="isPendingAssistantMessage(msg, index)" class="typing">
+                    <span>智能体思考中</span>
+                    <span class="thinking-ellipsis" aria-hidden="true">
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                    </span>
+                  </div>
+                  <p v-else class="bubble-text" v-html="highlightSearch(displayContent(msg.content))"></p>
                   <!-- Special button for 'purchase' mode in the AI msg -->
                   <div v-if="msg.isPurchasePrompt" class="message-actions">
                     <el-button class="stitch-primary-btn" @click="goToBrowse('video_purchase')">
@@ -279,17 +290,6 @@
                  </span>
                </div>
             </div>
-          </div>
-          <div v-if="isTyping && !isLoading" class="typing-cursor-indicator">
-            <span>智能体思考中</span>
-            <span class="thinking-ellipsis" aria-hidden="true">
-              <span>.</span>
-              <span>.</span>
-              <span>.</span>
-              <span>.</span>
-              <span>.</span>
-              <span>.</span>
-            </span>
           </div>
         </div>
       </div>
@@ -1609,6 +1609,12 @@ const displayContent = (text: string) => {
   return text.replace(/【推荐案例:case_\w+】/g, '').replace(/【引导下单(?::[^】]+)?】/g, '').trim()
 }
 
+const isPendingAssistantMessage = (msg: any, index: number) => {
+  if (!msg || msg.role !== 'assistant') return false
+  if ((msg.content || '').trim()) return false
+  return isTyping.value && index === displayedMessages.value.length - 1
+}
+
 // 高亮搜索关键词
 const highlightSearch = (text: string) => {
   if (!text) return ''
@@ -2556,16 +2562,6 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   border-radius: 2px;
   padding: 0 2px;
 }
-.typing-cursor-indicator {
-  display: inline-flex;
-  align-items: center;
-  margin: -4px 0 0 0;
-  padding-left: 12px;
-  color: rgba(0, 0, 0, 0.4);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
 /* \u9700\u6c42\u6536\u96c6\u5b8c\u6210\u540e\u7684\u5185\u8054\u64cd\u4f5c\u6309\u94ae */
 .completion-actions {
   margin-top: 16px;
