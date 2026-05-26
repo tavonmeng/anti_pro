@@ -19,6 +19,17 @@ from app.models.ai_chat import AIChatSession, AIChatMessage
 from app.models.human_handoff import HumanHandoff
 from app.models.homepage_bar import HomepageBar
 from app.models.customer_document import CustomerDocument, CustomerDocumentExtraction
+from app.models.creative_agent import (
+    CreativeSession,
+    CreativeIdea,
+    CreativeReview,
+    CreativeRun,
+    CreativeRunEvent,
+    CreativeAgentStep,
+    CreativeIteration,
+    CreativeDesignerFeedback,
+    CreativeMemoryEntry,
+)
 
 __all__ = [
     "User", "UserRole",
@@ -36,4 +47,7 @@ __all__ = [
     "AIChatSession", "AIChatMessage", "HumanHandoff",
     "HomepageBar",
     "CustomerDocument", "CustomerDocumentExtraction",
+    "CreativeSession", "CreativeIdea", "CreativeReview", "CreativeRun",
+    "CreativeRunEvent", "CreativeAgentStep", "CreativeIteration",
+    "CreativeDesignerFeedback", "CreativeMemoryEntry",
 ]

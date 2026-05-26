@@ -16,6 +16,7 @@ from app.api import contractor as contractor_api
 from app.api import contractor_admin as contractor_admin_api
 from app.api import workflow_config as workflow_config_api
 from app.api import homepage_bar as homepage_bar_api
+from app.api import creative_agent as creative_agent_api
 from app.middleware.cors import setup_cors
 from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
 from app.middleware.audit_logger import (
@@ -101,6 +102,7 @@ if deploy_mode in ("all", "internal"):
     app.include_router(admin_documents.router, prefix="/api")
     from app.api import human_handoffs
     app.include_router(human_handoffs.router, prefix="/api")
+    app.include_router(creative_agent_api.router, prefix="/api")
 
 # 挂载审计日志中间件（放在路由注册之后，确保能拦截所有请求）
 if settings.LOG_ENABLED:
@@ -165,6 +167,27 @@ async def startup_event():
             await migrate_ai_chat_message_ids()
         except Exception as e:
             print(f"⚠️  AI聊天消息幂等迁移异常（不影响启动）: {e}")
+
+        # 创意 Agent 迭代展示字段迁移（维度分数变化 + Agent 解释）
+        try:
+            from scripts.migrate_creative_agent_iterations import migrate as migrate_creative_agent_iterations
+            await migrate_creative_agent_iterations()
+        except Exception as e:
+            print(f"⚠️  创意Agent迭代字段迁移异常（不影响启动）: {e}")
+
+        # 创意 Agent ReAct 步骤与设计师方向字段迁移
+        try:
+            from scripts.migrate_creative_agent_react import migrate as migrate_creative_agent_react
+            await migrate_creative_agent_react()
+        except Exception as e:
+            print(f"⚠️  创意Agent ReAct字段迁移异常（不影响启动）: {e}")
+
+        # 创意 Agent 设计师反馈表迁移（人类介入后继续迭代）
+        try:
+            from scripts.migrate_creative_designer_feedbacks import migrate as migrate_creative_designer_feedbacks
+            await migrate_creative_designer_feedbacks()
+        except Exception as e:
+            print(f"⚠️  创意Agent设计师反馈表迁移异常（不影响启动）: {e}")
 
         # 初始化审计日志独立数据库（与主库物理隔离）
         await init_audit_db()

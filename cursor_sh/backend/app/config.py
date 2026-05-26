@@ -183,6 +183,19 @@ class Settings(BaseSettings):
     AI_CRAWL_MAX_CONCURRENT: int = 1
     AI_CRAWL_PENDING_TTL_SECONDS: int = 1800
     STARTUP_DB_LOCK_TIMEOUT: int = 60
+
+    # Hermes Agent API Server（创意工作台使用）
+    # 需要在 Hermes 侧启用 API_SERVER_ENABLED=true，并启动 `hermes gateway`。
+    HERMES_AGENT_ENABLED: bool = False
+    HERMES_API_BASE_URL: str = "http://127.0.0.1:8642/v1"
+    HERMES_API_KEY: str = ""
+    HERMES_MODEL_NAME: str = "hermes-agent"
+    HERMES_HTTP_TIMEOUT: float = 180.0
+    HERMES_CREATIVE_PROFILE: str = "creative-orchestrator"
+    HERMES_CREATIVE_SKILLS_DIR: str = "./hermes_skills"
+    HERMES_CREATIVE_REQUIRED_TOOLSETS: str = "skills,delegation,code_execution,memory,session_search"
+    HERMES_CREATIVE_BACKGROUND_TIMEOUT: float = 300.0
+    HERMES_CREATIVE_POLL_INTERVAL: float = 2.0
     
     # 部署模式：all = 全量（开发用）, external = 用户端, internal = 内部系统
     DEPLOYMENT_MODE: str = "all"
