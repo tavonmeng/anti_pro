@@ -67,6 +67,7 @@
         </div>
         <div class="module-intro" v-show="currentModule === service.type">
           <div class="intro-image" :style="{ background: service.gradient }">
+            <img class="intro-img" :src="service.image" :alt="service.title" />
             <div class="badge">{{ getServiceBadgeLabel(service.badge) }}</div>
           </div>
           <div class="intro-subtitle">{{ service.subtitle }}</div>
@@ -490,7 +491,17 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
   padding: 8px;
 }
 
+.intro-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .intro-image .badge {
+  position: relative;
+  z-index: 1;
   background: rgba(0, 112, 235, 0.9);
   color: #fff;
   font-size: 10px;

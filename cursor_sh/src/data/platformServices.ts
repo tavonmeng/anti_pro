@@ -13,6 +13,7 @@ export interface PlatformService {
   description: string
   badge: string
   gradient: string
+  image: string
   features: string[]
   footer: string
   orderable: boolean
@@ -26,6 +27,7 @@ export const platformServices: PlatformService[] = [
     description: '即用型裸眼3D数字内容资产 / 多屏适配内容方案 / 全球地标大屏内容规格适配',
     badge: '01｜3D DOOH Content Library',
     gradient: 'linear-gradient(135deg, #111111 0%, #303842 52%, #5d6f82 100%)',
+    image: '/service-images/1.jpg',
     features: ['即用型裸眼3D数字内容资产', '多屏适配内容方案', '全球地标大屏内容规格适配'],
     footer: 'Ready-to-Deploy 3D DOOH Assets',
     orderable: true
@@ -37,6 +39,7 @@ export const platformServices: PlatformService[] = [
     description: 'AI创意内容开发 / 场景化裸眼3D空间适配 / 真实环境播放模拟 / 一站式DOOH内容制作',
     badge: '02｜AI-Driven 3D DOOH Custom Production',
     gradient: 'linear-gradient(135deg, #0b1f33 0%, #0f5b8f 48%, #3fb8af 100%)',
+    image: '/service-images/2.jpg',
     features: ['AI创意内容开发', '场景化裸眼3D空间适配', '真实环境播放模拟', '一站式DOOH内容制作'],
     footer: 'End-to-End DOOH Content Production',
     orderable: true
@@ -48,6 +51,7 @@ export const platformServices: PlatformService[] = [
     description: '艺术指导与视觉设计 / 虚拟装置艺术 / 沉浸式空间视觉 / 实验性数字艺术内容',
     badge: '03｜Digital Art & Immersive Visual Design',
     gradient: 'linear-gradient(135deg, #32121a 0%, #8b2337 50%, #f0764f 100%)',
+    image: '/service-images/3.jpg',
     features: ['艺术指导与视觉设计', '虚拟装置艺术', '沉浸式空间视觉', '实验性数字艺术内容'],
     footer: 'Experimental Digital Art Content',
     orderable: true
@@ -59,6 +63,7 @@ export const platformServices: PlatformService[] = [
     description: '平面广告视觉设计 / TVC广告影片制作 / FOOH数字传播内容 / VJ视觉演出内容 / 动态视觉设计',
     badge: '04｜Advertising & Motion Content Production',
     gradient: 'linear-gradient(135deg, #17202a 0%, #7d3c98 48%, #f4d03f 100%)',
+    image: '/service-images/4.jpg',
     features: ['平面广告视觉设计', 'TVC广告影片制作', 'FOOH数字传播内容', 'VJ视觉演出内容', '动态视觉设计'],
     footer: 'Motion Graphic Design',
     orderable: false
@@ -70,6 +75,7 @@ export const platformServices: PlatformService[] = [
     description: '高端精修图像处理 / 电影级视频精修 / CGI视觉增强 / 商业摄影与视频拍摄 / 航拍影像制作',
     badge: '05｜Outdoor Media Post-Production Services',
     gradient: 'linear-gradient(135deg, #1c2833 0%, #566573 45%, #d5dbdb 100%)',
+    image: '/service-images/5.jpg',
     features: ['高端精修图像处理', '电影级视频精修', 'CGI视觉增强', '商业摄影与视频拍摄', '航拍影像制作'],
     footer: 'Cinematic Video Finishing',
     orderable: false
@@ -81,6 +87,7 @@ export const platformServices: PlatformService[] = [
     description: 'DOOH广告投放数据分析 / 受众效果分析报告 / 视觉传播效果评估 / 可下载数据报告系统',
     badge: '06｜Campaign Analytics & Performance Reporting',
     gradient: 'linear-gradient(135deg, #102027 0%, #00796b 48%, #cddc39 100%)',
+    image: '/service-images/6.jpg',
     features: ['DOOH广告投放数据分析', '受众效果分析报告', '视觉传播效果评估', '可下载数据报告系统'],
     footer: 'Downloadable Data Reports',
     orderable: false

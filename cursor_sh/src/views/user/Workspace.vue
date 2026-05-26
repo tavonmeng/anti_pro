@@ -44,7 +44,9 @@
               @keydown.space.self.prevent="triggerChoreography(service.type)"
             >
               <div class="card-image-wrapper">
-                <div class="card-img" :style="{ background: service.gradient }"></div>
+                <div class="card-img" :style="{ background: service.gradient }">
+                  <img class="card-image" :src="service.image" :alt="service.title" />
+                </div>
                 <div class="overlay-badge">{{ getServiceBadgeLabel(service.badge) }}</div>
               </div>
               <div class="card-body">
@@ -454,6 +456,13 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 .card-img {
   width: 100%;
   height: 100%;
+}
+
+.card-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .overlay-badge {
