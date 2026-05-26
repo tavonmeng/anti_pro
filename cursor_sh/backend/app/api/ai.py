@@ -493,14 +493,14 @@ async def ai_start(session_id: str, business_type: str | None = None):
         elif business_type == "video_purchase":
             reply = (
                 f"好的，我们进入「{label}」需求梳理。\n\n"
-                "我会先确认品牌、内容使用场景、屏幕规格和期望上线时间。"
-                "请先告诉我品牌名称。"
+                "我会先确认内容偏好、使用场景、屏幕规格和期望上线时间。"
+                "您可以先简单说说，这次想选哪类成片、用在什么场景？"
             )
         elif business_type == "digital_art":
             reply = (
                 f"好的，我们进入「{label}」需求梳理。\n\n"
                 "我会先确认项目场景、空间条件、艺术方向和交付要求。"
-                "请先告诉我项目或活动名称。"
+                "您可以先简单说说，这次活动或空间大概想做什么样的体验？"
             )
         else:
             reply = (

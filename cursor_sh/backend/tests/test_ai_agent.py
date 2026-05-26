@@ -129,6 +129,16 @@ async def test_ai_start_media_ai_3d_custom_uses_opening_question(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_ai_start_orderable_businesses_do_not_force_first_field(monkeypatch):
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+
+    for business_type in ["ai_3d_custom", "video_purchase", "digital_art"]:
+        response = await ai_module.ai_start("test-session", business_type)
+        assert "请先告诉我" not in response["reply"]
+        assert "这次" in response["reply"]
+
+
+@pytest.mark.asyncio
 async def test_ai_chat_handoff_does_not_match_artificial_intelligence(monkeypatch):
     monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "")
     monkeypatch.setattr(ai_module, "_save_session_file", lambda **_: None)

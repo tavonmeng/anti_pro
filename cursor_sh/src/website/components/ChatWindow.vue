@@ -167,7 +167,7 @@ const emit = defineEmits(['close'])
 const isMediaMode = (import.meta.env.VITE_AGENT_MODE || 'brand') === 'media'
 const session_id = ref(Math.random().toString(36).substring(7))
 const messages = ref([
-  { role: 'assistant', content: '您好！我是您的项目需求收集助手。我们将通过对话为您梳理出准确的投放需求表单，请问您的品牌和产品是什么呢？' }
+  { role: 'assistant', content: '您好！我是您的项目需求收集助手。我们将通过对话为您梳理出准确的投放需求表单。您可以先简单说说，这次大概想做什么样的内容？' }
 ])
 const inputMsg = ref('')
 const isLoading = ref(false)

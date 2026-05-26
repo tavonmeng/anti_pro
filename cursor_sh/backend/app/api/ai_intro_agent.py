@@ -71,11 +71,18 @@ def _has_order_context(history: list) -> bool:
 def _build_order_entry_reply(business_type: str, requirement_summary: str = "") -> str:
     label = ORDERABLE_BUSINESS_LABELS.get(business_type, ORDERABLE_BUSINESS_LABELS["ai_3d_custom"])
     summary_line = f"\n\n已记录的信息：{requirement_summary.strip()}" if requirement_summary else ""
+    if business_type == "ai_3d_custom":
+        return (
+            f"好的，已为您匹配「{label}」。"
+            f"{summary_line}\n\n"
+            "接下来我会从基础信息、创意方向、技术与交付几方面帮助您梳理。"
+            "您可以先简单说说，这次大概想做什么样的内容？"
+        )
     return (
         f"好的，已为您匹配「{label}」。"
         f"{summary_line}\n\n"
         "接下来我会帮您逐步补齐项目基础信息、创意方向、投放场景和技术交付要求。"
-        "我们先从项目基础信息开始：这次项目对应的品牌或项目名称是什么？"
+        "您可以先简单说说，这次项目大概想做什么样的内容或体验？"
     )
 
 
