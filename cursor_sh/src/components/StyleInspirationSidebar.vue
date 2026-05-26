@@ -25,12 +25,11 @@
           class="style-card"
           :data-index="index"
         >
-          <div class="style-image" :style="{ background: item.bg }">
-             <span class="style-emoji">{{ item.emoji }}</span>
+          <div class="style-image">
+             <img class="style-img" :src="item.image" :alt="item.title" />
           </div>
           <div class="style-info">
             <h4 class="style-title">{{ item.title }}</h4>
-            <p class="style-desc">{{ item.description }}</p>
           </div>
         </div>
       </transition-group>
@@ -44,14 +43,23 @@ import gsap from 'gsap'
 
 const emit = defineEmits(['close'])
 
-const styleMaterials = [
-  { id: 1, emoji: '🌆', title: '赛博朋克霓虹', description: '极具科幻感的都市夜景，以高对比霓虹灯光衬托前卫科技产品。', bg: '#f3f3f4' },
-  { id: 2, emoji: '🏺', title: '极简黏土风', description: '柔和漫反射光照下的纯粹质感，传递婴儿般温润的品牌调性。', bg: '#f3f3f4' },
-  { id: 3, emoji: '💧', title: '液态金属', description: '变幻莫测的流体物理模拟，展现奢侈品或尖端硬件的冷艳高端。', bg: '#f3f3f4' },
-  { id: 4, emoji: '✨', title: '全息数字幻影', description: '未来主义网格粒子特效，携微弱故障艺术提升前卫感。', bg: '#f3f3f4' },
-  { id: 5, emoji: '🌿', title: '超写实微观生态', description: '极大放大的逼真自然生命切片，阳光水珠细节毫毫毕现。', bg: '#f3f3f4' },
-  { id: 6, emoji: '🎨', title: '美漫卡通渲染', description: '粗犷色块与硬朗边线勾勒，将三维转为极具张力的二维视觉。', bg: '#f3f3f4' },
+const inspirationImageFiles = [
+  '风格化设计.jpg',
+  '毛绒质感.jpg',
+  '巨物.jpg',
+  '2D+3D.jpg',
+  '写实风.jpg',
 ]
+
+const getTitleFromFilename = (filename: string) => {
+  return filename.replace(/\.[^.]+$/, '')
+}
+
+const styleMaterials = inspirationImageFiles.map((filename, index) => ({
+  id: index + 1,
+  title: getTitleFromFilename(filename),
+  image: `/inspiration-images/${filename}`,
+}))
 
 const currentIndex = ref(0)
 const progress = ref(0)
@@ -232,13 +240,15 @@ const onLeave = (el: any, done: () => void) => {
 .style-image {
   height: 100px;
   width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: #f3f3f4;
+  overflow: hidden;
 }
 
-.style-emoji {
-  font-size: 32px;
+.style-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .style-info {
@@ -254,13 +264,5 @@ const onLeave = (el: any, done: () => void) => {
   color: #1a1c1c;
   margin: 0;
 }
-
-.style-desc {
-  font-size: 11px;
-  color: #646a78;
-  margin: 0;
-  line-height: 1.4;
-}
-
 
 </style>

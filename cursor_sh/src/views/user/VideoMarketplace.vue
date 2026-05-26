@@ -10,8 +10,14 @@
     <div class="waterfall-container">
       <div v-for="video in videoList" :key="video.id" class="video-card" @click="openModal(video)">
         <div class="video-preview-wrapper">
-          <!-- 默认不播放声音并循环作为预览动画 -->
+          <img
+            v-if="video.image"
+            class="preview-image"
+            :src="video.image"
+            :alt="video.title"
+          />
           <video 
+            v-else-if="video.src"
             class="video-element" 
             :src="video.src" 
             muted 
@@ -22,7 +28,7 @@
           ></video>
           <div class="play-overlay">
             <el-icon class="play-icon"><VideoPlay /></el-icon>
-            <span>点击播放</span>
+            <span>{{ video.image ? '查看详情' : '点击播放' }}</span>
           </div>
         </div>
         
@@ -46,7 +52,14 @@
       class="video-dialog"
     >
       <div class="dialog-content" v-if="activeVideo">
+        <img
+          v-if="activeVideo.image"
+          class="dialog-image"
+          :src="activeVideo.image"
+          :alt="activeVideo.title"
+        />
         <video 
+          v-else-if="activeVideo.src"
           class="dialog-video" 
           :src="activeVideo.src" 
           controls 
@@ -80,17 +93,26 @@ import { VideoPlay, ArrowRight } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const isModalVisible = ref(false)
-const activeVideo = ref<any>(null)
+interface LibraryItem {
+  id: number
+  title: string
+  type: string
+  tag: string
+  desc: string
+  image?: string
+  src?: string
+}
 
-// 模拟视频数据库
-const videoList = ref([
+const activeVideo = ref<LibraryItem | null>(null)
+
+const videoList = ref<LibraryItem[]>([
   { 
     id: 1, 
     title: '赛博朋克深空穿越', 
     type: '科幻奇境', 
     tag: '飞行器穿梭', 
     desc: '极具纵深感的宇宙飞行画面，机械部件极度写实，适合追求震撼冲击力的品牌展示。',
-    src: '/videos/video1.mp4' 
+    image: '/video-library-images/1.png'
   },
   { 
     id: 2, 
@@ -98,7 +120,7 @@ const videoList = ref([
     type: '硬科幻', 
     tag: '机械跃出', 
     desc: '巨型机甲从屏幕深处跳跃而出的裸眼3D大作，强烈的打破屏幕错觉。',
-    src: '/videos/video2.mp4' 
+    image: '/video-library-images/2.jpg'
   },
   { 
     id: 3, 
@@ -106,21 +128,11 @@ const videoList = ref([
     type: '超现实空间', 
     tag: '自然奇观', 
     desc: '数字花卉与晶体融合盛开，色彩艳丽，优雅高级，适合美妆或高端商业综合体宣发。',
-    src: '/videos/video3.mp4' 
-  },
-  { 
-    id: 4, 
-    title: '霓虹暗都异客觉醒', 
-    type: '赛博末世', 
-    tag: '炫彩光影', 
-    desc: '丰富的炫光特效与立体环境构造，光怪陆离的都市倒影极其深邃。',
-    src: '/videos/video4.mp4' 
+    image: '/video-library-images/3.jpg'
   }
 ])
 
-
-
-const openModal = (video: any) => {
+const openModal = (video: LibraryItem) => {
   activeVideo.value = video
   isModalVisible.value = true
 }
@@ -130,7 +142,7 @@ const goToPurchase = () => {
   // 传参可以在query或者仅仅进入填写页
   router.push({
     path: '/user/create-order/video_purchase',
-    query: { selected_id: activeVideo.value.id, title: activeVideo.value.title }
+    query: { selected_id: activeVideo.value?.id, title: activeVideo.value?.title }
   })
 }
 </script>
@@ -216,6 +228,13 @@ const goToPurchase = () => {
   display: block;
 }
 
+.preview-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
 .play-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -292,6 +311,13 @@ const goToPurchase = () => {
 }
 
 .dialog-video {
+  width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  display: block;
+}
+
+.dialog-image {
   width: 100%;
   max-height: 60vh;
   object-fit: contain;
