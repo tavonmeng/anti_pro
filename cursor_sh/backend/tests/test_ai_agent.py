@@ -118,6 +118,17 @@ async def test_ai_chat_handoff_negative_phrase_does_not_trigger(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_ai_start_media_ai_3d_custom_uses_opening_question(monkeypatch):
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+
+    response = await ai_module.ai_start("test-session", "ai_3d_custom")
+
+    assert "这次大概想做什么样的内容" in response["reply"]
+    assert "请先告诉我品牌或项目名称" not in response["reply"]
+    assert "请先告诉我项目名称" not in response["reply"]
+
+
+@pytest.mark.asyncio
 async def test_ai_chat_handoff_does_not_match_artificial_intelligence(monkeypatch):
     monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "")
     monkeypatch.setattr(ai_module, "_save_session_file", lambda **_: None)

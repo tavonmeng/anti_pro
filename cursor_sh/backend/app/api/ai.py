@@ -484,7 +484,13 @@ async def ai_start(session_id: str, business_type: str | None = None):
             "digital_art": "数字艺术与沉浸式视觉设计",
         }
         label = business_labels.get(business_type, business_labels["ai_3d_custom"])
-        if business_type == "video_purchase":
+        if settings.AGENT_MODE == "media" and business_type == "ai_3d_custom":
+            reply = (
+                f"好的，我们进入「{label}」需求梳理。\n\n"
+                "我会从基础信息、创意方向、技术与交付几方面帮助您梳理。"
+                "您可以先简单说说，这次大概想做什么样的内容？"
+            )
+        elif business_type == "video_purchase":
             reply = (
                 f"好的，我们进入「{label}」需求梳理。\n\n"
                 "我会先确认品牌、内容使用场景、屏幕规格和期望上线时间。"
@@ -499,8 +505,8 @@ async def ai_start(session_id: str, business_type: str | None = None):
         else:
             reply = (
                 f"好的，我们进入「{label}」需求梳理。\n\n"
-                "我会按项目基础信息、创意方向、投放场景和技术交付逐步确认。"
-                "请先告诉我品牌或项目名称。"
+                "我会从基础信息、创意方向、技术与交付几方面帮助您梳理。"
+                "您可以先简单说说，这次大概想做什么样的内容？"
             )
         return {"reply": reply, "agent_mode": settings.AGENT_MODE, "business_type": business_type}
 

@@ -1803,7 +1803,7 @@ const switchToOrderCreate = async (type: string = 'ai_3d_custom') => {
     const result = await response.json()
     if (result.reply) typewriterEffect(result.reply)
   } catch (e) {
-    typewriterEffect('已进入需求梳理流程。请先告诉我项目名称。')
+    typewriterEffect('已进入需求梳理流程。我会从基础信息、创意方向、技术与交付几方面帮助您梳理。您可以先简单说说，这次大概想做什么样的内容？')
   } finally {
     isLoading.value = false
   }
