@@ -203,3 +203,70 @@ async def test_media_ai_chat_strips_early_completion_without_upload_wrapup(monke
 
     assert "【需求收集完成】" not in response["message"]
     assert "现场实拍图" in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_stream_qwen_uses_chat_completions_without_responses_probe(monkeypatch):
+    async def _unexpected_responses_stream(*_, **__):
+        raise AssertionError("Qwen stream should not probe the Responses API")
+        yield ""
+
+    async def _mock_chat_stream_events(payload, *, timeout=None):
+        assert payload["model"] == "qwen3.6-plus"
+        assert payload["messages"][-1]["content"] == "我想做一个裸眼3D项目"
+        assert timeout == 120
+        yield {"type": "content", "content": "好的"}
+        yield {"type": "content", "content": "，请问计划投放在哪个城市？"}
+
+    monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "test-key")
+    monkeypatch.setattr(ai_module.settings, "AI_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    monkeypatch.setattr(ai_module.settings, "AI_RESPONSES_BASE_URL", "")
+    monkeypatch.setattr(ai_module.settings, "AI_PREFER_RESPONSES_API", False)
+    monkeypatch.setattr(ai_module.settings, "AI_MODEL_NAME", "qwen3.6-plus")
+    monkeypatch.setattr(ai_module.settings, "AI_HTTP_TIMEOUT", 120)
+    monkeypatch.setattr(ai_module, "stream_responses_completion", _unexpected_responses_stream)
+    monkeypatch.setattr(ai_module, "stream_chat_completion_events", _mock_chat_stream_events)
+    monkeypatch.setattr(ai_module, "_save_session_file", lambda **_: None)
+    monkeypatch.setattr(ai_module, "_append_handoff_message", _no_existing_handoff)
+
+    response = await ai_module.ai_chat_stream(
+        ai_module.ChatRequest(
+            session_id="test-session",
+            message="我想做一个裸眼3D项目",
+            history=[],
+        ),
+        _request_without_auth(),
+    )
+
+    chunks = []
+    async for chunk in response.body_iterator:
+        chunks.append(chunk.decode() if isinstance(chunk, bytes) else chunk)
+    body = "".join(chunks)
+
+    assert "event: delta" in body
+    assert "chat_completions" in body
+    assert "请问计划投放在哪个城市" in body
+
+
+@pytest.mark.asyncio
+async def test_qwen_chat_payload_disables_thinking_by_default(monkeypatch):
+    from app.services import ai_client
+
+    monkeypatch.setattr(ai_client.settings, "AI_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    monkeypatch.setattr(ai_client.settings, "AI_MODEL_NAME", "qwen3.6-plus")
+    monkeypatch.setattr(ai_client.settings, "AI_ENABLE_THINKING", False)
+
+    payload = ai_client._prepare_chat_payload({"model": "qwen3.6-plus", "messages": []})
+
+    assert payload["enable_thinking"] is False
+
+
+def test_design_thinking_only_for_creative_plan_requests():
+    assert ai_module._should_enable_design_thinking("帮我生成一个设计方案")
+    assert ai_module._should_enable_design_thinking("根据上面的信息写一版策划方案")
+    assert ai_module._should_enable_design_thinking("出个创意方案给客户看")
+
+    assert not ai_module._should_enable_design_thinking("这个能不能做")
+    assert not ai_module._should_enable_design_thinking("排期多久")
+    assert not ai_module._should_enable_design_thinking("报价方案大概怎么定")
+    assert not ai_module._should_enable_design_thinking("怎么落地执行")

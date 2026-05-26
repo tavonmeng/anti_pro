@@ -67,7 +67,7 @@
         </div>
         <div class="module-intro" v-show="currentModule === service.type">
           <div class="intro-image" :style="{ background: service.gradient }">
-            <div class="badge">{{ service.badge }}</div>
+            <div class="badge">{{ getServiceBadgeLabel(service.badge) }}</div>
           </div>
           <div class="intro-subtitle">{{ service.subtitle }}</div>
           <p class="intro-desc">
@@ -99,7 +99,7 @@ import {
   type AiChatSavedSession,
   type AiChatRemoteSession,
 } from '@/utils/aiChatSessions'
-import { isOrderableServiceType, platformServices, type ServiceType } from '@/data/platformServices'
+import { getServiceBadgeLabel, isOrderableServiceType, platformServices, type ServiceType } from '@/data/platformServices'
 
 const router = useRouter()
 const uiStore = useUiStore()

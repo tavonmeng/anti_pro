@@ -35,7 +35,7 @@
       />
       <div v-else class="service-inquiry">
         <div class="service-visual" :style="{ background: activeService?.gradient || fallbackGradient }">
-          <span>{{ activeService?.badge || 'Platform Service' }}</span>
+          <span>{{ activeService ? getServiceBadgeLabel(activeService.badge) : 'Platform Service' }}</span>
         </div>
         <div class="service-copy">
           <h2>{{ activeService?.title || '平台服务咨询' }}</h2>
@@ -110,7 +110,8 @@ import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
 import { orderApi } from '@/utils/api'
 import { getLatestEnterpriseStatus, showEnterpriseAuthPrompt } from '@/utils/enterpriseGuard'
-import { getServiceByType, isOrderableServiceType } from '@/data/platformServices'
+import { getServiceBadgeLabel, getServiceByType, isOrderableServiceType } from '@/data/platformServices'
+import { useUiStore } from '@/stores/ui'
 import VideoPurchaseForm from '@/components/VideoPurchaseForm.vue'
 import AI3DCustomForm from '@/components/AI3DCustomForm.vue'
 import DigitalArtForm from '@/components/DigitalArtForm.vue'
@@ -121,6 +122,7 @@ const router = useRouter()
 const route = useRoute()
 const orderStore = useOrderStore()
 const authStore = useAuthStore()
+const uiStore = useUiStore()
 
 const isEditMode = computed(() => route.name === 'EditOrder')
 const orderId = computed(() => isEditMode.value ? route.params.id as string : null)
@@ -322,6 +324,10 @@ const handleSaveDraft = async (formData: any) => {
 }
 
 const goBack = () => {
+  uiStore.setIsAiExpanded(false)
+  uiStore.setSecondarySidebar(false)
+  uiStore.toggleSidebar(false)
+  uiStore.setActiveModule('')
   router.push('/user/workspace')
 }
 </script>

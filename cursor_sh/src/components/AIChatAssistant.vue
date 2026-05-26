@@ -124,7 +124,18 @@
               <div class="assistant-wrapper">
                 <div class="assistant-tag"><span class="engine-name">智能引擎</span></div>
                 <div class="message-bubble glass-ai">
-                  <div v-if="isPendingAssistantMessage(msg, index)" class="typing">
+                  <p v-if="msg.isThinkingStatus" class="bubble-text thinking-status">
+                    <span class="thinking-status-text">{{ displayContent(msg.content) }}</span>
+                    <span class="thinking-ellipsis thinking-status-dots" aria-hidden="true">
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                    </span>
+                  </p>
+                  <div v-else-if="isPendingAssistantMessage(msg, index)" class="typing">
                     <span>智能体思考中</span>
                     <span class="thinking-ellipsis" aria-hidden="true">
                       <span>.</span>
@@ -2260,6 +2271,7 @@ const handleCustomAiChatStream = async (userText: string, userMessageId?: string
   let buffer = ''
   let rawReply = ''
   let sawDelta = false
+  let sawThinking = false
   let finalReceived = false
 
   const dispatchEvent = async (block: string) => {
@@ -2280,7 +2292,20 @@ const handleCustomAiChatStream = async (userText: string, userMessageId?: string
       sawDelta = true
       const msg = messages.value[msgIndex]
       if (msg && msg.role === 'assistant') {
+        msg.isThinkingStatus = false
         msg.content = cleanRequirementReply(rawReply)
+      }
+      scrollToBottom()
+      return
+    }
+
+    if (eventName === 'thinking') {
+      if (sawDelta) return
+      sawThinking = true
+      const msg = messages.value[msgIndex]
+      if (msg && msg.role === 'assistant') {
+        msg.isThinkingStatus = true
+        msg.content = data.label || '正在梳理设计与策划思路，可能需要稍长时间'
       }
       scrollToBottom()
       return
@@ -2290,6 +2315,7 @@ const handleCustomAiChatStream = async (userText: string, userMessageId?: string
       const replyContent = data.message || rawReply
       const msg = messages.value[msgIndex]
       if (msg && msg.role === 'assistant') {
+        msg.isThinkingStatus = false
         msg.content = cleanRequirementReply(replyContent)
       }
       await applyCustomAiChatFinalState(data, replyContent, assistantMessageId)
@@ -2332,7 +2358,7 @@ const handleCustomAiChatStream = async (userText: string, userMessageId?: string
     logger.logAction('AI', 'chat_stream_failed', { mode: selectedMode.value, businessType: businessType.value, sessionId: session_id.value })
     if (!sawDelta) {
       const msg = messages.value[msgIndex]
-      if (msg && msg.role === 'assistant' && !msg.content) {
+      if (msg && msg.role === 'assistant' && (!msg.content || sawThinking)) {
         messages.value.splice(msgIndex, 1)
       }
       return false
@@ -3437,6 +3463,33 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 @keyframes thinking-dot-reveal {
   0%, 72%, 100% { opacity: 0; }
   12%, 60% { opacity: 1; }
+}
+
+.thinking-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.thinking-status-text {
+  color: rgba(0, 0, 0, 0.42);
+  animation: thinking-text-pulse 1.8s ease-in-out infinite;
+}
+
+.thinking-status-dots {
+  color: rgba(0, 0, 0, 0.42);
+}
+
+@keyframes thinking-text-pulse {
+  0%, 100% {
+    color: rgba(0, 0, 0, 0.34);
+  }
+  45% {
+    color: rgba(0, 0, 0, 0.72);
+  }
+  70% {
+    color: rgba(60, 60, 60, 0.52);
+  }
 }
 
 /* Stitch Input Bar styling */

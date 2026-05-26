@@ -16,7 +16,13 @@ import re
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from app.config import settings
-from app.services.ai_client import post_chat_completion, stream_chat_completion, stream_responses_completion
+from app.services.ai_client import (
+    post_chat_completion,
+    should_use_responses_api,
+    stream_chat_completion,
+    stream_chat_completion_events,
+    stream_responses_completion,
+)
 from app.services.platform_service_catalog import (
     get_business_type_label,
     get_consultation_intro,
@@ -348,6 +354,29 @@ def _build_responses_input(messages: list[dict[str, str]]) -> list[dict[str, str
         for item in messages
         if item.get("role") and item.get("content")
     ]
+
+
+def _should_enable_design_thinking(message: str) -> bool:
+    """Only enable Qwen thinking for explicit creative/design plan generation."""
+    text = re.sub(r"\s+", "", (message or "").lower())
+    if not text:
+        return False
+
+    excluded_keywords = [
+        "排期", "报价", "预算", "可行", "能不能做", "能做吗",
+        "怎么落地", "怎么执行", "周期", "多久", "合同",
+    ]
+    if any(keyword in text for keyword in excluded_keywords):
+        return False
+
+    design_plan_keywords = [
+        "设计方案", "策划方案", "创意方案", "视觉方案", "内容方案",
+        "设计提案", "创意提案", "视觉提案", "内容策划",
+        "帮我设计方案", "帮我策划方案", "生成设计", "生成策划",
+        "写个设计方案", "写一版设计方案", "写个策划方案", "写一版策划方案",
+        "出个设计方案", "出个策划方案",
+    ]
+    return any(keyword in text for keyword in design_plan_keywords)
 
 
 async def _finalize_ai_chat_reply(
@@ -892,7 +921,11 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
     try:
         llm_messages = _build_requirement_llm_messages(request, memory_context)
         data = await post_chat_completion(
-            {"model": settings.AI_MODEL_NAME, "messages": llm_messages},
+            {
+                "model": settings.AI_MODEL_NAME,
+                "messages": llm_messages,
+                "enable_thinking": _should_enable_design_thinking(request.message),
+            },
             timeout=settings.AI_HTTP_TIMEOUT,
         )
         reply = data["choices"][0]["message"]["content"]
@@ -1089,40 +1122,65 @@ async def ai_chat_stream(request: ChatRequest, raw_request: Request):
 
     async def event_generator():
         collected: list[str] = []
+        thinking_enabled = _should_enable_design_thinking(request.message)
+        thinking_sent = False
         yield _sse_event("start", {})
         try:
-            provider = "responses"
-            try:
-                async for delta in stream_responses_completion(
+            provider = "chat_completions"
+            if should_use_responses_api():
+                provider = "responses"
+                try:
+                    async for delta in stream_responses_completion(
+                        {
+                            "model": settings.AI_MODEL_NAME,
+                            "input": _build_responses_input(llm_messages),
+                        },
+                        timeout=settings.AI_HTTP_TIMEOUT,
+                    ):
+                        collected.append(delta)
+                        yield _sse_event("delta", {"content": delta, "provider": provider})
+                except HTTPException as responses_error:
+                    if collected:
+                        raise
+                    provider = "chat_completions"
+                    log_business_event(
+                        logger,
+                        "ai_responses_stream_fallback",
+                        level="warning",
+                        user_id=user_id,
+                        username=username,
+                        session_id=request.session_id,
+                        business_type=request.business_type,
+                        fallback_provider=provider,
+                        error=str(responses_error.detail),
+                    )
+
+            if provider == "chat_completions":
+                async for event in stream_chat_completion_events(
                     {
                         "model": settings.AI_MODEL_NAME,
-                        "input": _build_responses_input(llm_messages),
+                        "messages": llm_messages,
+                        "enable_thinking": thinking_enabled,
                     },
                     timeout=settings.AI_HTTP_TIMEOUT,
                 ):
-                    collected.append(delta)
-                    yield _sse_event("delta", {"content": delta, "provider": provider})
-            except HTTPException as responses_error:
-                if collected:
-                    raise
-                provider = "chat_completions"
-                log_business_event(
-                    logger,
-                    "ai_responses_stream_fallback",
-                    level="warning",
-                    user_id=user_id,
-                    username=username,
-                    session_id=request.session_id,
-                    business_type=request.business_type,
-                    fallback_provider=provider,
-                    error=str(responses_error.detail),
-                )
-                async for delta in stream_chat_completion(
-                    {"model": settings.AI_MODEL_NAME, "messages": llm_messages},
-                    timeout=settings.AI_HTTP_TIMEOUT,
-                ):
-                    collected.append(delta)
-                    yield _sse_event("delta", {"content": delta, "provider": provider})
+                    event_type = event.get("type")
+                    if event_type == "reasoning":
+                        if thinking_enabled and not thinking_sent:
+                            thinking_sent = True
+                            yield _sse_event(
+                                "thinking",
+                                {
+                                    "stage": "creative_plan",
+                                    "label": "正在梳理设计与策划思路，可能需要稍长时间",
+                                    "provider": provider,
+                                },
+                            )
+                        continue
+                    delta = event.get("content") or ""
+                    if delta:
+                        collected.append(delta)
+                        yield _sse_event("delta", {"content": delta, "provider": provider})
 
             raw_reply = "".join(collected)
             if not raw_reply.strip():

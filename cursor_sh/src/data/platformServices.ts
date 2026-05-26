@@ -95,6 +95,10 @@ export const getServiceByType = (type: string) => {
   return platformServices.find((service) => service.type === type)
 }
 
+export const getServiceBadgeLabel = (badge: string) => {
+  return badge.replace(/^\d+\s*[｜|]\s*/, '')
+}
+
 export const isOrderableServiceType = (type: string): type is OrderType => {
   return orderableServiceTypes.includes(type as OrderType)
 }

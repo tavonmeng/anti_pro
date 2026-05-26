@@ -177,6 +177,8 @@ class Settings(BaseSettings):
     AI_RESPONSES_BASE_URL: str = ""
     AI_MODEL_NAME: str = "gpt-3.5-turbo"
     AI_HTTP_TIMEOUT: float = 120.0
+    AI_PREFER_RESPONSES_API: bool = False
+    AI_ENABLE_THINKING: bool = False
     AI_MAX_CONCURRENT_REQUESTS: int = 4
     AI_REQUEST_QUEUE_TIMEOUT: float = 5.0
     AI_BACKGROUND_MAX_CONCURRENT: int = 2

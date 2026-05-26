@@ -45,7 +45,7 @@
             >
               <div class="card-image-wrapper">
                 <div class="card-img" :style="{ background: service.gradient }"></div>
-                <div class="overlay-badge">{{ getOverlayTitle(service.badge) }}</div>
+                <div class="overlay-badge">{{ getServiceBadgeLabel(service.badge) }}</div>
               </div>
               <div class="card-body">
                 <h3 class="service-title">{{ service.title }}</h3>
@@ -87,7 +87,7 @@ import { useRouter } from 'vue-router'
 import { Right } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { useUiStore } from '@/stores/ui'
-import { platformServices, type ServiceType } from '@/data/platformServices'
+import { getServiceBadgeLabel, platformServices, type ServiceType } from '@/data/platformServices'
 import AIChatAssistant from '@/components/AIChatAssistant.vue'
 import StyleInspirationSidebar from '@/components/StyleInspirationSidebar.vue'
 import { logger } from '@/utils/logger'
@@ -191,10 +191,6 @@ const handleModeChange = (mode: string) => {
   aiSelectedMode.value = mode
   uiStore.setActiveModule(mode)
   logger.logAction('Workspace', 'switch_ai_mode', { mode })
-}
-
-const getOverlayTitle = (badge: string) => {
-  return badge.replace(/^\d+\s*[｜|]\s*/, '')
 }
 
 const triggerChoreography = async (targetType: ServiceType | null) => {
