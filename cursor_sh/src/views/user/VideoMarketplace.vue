@@ -243,7 +243,7 @@ const goToPurchase = () => {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  color: #fff;
+  color: var(--uv-ws-action-button-bg, #A0522D);
   opacity: 0;
   transition: opacity 0.3s;
   pointer-events: none; /* 让 hover 事件作用到底部 video */
@@ -270,9 +270,9 @@ const goToPurchase = () => {
 }
 
 .cat-tag {
-  background: #f0f4ff;
-  border-color: #d6e2ff;
-  color: #2F54EB;
+  background: var(--uv-ws-module-active-bg, #F3E7E1);
+  border-color: rgba(160, 82, 45, 0.24);
+  color: var(--uv-ws-action-button-bg, #A0522D);
 }
 
 .style-tag {

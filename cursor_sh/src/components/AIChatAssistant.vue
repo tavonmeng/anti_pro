@@ -5,7 +5,7 @@
       <!-- Stitch Header -->
       <header class="stitch-header">
         <div class="header-left">
-          <h2 class="font-headline">AI智能体帮你理清思路</h2>
+          <h2 class="font-headline">Unique Vision 智能体为您服务</h2>
         </div>
         
         <!-- Fused Search Bar -->
@@ -2637,13 +2637,13 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   background: var(--uv-ws-module-active-bg, rgba(160, 82, 45, 0.08));
 }
 .comp-btn-primary {
-  background: var(--uv-ws-ai-chat-button-bg, #666666);
-  border: 1px solid var(--uv-ws-ai-chat-button-bg, #666666);
+  background: var(--uv-ws-ai-chat-button-bg, #A0522D);
+  border: 1px solid var(--uv-ws-ai-chat-button-bg, #A0522D);
   color: #fff;
 }
 .comp-btn-primary:hover {
-  background: var(--uv-ws-ai-chat-button-hover, #555555);
-  border-color: var(--uv-ws-ai-chat-button-hover, #555555);
+  background: var(--uv-ws-ai-chat-button-hover, #8F4527);
+  border-color: var(--uv-ws-ai-chat-button-hover, #8F4527);
 }
 
 /* === Main Layout === */
@@ -2985,7 +2985,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .new-session-btn {
-  background: var(--uv-ws-ai-chat-button-bg, #666666);
+  background: var(--uv-ws-ai-chat-button-bg, #A0522D);
   color: #ffffff;
   padding: 6px 14px;
   border-radius: 9999px;
@@ -3000,7 +3000,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .new-session-btn:hover {
-  background: var(--uv-ws-ai-chat-button-hover, #555555);
+  background: var(--uv-ws-ai-chat-button-hover, #8F4527);
   transform: scale(0.98);
 }
 
@@ -3205,12 +3205,12 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .inline-edit-btn.primary {
-  background: var(--uv-ws-ai-chat-button-bg, #666666);
+  background: var(--uv-ws-send-button-bg, #666666);
   color: #ffffff;
 }
 
 .inline-edit-btn.primary:hover {
-  background: var(--uv-ws-ai-chat-button-hover, #555555);
+  background: var(--uv-ws-send-button-hover, #555555);
 }
 
 .message-attachment-grid {
@@ -3644,7 +3644,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .stitch-send-btn {
-  background: var(--uv-ws-ai-chat-button-bg, #666666);
+  background: var(--uv-ws-send-button-bg, #666666);
   color: #fff;
   border: none;
   height: 32px; /* Super slim button to allow pill to shrink */
@@ -3667,7 +3667,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .stitch-send-btn:hover {
-  background: var(--uv-ws-ai-chat-button-hover, #555555);
+  background: var(--uv-ws-send-button-hover, #555555);
   transform: scale(0.98);
 }
 
@@ -3955,7 +3955,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 .status-draft { background: #f0f0f5; color: #86868b; }
 .status-pending_assign { background: #fff3e0; color: #e65100; }
 .status-pending_contract { background: #fff8e1; color: #f57f17; }
-.status-in_production { background: #e3f2fd; color: #1565c0; }
+.status-in_production { background: var(--uv-ws-module-active-bg, #F3E7E1); color: var(--uv-ws-action-button-bg, #A0522D); }
 .status-pending_review { background: #fce4ec; color: #c62828; }
 .status-preview_ready { background: #e8f5e9; color: #2e7d32; }
 .status-completed { background: #e8f5e9; color: #1b5e20; }
@@ -3984,7 +3984,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   top: 7px;
   left: 12.5%;
   height: 2px;
-  background: #3b82f6;
+  background: var(--uv-ws-action-button-bg, #A0522D);
   z-index: 1;
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
 }
@@ -4034,7 +4034,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .step-active .step-dot {
-  border-color: #3b82f6;
+  border-color: var(--uv-ws-action-button-bg, #A0522D);
   background: #fff;
 }
 .step-active .step-dot::after {
@@ -4046,10 +4046,10 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #3b82f6;
+  background: var(--uv-ws-action-button-bg, #A0522D);
 }
 .step-active .step-label {
-  color: #3b82f6;
+  color: var(--uv-ws-action-button-bg, #A0522D);
 }
 
 .step-warning .step-dot {
@@ -4135,12 +4135,12 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .view-detail-link {
   font-size: 12px;
-  color: #1565c0;
+  color: var(--uv-ws-action-button-bg, #A0522D);
   font-weight: 500;
 }
 
 .order-card-inline:hover .view-detail-link {
-  color: #0d47a1;
+  color: var(--uv-ws-action-button-hover, #8F4527);
 }
 
 .status-revision_needed { background: #fff3e0; color: #e65100; }
@@ -4179,9 +4179,9 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   transition: all 0.2s;
 }
 .comp-btn-outline:hover {
-  border-color: #4f46e5;
-  color: #4f46e5;
-  background: rgba(79, 70, 229, 0.04);
+  border-color: var(--uv-ws-action-button-bg, #A0522D);
+  color: var(--uv-ws-action-button-bg, #A0522D);
+  background: var(--uv-ws-module-active-bg, #F3E7E1);
 }
 
 /* ===== 案例视频卡片 ===== */
@@ -4246,8 +4246,8 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   font-size: 10px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: #e3f2fd;
-  color: #1565c0;
+  background: var(--uv-ws-module-active-bg, #F3E7E1);
+  color: var(--uv-ws-action-button-bg, #A0522D);
   font-weight: 500;
 }
 

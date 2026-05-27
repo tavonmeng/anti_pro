@@ -624,12 +624,12 @@ const handleSaveDraft = () => {
 .form-stage-label {
   font-size: 16px;
   font-weight: 700;
-  color: #005ecb;
+  color: var(--uv-ws-action-button-bg, #A0522D);
   text-transform: uppercase;
   letter-spacing: 0.02em;
   margin: 32px 0 18px 0;
   padding-bottom: 10px;
-  border-bottom: 1px solid rgba(0, 94, 203, 0.18);
+  border-bottom: 1px solid rgba(160, 82, 45, 0.22);
 
   &:first-child {
     margin-top: 0;
@@ -701,8 +701,8 @@ const handleSaveDraft = () => {
 }
 
 .btn-primary {
-  background: #000000;
-  color: #ffffff;
+  background: var(--uv-ws-action-button-bg, #A0522D);
+  color: var(--uv-ws-action-button-text, #ffffff);
   border: none;
   padding: 10px 24px;
   border-radius: 9999px;
@@ -714,7 +714,7 @@ const handleSaveDraft = () => {
 }
 
 .btn-primary:hover {
-  opacity: 0.85;
+  background: var(--uv-ws-action-button-hover, #8F4527);
 }
 
 .btn-secondary {
@@ -737,8 +737,8 @@ const handleSaveDraft = () => {
 
 .btn-draft {
   background: transparent;
-  color: #A0522D;
-  border: 1px solid #A0522D;
+  color: var(--uv-ws-action-button-bg, #A0522D);
+  border: 1px solid var(--uv-ws-action-button-bg, #A0522D);
   padding: 10px 24px;
   border-radius: 9999px;
   font-size: 13px;
@@ -749,7 +749,7 @@ const handleSaveDraft = () => {
 }
 
 .btn-draft:hover {
-  background: rgba(0, 113, 227, 0.06);
+  background: var(--uv-ws-module-active-bg, #F3E7E1);
 }
 
 :deep(.el-form-item__label) {

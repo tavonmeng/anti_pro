@@ -1,5 +1,5 @@
 // 全局样式变量
-$primary-color: #007AFF;
+$primary-color: #A0522D;
 $success-color: #34C759;
 $warning-color: #FF9500;
 $danger-color: #FF3B30;
@@ -27,6 +27,16 @@ $spacing-xxl: 48px;
 $shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
 $shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
 $shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+:root {
+  --el-color-primary: var(--uv-ws-action-button-bg, #A0522D);
+  --el-color-primary-dark-2: var(--uv-ws-action-button-hover, #8F4527);
+  --el-color-primary-light-3: var(--uv-ws-module-active-mark, #A0522D);
+  --el-color-primary-light-5: var(--uv-ws-module-active-bg, #F3E7E1);
+  --el-color-primary-light-7: var(--uv-ws-module-active-bg, #F3E7E1);
+  --el-color-primary-light-8: var(--uv-ws-module-active-bg, #F3E7E1);
+  --el-color-primary-light-9: var(--uv-ws-module-active-bg, #F3E7E1);
+}
 
 // 全局样式重置
 * {
@@ -139,4 +149,3 @@ html, body {
 .el-dialog {
   border-radius: $border-radius-lg;
 }
-

@@ -49,7 +49,7 @@
           {{ formatTime(order.createdAt) }}
         </span>
       </div>
-      <el-button type="primary" text @click.stop="emitView">
+      <el-button type="primary" text class="view-detail-btn" @click.stop="emitView">
         查看详情
         <el-icon><ArrowRight /></el-icon>
       </el-button>
@@ -205,6 +205,15 @@ const formatTime = (timeString: string) => {
   align-items: center;
   padding-top: 12px;
   border-top: 1px solid #E8E8ED;
+}
+
+.view-detail-btn {
+  color: var(--uv-ws-action-button-bg, #A0522D) !important;
+
+  &:hover,
+  &:focus {
+    color: var(--uv-ws-action-button-hover, #8F4527) !important;
+  }
 }
 
 .order-meta {

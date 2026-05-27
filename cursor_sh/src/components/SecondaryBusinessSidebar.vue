@@ -11,7 +11,7 @@
         @keydown.enter.self.prevent="goToService('ai_agent')"
         @keydown.space.self.prevent="goToService('ai_agent')"
       >
-        <h4 class="ai-banner-title">✨您的7×24小时AI创意合伙人</h4>
+        <h4 class="ai-banner-title">您的7×24小时AI创意合伙人</h4>
         <div class="ai-banner-input-mock">
           <span class="ai-mock-placeholder">有什么想法...</span>
           <div class="ai-mock-btn">发送 <span class="ai-mock-dot" aria-hidden="true"></span></div>
@@ -311,7 +311,7 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
 }
 
 .ai-mock-btn {
-  background: var(--uv-ws-send-button-bg, #f3f3f4);
+  background: var(--uv-ws-send-button-bg, #666666);
   color: var(--uv-ws-send-button-text, #1b1b1c);
   font-weight: 500;
   padding: 0 12px;

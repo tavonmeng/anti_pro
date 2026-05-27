@@ -253,8 +253,8 @@ const getArtDirectionText = (): string => {
 }
 
 .btn-primary {
-  background: #000000;
-  color: #ffffff;
+  background: var(--uv-ws-action-button-bg, #A0522D);
+  color: var(--uv-ws-action-button-text, #ffffff);
   border: none;
   padding: 10px 24px;
   border-radius: 9999px;
@@ -266,7 +266,7 @@ const getArtDirectionText = (): string => {
 }
 
 .btn-primary:hover {
-  opacity: 0.85;
+  background: var(--uv-ws-action-button-hover, #8F4527);
 }
 
 .btn-secondary {
@@ -289,8 +289,8 @@ const getArtDirectionText = (): string => {
 
 .btn-draft {
   background: transparent;
-  color: #A0522D;
-  border: 1px solid #A0522D;
+  color: var(--uv-ws-action-button-bg, #A0522D);
+  border: 1px solid var(--uv-ws-action-button-bg, #A0522D);
   padding: 10px 24px;
   border-radius: 9999px;
   font-size: 13px;
@@ -301,7 +301,7 @@ const getArtDirectionText = (): string => {
 }
 
 .btn-draft:hover {
-  background: rgba(0, 113, 227, 0.06);
+  background: var(--uv-ws-module-active-bg, #F3E7E1);
 }
 
 :deep(.el-form-item__label) {
@@ -331,8 +331,9 @@ const getArtDirectionText = (): string => {
 }
 
 :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
-  background: #000000;
-  border-color: #000000;
+  background: var(--uv-ws-action-button-bg, #A0522D);
+  border-color: var(--uv-ws-action-button-bg, #A0522D);
+  color: var(--uv-ws-action-button-text, #ffffff);
   box-shadow: none;
 }
 </style>

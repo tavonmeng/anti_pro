@@ -1272,7 +1272,7 @@ export const chatHistoryApi = {
     session_type?: string
     metadata?: any
   }): Promise<any> {
-    return request.post('/ai/chat-history/message', data)
+    return request.post('/ai/chat-history/message', data, { silent: true })
   },
 
   // 批量同步整个会话
@@ -1283,7 +1283,7 @@ export const chatHistoryApi = {
     messages: Array<{ client_message_id?: string; role: string; content: string; timestamp?: string; metadata?: Record<string, any> }>
     replace?: boolean
   }): Promise<any> {
-    return request.post('/ai/chat-history/sync', data)
+    return request.post('/ai/chat-history/sync', data, { silent: true })
   },
 
   // 获取用户的会话列表

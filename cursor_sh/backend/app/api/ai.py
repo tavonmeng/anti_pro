@@ -1531,11 +1531,26 @@ async def _save_to_db(
                     message_count=0,
                 )
                 db.add(session)
-            elif user_id and user_id != "anonymous":
-                if not session.user_id or session.user_id == "anonymous":
-                    session.user_id = user_id
-                if username and (not session.username or session.username == "anonymous"):
-                    session.username = username
+            else:
+                current_user_id = user_id or "anonymous"
+                owner_id = session.user_id or "anonymous"
+                if owner_id != "anonymous" and owner_id != current_user_id:
+                    log_business_event(
+                        logger,
+                        "ai_chat_cross_user_session_write_blocked",
+                        level="warning",
+                        session_id=session_id,
+                        owner_id=owner_id,
+                        user_id=current_user_id,
+                        username=username,
+                        business_type=business_type,
+                    )
+                    return
+                if current_user_id != "anonymous":
+                    if not session.user_id or session.user_id == "anonymous":
+                        session.user_id = current_user_id
+                    if username and (not session.username or session.username == "anonymous"):
+                        session.username = username
 
             existing_ids = set()
             if user_message_id or assistant_message_id:

@@ -652,7 +652,7 @@ const goBack = () => {
       display: flex;
       align-items: center;
       gap: 8px;
-      color: #007AFF;
+      color: var(--uv-ws-action-button-bg, #A0522D);
       text-decoration: none;
       flex: 1;
       
@@ -670,8 +670,8 @@ const goBack = () => {
   .preview-note-content {
     margin-top: 12px;
     padding: 12px;
-    background: #F0F9FF;
-    border-left: 3px solid #007AFF;
+    background: var(--uv-ws-module-active-bg, #F3E7E1);
+    border-left: 3px solid var(--uv-ws-action-button-bg, #A0522D);
     border-radius: 4px;
     
     .note-text {
@@ -692,7 +692,7 @@ const goBack = () => {
 }
 
 .preview-card {
-  border-left: 3px solid #007AFF;
+  border-left: 3px solid var(--uv-ws-action-button-bg, #A0522D);
 }
 
 .feedback-card {
@@ -755,8 +755,8 @@ const goBack = () => {
   
   .dlv-note {
     padding: 10px 12px;
-    background: #F0F9FF;
-    border-left: 3px solid #007AFF;
+    background: var(--uv-ws-module-active-bg, #F3E7E1);
+    border-left: 3px solid var(--uv-ws-action-button-bg, #A0522D);
     border-radius: 4px;
     margin-bottom: 10px;
   }

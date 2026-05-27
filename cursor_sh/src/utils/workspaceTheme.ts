@@ -40,8 +40,8 @@ export const DEFAULT_WORKSPACE_THEME = {
   moduleIntroTitle: '#1F2329',
   moduleIntroText: '#6C707D',
   aiChatAccent: '#A0522D',
-  aiChatButtonBg: '#666666',
-  aiChatButtonHover: '#555555'
+  aiChatButtonBg: '#A0522D',
+  aiChatButtonHover: '#8F4527'
 } as const
 
 export type WorkspaceThemeKey = keyof typeof DEFAULT_WORKSPACE_THEME
@@ -172,6 +172,14 @@ export const applyWorkspaceTheme = (theme: WorkspaceTheme = loadWorkspaceTheme()
   for (const key of Object.keys(THEME_VARIABLES) as WorkspaceThemeKey[]) {
     document.documentElement.style.setProperty(THEME_VARIABLES[key], normalized[key])
   }
+
+  document.documentElement.style.setProperty('--el-color-primary', normalized.actionButtonBg)
+  document.documentElement.style.setProperty('--el-color-primary-dark-2', normalized.actionButtonHover)
+  document.documentElement.style.setProperty('--el-color-primary-light-3', normalized.moduleActiveMark)
+  document.documentElement.style.setProperty('--el-color-primary-light-5', normalized.moduleActiveBg)
+  document.documentElement.style.setProperty('--el-color-primary-light-7', normalized.moduleActiveBg)
+  document.documentElement.style.setProperty('--el-color-primary-light-8', normalized.moduleActiveBg)
+  document.documentElement.style.setProperty('--el-color-primary-light-9', normalized.moduleActiveBg)
 }
 
 export const saveWorkspaceTheme = (theme: WorkspaceTheme) => {

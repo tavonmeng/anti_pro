@@ -35,6 +35,12 @@
       />
       <div v-else class="service-inquiry">
         <div class="service-visual" :style="{ background: activeService?.gradient || fallbackGradient }">
+          <img
+            v-if="activeService?.image"
+            class="service-visual-img"
+            :src="activeService.image"
+            :alt="activeService.title"
+          />
           <span>{{ activeService ? getServiceBadgeLabel(activeService.badge) : 'Platform Service' }}</span>
         </div>
         <div class="service-copy">
@@ -400,6 +406,14 @@ const goBack = () => {
   border-radius: 8px;
   position: relative;
   overflow: hidden;
+}
+
+.service-visual-img {
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  display: block;
+  object-fit: cover;
 }
 
 .service-visual span {

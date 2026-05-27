@@ -318,5 +318,11 @@ const handleSaveDraft = () => {
   border-radius: 8px;
   margin-right: 8px;
 }
-</style>
 
+:deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: var(--uv-ws-action-button-bg, #A0522D);
+  border-color: var(--uv-ws-action-button-bg, #A0522D);
+  color: var(--uv-ws-action-button-text, #ffffff);
+  box-shadow: none;
+}
+</style>

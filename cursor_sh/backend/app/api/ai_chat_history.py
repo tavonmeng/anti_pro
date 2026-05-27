@@ -78,6 +78,15 @@ def _refresh_session_owner(session: AIChatSession, user_id: str, username: str):
             session.username = username
 
 
+def _ensure_session_owner(session: AIChatSession, user_id: str, username: str):
+    """Protect client-generated session IDs from cross-user reuse."""
+    current_user_id = user_id or "anonymous"
+    owner_id = session.user_id or "anonymous"
+    if owner_id != "anonymous" and owner_id != current_user_id:
+        raise HTTPException(status_code=403, detail="无权修改此会话")
+    _refresh_session_owner(session, user_id, username)
+
+
 def _message_pair(message: dict) -> tuple[str, str]:
     return (message.get("role", "user"), message.get("content", ""))
 
@@ -138,7 +147,7 @@ async def save_message(
             )
             db.add(session)
         else:
-            _refresh_session_owner(session, user_id, username)
+            _ensure_session_owner(session, user_id, username)
             session.session_type = data.session_type or session.session_type
             session.business_type = data.business_type or session.business_type
 
@@ -182,6 +191,8 @@ async def save_message(
             await db.rollback()
         return {"code": 200, "message": "ok"}
 
+    except HTTPException:
+        raise
     except Exception as e:
         log_business_event(
             logger,
@@ -212,6 +223,9 @@ async def sync_session(
         )
         session = result.scalar_one_or_none()
 
+        if session:
+            _ensure_session_owner(session, user_id, username)
+
         if data.replace and not data.messages:
             if session:
                 await db.execute(
@@ -239,7 +253,6 @@ async def sync_session(
             db.add(session)
             await db.flush()
         else:
-            _refresh_session_owner(session, user_id, username)
             session.session_type = data.session_type or session.session_type
             session.business_type = data.business_type or session.business_type
 
@@ -318,6 +331,8 @@ async def sync_session(
             await db.rollback()
         return {"code": 200, "message": "ok", "data": {"synced": len(new_messages)}}
 
+    except HTTPException:
+        raise
     except Exception as e:
         log_business_event(
             logger,

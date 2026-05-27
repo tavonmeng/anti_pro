@@ -260,7 +260,7 @@ onUnmounted(() => {
       }
       
       &.unread {
-        background-color: var(--uv-ws-module-active-bg, #F0F9FF);
+        background-color: var(--uv-ws-module-active-bg, #F3E7E1);
       }
       
       .notification-content {

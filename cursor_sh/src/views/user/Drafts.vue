@@ -265,8 +265,8 @@ const goToWorkspace = () => {
   gap: 14px;
 
   &:hover {
-    border-color: rgba(0, 113, 227, 0.3);
-    box-shadow: 0 4px 16px rgba(0, 113, 227, 0.08);
+    border-color: var(--uv-ws-action-button-bg, #A0522D);
+    box-shadow: 0 4px 16px rgba(160, 82, 45, 0.12);
     transform: translateY(-1px);
   }
 }

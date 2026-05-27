@@ -237,7 +237,7 @@ const formatTime = (timeString: string): string => {
 
 .file-icon {
   font-size: 24px;
-  color: #667eea;
+  color: var(--uv-ws-action-button-bg, #A0522D);
   flex-shrink: 0;
 }
 
@@ -283,14 +283,14 @@ const formatTime = (timeString: string): string => {
   transition: all 0.3s ease;
   
   &:hover {
-    border-color: #667eea;
-    background: #FAFAFC;
+    border-color: var(--uv-ws-action-button-bg, #A0522D);
+    background: var(--uv-ws-module-active-bg, #F3E7E1);
   }
 }
 
 :deep(.el-icon--upload) {
   font-size: 48px;
-  color: #667eea;
+  color: var(--uv-ws-action-button-bg, #A0522D);
   margin-bottom: 16px;
 }
 
@@ -299,7 +299,7 @@ const formatTime = (timeString: string): string => {
   color: #1D1D1F;
   
   em {
-    color: #667eea;
+    color: var(--uv-ws-action-button-bg, #A0522D);
     font-style: normal;
   }
 }

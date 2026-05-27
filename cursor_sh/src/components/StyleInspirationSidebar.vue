@@ -24,6 +24,11 @@
           :key="item.id" 
           class="style-card"
           :data-index="index"
+          role="button"
+          tabindex="0"
+          @click="openPreview(item)"
+          @keydown.enter.self.prevent="openPreview(item)"
+          @keydown.space.self.prevent="openPreview(item)"
         >
           <div class="style-image">
              <img class="style-img" :src="item.image" :alt="item.title" />
@@ -34,6 +39,23 @@
         </div>
       </transition-group>
     </div>
+
+    <transition name="preview-fade">
+      <div
+        v-if="previewItem"
+        class="image-preview-overlay"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="previewItem.title"
+        @click.self="closePreview"
+      >
+        <button class="preview-close-btn" type="button" title="关闭" @click="closePreview">×</button>
+        <figure class="preview-figure">
+          <img class="preview-image" :src="previewItem.image" :alt="previewItem.title" @click="closePreview" />
+          <figcaption class="preview-title">{{ previewItem.title }}</figcaption>
+        </figure>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -64,6 +86,7 @@ const styleMaterials = inspirationImageFiles.map((filename, index) => ({
 const currentIndex = ref(0)
 const progress = ref(0)
 const isHovering = ref(false)
+const previewItem = ref<(typeof styleMaterials)[number] | null>(null)
 let progressInterval: any = null
 
 const visibleStyles = computed(() => {
@@ -75,6 +98,16 @@ const visibleStyles = computed(() => {
 
 const nextSlide = () => {
   currentIndex.value = (currentIndex.value + 2) % styleMaterials.length
+}
+
+const openPreview = (item: (typeof styleMaterials)[number]) => {
+  previewItem.value = item
+  isHovering.value = true
+}
+
+const closePreview = () => {
+  previewItem.value = null
+  isHovering.value = false
 }
 
 onMounted(() => {
@@ -263,6 +296,76 @@ const onLeave = (el: any, done: () => void) => {
   font-weight: 500;
   color: #1a1c1c;
   margin: 0;
+}
+
+.image-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  padding: 48px;
+  box-sizing: border-box;
+}
+
+.preview-figure {
+  margin: 0;
+  max-width: min(82vw, 1120px);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: calc(86vh - 44px);
+  object-fit: contain;
+  border-radius: 8px;
+  background: #111;
+  cursor: zoom-out;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
+}
+
+.preview-title {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.preview-close-btn {
+  position: fixed;
+  top: 22px;
+  right: 26px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.42);
+  color: #ffffff;
+  font-size: 24px;
+  line-height: 30px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.preview-close-btn:hover {
+  background: rgba(0, 0, 0, 0.7);
+  border-color: rgba(255, 255, 255, 0.65);
+}
+
+.preview-fade-enter-active,
+.preview-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.preview-fade-enter-from,
+.preview-fade-leave-to {
+  opacity: 0;
 }
 
 </style>
