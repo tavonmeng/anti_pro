@@ -134,13 +134,13 @@ onMounted(() => {
   transition: all 0.3s ease;
   
   &.is-unread {
-    color: #f56c6c; /* 未读时显红色 */
+    color: var(--uv-ws-unread-text, #A0522D);
     animation: heartbeat 2s infinite;
   }
 }
 
 .text-unread {
-  color: #f56c6c;
+  color: var(--uv-ws-unread-text, #A0522D);
   font-weight: 500;
 }
 

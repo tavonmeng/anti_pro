@@ -2630,20 +2630,20 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 .comp-btn-outline {
   background: transparent;
-  border: 1px solid #0071e3;
-  color: #0071e3;
+  border: 1px solid var(--uv-ws-ai-chat-accent, #A0522D);
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
 }
 .comp-btn-outline:hover {
-  background: rgba(0, 113, 227, 0.06);
+  background: var(--uv-ws-module-active-bg, rgba(160, 82, 45, 0.08));
 }
 .comp-btn-primary {
-  background: #0d99ff;
-  border: 1px solid #0d99ff;
+  background: var(--uv-ws-ai-chat-button-bg, #666666);
+  border: 1px solid var(--uv-ws-ai-chat-button-bg, #666666);
   color: #fff;
 }
 .comp-btn-primary:hover {
-  background: #0a8bed;
-  border-color: #0a8bed;
+  background: var(--uv-ws-ai-chat-button-hover, #555555);
+  border-color: var(--uv-ws-ai-chat-button-hover, #555555);
 }
 
 /* === Main Layout === */
@@ -2869,7 +2869,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .preview-msg.assistant .preview-avatar {
-  background: linear-gradient(135deg, #0d99ff, #0a8bed);
+  background: var(--uv-ws-ai-chat-accent, #A0522D);
   color: #fff;
   border: none;
 }
@@ -2950,8 +2950,8 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .history-btn.active {
-  color: #0d99ff;
-  background: rgba(13, 153, 255, 0.08);
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
+  background: var(--uv-ws-module-active-bg, rgba(160, 82, 45, 0.08));
   border-radius: 8px;
 }
 
@@ -2985,7 +2985,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .new-session-btn {
-  background: #0d99ff; /* Figma primary blue */
+  background: var(--uv-ws-ai-chat-button-bg, #666666);
   color: #ffffff;
   padding: 6px 14px;
   border-radius: 9999px;
@@ -3000,7 +3000,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .new-session-btn:hover {
-  background: #0a8bed; /* Slightly darker vivid blue */
+  background: var(--uv-ws-ai-chat-button-hover, #555555);
   transform: scale(0.98);
 }
 
@@ -3205,12 +3205,12 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .inline-edit-btn.primary {
-  background: #0d99ff;
+  background: var(--uv-ws-ai-chat-button-bg, #666666);
   color: #ffffff;
 }
 
 .inline-edit-btn.primary:hover {
-  background: #087bd3;
+  background: var(--uv-ws-ai-chat-button-hover, #555555);
 }
 
 .message-attachment-grid {
@@ -3264,7 +3264,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .user-avatar {
-  background: #0058bc;
+  background: var(--uv-ws-ai-chat-accent, #A0522D);
   color: #fff;
   width: 32px;
   height: 32px;
@@ -3598,7 +3598,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .file-icon-placeholder {
   font-size: 18px;
-  color: #0d99ff;
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
 }
 
 .file-name {
@@ -3610,7 +3610,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .file-status {
   flex: 0 0 auto;
-  color: #0d99ff;
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
   font-size: 11px;
 }
 
@@ -3635,7 +3635,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .file-remove:hover {
-  color: #f56c6c;
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
 }
 
 .right-tools {
@@ -3644,7 +3644,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .stitch-send-btn {
-  background: #0d99ff; /* Same as new session btn */
+  background: var(--uv-ws-ai-chat-button-bg, #666666);
   color: #fff;
   border: none;
   height: 32px; /* Super slim button to allow pill to shrink */
@@ -3667,7 +3667,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .stitch-send-btn:hover {
-  background: #0a8bed;
+  background: var(--uv-ws-ai-chat-button-hover, #555555);
   transform: scale(0.98);
 }
 
@@ -3737,7 +3737,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #0d99ff;
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
   font-size: 13px;
   padding: 12px 0;
 }
@@ -3788,8 +3788,8 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .field-input:focus, .field-textarea:focus {
-  border-color: #0d99ff;
-  box-shadow: 0 0 0 2px rgba(13, 153, 255, 0.1);
+  border-color: var(--uv-ws-ai-chat-accent, #A0522D);
+  box-shadow: 0 0 0 2px rgba(160, 82, 45, 0.12);
 }
 
 .field-input::placeholder, .field-textarea::placeholder {
@@ -3855,8 +3855,8 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #0d99ff;
-  background: rgba(13, 153, 255, 0.08);
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
+  background: var(--uv-ws-module-active-bg, rgba(160, 82, 45, 0.08));
 }
 
 .form-attachment-name {

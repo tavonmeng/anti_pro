@@ -289,8 +289,8 @@ const getArtDirectionText = (): string => {
 
 .btn-draft {
   background: transparent;
-  color: #0071e3;
-  border: 1px solid #0071e3;
+  color: #A0522D;
+  border: 1px solid #A0522D;
   padding: 10px 24px;
   border-radius: 9999px;
   font-size: 13px;
@@ -336,4 +336,3 @@ const getArtDirectionText = (): string => {
   box-shadow: none;
 }
 </style>
-

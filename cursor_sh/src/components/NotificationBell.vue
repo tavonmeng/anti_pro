@@ -212,12 +212,12 @@ onUnmounted(() => {
     transition: color 0.3s;
     
     &:hover {
-      color: #409EFF;
+      color: var(--uv-ws-unread-text, #A0522D);
     }
   }
   
   :deep(.el-badge__content) {
-    background-color: #F56C6C;
+    background-color: var(--uv-ws-notification-badge, #A0522D);
     border: none;
   }
 }
@@ -260,7 +260,7 @@ onUnmounted(() => {
       }
       
       &.unread {
-        background-color: #F0F9FF;
+        background-color: var(--uv-ws-module-active-bg, #F0F9FF);
       }
       
       .notification-content {
@@ -286,7 +286,7 @@ onUnmounted(() => {
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background-color: #409EFF;
+            background-color: var(--uv-ws-notification-badge, #A0522D);
             flex-shrink: 0;
             display: inline-block;
           }
@@ -325,4 +325,3 @@ onUnmounted(() => {
   }
 }
 </style>
-

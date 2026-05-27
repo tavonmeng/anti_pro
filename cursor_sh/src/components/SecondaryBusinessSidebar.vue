@@ -14,7 +14,7 @@
         <h4 class="ai-banner-title">✨您的7×24小时AI创意合伙人</h4>
         <div class="ai-banner-input-mock">
           <span class="ai-mock-placeholder">有什么想法...</span>
-          <div class="ai-mock-btn">发送 ✨</div>
+          <div class="ai-mock-btn">发送 <span class="ai-mock-dot" aria-hidden="true"></span></div>
         </div>
       </div>
     </div>
@@ -307,12 +307,12 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
 
 .ai-mock-placeholder {
   font-size: 12px;
-  color: #a0a4ae;
+  color: var(--uv-ws-ai-agent-placeholder, #a0a4ae);
 }
 
 .ai-mock-btn {
-  background: #f3f3f4; /* Softer background */
-  color: #1b1b1c;
+  background: var(--uv-ws-send-button-bg, #f3f3f4);
+  color: var(--uv-ws-send-button-text, #1b1b1c);
   font-weight: 500;
   padding: 0 12px;
   height: 28px;
@@ -321,6 +321,16 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 5px;
+}
+
+.ai-mock-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--uv-ws-send-dot, #000000);
+  display: inline-block;
+  flex-shrink: 0;
 }
 
 .recent-chat-section {
@@ -339,14 +349,14 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
   justify-content: space-between;
   padding: 0 8px;
   font-size: 11px;
-  color: #7a808a;
+  color: var(--uv-ws-muted-text, #7a808a);
   font-weight: 500;
 }
 
 .recent-chat-toggle {
   border: none;
   background: transparent;
-  color: #0d99ff;
+  color: var(--uv-ws-module-active-mark, #A0522D);
   font-size: 11px;
   padding: 2px 4px;
   cursor: pointer;
@@ -354,7 +364,7 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
 }
 
 .recent-chat-toggle:hover {
-  background: rgba(13, 153, 255, 0.08);
+  background: var(--uv-ws-module-active-bg, rgba(160, 82, 45, 0.08));
 }
 
 .recent-chat-item {
@@ -390,17 +400,17 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
 }
 
 .recent-chat-item.is-active {
-  background: #e5f4ff;
+  background: var(--uv-ws-module-active-bg, rgba(160, 82, 45, 0.12));
 }
 
 .recent-chat-item.is-active::before {
-  background: #0d99ff;
+  background: var(--uv-ws-module-active-mark, #A0522D);
 }
 
 .recent-chat-title {
   font-size: 12px;
   line-height: 16px;
-  color: #25282d;
+  color: var(--uv-ws-page-text, #25282d);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -409,7 +419,7 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
 .recent-chat-meta {
   font-size: 10px;
   line-height: 14px;
-  color: #8a9099;
+  color: var(--uv-ws-muted-text, #8a9099);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -429,7 +439,7 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
-  color: #414754;
+  color: var(--uv-ws-module-title, #414754);
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
@@ -440,12 +450,12 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
 
 .module-pill:hover {
   background: rgba(0, 0, 0, 0.04);
-  color: #1b1b1c;
+  color: var(--uv-ws-page-text, #1b1b1c);
 }
 
 .module-pill.is-active {
-  background: #e5f4ff; /* Figma active item light blue */
-  color: #1a1c1c; /* Text stays dark/black as in Figma */
+  background: var(--uv-ws-module-active-bg, rgba(160, 82, 45, 0.12));
+  color: var(--uv-ws-page-text, #1a1c1c);
   font-weight: 500;
   margin-bottom: 8px; /* space before intro drops down */
 }
@@ -457,7 +467,7 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
 }
 
 .expand-icon.is-active-icon {
-  color: #0d99ff; /* The icon takes the Figma primary blue to pop */
+  color: var(--uv-ws-module-active-mark, #A0522D);
 }
 
 .expand-icon.rotated {
@@ -502,8 +512,8 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
 .intro-image .badge {
   position: relative;
   z-index: 1;
-  background: rgba(0, 112, 235, 0.9);
-  color: #fff;
+  background: var(--uv-ws-service-badge-bg, #000000);
+  color: var(--uv-ws-service-badge-text, #fff);
   font-size: 10px;
   font-weight: 500;
   padding: 4px 8px;
@@ -516,11 +526,11 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
   white-space: nowrap;
 }
 
-.intro-image .badge.creative { background: rgba(0, 112, 235, 0.9); }
-.intro-image .badge.art { background: rgba(0, 112, 235, 0.9); }
+.intro-image .badge.creative { background: var(--uv-ws-service-badge-bg, #000000); }
+.intro-image .badge.art { background: var(--uv-ws-service-badge-bg, #000000); }
 
 .intro-subtitle {
-  color: #1f2329;
+  color: var(--uv-ws-module-intro-title, #1f2329);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.4;
@@ -529,7 +539,7 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
 .intro-desc {
   margin: 0;
   font-size: 12px;
-  color: #6c707d;
+  color: var(--uv-ws-module-intro-text, #6c707d);
   line-height: 1.6;
 }
 
@@ -540,9 +550,9 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
 }
 
 .intro-tags span {
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--uv-ws-service-tag-border, rgba(0, 0, 0, 0.12));
   border-radius: 4px;
-  color: #414754;
+  color: var(--uv-ws-service-tag-text, #414754);
   font-size: 10px;
   line-height: 1;
   padding: 4px 6px;

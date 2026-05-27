@@ -168,6 +168,47 @@
         </div>
       </section>
 
+      <section class="theme-debug-panel">
+        <div class="theme-debug-header">
+          <div>
+            <h3>临时主题调试</h3>
+            <p>仅保存到当前浏览器，用于快速调试 workspace 的模块颜色和字体颜色。</p>
+          </div>
+          <div class="theme-debug-actions">
+            <el-button :icon="RefreshLeft" @click="handleThemeReset">恢复当前默认</el-button>
+            <el-button type="primary" @click="handleThemeApply">应用到 workspace</el-button>
+          </div>
+        </div>
+
+        <div class="theme-group-list">
+          <div v-for="group in themeFieldGroups" :key="group.name" class="theme-group">
+            <div class="theme-group-title">{{ group.name }}</div>
+            <div class="theme-field-grid">
+              <label v-for="field in group.fields" :key="field.key" class="theme-field">
+                <span class="theme-field-label">{{ field.label }}</span>
+                <span class="theme-field-desc">{{ field.description }}</span>
+                <div class="theme-color-row">
+                  <input
+                    class="theme-color-picker"
+                    type="color"
+                    :value="getThemePickerValue(field.key)"
+                    :aria-label="field.label"
+                    @input="handleThemePickerInput(field.key, $event)"
+                  />
+                  <el-input
+                    v-model="themeDraft[field.key]"
+                    class="theme-color-input"
+                    placeholder="#A0522D"
+                    maxlength="7"
+                    :class="{ 'is-invalid': !isThemeColorValid(themeDraft[field.key]) }"
+                  />
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="danger-panel">
         <div>
           <h3>账号操作</h3>
@@ -223,6 +264,16 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { authApi, userApi, enterpriseApi } from '@/utils/api'
+import {
+  DEFAULT_WORKSPACE_THEME,
+  WORKSPACE_THEME_FIELDS,
+  applyWorkspaceTheme,
+  loadWorkspaceTheme,
+  resetWorkspaceTheme,
+  saveWorkspaceTheme,
+  type WorkspaceTheme,
+  type WorkspaceThemeKey
+} from '@/utils/workspaceTheme'
 import type { UploadFile } from 'element-plus'
 
 const router = useRouter()
@@ -240,6 +291,17 @@ const sendingSms = ref(false)
 const changingPhone = ref(false)
 const smsCooldown = ref(0)
 let smsTimer: ReturnType<typeof setInterval> | null = null
+
+const themeDraft = reactive<WorkspaceTheme>({ ...loadWorkspaceTheme() })
+const themeFieldGroups = WORKSPACE_THEME_FIELDS.reduce<Array<{ name: string; fields: typeof WORKSPACE_THEME_FIELDS }>>((groups, field) => {
+  const existing = groups.find(group => group.name === field.group)
+  if (existing) {
+    existing.fields.push(field)
+  } else {
+    groups.push({ name: field.group, fields: [field] })
+  }
+  return groups
+}, [])
 
 const profileForm = reactive({
   username: '',
@@ -301,6 +363,7 @@ const enterpriseHint = computed(() => {
 
 onMounted(async () => {
   syncFormFromUser()
+  applyWorkspaceTheme(themeDraft)
   await refreshEnterpriseStatus()
 })
 
@@ -310,6 +373,35 @@ onUnmounted(() => {
 
 const getUserRealName = () => {
   return authStore.user?.realName || (authStore.user as any)?.real_name || ''
+}
+
+const isThemeColorValid = (value: string) => /^#[0-9a-fA-F]{6}$/.test(value.trim())
+
+const getThemePickerValue = (key: WorkspaceThemeKey) => {
+  return isThemeColorValid(themeDraft[key]) ? themeDraft[key] : DEFAULT_WORKSPACE_THEME[key]
+}
+
+const handleThemePickerInput = (key: WorkspaceThemeKey, event: Event) => {
+  const target = event.target as HTMLInputElement
+  themeDraft[key] = target.value.toUpperCase()
+}
+
+const handleThemeApply = () => {
+  const invalidField = WORKSPACE_THEME_FIELDS.find(field => !isThemeColorValid(themeDraft[field.key]))
+  if (invalidField) {
+    ElMessage.warning(`${invalidField.label} 需要填写 #RRGGBB 格式的色号`)
+    return
+  }
+
+  const savedTheme = saveWorkspaceTheme(themeDraft)
+  Object.assign(themeDraft, savedTheme)
+  ElMessage.success('主题已应用到 workspace')
+}
+
+const handleThemeReset = () => {
+  const defaultTheme = resetWorkspaceTheme()
+  Object.assign(themeDraft, defaultTheme)
+  ElMessage.success('已恢复当前默认主题')
 }
 
 const syncFormFromUser = () => {
@@ -571,6 +663,7 @@ const handleLogout = async () => {
 }
 
 .account-panel,
+.theme-debug-panel,
 .danger-panel {
   background: #ffffff;
   border: 1px solid rgba(27, 27, 28, 0.08);
@@ -597,7 +690,7 @@ const handleLogout = async () => {
 }
 
 .profile-avatar {
-  background: #0058bc;
+  background: #A0522D;
   color: #fff;
   font-size: 24px;
   font-weight: 700;
@@ -701,8 +794,8 @@ const handleLogout = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #eef4ff;
-  color: #0058bc;
+  background: rgba(160, 82, 45, 0.12);
+  color: #A0522D;
   font-size: 20px;
 
   &.is-approved {
@@ -830,6 +923,112 @@ const handleLogout = async () => {
   }
 }
 
+.theme-debug-panel {
+  padding: 20px;
+}
+
+.theme-debug-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+
+  h3 {
+    margin: 0 0 5px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  p {
+    margin: 0;
+    color: #6f737c;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+}
+
+.theme-debug-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.theme-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.theme-group-title {
+  color: #1b1b1c;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.theme-field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.theme-field {
+  min-width: 0;
+  border: 1px solid rgba(27, 27, 28, 0.08);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fafafa;
+}
+
+.theme-field-label,
+.theme-field-desc {
+  display: block;
+}
+
+.theme-field-label {
+  color: #1b1b1c;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+
+.theme-field-desc {
+  min-height: 28px;
+  color: #6f737c;
+  font-size: 11px;
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+
+.theme-color-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.theme-color-picker {
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(27, 27, 28, 0.12);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.theme-color-input {
+  :deep(.el-input__wrapper) {
+    min-height: 32px;
+  }
+
+  &.is-invalid :deep(.el-input__wrapper) {
+    box-shadow: 0 0 0 1px #c84444 inset;
+  }
+}
+
 @media (max-width: 1100px) {
   .identity-strip {
     grid-template-columns: auto minmax(0, 1fr);
@@ -837,6 +1036,10 @@ const handleLogout = async () => {
 
   .account-status {
     grid-column: 1 / -1;
+  }
+
+  .theme-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -860,9 +1063,23 @@ const handleLogout = async () => {
   }
 
   .inline-edit,
-  .danger-panel {
+  .danger-panel,
+  .theme-debug-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .theme-debug-actions {
+    justify-content: stretch;
+
+    :deep(.el-button) {
+      flex: 1;
+      margin-left: 0;
+    }
+  }
+
+  .theme-field-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -461,7 +461,7 @@ watch(visible, (val) => {
     transform: translateX(-50%);
     width: 48px;
     height: 3px;
-    background: #0071e3;
+    background: #A0522D;
     border-radius: 2px;
   }
 }
@@ -508,7 +508,7 @@ watch(visible, (val) => {
   color: #1a1c1c;
   margin-bottom: 16px;
   padding-left: 12px;
-  border-left: 3px solid #0071e3;
+  border-left: 3px solid #A0522D;
 }
 
 // --- 需求摘要表格 ---
@@ -566,8 +566,8 @@ watch(visible, (val) => {
   flex-shrink: 0;
 
   &.start {
-    background: #0071e3;
-    box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.15);
+    background: #A0522D;
+    box-shadow: 0 0 0 4px rgba(160, 82, 45, 0.16);
   }
   &.end {
     background: #34c759;
@@ -578,7 +578,7 @@ watch(visible, (val) => {
 .timeline-line {
   width: 2px;
   height: 24px;
-  background: linear-gradient(to bottom, #0071e3, #34c759);
+  background: linear-gradient(to bottom, #A0522D, #34c759);
   margin-left: 5px;
   margin: 4px 0 4px 5px;
 }
@@ -609,7 +609,7 @@ watch(visible, (val) => {
   text-align: center;
 
   strong {
-    color: #0071e3;
+    color: #A0522D;
   }
 }
 

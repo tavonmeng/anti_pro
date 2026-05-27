@@ -406,9 +406,9 @@ const goBack = () => {
   position: absolute;
   left: 16px;
   bottom: 16px;
-  background: #0070eb;
+  background: var(--uv-ws-service-badge-bg, #000000);
   border-radius: 4px;
-  color: #fff;
+  color: var(--uv-ws-service-badge-text, #fff);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.05em;
@@ -417,7 +417,7 @@ const goBack = () => {
 }
 
 .service-copy h2 {
-  color: #1a1c1c;
+  color: var(--uv-ws-service-title, #1a1c1c);
   font-size: 22px;
   font-weight: 500;
   letter-spacing: -0.01em;
@@ -425,28 +425,28 @@ const goBack = () => {
 }
 
 .service-kicker {
-  color: #414754;
+  color: var(--uv-ws-service-subtitle, #414754);
   font-size: 13px;
   font-weight: 500;
   margin: 0 0 16px 0;
 }
 
 .service-desc {
-  color: #646a78;
+  color: var(--uv-ws-service-intro, #646a78);
   font-size: 14px;
   line-height: 1.7;
   margin: 0 0 14px 0;
 }
 
 .service-support {
-  color: #414754;
+  color: var(--uv-ws-muted-text, #414754);
   font-size: 13px;
   line-height: 1.7;
   margin: 0 0 20px 0;
 }
 
 .service-support a {
-  color: #0d99ff;
+  color: var(--uv-ws-action-button-bg, #A0522D);
   font-weight: 500;
   text-decoration: none;
 }

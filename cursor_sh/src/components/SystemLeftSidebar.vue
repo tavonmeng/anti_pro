@@ -498,7 +498,7 @@ const handleLogout = async () => {
   padding: 0 16px;
   border-radius: 20px;
   cursor: pointer;
-  color: #414754;
+  color: var(--uv-ws-module-title, #414754);
   font-size: 13px;
   font-weight: 500;
   transition: all 0.2s ease;
@@ -511,19 +511,19 @@ const handleLogout = async () => {
 }
 
 .nav-item:hover {
-  background: rgba(234, 231, 231, 0.5); /* surface-container-high hover */
-  color: #1b1b1c;
+  background: var(--uv-ws-sidebar-hover-bg, rgba(234, 231, 231, 0.5));
+  color: var(--uv-ws-page-text, #1b1b1c);
 }
 
 .nav-item.active {
-  background: #ffffff; /* Let the active pill pop via lowest container */
-  color: #0058bc; /* Primary */
+  background: var(--uv-ws-sidebar-active-bg, #ffffff);
+  color: var(--uv-ws-sidebar-active, #A0522D);
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(27, 27, 28, 0.02); /* Subtle shadow for active pill */
 }
 
 .nav-item.active .el-icon {
-  color: #0058bc; /* Primary color when active */
+  color: var(--uv-ws-sidebar-active, #A0522D);
 }
 
 .ongoing-projects-nav {
@@ -567,7 +567,7 @@ const handleLogout = async () => {
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(0,0,0,0.08); /* Distinct circular outline */
-  color: #0d99ff; /* Use primary blue inside the icon circle */
+  color: var(--uv-ws-action-button-bg, #A0522D);
   font-size: 16px;
 }
 
@@ -582,7 +582,7 @@ const handleLogout = async () => {
 .card-title {
   font-size: 12px;
   font-weight: 500;
-  color: #1a1c1c;
+  color: var(--uv-ws-page-text, #1a1c1c);
   width: 100%;
 }
 
@@ -592,20 +592,20 @@ const handleLogout = async () => {
   justify-content: center;
   gap: 6px;
   font-size: 11px;
-  color: #747474;
+  color: var(--uv-ws-muted-text, #747474);
 }
 
 .status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #0071e3; 
+  background: var(--uv-ws-action-button-bg, #A0522D);
 }
 
 .card-action-btn {
   width: 100%;
-  background: #0d99ff; /* Figma blue */
-  color: #ffffff;
+  background: var(--uv-ws-action-button-bg, #A0522D);
+  color: var(--uv-ws-action-button-text, #ffffff);
   border: none;
   padding: 6px 0; /* Flatter button */
   border-radius: 6px;
@@ -621,7 +621,7 @@ const handleLogout = async () => {
 }
 
 .card-action-btn:hover {
-  background: #0a8bed;
+  background: var(--uv-ws-action-button-hover, #8f4527);
   transform: scale(0.98);
 }
 
@@ -709,15 +709,15 @@ const handleLogout = async () => {
 
 .auth-text {
   font-size: 13px;
-  color: #1a1a1a;
+  color: var(--uv-ws-page-text, #1a1a1a);
   line-height: 1.4;
   margin-bottom: 16px;
 }
 
 .auth-btn {
   width: 100%;
-  background: #0d99ff; /* Bright blue */
-  color: #fff;
+  background: var(--uv-ws-action-button-bg, #A0522D);
+  color: var(--uv-ws-action-button-text, #fff);
   border: none;
   border-radius: 6px;
   padding: 6px 0;
@@ -742,6 +742,8 @@ const handleLogout = async () => {
 :deep(.nav-item .el-badge__content.is-fixed) {
   top: 8px;
   right: 14px;
+  background-color: var(--uv-ws-notification-badge, #A0522D) !important;
+  border-color: var(--uv-ws-notification-badge, #A0522D) !important;
 }
 
 :deep(.nav-item .el-badge) {
@@ -753,26 +755,28 @@ const handleLogout = async () => {
 
 .draft-nav-badge {
   margin-left: auto;
-  :deep(.el-badge__content) {
-    font-size: 10px;
-    height: 16px;
-    line-height: 16px;
-    padding: 0 5px;
-    background: #0071e3;
-  }
+}
+
+.draft-nav-badge :deep(.el-badge__content) {
+  font-size: 10px;
+  height: 16px;
+  line-height: 16px;
+  padding: 0 5px;
+  background-color: var(--uv-ws-notification-badge, #A0522D) !important;
+  border-color: var(--uv-ws-notification-badge, #A0522D) !important;
 }
 
 .announcement-icon-btn {
   transition: all 0.3s ease;
   
   &.is-unread {
-    color: #f56c6c !important;
+    color: var(--uv-ws-unread-text, #A0522D) !important;
     animation: heartbeat 2s infinite;
   }
 }
 
 .text-unread {
-  color: #f56c6c;
+  color: var(--uv-ws-unread-text, #A0522D);
   font-weight: 500;
 }
 

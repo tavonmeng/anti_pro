@@ -15,7 +15,7 @@
               <div class="hero-input-area" @click="handleAiExpand(true)">
                 <input type="text" :placeholder="placeholderText" class="hero-input" readonly />
                 <div class="generate-btn">
-                  发送 <span class="sparkle">✨</span>
+                  发送 <span class="sparkle" aria-hidden="true"></span>
                 </div>
               </div>
             </div>
@@ -257,13 +257,13 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
   background: transparent;
   width: 100%;
   font-size: 16px;
-  color: #1b1b1c;
+  color: var(--uv-ws-page-text, #1b1b1c);
   outline: none;
   font-family: inherit;
 }
 
 .search-input::placeholder {
-  color: #a0a4ae;
+  color: var(--uv-ws-ai-agent-placeholder, #a0a4ae);
 }
 
 .workspace-layout {
@@ -333,7 +333,7 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
   font-feature-settings: "kern" 1;
   font-size: 26px;
   font-weight: 500;
-  color: #000000;
+  color: var(--uv-ws-page-text, #000000);
   letter-spacing: -0.26px;
 }
 
@@ -343,7 +343,7 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 
 /* Hero Banner */
 .hero-banner {
-  background: #f0f5fc;
+  background: var(--uv-ws-ai-agent-bg, #E9D5BD);
   border-radius: 16px;
   padding: 32px 40px;
   margin-bottom: 24px;
@@ -364,13 +364,13 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 .hero-title {
   font-size: 24px;
   font-weight: 500;
-  color: #1b1b1c;
+  color: var(--uv-ws-ai-agent-title, #1b1b1c);
   margin: 0 0 24px 0;
   letter-spacing: -0.01em;
 }
 
 .hero-input-area {
-  background: #ffffff;
+  background: var(--uv-ws-ai-agent-input-bg, #ffffff);
   border-radius: 9999px;
   display: flex;
   align-items: center;
@@ -391,19 +391,19 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
   background: transparent;
   flex: 1;
   font-size: 15px;
-  color: #1b1b1c;
+  color: var(--uv-ws-ai-agent-input-text, #1b1b1c);
   outline: none;
   font-family: inherit;
   cursor: pointer;
 }
 
 .hero-input::placeholder {
-  color: #a0a4ae;
+  color: var(--uv-ws-ai-agent-placeholder, #a0a4ae);
 }
 
 .generate-btn {
-  background: #0d99ff; /* Matched to Figma primary blue (View orders color) */
-  color: #fff;
+  background: var(--uv-ws-send-button-bg, #666666);
+  color: var(--uv-ws-send-button-text, #fff);
   font-weight: 500;
   padding: 8px 16px;
   border-radius: 9999px;
@@ -415,8 +415,17 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 }
 
 .generate-btn:hover {
-  background: #0a8bed;
+  background: var(--uv-ws-send-button-hover, #555555);
   transform: scale(0.98);
+}
+
+.sparkle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--uv-ws-send-dot, #000000);
+  display: inline-block;
+  flex-shrink: 0;
 }
 
 .service-cards {
@@ -445,12 +454,12 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
   position: relative;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--uv-ws-service-image-border, rgba(0, 0, 0, 0.08));
   transition: border-color 0.2s ease;
 }
 
 .service-card:hover .card-image-wrapper {
-  border-color: rgba(0, 0, 0, 0.25);
+  border-color: var(--uv-ws-service-image-hover-border, rgba(0, 0, 0, 0.25));
 }
 
 .card-img {
@@ -476,8 +485,8 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
   font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #fff;
-  background: #0070eb;
+  color: var(--uv-ws-service-badge-text, #fff);
+  background: var(--uv-ws-service-badge-bg, #000000);
   width: fit-content;
   max-width: calc(100% - 16px);
   overflow: hidden;
@@ -495,12 +504,12 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 .service-title {
   font-size: 16px;
   font-weight: 500;
-  color: #1b1b1c;
+  color: var(--uv-ws-service-title, #1b1b1c);
   margin: 0 0 6px 0;
 }
 
 .service-subtitle {
-  color: #414754;
+  color: var(--uv-ws-service-subtitle, #414754);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.35;
@@ -509,7 +518,7 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 
 .service-description {
   font-size: 12px;
-  color: #646a78;
+  color: var(--uv-ws-service-intro, #646a78);
   line-height: 1.4;
   margin: 0 0 12px 0;
   flex: 1;
@@ -523,11 +532,11 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 }
 
 .outline-tag {
-  border: 1px solid #c1c6d6;
+  border: 1px solid var(--uv-ws-service-tag-border, #c1c6d6);
   border-radius: 4px;
   padding: 2px 6px;
   font-size: 10px;
-  color: #414754;
+  color: var(--uv-ws-service-tag-text, #414754);
 }
 
 .card-footer {
@@ -540,11 +549,11 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 .price-text {
   font-weight: 500;
   font-size: 13px;
-  color: #0058bc;
+  color: var(--uv-ws-service-footer, #A0522D);
 }
 
 .arrow-right {
-  color: #414754;
+  color: var(--uv-ws-service-arrow, #414754);
   font-size: 18px;
 }
 
@@ -578,7 +587,7 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 .section-title {
   font-size: 18px;
   font-weight: 500;
-  color: #1b1b1c;
+  color: var(--uv-ws-business-title, #1b1b1c);
   margin: 0;
   letter-spacing: -0.01em;
 }
@@ -586,14 +595,14 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 .section-subtitle {
   margin: 0;
   font-size: 12px;
-  color: #646a78;
+  color: var(--uv-ws-business-subtitle, #646a78);
   transition: opacity 0.4s ease;
 }
 
 .figma-divider {
   width: 100%;
   height: 1px;
-  background-color: #e5e5e5;
+  background-color: var(--uv-ws-divider, #e5e5e5);
   margin: 24px 0 32px 0;
 }
 

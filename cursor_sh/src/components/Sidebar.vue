@@ -287,6 +287,8 @@ const handleLogout = async () => {
     height: 16px;
     line-height: 16px;
     padding: 0 5px;
+    background-color: var(--uv-ws-notification-badge, #A0522D) !important;
+    border-color: var(--uv-ws-notification-badge, #A0522D) !important;
   }
 }
 </style>

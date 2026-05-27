@@ -285,7 +285,7 @@ const goToWorkspace = () => {
 
 .type-icon {
   font-size: 16px;
-  color: #0071e3;
+  color: #A0522D;
 }
 
 .type-text {

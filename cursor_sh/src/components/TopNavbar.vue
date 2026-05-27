@@ -148,7 +148,7 @@ const handleCommand = async (command: string) => {
     border-bottom: none;
     
     &.is-active {
-      color: #0058bc; /* Primary */
+      color: var(--uv-ws-sidebar-active, #A0522D);
       background: transparent;
       font-weight: 600;
       position: relative;
@@ -161,7 +161,7 @@ const handleCommand = async (command: string) => {
         right: 20px;
         height: 3px;
         border-radius: 9999px;
-        background: #0058bc;
+        background: var(--uv-ws-sidebar-active, #A0522D);
       }
     }
     
@@ -205,7 +205,7 @@ const handleCommand = async (command: string) => {
 }
 
 .user-avatar {
-  background: #0058bc; /* Primary */
+  background: var(--uv-ws-sidebar-active, #A0522D);
   color: #ffffff;
   font-weight: 600;
   font-size: 16px;
