@@ -1,61 +1,63 @@
 # FastAPI 核心
-fastapi
-uvicorn
-python-multipart
+fastapi==0.115.12
+uvicorn==0.34.2
+gunicorn==23.0.0
+python-multipart==0.0.20
 
 # 数据库
-sqlalchemy
-aiosqlite
-aiomysql
-cryptography
+sqlalchemy==2.0.41
+aiosqlite==0.21.0
+aiomysql==0.2.0
+cryptography==45.0.3
+alembic==1.13.3
 
 # 数据验证
-pydantic
-pydantic-settings
-email-validator
+pydantic==2.11.5
+pydantic-settings==2.9.1
+email-validator==2.2.0
 
 # 认证和安全
-python-jose[cryptography]
-passlib[bcrypt]
-bcrypt<5.0.0
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.3.0
 
 # 文件处理
-aiofiles
-pypdf
-python-docx
-python-pptx
+aiofiles==24.1.0
+pypdf==5.5.0
+python-docx==1.1.2
+python-pptx==1.0.2
 
 # PDF 生成
-reportlab
+reportlab==4.4.1
 
 # 阿里云 OSS (预留)
-oss2
+oss2==2.19.1
 
 # 阿里云号码认证服务（短信验证码）
-alibabacloud_dypnsapi20170525
-alibabacloud_credentials
-alibabacloud_tea_openapi
-alibabacloud_tea_util
+alibabacloud_dypnsapi20170525==2.0.24
+alibabacloud_credentials==0.3.6
+alibabacloud_tea_openapi==0.3.14
+alibabacloud_tea_util==0.3.13
 
 # 邮件
-aiosmtplib
+aiosmtplib==3.0.2
 
 # API 限流
-slowapi
+slowapi==0.1.9
 
 # 工具
-python-dotenv
-loguru
+python-dotenv==1.1.0
+loguru==0.7.3
 
 # 开发工具
-pytest
-pytest-asyncio
-httpx
+pytest==8.3.5
+pytest-asyncio==0.26.0
+httpx==0.28.1
 
 # 公司官网爬取（Agent Memory）
-beautifulsoup4
-lxml
+beautifulsoup4==4.13.4
+lxml==5.4.0
 
 # AI语音实时识别
-websockets
-python-socks[asyncio]
+websockets==15.0.1
+python-socks[asyncio]==2.7.1

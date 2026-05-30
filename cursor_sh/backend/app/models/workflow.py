@@ -1,8 +1,8 @@
 """工作流环节全局配置模型"""
 
 from sqlalchemy import Column, String, Integer, Boolean, DateTime, JSON
-from sqlalchemy.sql import func
 from app.database import Base
+from app.utils.timezone import beijing_now
 
 
 class WorkflowStageConfig(Base):
@@ -20,8 +20,8 @@ class WorkflowStageConfig(Base):
     # 审核项列表，如: ["内容安全合规性","风格与品牌调性一致","技术规格达标","无版权/商标侵权风险"]
     review_items = Column(JSON, nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
+    updated_at = Column(DateTime(timezone=True), default=beijing_now, onupdate=beijing_now)
 
     def __repr__(self):
         return f"<WorkflowStageConfig(id={self.id}, name={self.name}, days={self.default_days})>"

@@ -4,6 +4,9 @@
 通过 .env 中的 DB_TYPE 或 DATABASE_URL 进行切换。
 """
 
+from pathlib import Path
+
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base
 
@@ -16,6 +19,18 @@ except ImportError:
         return sessionmaker(*args, **kwargs)
 
 from app.config import settings
+
+
+def _required_alembic_heads() -> set[str]:
+    """Return migration heads from the local Alembic script directory."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    backend_dir = Path(__file__).resolve().parents[1]
+    alembic_cfg = Config(str(backend_dir / "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", str(backend_dir / "alembic"))
+    script = ScriptDirectory.from_config(alembic_cfg)
+    return set(script.get_heads())
 
 
 def _create_engine():
@@ -40,6 +55,7 @@ def _create_engine():
             # pool_pre_ping: 每次从池中取连接前先 ping 一下
             # 防止 RDS 在空闲超时后关闭连接导致 "MySQL server has gone away"
             pool_pre_ping=settings.DB_POOL_PRE_PING,
+            connect_args={"init_command": "SET time_zone = '+08:00'"},
         )
     else:
         # ====== SQLite 模式（开发/测试）======
@@ -75,8 +91,44 @@ async def get_db() -> AsyncSession:
 
 async def init_db():
     """初始化数据库（创建所有表）"""
+    import app.models  # noqa: F401 - ensure all models are registered
+
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        if settings.is_production and not settings.AUTO_CREATE_TABLES:
+            required_heads = _required_alembic_heads()
+
+            def _schema_state(sync_conn):
+                existing = set(inspect(sync_conn).get_table_names())
+                expected = set(Base.metadata.tables.keys())
+                versions = set()
+                if "alembic_version" in existing:
+                    rows = sync_conn.execute(text("SELECT version_num FROM alembic_version")).fetchall()
+                    versions = {row[0] for row in rows}
+                return {
+                    "missing_tables": sorted(expected - existing),
+                    "versions": versions,
+                    "has_version_table": "alembic_version" in existing,
+                }
+
+            schema_state = await conn.run_sync(_schema_state)
+            missing_tables = schema_state["missing_tables"]
+            if missing_tables:
+                preview = ", ".join(missing_tables[:10])
+                more = "..." if len(missing_tables) > 10 else ""
+                raise RuntimeError(
+                    "数据库 schema 未完成迁移，请先运行 `alembic upgrade head`；缺失表: %s%s"
+                    % (preview, more)
+                )
+            if not schema_state["has_version_table"]:
+                raise RuntimeError("数据库缺少 alembic_version 表，请先运行 `alembic upgrade head` 或在确认结构一致后执行 `alembic stamp head`")
+            missing_heads = sorted(required_heads - schema_state["versions"])
+            if missing_heads:
+                raise RuntimeError(
+                    "数据库 Alembic 版本不是最新，请先运行 `alembic upgrade head`；缺失版本: %s"
+                    % ", ".join(missing_heads)
+                )
+        else:
+            await conn.run_sync(Base.metadata.create_all)
     
     # 打印当前数据库模式
     db_type = "MySQL (RDS)" if settings.is_mysql else "SQLite"

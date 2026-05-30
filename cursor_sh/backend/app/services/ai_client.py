@@ -9,9 +9,12 @@ import httpx
 from fastapi import HTTPException
 
 from app.config import settings
+from app.utils.log_setup import get_module_logger
+from app.utils.retry import retry_async
 
 
 _ai_semaphore: asyncio.Semaphore | None = None
+logger = get_module_logger("ai")
 
 
 def _get_ai_semaphore() -> asyncio.Semaphore:
@@ -52,6 +55,15 @@ def _prepare_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return provider_payload
 
 
+def _is_retryable_ai_exception(exc: BaseException) -> bool:
+    if isinstance(exc, httpx.TimeoutException):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code if exc.response is not None else 502
+        return status_code in (408, 429) or status_code >= 500
+    return isinstance(exc, httpx.HTTPError)
+
+
 def _extract_response_completed_text(response_payload: dict[str, Any]) -> str:
     output = response_payload.get("output") or []
     parts: list[str] = []
@@ -87,18 +99,32 @@ async def post_chat_completion(
         raise HTTPException(status_code=429, detail="AI 请求繁忙，请稍后再试")
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{settings.AI_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.AI_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json=_prepare_chat_payload(payload),
-                timeout=timeout if timeout is not None else settings.AI_HTTP_TIMEOUT,
-            )
-            response.raise_for_status()
-            return response.json()
+        async def _call_provider() -> dict[str, Any]:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{settings.AI_BASE_URL}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {settings.AI_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json=_prepare_chat_payload(payload),
+                    timeout=timeout if timeout is not None else settings.AI_HTTP_TIMEOUT,
+                )
+                response.raise_for_status()
+                return response.json()
+
+        return await retry_async(
+            _call_provider,
+            logger=logger,
+            event="ai_chat_completion_provider_call",
+            attempts=settings.AI_RETRY_ATTEMPTS,
+            fields={
+                "model": payload.get("model") or settings.AI_MODEL_NAME,
+                "base_url": settings.AI_BASE_URL,
+                "message_count": len(payload.get("messages") or []),
+            },
+            should_retry=_is_retryable_ai_exception,
+        )
     except HTTPException:
         raise
     except httpx.TimeoutException:

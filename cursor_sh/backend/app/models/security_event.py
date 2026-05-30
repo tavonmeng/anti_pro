@@ -1,9 +1,9 @@
 """安全事件模型 — 记录注册/登录等关键操作的行为数据，用于反灰产分析"""
 
 from sqlalchemy import Column, String, DateTime, Integer, Float, Text, JSON, Enum
-from sqlalchemy.sql import func
 import enum
 from app.database import Base
+from app.utils.timezone import beijing_now
 
 
 class SecurityEventType(str, enum.Enum):
@@ -64,7 +64,7 @@ class SecurityEvent(Base):
     # 失败原因（仅 fail 事件）
     fail_reason = Column(String(200))
     
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at = Column(DateTime(timezone=True), default=beijing_now, index=True)
     
     def __repr__(self):
         return f"<SecurityEvent(id={self.id}, type={self.event_type}, ip={self.client_ip}, phone={self.phone})>"

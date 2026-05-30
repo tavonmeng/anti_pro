@@ -75,6 +75,7 @@ import { useOrderStore } from '@/stores/order'
 import { useUiStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { ensureEnterpriseApproved } from '@/utils/enterpriseGuard'
+import { formatServerMonthDayTime } from '@/utils/time'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 import type { Order } from '@/types'
 
@@ -105,17 +106,7 @@ onActivated(() => {
 })
 
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  const date = new Date(timeString)
-  if (isNaN(date.getTime())) return timeString
-  return date.toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
+  return formatServerMonthDayTime(timeString)
 }
 
 const resetNavigationLayout = () => {

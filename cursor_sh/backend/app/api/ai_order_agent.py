@@ -14,6 +14,7 @@ from app.services.ai_client import post_chat_completion
 from app.utils.security import decode_access_token
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_now, ensure_beijing
 
 order_router = APIRouter()
 logger = get_module_logger("ai")
@@ -234,7 +235,7 @@ def _filter_orders_by_time(user_msg: str, orders: list) -> list:
     
     示例：'上个月的订单'、'最近一周下的单'、'这个月的'
     """
-    now = datetime.now()
+    now = beijing_now()
     start_date = None
 
     if "上个月" in user_msg:
@@ -272,7 +273,7 @@ def _filter_orders_by_time(user_msg: str, orders: list) -> list:
         if not created:
             continue
         try:
-            order_date = datetime.fromisoformat(created.replace("Z", "+00:00")).replace(tzinfo=None)
+            order_date = ensure_beijing(datetime.fromisoformat(created.replace("Z", "+00:00")))
             if start_date <= order_date < end_date:
                 matched.append(o)
         except (ValueError, TypeError):

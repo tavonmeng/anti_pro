@@ -9,13 +9,22 @@ OSS_ENABLED=False 时回退到本地磁盘存储（开发环境）。
 import os
 import uuid
 from typing import Optional
-from datetime import datetime
 import aiofiles
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import settings
+from app.database import get_db
+from app.models.contractor import Contractor
+from app.models.contractor_assignment import ContractorAssignment
+from app.models.contractor_deliverable import ContractorDeliverable
+from app.models.order import Order, OrderAssignee
+from app.models.user import User, UserRole
 from app.utils.business_log import log_business_event
+from app.utils.dependencies import AnyUser, get_current_user_for_public_deployment, require_internal_deployment
 from app.utils.log_setup import get_module_logger
-from app.utils.security import decode_access_token
+from app.utils.timezone import beijing_now, beijing_now_iso
 
 router = APIRouter(prefix="/upload", tags=["文件上传"])
 logger = get_module_logger("order")
@@ -30,7 +39,7 @@ def _safe_filename(filename: str | None, fallback: str) -> str:
 
 
 def _local_safe_name(filename: str) -> str:
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    timestamp = beijing_now().strftime("%Y%m%d_%H%M%S_%f")
     return "%s_%s_%s" % (timestamp, uuid.uuid4().hex[:8], filename)
 
 
@@ -82,14 +91,112 @@ def _cleanup_temp_file(tmp_path: str):
         pass
 
 
-def _get_user_id_from_request(request: Request) -> str:
-    """从请求头中尽量提取用户ID，失败返回 anonymous"""
-    auth_header = request.headers.get("authorization", "")
-    if auth_header.startswith("Bearer "):
-        payload = decode_access_token(auth_header[7:])
-        if payload:
-            return payload.get("user_id", "anonymous")
-    return "anonymous"
+def _role_value(user: AnyUser) -> str:
+    role = getattr(user, "role", "")
+    return role.value if hasattr(role, "value") else str(role)
+
+
+def _contains_object_key(value, key: str) -> bool:
+    """Recursively check JSON-ish metadata for an OSS object key."""
+    if isinstance(value, str):
+        if value == key:
+            return True
+        from app.services.oss_service import extract_object_key
+        return extract_object_key(value) == key
+    if isinstance(value, dict):
+        if value.get("object_key") == key or value.get("objectKey") == key:
+            return True
+        return any(_contains_object_key(item, key) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_object_key(item, key) for item in value)
+    return False
+
+
+def _key_matches_user_prefix(key: str, user_id: str) -> bool:
+    allowed_prefixes = (
+        f"site_photos/{user_id}/",
+        f"deliverables/{user_id}/",
+        f"showcase_cases/{user_id}/",
+        f"avatars/{user_id}/",
+        f"enterprise/{user_id}/",
+    )
+    return key.startswith(allowed_prefixes)
+
+
+async def _can_access_order_object_key(db: AsyncSession, key: str, current_user: AnyUser) -> bool:
+    role = _role_value(current_user)
+
+    if role == UserRole.USER.value:
+        result = await db.execute(select(Order).where(Order.user_id == current_user.id))
+    elif role == UserRole.STAFF.value:
+        result = await db.execute(
+            select(Order)
+            .join(OrderAssignee, Order.id == OrderAssignee.order_id)
+            .where(OrderAssignee.assignee_id == current_user.id)
+        )
+    elif role == UserRole.CONTRACTOR.value:
+        result = await db.execute(
+            select(Order)
+            .join(ContractorAssignment, Order.id == ContractorAssignment.order_id)
+            .where(ContractorAssignment.contractor_id == current_user.id)
+        )
+    else:
+        return False
+
+    return any(_contains_object_key(order.order_data or {}, key) for order in result.scalars().all())
+
+
+async def _can_access_deliverable_object_key(db: AsyncSession, key: str, current_user: AnyUser) -> bool:
+    role = _role_value(current_user)
+
+    query = select(ContractorDeliverable).join(
+        ContractorAssignment,
+        ContractorDeliverable.assignment_id == ContractorAssignment.id,
+    )
+
+    if role == UserRole.USER.value:
+        query = query.join(Order, ContractorAssignment.order_id == Order.id).where(
+            Order.user_id == current_user.id,
+            ContractorDeliverable.is_published_to_user == True,  # noqa: E712
+        )
+    elif role == UserRole.STAFF.value:
+        query = query.join(Order, ContractorAssignment.order_id == Order.id).join(
+            OrderAssignee,
+            Order.id == OrderAssignee.order_id,
+        ).where(OrderAssignee.assignee_id == current_user.id)
+    elif role == UserRole.CONTRACTOR.value:
+        query = query.where(ContractorAssignment.contractor_id == current_user.id)
+    else:
+        return False
+
+    result = await db.execute(query)
+    return any(_contains_object_key(deliverable.files or [], key) for deliverable in result.scalars().all())
+
+
+async def _can_access_object_key(db: AsyncSession, key: str, current_user: AnyUser) -> bool:
+    role = _role_value(current_user)
+    if role == UserRole.ADMIN.value:
+        return True
+
+    if _key_matches_user_prefix(key, current_user.id):
+        return True
+
+    if role == UserRole.USER.value:
+        result = await db.execute(select(User).where(User.id == current_user.id))
+        user = result.scalar_one_or_none()
+        if user and key in {user.avatar, user.business_license_url}:
+            return True
+
+    if role == UserRole.CONTRACTOR.value:
+        result = await db.execute(select(Contractor).where(Contractor.id == current_user.id))
+        contractor = result.scalar_one_or_none()
+        if contractor and _contains_object_key(contractor.showcase_cases or [], key):
+            return True
+
+    return (
+        await _can_access_order_object_key(db, key, current_user)
+        or await _can_access_deliverable_object_key(db, key, current_user)
+    )
 
 
 def _log_upload_rejected(endpoint: str, user_id: str, filename: str | None, ext: str, reason: str) -> None:
@@ -133,8 +240,8 @@ def _log_upload_success(
 
 @router.post("/site-photo")
 async def upload_site_photo(
-    request: Request,
     file: UploadFile = File(...),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
 ):
     """上传现场实拍图或参考文件"""
     # 限制文件类型
@@ -145,7 +252,7 @@ async def upload_site_photo(
         '.key', '.mp4', '.mov', '.avi',
     }
     ext = os.path.splitext(file.filename or '')[1].lower()
-    user_id = _get_user_id_from_request(request)
+    user_id = current_user.id
     if ext not in allowed_ext:
         _log_upload_rejected("site_photo", user_id, file.filename, ext, "unsupported_ext")
         raise HTTPException(status_code=400, detail="不支持的文件类型: %s" % ext)
@@ -179,7 +286,7 @@ async def upload_site_photo(
                 "object_key": result["object_key"],
                 "filename": result["filename"],
                 "size": result["size"],
-                "uploadedAt": datetime.now().isoformat(),
+                "uploadedAt": beijing_now_iso(),
             }
         _safe_name, file_url = _store_local_temp_file(tmp_path, "site_photos", user_id, filename)
         tmp_path = ""
@@ -198,7 +305,7 @@ async def upload_site_photo(
             "file_url": file_url,
             "filename": filename,
             "size": size,
-            "uploadedAt": datetime.now().isoformat(),
+            "uploadedAt": beijing_now_iso(),
         }
     finally:
         _cleanup_temp_file(tmp_path)
@@ -206,8 +313,8 @@ async def upload_site_photo(
 
 @router.post("/file")
 async def upload_generic_file(
-    request: Request,
     file: UploadFile = File(...),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
 ):
     """通用文件上传（支持图片、视频、文档，最大 50MB）
 
@@ -229,7 +336,7 @@ async def upload_generic_file(
         '.zip', '.rar', '.7z',
     }
     ext = os.path.splitext(file.filename or '')[1].lower()
-    user_id = _get_user_id_from_request(request)
+    user_id = current_user.id
     if ext not in allowed_ext:
         _log_upload_rejected("generic_file", user_id, file.filename, ext, "unsupported_ext")
         raise HTTPException(status_code=400, detail="不支持的文件类型: %s" % ext)
@@ -266,7 +373,7 @@ async def upload_generic_file(
                     "filename": result["filename"],
                     "size": result["size"],
                     "mime_type": file.content_type or "",
-                    "uploadedAt": datetime.now().isoformat(),
+                    "uploadedAt": beijing_now_iso(),
                 }
             }
         _safe_name, file_url = _store_local_temp_file(tmp_path, "deliverables", user_id, filename)
@@ -289,7 +396,7 @@ async def upload_generic_file(
                 "filename": filename,
                 "size": size,
                 "mime_type": file.content_type or "",
-                "uploadedAt": datetime.now().isoformat(),
+                "uploadedAt": beijing_now_iso(),
             }
         }
     finally:
@@ -298,8 +405,9 @@ async def upload_generic_file(
 
 @router.get("/sign-url")
 async def get_signed_url(
-    request: Request,
     key: str = Query(..., description="OSS object key"),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
+    db: AsyncSession = Depends(get_db),
 ):
     """为私有 Bucket 中的文件生成新的签名 URL（1小时有效期）
 
@@ -307,27 +415,28 @@ async def get_signed_url(
     """
     if not settings.OSS_ENABLED:
         # 本地模式：直接返回原始路径
-        return {"url": key}
+        return {"code": 200, "message": "获取成功", "data": {"url": key}}
 
-    auth_header = request.headers.get("authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="未登录")
-    payload = decode_access_token(auth_header[7:])
-    if not payload:
-        raise HTTPException(status_code=401, detail="登录已过期")
+    from app.services.oss_service import extract_object_key, get_signed_url as oss_sign
 
-    from app.services.oss_service import get_signed_url as oss_sign
+    object_key = extract_object_key(key)
+    if not object_key:
+        raise HTTPException(status_code=400, detail="无效的 OSS 文件地址")
+
+    if not await _can_access_object_key(db, object_key, current_user):
+        raise HTTPException(status_code=403, detail="无权访问此文件")
+
     try:
-        url = oss_sign(key, expires=3600)
-        return {"url": url}
+        url = oss_sign(object_key, expires=3600)
+        return {"code": 200, "message": "获取成功", "data": {"url": url, "object_key": object_key}}
     except Exception as e:
-        raise HTTPException(status_code=500, detail="生成签名 URL 失败: %s" % str(e))
+        raise HTTPException(status_code=500, detail="生成签名 URL 失败，请稍后重试") from e
 
 
 @router.post("/showcase-video")
 async def upload_showcase_video(
-    request: Request,
     file: UploadFile = File(...),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
 ):
     """承包商优秀案例视频上传（最大 200MB）
 
@@ -336,7 +445,11 @@ async def upload_showcase_video(
     # 限制文件类型（仅视频）
     allowed_ext = {'.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm'}
     ext = os.path.splitext(file.filename or '')[1].lower()
-    user_id = _get_user_id_from_request(request)
+    await require_internal_deployment()
+    if _role_value(current_user) not in [UserRole.CONTRACTOR.value, UserRole.ADMIN.value]:
+        raise HTTPException(status_code=403, detail="仅承包商或管理员可以上传案例视频")
+
+    user_id = current_user.id
     if ext not in allowed_ext:
         _log_upload_rejected("showcase_video", user_id, file.filename, ext, "unsupported_ext")
         raise HTTPException(status_code=400, detail="仅支持视频文件格式: %s" % ', '.join(allowed_ext))
@@ -374,7 +487,7 @@ async def upload_showcase_video(
                     "filename": result["filename"],
                     "size": result["size"],
                     "mime_type": file.content_type or "video/mp4",
-                    "uploadedAt": datetime.now().isoformat(),
+                    "uploadedAt": beijing_now_iso(),
                 }
             }
         _safe_name, file_url = _store_local_temp_file(tmp_path, "showcase_cases", user_id, filename)
@@ -397,7 +510,7 @@ async def upload_showcase_video(
                 "filename": filename,
                 "size": size,
                 "mime_type": file.content_type or "video/mp4",
-                "uploadedAt": datetime.now().isoformat(),
+                "uploadedAt": beijing_now_iso(),
             }
         }
     finally:

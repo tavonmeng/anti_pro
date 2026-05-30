@@ -1,8 +1,8 @@
 """审计日志模型（独立存储于 audit.db）"""
 
 from sqlalchemy import Column, String, Integer, Text, DateTime
-from sqlalchemy.sql import func
 from app.audit_database import AuditBase
+from app.utils.timezone import beijing_now
 
 
 class AuditLog(AuditBase):
@@ -21,7 +21,7 @@ class AuditLog(AuditBase):
     payload = Column(Text, comment="脱敏后的请求参数 JSON")
     response_status = Column(Integer, comment="HTTP 状态码")
     duration_ms = Column(Integer, comment="耗时（毫秒）")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at = Column(DateTime(timezone=True), default=beijing_now, index=True)
 
     def __repr__(self):
         return f"<AuditLog(id={self.id}, module={self.module}, action={self.action})>"

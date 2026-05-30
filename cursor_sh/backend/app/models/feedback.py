@@ -1,10 +1,10 @@
 """反馈模型"""
 
 from sqlalchemy import Column, String, Text, DateTime, Enum, ForeignKey
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import enum
 from app.database import Base
+from app.utils.timezone import beijing_now
 
 
 class FeedbackType(str, enum.Enum):
@@ -23,11 +23,10 @@ class Feedback(Base):
     content = Column(Text, nullable=False)
     type = Column(Enum(FeedbackType), nullable=False)
     created_by = Column(String(50), ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
     
     # 关系（使用 selectin 加载策略，兼容异步上下文）
     order = relationship("Order", back_populates="feedbacks", lazy="selectin")
     
     def __repr__(self):
         return f"<Feedback(id={self.id}, order_id={self.order_id}, type={self.type})>"
-

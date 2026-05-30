@@ -446,6 +446,7 @@ import {
   type AiChatSavedSession,
 } from '@/utils/aiChatSessions'
 import { getLatestEnterpriseStatus } from '@/utils/enterpriseGuard'
+import { formatServerMonthDayTime, formatServerShortTime } from '@/utils/time'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 
 // 语音输入开关，通过 .env 文件配置
@@ -1249,14 +1250,7 @@ const saveCurrentToHistory = (options: { force?: boolean; syncBackend?: boolean 
     routeFullPath: route.fullPath,
     stateSnapshot: captureConversationState(),
     updatedAt: now,
-    savedAt: new Date().toLocaleString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    })
+    savedAt: formatServerMonthDayTime(new Date().toISOString(), '')
   }
 
   savedHistories.value = upsertAiChatSession(getCurrentUserId(), session)
@@ -1315,14 +1309,7 @@ const syncCurrentConversationToBackend = async () => {
     agentMode,
     routeFullPath: route.fullPath,
     stateSnapshot: captureConversationState(),
-    savedAt: new Date().toLocaleString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    })
+    savedAt: formatServerMonthDayTime(new Date().toISOString(), '')
   }
 
   const msgs = session.messages.filter((m: any) =>
@@ -1360,14 +1347,7 @@ const buildCurrentSavedSession = (): SavedSession => {
     routeFullPath: route.fullPath,
     stateSnapshot: captureConversationState(),
     updatedAt: Date.now(),
-    savedAt: new Date().toLocaleString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    })
+    savedAt: formatServerMonthDayTime(new Date().toISOString(), '')
   }
 }
 
@@ -1703,8 +1683,7 @@ watch(() => messages.value.length, scrollToBottom)
 watch(() => isLoading.value, scrollToBottom)
 
 const getCurrentTime = () => {
-  const now = new Date()
-  return now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  return formatServerShortTime(new Date().toISOString())
 }
 
 // ===== 订单展示辅助函数 =====
@@ -1765,9 +1744,7 @@ const getProgressWidth = (status: string) => {
 }
 
 const formatOrderDate = (dateStr: string) => {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return formatServerMonthDayTime(dateStr, '')
 }
 
 const activateOrderCreateFromGuide = (type: string = 'ai_3d_custom', requirementSummary: string = '') => {

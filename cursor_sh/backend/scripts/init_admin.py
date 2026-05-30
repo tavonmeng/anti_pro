@@ -71,7 +71,7 @@ async def ensure_admin():
         print(f"  ✅ 管理员账户创建成功（admins 表）")
         print(f"     用户名: {settings.INIT_ADMIN_USERNAME}")
         print(f"     手机号: {settings.INIT_ADMIN_PHONE}")
-        print(f"     密码:   {settings.INIT_ADMIN_PASSWORD}")
+        print("     密码:   [已隐藏]")
         print(f"     邮箱:   {settings.INIT_ADMIN_EMAIL}")
 
 
@@ -119,7 +119,7 @@ async def create_sample_staff():
         
         await session.commit()
         if created_count > 0:
-            print(f"  ✅ 创建了 {created_count} 个示例负责人账户（staff_members 表，默认密码: 123456）")
+            print(f"  ✅ 创建了 {created_count} 个示例负责人账户（staff_members 表，默认密码已隐藏）")
         else:
             print(f"  ✅ 示例负责人账户已就绪")
 
@@ -135,8 +135,11 @@ async def main():
     # 创建管理员账户（admins 表）
     await ensure_admin()
     
-    # 创建示例负责人（staff_members 表）
-    await create_sample_staff()
+    # 创建示例负责人（staff_members 表）。生产环境默认关闭，避免默认密码账号上线。
+    if settings.INIT_SAMPLE_STAFF or not settings.is_production:
+        await create_sample_staff()
+    else:
+        print("✅ 生产环境已跳过示例负责人账户创建")
     
     print("\n🎉 数据库初始化完成！")
     print(f"\n📋 数据库表结构:")
@@ -145,7 +148,7 @@ async def main():
     print(f"   users         → 普通客户")
     print(f"\n📋 管理员登录信息:")
     print(f"   手机号: {settings.INIT_ADMIN_PHONE}")
-    print(f"   密码:   {settings.INIT_ADMIN_PASSWORD}")
+    print("   密码:   [已隐藏]")
     print(f"   登录地址: /admin/login")
 
 

@@ -15,6 +15,7 @@ from app.database import async_session_maker
 from app.config import settings
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_now, beijing_now_iso, ensure_beijing
 
 
 logger = get_module_logger("ai")
@@ -70,8 +71,9 @@ def _pending_crawl_is_fresh(company_info: dict) -> bool:
     except (TypeError, ValueError):
         return False
 
+    started = ensure_beijing(started)
     ttl = max(60, int(settings.AI_CRAWL_PENDING_TTL_SECONDS or 1800))
-    return (datetime.now() - started).total_seconds() < ttl
+    return (beijing_now() - started).total_seconds() < ttl
 
 
 def _compact_agent_notes(notes: str, max_lines: int = 8, max_chars: int = 700) -> str:
@@ -272,7 +274,7 @@ def _screen_from_legacy_note_fragment(fragment: str) -> dict | None:
         "source": {
             "type": "conversation",
             "migrated_from": "project_preferences.notes",
-            "updated_at": datetime.now().isoformat(),
+            "updated_at": beijing_now_iso(),
         },
     }
     if specs:
@@ -341,8 +343,8 @@ async def get_or_create_memory(user_id: str, db: AsyncSession | None = None) -> 
             past_projects=[],
             interaction_stats={
                 "total_sessions": 0,
-                "first_contact": datetime.now().isoformat(),
-                "last_contact": datetime.now().isoformat(),
+                "first_contact": beijing_now_iso(),
+                "last_contact": beijing_now_iso(),
             },
             agent_notes="",
         )
@@ -395,9 +397,9 @@ async def update_interaction_stats(user_id: str):
         memory = await get_or_create_memory(user_id, db=session)
         stats = memory.interaction_stats or {}
         stats["total_sessions"] = stats.get("total_sessions", 0) + 1
-        stats["last_contact"] = datetime.now().isoformat()
+        stats["last_contact"] = beijing_now_iso()
         if not stats.get("first_contact"):
-            stats["first_contact"] = datetime.now().isoformat()
+            stats["first_contact"] = beijing_now_iso()
 
         memory.interaction_stats = stats
         await session.commit()
@@ -419,7 +421,7 @@ async def sync_past_project(user_id: str, project_info: dict):
         past = memory.past_projects or []
 
         # 添加时间戳
-        project_info["updated_at"] = datetime.now().isoformat()
+        project_info["updated_at"] = beijing_now_iso()
 
         # 如果已有该订单，更新状态
         updated = False
@@ -467,7 +469,7 @@ async def trigger_crawl(user_id: str, company_name: str):
             **company_info,
             "name": company_name,
             "crawl_status": "pending",
-            "crawl_started_at": datetime.now().isoformat(),
+            "crawl_started_at": beijing_now_iso(),
         }
         await session.commit()
 
@@ -524,8 +526,8 @@ async def _background_crawl(user_id: str, company_name: str, task_key: str = "")
                 "company_info": {
                     "name": company_name,
                     "crawl_status": "failed",
-                    "error": str(e),
-                    "crawled_at": datetime.now().isoformat(),
+                    "error": "抓取失败，请稍后重试",
+                    "crawled_at": beijing_now_iso(),
                 },
             })
         except Exception:
@@ -890,7 +892,7 @@ def _normalize_conversation_screens(value) -> list[dict]:
 
     allowed_fields = {"city", "name", "specs", "notes"}
     normalized: list[dict] = []
-    now = datetime.now().isoformat()
+    now = beijing_now_iso()
 
     for raw in value:
         if not isinstance(raw, dict):
@@ -1052,7 +1054,7 @@ def _merge_preferences(existing: dict, new: dict) -> dict:
     - 自动记录 last_updated 和各字段的更新时间
     """
     merged = {**existing}
-    now = datetime.now().isoformat()
+    now = beijing_now_iso()
     changed_fields = []
 
     list_fields = [

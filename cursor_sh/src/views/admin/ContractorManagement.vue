@@ -129,6 +129,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { formatServerTime } from '@/utils/time'
 
 const invitations = ref<any[]>([])
 const contractors = ref<any[]>([])
@@ -145,8 +146,7 @@ const generating = ref(false)
 const generatedUrl = ref('')
 
 const formatTime = (iso: string) => {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return formatServerTime(iso, '—')
 }
 
 const getInviteUrl = (token: string) => {

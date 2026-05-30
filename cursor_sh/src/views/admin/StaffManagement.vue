@@ -216,6 +216,7 @@ import {
 import StaffDialog from '@/components/StaffDialog.vue'
 import { staffApi } from '@/utils/api'
 import type { User as StaffUser } from '@/types'
+import { formatServerTime } from '@/utils/time'
 
 // 数据
 const loading = ref(false)
@@ -373,9 +374,7 @@ function handleDialogSuccess() {
 }
 
 function formatDate(dateStr: string) {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN')
+  return formatServerTime(dateStr)
 }
 
 // 生命周期
@@ -497,4 +496,3 @@ onMounted(() => {
   border-top: 1px solid #E5E5E7;
 }
 </style>
-

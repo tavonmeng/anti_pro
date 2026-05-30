@@ -125,6 +125,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { useStaffStore } from '@/stores/staff'
+import { formatServerTime } from '@/utils/time'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import type { Order, OrderType, OrderStatus } from '@/types'
 
@@ -199,14 +200,7 @@ const orderTypeMap: Record<OrderType, string> = {
 const getOrderTypeText = (type: OrderType) => orderTypeMap[type] || type
 
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  const date = new Date(timeString)
-  if (isNaN(date.getTime())) return timeString
-  return date.toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false
-  })
+  return formatServerTime(timeString)
 }
 
 const getStatusColorClass = (status: string) => {

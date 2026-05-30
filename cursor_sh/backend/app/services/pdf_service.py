@@ -3,7 +3,7 @@
 import io
 import os
 import platform
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm, cm
@@ -17,6 +17,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_now, ensure_beijing
 
 
 logger = get_module_logger("order")
@@ -301,7 +302,7 @@ def _format_time(time_str: str) -> str:
         return "-"
     try:
         dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-        beijing = dt.astimezone(timezone(timedelta(hours=8)))
+        beijing = ensure_beijing(dt)
         return beijing.strftime("%Y年%m月%d日 %H:%M")
     except Exception:
         return time_str
@@ -490,10 +491,9 @@ class PDFService:
         
         # 计算关键日期
         try:
-            start_dt = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
-            start_dt = start_dt.astimezone(timezone(timedelta(hours=8)))
+            start_dt = ensure_beijing(datetime.fromisoformat(created_at_str.replace("Z", "+00:00")))
         except Exception:
-            start_dt = datetime.now(timezone(timedelta(hours=8)))
+            start_dt = beijing_now()
         
         start_date_str = start_dt.strftime("%Y年%m月%d日")
         
@@ -719,7 +719,7 @@ class PDFService:
             spaceAfter=8,
         ))
         
-        now_beijing = datetime.now(timezone(timedelta(hours=8)))
+        now_beijing = beijing_now()
         elements.append(Paragraph(
             f"北京数艺光程数字科技有限责任公司 · 本文件由系统自动生成 · {now_beijing.strftime('%Y-%m-%d %H:%M')}",
             styles["Footer"]
@@ -899,7 +899,7 @@ class PDFService:
         
         # ---- 页脚 ----
         elements.append(HRFlowable(width="100%", thickness=0.3, color=colors.HexColor("#d0d0d0"), spaceAfter=6))
-        now_beijing = datetime.now(timezone(timedelta(hours=8)))
+        now_beijing = beijing_now()
         elements.append(Paragraph(
             f"Unique Vision AI · 内部订单详情 · 导出时间：{now_beijing.strftime('%Y-%m-%d %H:%M')} · 仅供内部使用",
             styles["Footer"]

@@ -121,6 +121,7 @@
 import { ref, onMounted } from 'vue'
 import { Search, Loading } from '@element-plus/icons-vue'
 import { chatHistoryApi } from '@/utils/api'
+import { formatServerMonthDayTime } from '@/utils/time'
 
 const sessions = ref<any[]>([])
 const loading = ref(false)
@@ -168,14 +169,7 @@ const openSession = async (row: any) => {
 }
 
 const formatTime = (ts: string) => {
-  if (!ts) return '-'
-  try {
-    return new Date(ts).toLocaleString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit',
-    })
-  } catch { return ts }
+  return formatServerMonthDayTime(ts)
 }
 
 const bizTypeLabel = (t: string) => {

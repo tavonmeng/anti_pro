@@ -15,6 +15,7 @@ except ImportError:
         return validator(field, pre=True)
 
 import json
+from urllib.parse import quote_plus
 
 
 class Settings(BaseSettings):
@@ -23,8 +24,10 @@ class Settings(BaseSettings):
     # 应用配置
     APP_NAME: str = "Unique Vision AI"
     APP_VERSION: str = "1.0.0"
+    ENVIRONMENT: str = "development"
     DEBUG: bool = True
     SECRET_KEY: str = "dev-secret-key-change-in-production"
+    API_DOCS_ENABLED: bool = False
 
     @compat_validator('DEBUG')
     @classmethod
@@ -67,6 +70,7 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT: int = 30            # 获取连接超时（秒）
     DB_POOL_RECYCLE: int = 1800          # 连接回收时间（秒），RDS 推荐 1800
     DB_POOL_PRE_PING: bool = True        # 连接健康检查，防止 RDS 闲置断开
+    AUTO_CREATE_TABLES: bool = False     # 生产环境应使用 Alembic，开发环境仍自动建表
     
     @property
     def database_url(self) -> str:
@@ -76,21 +80,98 @@ class Settings(BaseSettings):
             return self.DATABASE_URL
         
         # 根据 DB_TYPE 自动拼接
-        if self.DB_TYPE == "mysql":
+        if (self.DB_TYPE or "").strip().lower() == "mysql":
+            user = quote_plus(self.DB_USER)
+            password = quote_plus(self.DB_PASSWORD)
+            charset = quote_plus(self.DB_CHARSET or "utf8mb4")
             return (
-                f"mysql+aiomysql://{self.DB_USER}:{self.DB_PASSWORD}"
+                f"mysql+aiomysql://{user}:{password}"
                 f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-                f"?charset={self.DB_CHARSET}"
+                f"?charset={charset}"
             )
         else:
             # 默认 SQLite
             return f"sqlite+aiosqlite:///./{self.DB_NAME}.db"
+
+    @property
+    def audit_database_url(self) -> str:
+        """获取审计日志数据库连接串。"""
+        return self.AUDIT_DATABASE_URL or "sqlite+aiosqlite:///./audit.db"
     
     @property
     def is_mysql(self) -> bool:
         """判断当前是否使用 MySQL"""
-        url = self.database_url
-        return url.startswith("mysql")
+        return self.database_url.startswith("mysql")
+
+    @property
+    def is_audit_mysql(self) -> bool:
+        """判断审计日志库是否使用 MySQL/RDS。"""
+        return self.audit_database_url.startswith("mysql")
+
+    @property
+    def deploy_mode(self) -> str:
+        return (self.DEPLOYMENT_MODE or "all").strip().lower()
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT.strip().lower() in ("prod", "production") or self.deploy_mode in ("external", "internal")
+
+    @property
+    def docs_enabled(self) -> bool:
+        return self.API_DOCS_ENABLED or not self.is_production
+
+    def validate_startup_config(self) -> None:
+        """Fail fast when production-like deployments still use development settings."""
+        if not self.is_production:
+            return
+
+        problems: list[str] = []
+        weak_values = {
+            "",
+            "dev-secret-key-change-in-production",
+            "dev-jwt-secret-key-change-in-production",
+            "your-secret-key-change-in-production",
+            "your-jwt-secret-key-change-in-production",
+            "123456",
+        }
+
+        if self.DEBUG:
+            problems.append("DEBUG must be false")
+        if not self.is_mysql:
+            problems.append("DB_TYPE/DATABASE_URL must use MySQL/RDS")
+        if not self.DATABASE_URL and (self.DB_TYPE or "").strip().lower() == "mysql":
+            if not all([self.DB_HOST, self.DB_NAME, self.DB_USER, self.DB_PASSWORD]):
+                problems.append("DB_HOST/DB_NAME/DB_USER/DB_PASSWORD are required for MySQL/RDS")
+        if self.LOG_DB_ENABLED and not self.is_audit_mysql:
+            problems.append("AUDIT_DATABASE_URL must use MySQL/RDS when LOG_DB_ENABLED=true")
+        if self.SECRET_KEY in weak_values or len(self.SECRET_KEY) < 32:
+            problems.append("SECRET_KEY must be a strong non-default value")
+        if self.JWT_SECRET_KEY in weak_values or len(self.JWT_SECRET_KEY) < 32:
+            problems.append("JWT_SECRET_KEY must be a strong non-default value")
+        if self.deploy_mode == "internal" and self.INIT_ADMIN_PASSWORD in weak_values:
+            problems.append("INIT_ADMIN_PASSWORD must not be a default value")
+        if self.SMS_ENABLED and not all([
+            self.SMS_ACCESS_KEY_ID,
+            self.SMS_ACCESS_KEY_SECRET,
+            self.SMS_SIGN_NAME,
+            self.SMS_TEMPLATE_CODE,
+        ]):
+            problems.append("SMS_ENABLED=true requires complete SMS credentials")
+        if self.OSS_ENABLED and not all([
+            self.OSS_ACCESS_KEY_ID,
+            self.OSS_ACCESS_KEY_SECRET,
+            self.OSS_BUCKET_NAME,
+            self.OSS_ENDPOINT,
+        ]):
+            problems.append("OSS_ENABLED=true requires complete OSS credentials")
+        if self.deploy_mode in ("all", "external") and not self.AI_API_KEY:
+            problems.append("AI_API_KEY is required for production user-facing AI routes")
+        origins = self.CORS_ORIGINS if isinstance(self.CORS_ORIGINS, list) else []
+        if "*" in origins:
+            problems.append("CORS_ORIGINS must not contain '*' in production")
+
+        if problems:
+            raise RuntimeError("Production configuration is unsafe: " + "; ".join(problems))
     
     # JWT 配置
     JWT_SECRET_KEY: str = "dev-jwt-secret-key-change-in-production"
@@ -145,6 +226,16 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = ""
     SMTP_FROM_NAME: str = "Unique Vision AI"
+    SMTP_TIMEOUT: float = 20.0
+
+    # 外部服务重试配置
+    EXTERNAL_API_RETRY_ATTEMPTS: int = 3
+    EXTERNAL_API_RETRY_INITIAL_DELAY: float = 0.5
+    EXTERNAL_API_RETRY_MAX_DELAY: float = 3.0
+    OSS_RETRY_ATTEMPTS: int = 3
+    SMS_RETRY_ATTEMPTS: int = 2
+    EMAIL_RETRY_ATTEMPTS: int = 2
+    AI_RETRY_ATTEMPTS: int = 2
     
     # API 限流配置
     RATE_LIMIT_ENABLED: bool = True
@@ -160,6 +251,9 @@ class Settings(BaseSettings):
     LOG_DB_ENABLED: bool = True              # 是否将审计日志写入数据库
     LOG_DB_METHODS: str = "POST,PUT,DELETE"  # 哪些 HTTP Method 触发数据库记录
     LOG_DB_QUEUE_SIZE: int = 1000            # 审计日志入库队列上限，避免后台任务无限堆积
+
+    # 初始化脚本配置
+    INIT_SAMPLE_STAFF: bool = False          # 仅开发/演示环境开启，生产环境不要创建默认密码示例账号
     LOG_DB_WORKERS: int = 2                  # 每个进程内审计日志入库 worker 数
     LOG_SANITIZE_FIELDS: str = "password,oldPassword,newPassword,old_password,new_password,token,secret,sms_code,captcha,invite_token"
     LOG_MAX_PAYLOAD_SIZE: int = 4096         # payload 字段最大字符数（超出截断）

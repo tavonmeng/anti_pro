@@ -1,8 +1,8 @@
 """承包商一次性邀请链接模型"""
 
 from sqlalchemy import Column, String, Boolean, DateTime, Text
-from sqlalchemy.sql import func
 from app.database import Base
+from app.utils.timezone import beijing_now
 
 
 class ContractorInvitation(Base):
@@ -16,7 +16,7 @@ class ContractorInvitation(Base):
     is_used = Column(Boolean, default=False)
     note = Column(String(500))                                              # 管理员备注（如：给 XX 公司的邀请）
     expires_at = Column(DateTime(timezone=True), nullable=False)            # 过期时间
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
 
     def __repr__(self):
         return f"<ContractorInvitation(id={self.id}, used={self.is_used})>"

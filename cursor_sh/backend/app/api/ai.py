@@ -5,7 +5,7 @@ AI 智能体 — 主路由入口
 其余 Agent 拆分为独立模块并通过 include_router 引入。
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import httpx
@@ -13,7 +13,6 @@ import asyncio
 import json
 import os
 import re
-from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from app.config import settings
 from app.services.ai_client import (
@@ -29,10 +28,11 @@ from app.services.platform_service_catalog import (
     is_consultation_business_type,
 )
 from app.utils.business_log import log_business_event
+from app.utils.dependencies import AnyUser, get_current_user_for_public_deployment
 from app.utils.log_setup import get_module_logger
-from app.utils.security import decode_access_token
+from app.utils.timezone import beijing_now
 
-router = APIRouter(prefix="/ai", tags=["AI 智能体对话"])
+router = APIRouter(prefix="/ai", tags=["AI 智能体对话"], dependencies=[Depends(get_current_user_for_public_deployment)])
 logger = get_module_logger("ai")
 
 
@@ -62,6 +62,10 @@ class ChatRequest(BaseModel):
     business_type: str = "ai_3d_custom"
     user_message_id: str | None = None
     assistant_message_id: str | None = None
+
+
+def _current_user_identity(current_user: AnyUser) -> tuple[str, str]:
+    return current_user.id, getattr(current_user, "username", "") or getattr(current_user, "real_name", "") or "user"
 
 
 def _strip_completion_marker(message: str) -> str:
@@ -145,7 +149,7 @@ def _fallback_extract_media(history: list) -> dict:
 
     online_time = ""
     if "下个月" in user_text and "月底" in user_text:
-        now = datetime.now()
+        now = beijing_now()
         year = now.year + (1 if now.month == 12 else 0)
         month = 1 if now.month == 12 else now.month + 1
         online_time = f"{year}年{month}月底"
@@ -769,69 +773,80 @@ def _is_mock_completion_message(message: str) -> bool:
     return any(marker in message for marker in positive_markers)
 
 
+def _dev_ai_unavailable_reply(message: str) -> str:
+    """Local development fallback used only when AI_API_KEY is not configured."""
+    reply = "AI 服务未配置，当前为本地开发占位回复。"
+    if _is_mock_completion_message(message):
+        return reply + " 核心需求已确认，我将为您整理项目评估与需求明细。 【需求收集完成】"
+    if len(message) > 5:
+        return reply + f" 收到您的反馈：{message[:10]}... 请问这次项目计划投放在哪个城市或站点？"
+    return reply + " 请继续详细描述您的诉求。"
+
+
+def _raise_ai_key_missing() -> None:
+    log_business_event(logger, "ai_api_key_missing", level="error", deployment_mode=settings.deploy_mode)
+    raise HTTPException(status_code=503, detail="AI 服务暂时不可用")
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 需求收集 Agent（/chat）
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.post("/chat")
-async def ai_chat(request: ChatRequest, raw_request: Request):
+async def ai_chat(
+    request: ChatRequest,
+    raw_request: Request,
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
+):
     """核心聊天接口 — 需求收集对话（含 Memory 注入）"""
-    user_id = "anonymous"
-    username = "anonymous"
+    user_id, username = _current_user_identity(current_user)
     company_name = ""
-    auth_header = raw_request.headers.get("authorization", "")
-    if auth_header.startswith("Bearer "):
-        payload = decode_access_token(auth_header[7:])
-        if payload:
-            user_id = payload.get("user_id", "anonymous")
-            username = payload.get("username", "anonymous")
 
     # ── 加载用户 Memory ──
     memory = None
     memory_context = ""
-    if user_id != "anonymous":
-        try:
-            from app.services.memory_service import (
-                get_or_create_memory, build_memory_context,
-                trigger_crawl, update_interaction_stats,
-            )
-            memory = await get_or_create_memory(user_id)
-            memory_context = build_memory_context(memory)
+    try:
+        from app.services.memory_service import (
+            get_or_create_memory, build_memory_context,
+            trigger_crawl, update_interaction_stats,
+        )
+        memory = await get_or_create_memory(user_id)
+        memory_context = build_memory_context(memory)
 
-            # 首次接触 + 有公司名 → 触发后台爬取
-            ci = memory.company_info or {}
-            if not ci.get("crawl_status") and not company_name:
-                # 从 DB 获取用户的公司名
-                try:
-                    from app.database import async_session_maker
-                    from app.models.user import User
-                    from sqlalchemy import select
-                    async with async_session_maker() as session:
-                        result = await session.execute(
-                            select(User.company, User.enterprise_name).where(User.id == user_id)
-                        )
-                        row = result.first()
-                        if row:
-                            company_name = row.enterprise_name or row.company or ""
-                except Exception:
-                    pass
+        # 首次接触 + 有公司名 → 触发后台爬取
+        ci = memory.company_info or {}
+        if not ci.get("crawl_status") and not company_name:
+            # 从 DB 获取用户的公司名
+            try:
+                from app.database import async_session_maker
+                from app.models.user import User
+                from sqlalchemy import select
+                async with async_session_maker() as session:
+                    result = await session.execute(
+                        select(User.company, User.enterprise_name).where(User.id == user_id)
+                    )
+                    row = result.first()
+                    if row:
+                        company_name = row.enterprise_name or row.company or ""
+            except Exception:
+                pass
 
-                if company_name:
-                    await trigger_crawl(user_id, company_name)
+            if company_name:
+                await trigger_crawl(user_id, company_name)
 
-            # 更新交互统计（后台，不阻塞）
-            import asyncio
-            asyncio.create_task(update_interaction_stats(user_id))
-        except Exception as e:
-            log_business_event(
-                logger,
-                "ai_memory_context_failed",
-                level="warning",
-                user_id=user_id,
-                session_id=request.session_id,
-                business_type=request.business_type,
-                error=str(e),
-            )
+        # 更新交互统计（后台，不阻塞）
+        import asyncio
+        asyncio.create_task(update_interaction_stats(user_id))
+    except Exception as e:
+        log_business_event(
+            logger,
+            "ai_memory_context_failed",
+            level="warning",
+            user_id=user_id,
+            session_id=request.session_id,
+            business_type=request.business_type,
+            error=str(e),
+        )
 
     existing_handoff = await _append_handoff_message(
         user_id=user_id,
@@ -907,14 +922,9 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
         return {"message": reply, "handoff": False, "business_type": request.business_type}
 
     if not settings.AI_API_KEY:
-        mock_reply = "【真实后端接口调试中】"
-        if _is_mock_completion_message(request.message):
-            mock_reply += "核心需求已确认，我将为您整理项目评估与需求明细。 【需求收集完成】"
-        elif len(request.message) > 5:
-            mock_reply += f"收到您的反馈：{request.message[:10]}... 请问这次项目计划投放在哪个城市或站点？"
-        else:
-            mock_reply += "好的，请继续详细描述您的诉求。"
-
+        if settings.is_production:
+            _raise_ai_key_missing()
+        mock_reply = _dev_ai_unavailable_reply(request.message)
         _save_session_file(
             session_id=request.session_id, user_id=user_id, username=username,
             history=request.history, user_msg=request.message, assistant_msg=mock_reply,
@@ -957,62 +967,58 @@ async def ai_chat(request: ChatRequest, raw_request: Request):
             history_count=len(request.history or []),
             error=str(e),
         )
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("/chat/stream")
-async def ai_chat_stream(request: ChatRequest, raw_request: Request):
+async def ai_chat_stream(
+    request: ChatRequest,
+    raw_request: Request,
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
+):
     """流式需求收集对话。保留 /chat 作为非流式兼容入口。"""
-    user_id = "anonymous"
-    username = "anonymous"
+    user_id, username = _current_user_identity(current_user)
     company_name = ""
-    auth_header = raw_request.headers.get("authorization", "")
-    if auth_header.startswith("Bearer "):
-        payload = decode_access_token(auth_header[7:])
-        if payload:
-            user_id = payload.get("user_id", "anonymous")
-            username = payload.get("username", "anonymous")
 
     memory_context = ""
-    if user_id != "anonymous":
-        try:
-            from app.services.memory_service import (
-                get_or_create_memory, build_memory_context,
-                trigger_crawl, update_interaction_stats,
-            )
-            memory = await get_or_create_memory(user_id)
-            memory_context = build_memory_context(memory)
+    try:
+        from app.services.memory_service import (
+            get_or_create_memory, build_memory_context,
+            trigger_crawl, update_interaction_stats,
+        )
+        memory = await get_or_create_memory(user_id)
+        memory_context = build_memory_context(memory)
 
-            ci = memory.company_info or {}
-            if not ci.get("crawl_status") and not company_name:
-                try:
-                    from app.database import async_session_maker
-                    from app.models.user import User
-                    from sqlalchemy import select
-                    async with async_session_maker() as session:
-                        result = await session.execute(
-                            select(User.company, User.enterprise_name).where(User.id == user_id)
-                        )
-                        row = result.first()
-                        if row:
-                            company_name = row.enterprise_name or row.company or ""
-                except Exception:
-                    pass
+        ci = memory.company_info or {}
+        if not ci.get("crawl_status") and not company_name:
+            try:
+                from app.database import async_session_maker
+                from app.models.user import User
+                from sqlalchemy import select
+                async with async_session_maker() as session:
+                    result = await session.execute(
+                        select(User.company, User.enterprise_name).where(User.id == user_id)
+                    )
+                    row = result.first()
+                    if row:
+                        company_name = row.enterprise_name or row.company or ""
+            except Exception:
+                pass
 
-                if company_name:
-                    await trigger_crawl(user_id, company_name)
+            if company_name:
+                await trigger_crawl(user_id, company_name)
 
-            asyncio.create_task(update_interaction_stats(user_id))
-        except Exception as e:
-            log_business_event(
-                logger,
-                "ai_memory_context_failed",
-                level="warning",
-                user_id=user_id,
-                session_id=request.session_id,
-                business_type=request.business_type,
-                error=str(e),
-            )
+        asyncio.create_task(update_interaction_stats(user_id))
+    except Exception as e:
+        log_business_event(
+            logger,
+            "ai_memory_context_failed",
+            level="warning",
+            user_id=user_id,
+            session_id=request.session_id,
+            business_type=request.business_type,
+            error=str(e),
+        )
 
     async def one_shot(payload: dict):
         yield _sse_event("start", {})
@@ -1103,14 +1109,9 @@ async def ai_chat_stream(request: ChatRequest, raw_request: Request):
         return StreamingResponse(one_shot(payload), media_type="text/event-stream", headers=stream_headers)
 
     if not settings.AI_API_KEY:
-        mock_reply = "【真实后端接口调试中】"
-        if _is_mock_completion_message(request.message):
-            mock_reply += "核心需求已确认，我将为您整理项目评估与需求明细。 【需求收集完成】"
-        elif len(request.message) > 5:
-            mock_reply += f"收到您的反馈：{request.message[:10]}... 请问这次项目计划投放在哪个城市或站点？"
-        else:
-            mock_reply += "好的，请继续详细描述您的诉求。"
-
+        if settings.is_production:
+            _raise_ai_key_missing()
+        mock_reply = _dev_ai_unavailable_reply(request.message)
         _save_session_file(
             session_id=request.session_id, user_id=user_id, username=username,
             history=request.history, user_msg=request.message, assistant_msg=mock_reply,
@@ -1251,19 +1252,9 @@ class ExtractRequest(BaseModel):
 async def ai_extract(request: ExtractRequest):
     """从对话历史中提取结构化信息"""
     if not settings.AI_API_KEY:
-        if settings.AGENT_MODE == "media":
-            return {
-                "project_name": "示例项目 (Mock)",
-                "city_location": "成都春熙路",
-                "art_direction": "未来科技",
-                "budget": "60万"
-            }
-        return {
-            "brand": "示例品牌 (Mock)",
-            "target_group": "年轻群体",
-            "style": "科技感设计",
-            "budget": "10万以上"
-        }
+        if settings.is_production:
+            _raise_ai_key_missing()
+        return {}
 
     try:
         if settings.AGENT_MODE == "media":
@@ -1405,6 +1396,8 @@ async def ai_assess(request: AssessRequest):
     style = d.get("style", "")
 
     if not settings.AI_API_KEY:
+        if settings.is_production:
+            _raise_ai_key_missing()
         has_custom_need = bool(content_desc) or bool(style)
         if budget and ("万" in budget):
             try:
@@ -1596,7 +1589,7 @@ async def _save_to_db(
                 added_count += 1
 
             session.message_count = (session.message_count or 0) + added_count
-            now = datetime.now()
+            now = beijing_now()
             session.updated_at = now
 
             try:
@@ -1681,7 +1674,7 @@ def _save_session_file(
                     "timestamp": h.get("timestamp", ""),
                 })
 
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = beijing_now().strftime("%Y-%m-%d %H:%M:%S")
         full_messages.append({"role": "user", "content": user_msg, "timestamp": now})
         full_messages.append({"role": "assistant", "content": assistant_msg, "timestamp": now})
 

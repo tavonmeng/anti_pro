@@ -69,7 +69,7 @@ export interface UploadedFile {
   size: number
   type: string
   uploadTime: string
-  url?: string  // 模拟存储路径
+  url?: string
   previewUrl?: string
   isImage?: boolean
   file_url?: string

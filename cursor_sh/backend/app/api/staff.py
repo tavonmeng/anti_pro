@@ -14,6 +14,7 @@ from app.schemas.response import ApiResponse
 from app.utils.dependencies import get_current_user, require_admin, AnyUser
 from app.utils.security import get_password_hash
 from app.utils.validators import generate_id
+from app.utils.timezone import beijing_iso
 
 router = APIRouter(prefix="/staff", tags=["负责人"])
 
@@ -81,8 +82,8 @@ async def get_staff_list(
                 "role": "staff",
                 "isActive": staff.is_active,
                 "orderCount": order_count,
-                "createdAt": staff.created_at.isoformat() if staff.created_at else None,
-                "updatedAt": staff.updated_at.isoformat() if staff.updated_at else None
+                "createdAt": beijing_iso(staff.created_at),
+                "updatedAt": beijing_iso(staff.updated_at)
             }
             staff_with_count.append(staff_dict)
         
@@ -95,7 +96,7 @@ async def get_staff_list(
             }
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("")
@@ -137,14 +138,14 @@ async def add_staff(
             "role": "staff",
             "isActive": new_staff.is_active,
             "orderCount": 0,
-            "createdAt": new_staff.created_at.isoformat() if new_staff.created_at else None
+            "createdAt": beijing_iso(new_staff.created_at)
         }
         
         return ApiResponse(code=201, message="负责人添加成功", data=staff_response)
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.put("/{staff_id}")
@@ -197,15 +198,15 @@ async def update_staff(
             "role": "staff",
             "isActive": staff.is_active,
             "orderCount": order_count,
-            "createdAt": staff.created_at.isoformat() if staff.created_at else None,
-            "updatedAt": staff.updated_at.isoformat() if staff.updated_at else None
+            "createdAt": beijing_iso(staff.created_at),
+            "updatedAt": beijing_iso(staff.updated_at)
         }
         
         return ApiResponse(code=200, message="更新成功", data=staff_response)
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.delete("/{staff_id}")
@@ -252,4 +253,4 @@ async def delete_staff(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e

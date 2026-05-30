@@ -6,7 +6,11 @@ from app.database import get_db
 from app.schemas.response import ApiResponse
 from app.schemas.announcement import AnnouncementCreate, AnnouncementUpdate, AnnouncementResponse
 from app.services.announcement_service import AnnouncementService
-from app.utils.dependencies import get_current_user, require_admin, AnyUser
+from app.utils.dependencies import (
+    get_current_user_for_public_deployment,
+    require_internal_admin,
+    AnyUser,
+)
 from app.models.user import UserRole
 
 router = APIRouter(prefix="/announcements", tags=["公告"])
@@ -14,7 +18,7 @@ router = APIRouter(prefix="/announcements", tags=["公告"])
 @router.get("", response_model=ApiResponse[List[AnnouncementResponse]])
 async def get_announcements(
     active_only: bool = Query(True, description="是否仅获取激活的公告（普通用户应为True，管理员可为False）"),
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """获取公告列表"""
@@ -26,12 +30,12 @@ async def get_announcements(
         announcements = await AnnouncementService.get_all_announcements(db, active_only)
         return ApiResponse(code=200, message="获取成功", data=announcements)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 @router.post("", response_model=ApiResponse[AnnouncementResponse])
 async def create_announcement(
     data: AnnouncementCreate,
-    current_user: AnyUser = Depends(require_admin),
+    current_user: AnyUser = Depends(require_internal_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """创建公告（仅管理员）"""
@@ -39,13 +43,13 @@ async def create_announcement(
         announcement = await AnnouncementService.create_announcement(db, data, current_user.id)
         return ApiResponse(code=201, message="创建成功", data=announcement)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 @router.put("/{announcement_id}", response_model=ApiResponse[AnnouncementResponse])
 async def update_announcement(
     announcement_id: str,
     data: AnnouncementUpdate,
-    current_user: AnyUser = Depends(require_admin),
+    current_user: AnyUser = Depends(require_internal_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """更新公告（仅管理员）"""
@@ -55,12 +59,12 @@ async def update_announcement(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 @router.delete("/{announcement_id}", response_model=ApiResponse[dict])
 async def delete_announcement(
     announcement_id: str,
-    current_user: AnyUser = Depends(require_admin),
+    current_user: AnyUser = Depends(require_internal_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """删除公告（仅管理员）"""
@@ -70,4 +74,4 @@ async def delete_announcement(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e

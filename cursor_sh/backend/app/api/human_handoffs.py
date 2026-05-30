@@ -1,6 +1,5 @@
 """管理员端转人工客户队列 API。"""
 
-from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -17,6 +16,7 @@ from app.schemas.response import ApiResponse
 from app.utils.business_log import log_business_event
 from app.utils.dependencies import AnyUser, require_admin
 from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_iso, beijing_now
 
 router = APIRouter(prefix="/human-handoffs", tags=["转人工客户"])
 logger = get_module_logger("ai")
@@ -43,9 +43,9 @@ def _handoff_item(handoff: HumanHandoff, user: User | None, order: Order | None)
         "messageCount": handoff.message_count,
         "extractedData": handoff.extracted_data or {},
         "chatSnapshot": handoff.chat_snapshot or [],
-        "createdAt": handoff.created_at.isoformat() if handoff.created_at else None,
-        "updatedAt": handoff.updated_at.isoformat() if handoff.updated_at else None,
-        "followedAt": handoff.followed_at.isoformat() if handoff.followed_at else None,
+        "createdAt": beijing_iso(handoff.created_at),
+        "updatedAt": beijing_iso(handoff.updated_at),
+        "followedAt": beijing_iso(handoff.followed_at),
     }
 
 
@@ -135,8 +135,8 @@ async def update_handoff_status(
 
     old_status = handoff.status
     handoff.status = payload.status
-    handoff.updated_at = datetime.now(timezone.utc)
-    handoff.followed_at = datetime.now(timezone.utc) if payload.status == "followed" else None
+    handoff.updated_at = beijing_now()
+    handoff.followed_at = beijing_now() if payload.status == "followed" else None
 
     if handoff.draft_order_id:
         order_result = await db.execute(select(Order).where(Order.id == handoff.draft_order_id))
@@ -145,7 +145,7 @@ async def update_handoff_status(
             order_data = dict(order.order_data or {})
             order_data["handoff_status"] = payload.status
             order.order_data = order_data
-            order.updated_at = datetime.now(timezone.utc)
+            order.updated_at = beijing_now()
 
     await db.commit()
     await db.refresh(handoff)

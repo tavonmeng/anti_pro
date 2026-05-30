@@ -75,6 +75,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { enterpriseApi } from '@/utils/api'
+import { formatServerTime } from '@/utils/time'
 
 const loading = ref(false)
 const activeTab = ref('pending')
@@ -103,9 +104,7 @@ const fetchList = async () => {
 }
 
 const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const d = new Date(dateStr)
-  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return formatServerTime(dateStr)
 }
 
 const previewLicense = (url: string) => {

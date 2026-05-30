@@ -1,9 +1,9 @@
 """管理员模型"""
 
 from sqlalchemy import Column, String, Boolean, DateTime
-from sqlalchemy.sql import func
 import enum
 from app.database import Base
+from app.utils.timezone import beijing_now
 
 
 class Admin(Base):
@@ -18,8 +18,8 @@ class Admin(Base):
     real_name = Column(String(50))
     avatar = Column(String(255))
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
+    updated_at = Column(DateTime(timezone=True), default=beijing_now, onupdate=beijing_now)
     
     @property
     def role(self):

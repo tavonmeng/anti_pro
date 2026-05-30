@@ -994,28 +994,13 @@ For a clean rollback window, avoid allowing writes on both old and new systems a
 
 ### SQLite to MySQL/RDS migration
 
-There is an existing script:
+The old partial SQLite-to-RDS helper script has been removed. It covered only an
+early subset of tables and was not safe for full-system migration.
 
-```bash
-cd backend
-python scripts/migrate_to_rds.py
-```
+For a full SQLite to MySQL migration, use one of:
 
-However, this script currently migrates only an early subset of tables:
-
-- `users`
-- `orders`
-- `order_assignees`
-- `files`
-- `feedbacks`
-- `notifications`
-
-It does not cover newer tables such as admins, staff, contractors, workflow, deliverables, AI chat, user memory, announcements, security events, and audit logs. Do not use it for full-system migration unless it is updated first.
-
-For a full SQLite to MySQL migration, prefer one of:
-
-- update `scripts/migrate_to_rds.py` to include all current tables in dependency order;
-- use a tested SQLite-to-MySQL migration tool and then verify row counts table by table;
+- a tested SQLite-to-MySQL migration tool and then verify row counts table by table;
+- a purpose-built migration script reviewed against every current model/table;
 - keep SQLite and use the full-directory migration method above.
 
 ### Minimal backup set

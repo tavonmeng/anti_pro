@@ -3,7 +3,6 @@
 import os
 import tempfile
 import uuid
-from datetime import datetime
 from sqlalchemy import select
 
 from app.config import settings
@@ -15,6 +14,7 @@ from app.services.memory_service import get_or_create_memory
 from app.services.memory_merge_service import merge_document_knowledge
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_now
 
 
 logger = get_module_logger("ai")
@@ -133,7 +133,7 @@ async def approve_document_extraction(document_id: str, reviewed_data: dict, adm
         extraction.status = "approved"
         extraction.reviewed_data = reviewed_data
         extraction.reviewed_by = admin_id
-        extraction.reviewed_at = datetime.now()
+        extraction.reviewed_at = beijing_now()
         extraction.summary = _build_summary(reviewed_data)
         await session.commit()
 

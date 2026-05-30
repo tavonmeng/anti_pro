@@ -4,11 +4,11 @@ import os
 import aiofiles
 from typing import List
 from fastapi import UploadFile, HTTPException
-from datetime import datetime
 
 from app.config import settings
 from app.utils.validators import validate_file_size, validate_file_type, generate_id
 from app.schemas.file import FileUpload, FileResponse
+from app.utils.timezone import beijing_now_iso
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 
@@ -83,7 +83,7 @@ class FileService:
             name=file.filename,
             size=file_size,
             type=file.content_type,
-            uploadTime=datetime.utcnow().isoformat() + "Z",
+            uploadTime=beijing_now_iso(),
             url=file_url
         )
     
@@ -116,7 +116,7 @@ class FileService:
             name=file.filename,
             size=file_size,
             type=file.content_type,
-            uploadTime=datetime.utcnow().isoformat() + "Z",
+            uploadTime=beijing_now_iso(),
             url=result["url"],
             object_key=result.get("object_key", ""),
         )

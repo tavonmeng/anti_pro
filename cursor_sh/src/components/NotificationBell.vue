@@ -85,6 +85,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Bell, Delete } from '@element-plus/icons-vue'
 import { useNotificationStore } from '@/stores/notification'
+import { formatServerRelativeTime } from '@/utils/time'
 import type { Notification } from '@/types'
 
 const router = useRouter()
@@ -113,45 +114,8 @@ const handleHide = () => {
   visible.value = false
 }
 
-// 格式化时间（转换为北京时间）
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  
-  // 解析时间字符串
-  const date = new Date(timeString)
-  if (isNaN(date.getTime())) {
-    return timeString
-  }
-  
-  // 获取当前时间（UTC时间戳）
-  const now = new Date()
-  
-  // 计算时间差（毫秒）
-  const diff = now.getTime() - date.getTime()
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-  
-  if (minutes < 1) {
-    return '刚刚'
-  } else if (minutes < 60) {
-    return `${minutes}分钟前`
-  } else if (hours < 24) {
-    return `${hours}小时前`
-  } else if (days < 7) {
-    return `${days}天前`
-  } else {
-    // 显示完整的北京时间（使用 toLocaleString 自动转换为北京时间）
-    return date.toLocaleString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    })
-  }
+  return formatServerRelativeTime(timeString)
 }
 
 // 点击消息

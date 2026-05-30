@@ -13,12 +13,14 @@ import ssl
 import asyncio
 import json
 import uuid
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, UploadFile, File, Depends
 from fastapi.responses import JSONResponse
 import websockets
 from app.config import settings
 from app.utils.business_log import log_business_event
+from app.utils.dependencies import AnyUser, get_current_user_for_public_deployment
 from app.utils.log_setup import get_module_logger
+from app.utils.security import decode_access_token
 
 # 强制忽略系统层面的网络代理
 os.environ["NO_PROXY"] = "dashscope.aliyuncs.com,dashscope-intl.aliyuncs.com,localhost,127.0.0.1"
@@ -35,7 +37,10 @@ DASHSCOPE_FILE_API = "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/t
 # 离线一次性识别（推荐）
 # ============================================================
 @router.post("/asr/recognize")
-async def asr_recognize(audio: UploadFile = File(...)):
+async def asr_recognize(
+    audio: UploadFile = File(...),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
+):
     """接收完整 PCM 音频文件，调用 DashScope 识别"""
     import time
     t0 = time.time()
@@ -68,7 +73,7 @@ async def asr_recognize(audio: UploadFile = File(...)):
 
     except Exception as e:
         log_business_event(logger, "asr_recognize_failed", level="error", error=str(e))
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "语音识别服务暂时不可用，请稍后重试"}, status_code=500)
 
 
 async def recognize_via_ws(api_key: str, pcm_data: bytes) -> str:
@@ -192,6 +197,23 @@ async def asr_stream(ws: WebSocket):
     """实时语音识别 WebSocket 端点"""
     await ws.accept()
 
+    auth_header = ws.headers.get("authorization", "")
+    token = ""
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    else:
+        token = ws.query_params.get("token", "")
+
+    payload = decode_access_token(token) if token else None
+    if not payload:
+        await ws.send_json({"type": "error", "message": "未登录，请先登录"})
+        await ws.close(code=1008)
+        return
+    if settings.DEPLOYMENT_MODE == "external" and payload.get("role") != "user":
+        await ws.send_json({"type": "error", "message": "接口不存在"})
+        await ws.close(code=1008)
+        return
+
     api_key = settings.AI_API_KEY
     if not api_key:
         await ws.send_json({"type": "error", "message": "服务端未配置 AI_API_KEY"})
@@ -267,14 +289,14 @@ async def asr_stream(ws: WebSocket):
                         await ws.send_json({"type": "finished"})
                         break
                     elif event == "task-failed":
-                        err = msg.get("header", {}).get("error_message", "识别失败")
-                        await ws.send_json({"type": "error", "message": err})
+                        await ws.send_json({"type": "error", "message": "语音识别失败，请稍后重试"})
                         break
             except websockets.exceptions.ConnectionClosed:
                 pass
             except Exception as e:
+                log_business_event(logger, "asr_stream_relay_failed", level="error", error=str(e))
                 try:
-                    await ws.send_json({"type": "error", "message": str(e)})
+                    await ws.send_json({"type": "error", "message": "语音识别服务暂时不可用，请稍后重试"})
                 except Exception:
                     pass
 
@@ -317,8 +339,9 @@ async def asr_stream(ws: WebSocket):
                 pass
 
     except Exception as e:
+        log_business_event(logger, "asr_stream_failed", level="error", error=str(e))
         try:
-            await ws.send_json({"type": "error", "message": f"语音识别服务异常: {str(e)}"})
+            await ws.send_json({"type": "error", "message": "语音识别服务暂时不可用，请稍后重试"})
         except Exception:
             pass
     finally:

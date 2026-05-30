@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
+import { isExternalDeployment, isInternalRoute } from '@/utils/deployment'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -235,6 +236,11 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+
+  if (isExternalDeployment && isInternalRoute(to.path)) {
+    next('/')
+    return
+  }
   
   // 检查是否需要认证
   if (to.meta.requiresAuth && !authStore.isAuthenticated()) {

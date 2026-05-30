@@ -61,6 +61,7 @@
 import { computed } from 'vue'
 import { User, Avatar, Clock, ArrowRight } from '@element-plus/icons-vue'
 import OrderStatusBadge from './OrderStatusBadge.vue'
+import { formatServerTime } from '@/utils/time'
 import type { Order, VideoPurchaseOrder, DigitalArtOrder } from '@/types'
 
 interface Props {
@@ -133,14 +134,7 @@ const getArtDirectionText = (order: Order) => {
 }
 
 const formatTime = (timeString: string) => {
-  const date = new Date(timeString)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return formatServerTime(timeString)
 }
 </script>
 

@@ -5,21 +5,47 @@ OSS_ENABLED=False 时自动回退到本地磁盘存储（开发环境）。
 """
 
 import os
-import time
-from datetime import datetime
-from typing import Optional
+from urllib.parse import unquote, urlparse
 
 from app.config import settings
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.retry import RetryableExternalError, retry_sync
+from app.utils.timezone import beijing_now
 
 
 logger = get_module_logger("order")
 
 
+def _is_retryable_status(status_code: int) -> bool:
+    return status_code in (408, 429) or status_code >= 500
+
+
+def _raise_for_oss_status(operation: str, status_code: int) -> None:
+    message = "OSS %s 失败，状态码: %d" % (operation, status_code)
+    if _is_retryable_status(status_code):
+        raise RetryableExternalError(message)
+    raise RuntimeError(message)
+
+
+def _is_retryable_oss_exception(exc: BaseException) -> bool:
+    if isinstance(exc, RetryableExternalError):
+        return True
+    if isinstance(exc, RuntimeError) and "状态码" in str(exc):
+        return False
+    return True
+
+
 # ============ OSS 客户端初始化 ============
 
 _oss_bucket = None
+
+
+def _oss_endpoint() -> str:
+    endpoint = (settings.OSS_ENDPOINT or "").strip()
+    if endpoint and not endpoint.startswith(("http://", "https://")):
+        endpoint = "https://" + endpoint
+    return endpoint
 
 
 def _get_bucket():
@@ -30,7 +56,7 @@ def _get_bucket():
 
     import oss2
     auth = oss2.Auth(settings.OSS_ACCESS_KEY_ID, settings.OSS_ACCESS_KEY_SECRET)
-    _oss_bucket = oss2.Bucket(auth, settings.OSS_ENDPOINT, settings.OSS_BUCKET_NAME)
+    _oss_bucket = oss2.Bucket(auth, _oss_endpoint(), settings.OSS_BUCKET_NAME)
     return _oss_bucket
 
 
@@ -48,16 +74,26 @@ def upload_bytes(data: bytes, object_key: str, content_type: str = "") -> str:
     Returns:
         object_key（与入参相同，方便链式调用）
     """
-    import oss2
     bucket = _get_bucket()
 
     headers = {}
     if content_type:
         headers["Content-Type"] = content_type
 
-    result = bucket.put_object(object_key, data, headers=headers)
-    if result.status != 200:
-        raise RuntimeError("OSS 上传失败，状态码: %d" % result.status)
+    def _upload():
+        result = bucket.put_object(object_key, data, headers=headers)
+        if result.status != 200:
+            _raise_for_oss_status("upload_bytes", result.status)
+        return result
+
+    retry_sync(
+        _upload,
+        logger=logger,
+        event="oss_upload_bytes",
+        attempts=settings.OSS_RETRY_ATTEMPTS,
+        fields={"object_key": object_key, "size": len(data), "content_type": content_type},
+        should_retry=_is_retryable_oss_exception,
+    )
 
     return object_key
 
@@ -72,9 +108,25 @@ def upload_file(object_key: str, file_path: str, content_type: str = "") -> str:
     if content_type:
         headers["Content-Type"] = content_type
 
-    result = bucket.put_object_from_file(object_key, file_path, headers=headers)
-    if result.status != 200:
-        raise RuntimeError("OSS 上传失败，状态码: %d" % result.status)
+    def _upload():
+        result = bucket.put_object_from_file(object_key, file_path, headers=headers)
+        if result.status != 200:
+            _raise_for_oss_status("upload_file", result.status)
+        return result
+
+    retry_sync(
+        _upload,
+        logger=logger,
+        event="oss_upload_file",
+        attempts=settings.OSS_RETRY_ATTEMPTS,
+        fields={
+            "object_key": object_key,
+            "file_path": file_path,
+            "size": os.path.getsize(file_path) if os.path.exists(file_path) else None,
+            "content_type": content_type,
+        },
+        should_retry=_is_retryable_oss_exception,
+    )
 
     return object_key
 
@@ -100,11 +152,58 @@ def get_signed_url(object_key: str, expires: int = 3600) -> str:
     return url
 
 
+def extract_object_key(url_or_key: str) -> str:
+    """从本系统 OSS URL 或 object_key 中提取对象路径。
+
+    历史数据里有些文件只保存了带签名的完整 URL。签名过期后必须从 URL
+    反推出 object_key，再重新签名。
+    """
+    if not url_or_key:
+        return ""
+
+    value = str(url_or_key).strip()
+    if not value:
+        return ""
+
+    if not value.startswith(("http://", "https://")):
+        return "" if value.startswith("/") else value
+
+    parsed = urlparse(value)
+    if not parsed.netloc or not parsed.path:
+        return ""
+
+    host = parsed.netloc.split("@")[-1].split(":")[0]
+    bucket_name = settings.OSS_BUCKET_NAME
+    endpoint = settings.OSS_ENDPOINT or ""
+    endpoint_host = urlparse(endpoint if "://" in endpoint else f"https://{endpoint}").netloc
+    object_path = unquote(parsed.path.lstrip("/"))
+    if not object_path:
+        return ""
+
+    if bucket_name and endpoint_host:
+        if host == f"{bucket_name}.{endpoint_host}":
+            return object_path
+        if host == endpoint_host and object_path.startswith(f"{bucket_name}/"):
+            return object_path[len(bucket_name) + 1:]
+
+    if bucket_name and host.startswith(f"{bucket_name}.") and ".aliyuncs.com" in host:
+        return object_path
+
+    return ""
+
+
 def delete_object(object_key: str) -> bool:
     """删除 OSS 上的对象"""
     try:
         bucket = _get_bucket()
-        bucket.delete_object(object_key)
+        retry_sync(
+            lambda: bucket.delete_object(object_key),
+            logger=logger,
+            event="oss_delete_object",
+            attempts=settings.OSS_RETRY_ATTEMPTS,
+            fields={"object_key": object_key},
+            should_retry=_is_retryable_oss_exception,
+        )
         log_business_event(logger, "oss_object_deleted", object_key=object_key)
         return True
     except Exception as e:
@@ -115,26 +214,48 @@ def delete_object(object_key: str) -> bool:
 def download_object_to_file(object_key: str, file_path: str):
     """下载 OSS 私有对象到本地临时文件。"""
     bucket = _get_bucket()
-    result = bucket.get_object(object_key)
-    with open(file_path, "wb") as f:
-        while True:
-            chunk = result.read(1024 * 1024)
-            if not chunk:
-                break
-            f.write(chunk)
+
+    def _download():
+        result = bucket.get_object(object_key)
+        with open(file_path, "wb") as f:
+            while True:
+                chunk = result.read(1024 * 1024)
+                if not chunk:
+                    break
+                f.write(chunk)
+
+    retry_sync(
+        _download,
+        logger=logger,
+        event="oss_download_object",
+        attempts=settings.OSS_RETRY_ATTEMPTS,
+        fields={"object_key": object_key, "target": file_path},
+        should_retry=_is_retryable_oss_exception,
+    )
 
 
 def download_object_bytes(object_key: str) -> bytes:
     """下载 OSS 私有对象并返回 bytes。适合 PDF 这类小型归档文件。"""
     bucket = _get_bucket()
-    result = bucket.get_object(object_key)
-    chunks = []
-    while True:
-        chunk = result.read(1024 * 1024)
-        if not chunk:
-            break
-        chunks.append(chunk)
-    return b"".join(chunks)
+
+    def _download() -> bytes:
+        result = bucket.get_object(object_key)
+        chunks = []
+        while True:
+            chunk = result.read(1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+    return retry_sync(
+        _download,
+        logger=logger,
+        event="oss_download_object",
+        attempts=settings.OSS_RETRY_ATTEMPTS,
+        fields={"object_key": object_key},
+        should_retry=_is_retryable_oss_exception,
+    )
 
 
 # ============ 工具方法 ============
@@ -145,11 +266,14 @@ def build_object_key(prefix: str, user_id: str, filename: str) -> str:
 
     示例: site_photos/user-abc123/20260429_143052_photo.jpg
     """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = "%s_%s" % (timestamp, filename)
-    if user_id:
-        return "%s/%s/%s" % (prefix, user_id, safe_name)
-    return "%s/%s" % (prefix, safe_name)
+    timestamp = beijing_now().strftime("%Y%m%d_%H%M%S")
+    clean_prefix = (prefix or "uploads").strip().strip("/")
+    clean_user_id = (user_id or "").strip().strip("/").replace("\\", "_").replace("/", "_")
+    clean_filename = os.path.basename((filename or "upload").replace("\\", "/")).strip() or "upload"
+    safe_name = "%s_%s" % (timestamp, clean_filename)
+    if clean_user_id:
+        return "%s/%s/%s" % (clean_prefix, clean_user_id, safe_name)
+    return "%s/%s" % (clean_prefix, safe_name)
 
 
 def upload_and_sign(
@@ -224,9 +348,9 @@ def maybe_sign_url(url_or_key: str, expires: int = 3600) -> str:
     if not settings.OSS_ENABLED:
         return url_or_key
 
-    # 已经是完整 URL（已签名或外部链接），不处理
     if url_or_key.startswith("http://") or url_or_key.startswith("https://"):
-        return url_or_key
+        object_key = extract_object_key(url_or_key)
+        return get_signed_url(object_key, expires) if object_key else url_or_key
 
     # 本地路径（/uploads/...），在 OSS 模式下不应该出现，但安全起见原样返回
     if url_or_key.startswith("/"):

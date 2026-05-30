@@ -394,6 +394,7 @@ import { ref, computed, onMounted } from 'vue'
 import { Search, Loading, Upload, Refresh, View, Plus, Delete } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { formatServerTime } from '@/utils/time'
 
 const customers = ref<any[]>([])
 const loading = ref(false)
@@ -670,14 +671,7 @@ const saveNotes = async () => {
 }
 
 const formatTime = (ts: string) => {
-  if (!ts) return '-'
-  try {
-    return new Date(ts).toLocaleString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit',
-    })
-  } catch { return ts }
+  return formatServerTime(ts)
 }
 
 const statusLabel = (s: string) => {

@@ -4,8 +4,8 @@
 """
 
 from sqlalchemy import Column, String, Integer, Text, DateTime, JSON, ForeignKey, Index, UniqueConstraint
-from sqlalchemy.sql import func
 from app.database import Base
+from app.utils.timezone import beijing_now
 
 
 class AIChatSession(Base):
@@ -19,8 +19,8 @@ class AIChatSession(Base):
     business_type = Column(String(30), default="ai_3d_custom") # ai_3d_custom / video_purchase / digital_art
     title = Column(String(200), nullable=True)                 # 会话标题（取第一条用户消息摘要）
     message_count = Column(Integer, default=0)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
+    updated_at = Column(DateTime(timezone=True), default=beijing_now, onupdate=beijing_now)
 
 
 class AIChatMessage(Base):
@@ -33,7 +33,7 @@ class AIChatMessage(Base):
     role = Column(String(20), nullable=False)                  # user / assistant / system
     content = Column(Text, nullable=False)
     metadata_json = Column(JSON, nullable=True)                # 附加数据（上传文件等）
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
 
     __table_args__ = (
         UniqueConstraint("session_id", "client_message_id", name="uq_ai_chat_session_client_msg"),

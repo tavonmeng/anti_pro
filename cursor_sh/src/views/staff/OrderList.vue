@@ -185,6 +185,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Refresh, Document, Loading, View, CircleCheck, CircleClose, ChatLineSquare } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
+import { formatServerTime } from '@/utils/time'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
 import type { Order, OrderType, OrderStatus, UploadedFile } from '@/types'
@@ -237,20 +238,7 @@ const getOrderTypeText = (type: OrderType) => {
 }
 
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  const date = new Date(timeString)
-  if (isNaN(date.getTime())) {
-    return timeString
-  }
-  return date.toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
+  return formatServerTime(timeString)
 }
 
 const handleUploadPreview = (order: Order) => {
@@ -464,5 +452,4 @@ const viewDetail = (order: Order) => {
   font-weight: 600;
 }
 </style>
-
 

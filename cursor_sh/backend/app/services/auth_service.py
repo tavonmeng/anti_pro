@@ -10,6 +10,7 @@ from app.models.staff_member import StaffMember
 from app.models.contractor import Contractor
 from app.models.contractor_invitation import ContractorInvitation
 from app.models.security_event import SecurityEvent, SecurityEventType
+from app.config import settings
 from app.schemas.auth import (
     LoginRequest, RegisterRequest, LoginResponse, 
     ChangePasswordRequest, ResetPasswordRequest
@@ -24,6 +25,34 @@ from app.utils.log_setup import get_module_logger
 
 
 logger = get_module_logger("auth")
+
+
+def _role_value(role) -> str:
+    return role.value if hasattr(role, "value") else str(role)
+
+
+def _ensure_role_allowed_for_deployment(role: UserRole) -> None:
+    """External deployment is customer-facing and must not expose internal auth."""
+    role_value = _role_value(role)
+    deploy_mode = (settings.DEPLOYMENT_MODE or "").strip().lower()
+    if deploy_mode == "external" and role_value != UserRole.USER.value:
+        log_business_event(
+            logger,
+            "internal_role_auth_blocked_on_external",
+            level="warning",
+            role=role_value,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="接口不存在",
+        )
+
+
+def _password_reset_models():
+    deploy_mode = (settings.DEPLOYMENT_MODE or "").strip().lower()
+    if deploy_mode == "external":
+        return [User]
+    return [User, Admin, StaffMember, Contractor]
 
 
 def _get_model_for_role(role: UserRole):
@@ -46,6 +75,7 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
     1. 手机号 + 密码
     2. 手机号 + 短信验证码
     """
+    _ensure_role_allowed_for_deployment(login_data.role)
     Model = _get_model_for_role(login_data.role)
     
     if not login_data.phone:
@@ -347,7 +377,7 @@ async def register(db: AsyncSession, register_data: RegisterRequest, client_ip: 
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"注册失败: {str(e)}"
+            detail="注册失败，请稍后重试"
         )
 
 
@@ -361,9 +391,10 @@ async def reset_password(db: AsyncSession, data: ResetPasswordRequest) -> dict:
             detail="验证码错误或已过期"
         )
     
-    # 2. 在四张表中查找用户
+    # 2. 在用户表中查找。External 部署只允许普通客户找回密码；
+    #    内部角色只能在 internal/all 部署入口操作。
     user = None
-    for Model in [User, Admin, StaffMember, Contractor]:
+    for Model in _password_reset_models():
         result = await db.execute(
             select(Model).where(Model.phone == data.phone)
         )
@@ -428,7 +459,7 @@ async def register_contractor(db: AsyncSession, register_data: dict) -> dict:
             - specialty: 专业方向（选填）
             - expertise: 擅长领域（选填）
     """
-    from datetime import datetime, timezone
+    from app.utils.timezone import beijing_now, ensure_beijing
     
     try:
         # 1. 验证邀请 token
@@ -458,8 +489,9 @@ async def register_contractor(db: AsyncSession, register_data: dict) -> dict:
                 detail="邀请链接已被使用"
             )
         
-        now = datetime.now(timezone.utc)
-        if invitation.expires_at and invitation.expires_at.replace(tzinfo=timezone.utc) < now:
+        now = beijing_now()
+        expires_at = ensure_beijing(invitation.expires_at)
+        if expires_at and expires_at < now:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="邀请链接已过期"
@@ -564,5 +596,5 @@ async def register_contractor(db: AsyncSession, register_data: dict) -> dict:
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"注册失败: {str(e)}"
+            detail="注册失败，请稍后重试"
         )

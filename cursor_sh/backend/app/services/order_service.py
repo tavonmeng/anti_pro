@@ -5,9 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
 from typing import List, Optional, Union
-from datetime import datetime, timezone
+from datetime import datetime
 
 from app.models.order import Order, OrderType, OrderStatus, OrderAssignee
+from app.models.contractor_assignment import ContractorAssignment
+from app.models.contractor_deliverable import ContractorDeliverable
 from app.models.user import EnterpriseStatus, User, UserRole
 from app.utils.dependencies import AnyUser
 from app.models.admin import Admin
@@ -26,9 +28,19 @@ from app.services.pdf_service import PDFService
 from app.config import settings
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_iso, beijing_now, beijing_now_iso
 
 
 logger = get_module_logger("order")
+
+
+def _log_email_result(event: str, sent: bool, **fields):
+    log_business_event(
+        logger,
+        event if sent else f"{event}_failed",
+        level="info" if sent else "warning",
+        **fields,
+    )
 
 
 async def _get_order_assignee_ids(db: AsyncSession, order_id: str) -> List[str]:
@@ -37,6 +49,12 @@ async def _get_order_assignee_ids(db: AsyncSession, order_id: str) -> List[str]:
         select(OrderAssignee.assignee_id).where(OrderAssignee.order_id == order_id)
     )
     return [row[0] for row in result.all()]
+
+
+def _iso_beijing(dt: datetime | None) -> str | None:
+    if not dt:
+        return None
+    return beijing_iso(dt)
 
 
 class OrderStateMachine:
@@ -155,7 +173,7 @@ class OrderService:
             order_response = await OrderService._build_order_response(db, order, user)
 
         pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response)
-        archived_at = datetime.now(timezone.utc).isoformat()
+        archived_at = beijing_now_iso()
 
         if settings.OSS_ENABLED:
             from app.services.oss_service import upload_bytes
@@ -327,14 +345,14 @@ class OrderService:
                     user,
                     order_response,
                 )
-                await EmailService.send_order_confirmation(
+                email_sent = await EmailService.send_order_confirmation(
                     user.email,
                     new_order.order_number,
                     pdf_bytes
                 )
-                log_business_event(
-                    logger,
+                _log_email_result(
                     "order_confirmation_email_sent",
+                    email_sent,
                     order_id=new_order.id,
                     order_number=new_order.order_number,
                     user_id=user.id,
@@ -705,14 +723,14 @@ class OrderService:
                     user,
                     order_response_for_pdf,
                 )
-                await EmailService.send_order_confirmation(
+                email_sent = await EmailService.send_order_confirmation(
                     user.email,
                     order.order_number,
                     pdf_bytes
                 )
-                log_business_event(
-                    logger,
+                _log_email_result(
                     "order_confirmation_email_sent",
+                    email_sent,
                     order_id=order.id,
                     order_number=order.order_number,
                     user_id=order.user_id,
@@ -720,15 +738,15 @@ class OrderService:
                 )
             else:
                 # 发送普通的状态变更邮件
-                await EmailService.send_order_status_notification(
+                email_sent = await EmailService.send_order_status_notification(
                     user.email,
                     order.order_number,
                     old_status.value,
                     new_status.value
                 )
-                log_business_event(
-                    logger,
+                _log_email_result(
                     "order_status_email_sent",
+                    email_sent,
                     order_id=order.id,
                     order_number=order.order_number,
                     user_id=order.user_id,
@@ -944,6 +962,16 @@ class OrderService:
         # 权限检查
         if current_user.role not in [UserRole.ADMIN, UserRole.STAFF]:
             raise HTTPException(status_code=403, detail="权限不足")
+
+        if current_user.role == UserRole.STAFF:
+            assignee_result = await db.execute(
+                select(OrderAssignee).where(
+                    OrderAssignee.order_id == order_id,
+                    OrderAssignee.assignee_id == current_user.id
+                )
+            )
+            if not assignee_result.scalar_one_or_none():
+                raise HTTPException(status_code=403, detail="无权为未分配给自己的订单上传预览")
         
         # 处理预览文件
         preview_files = []
@@ -970,14 +998,13 @@ class OrderService:
         order_data["previewFiles"] = preview_files_field
         
         # 存储预览历史记录（每次上传都保存一条完整记录）
-        # 使用 UTC 时间并添加时区信息，与数据库时间格式保持一致
-        utc_now = datetime.now(timezone.utc)
+        now = beijing_now()
         preview_type_value = preview_type if preview_type in ["initial", "final"] else "initial"
         preview_history_entry = {
             "id": generate_id("preview"),
             "files": preview_files,
             "note": note or "",
-            "createdAt": utc_now.isoformat(),
+            "createdAt": now.isoformat(),
             "createdBy": current_user.id,
             "createdByName": current_user.real_name or current_user.username,
             "previewType": preview_type_value,
@@ -1003,7 +1030,7 @@ class OrderService:
                 order_data["previewNotes"] = []
             order_data["previewNotes"].append({
                 "note": note,
-                "createdAt": utc_now.isoformat(),
+                "createdAt": now.isoformat(),
                 "createdBy": current_user.id,
                 "createdByName": current_user.real_name or current_user.username
             })
@@ -1090,12 +1117,12 @@ class OrderService:
         if target_preview.get("reviewStatus") != "pending":
             raise HTTPException(status_code=400, detail="该预览已审核")
         
-        utc_now = datetime.now(timezone.utc).isoformat()
+        now = beijing_now_iso()
         reviewer_name = current_user.real_name or current_user.username
         
         target_preview["reviewStatus"] = "approved" if review_data.action == "approve" else "rejected"
         target_preview["reviewNote"] = review_data.note or ""
-        target_preview["reviewedAt"] = utc_now
+        target_preview["reviewedAt"] = now
         target_preview["reviewedBy"] = current_user.id
         target_preview["reviewedByName"] = reviewer_name
         
@@ -1146,14 +1173,14 @@ class OrderService:
             user_result = await db.execute(select(User).where(User.id == order.user_id))
             user = user_result.scalar_one_or_none()
             if user and user.email:
-                await EmailService.send_preview_ready_notification(
+                email_sent = await EmailService.send_preview_ready_notification(
                     user.email,
                     order.order_number,
                     preview_type_text
                 )
-                log_business_event(
-                    logger,
+                _log_email_result(
                     "preview_ready_email_sent",
+                    email_sent,
                     order_id=order.id,
                     order_number=order.order_number,
                     user_id=order.user_id,
@@ -1204,7 +1231,7 @@ class OrderService:
                     order.order_number,
                     old_status.value,
                     order.status.value
-            )
+                )
         
         return await OrderService._build_order_response(db, order, current_user)
     
@@ -1225,6 +1252,37 @@ class OrderService:
         # 权限检查：只有订单创建者可以提交反馈
         if order.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="只有订单创建者可以提交反馈")
+
+        # 交付物反馈必须指向当前订单下已经推送给客户的交付物。
+        if feedback_data.deliverableId:
+            deliverable_result = await db.execute(
+                select(ContractorDeliverable)
+                .join(ContractorAssignment, ContractorDeliverable.assignment_id == ContractorAssignment.id)
+                .where(
+                    ContractorDeliverable.id == feedback_data.deliverableId,
+                    ContractorAssignment.order_id == order_id,
+                    ContractorDeliverable.is_published_to_user == True,  # noqa: E712
+                )
+            )
+            if not deliverable_result.scalar_one_or_none():
+                raise HTTPException(status_code=404, detail="交付物不存在或尚未对客户发布")
+
+        target_status = None
+        if not feedback_data.deliverableId:
+            if feedback_data.type == FeedbackType.REVISION:
+                if order.status not in [OrderStatus.PREVIEW_READY, OrderStatus.FINAL_PREVIEW]:
+                    raise HTTPException(status_code=400, detail="当前订单状态不能提交修改反馈")
+                target_status = OrderStatus.REVISION_NEEDED
+            elif feedback_data.type == FeedbackType.APPROVAL:
+                if order.status == OrderStatus.PREVIEW_READY:
+                    target_status = OrderStatus.IN_PRODUCTION
+                elif order.status == OrderStatus.FINAL_PREVIEW:
+                    target_status = OrderStatus.COMPLETED
+                else:
+                    raise HTTPException(status_code=400, detail="当前订单状态不能确认通过")
+
+            if target_status:
+                OrderStateMachine.validate_transition(order.status, target_status)
         
         # 创建反馈记录
         feedback = Feedback(
@@ -1239,19 +1297,12 @@ class OrderService:
         
         # 仅订单级别反馈时才更新订单状态（交付物级别反馈不影响订单状态）
         old_status = order.status
-        if not feedback_data.deliverableId:
+        if target_status:
             if feedback_data.type == FeedbackType.REVISION:
-                # 需要修改
-                order.status = OrderStatus.REVISION_NEEDED
+                order.status = target_status
                 order.revision_count += 1
             elif feedback_data.type == FeedbackType.APPROVAL:
-                # 确认通过
-                if order.status == OrderStatus.PREVIEW_READY:
-                    # 初稿通过，继续制作终稿
-                    order.status = OrderStatus.IN_PRODUCTION
-                elif order.status == OrderStatus.FINAL_PREVIEW:
-                    # 终稿通过，订单完成
-                    order.status = OrderStatus.COMPLETED
+                order.status = target_status
         
         await db.commit()
         await db.refresh(feedback)
@@ -1316,19 +1367,13 @@ class OrderService:
                 error=str(e),
             )
         
-        # 确保时间包含时区信息（UTC）
-        feedback_created_at = feedback.created_at
-        if feedback_created_at.tzinfo is None:
-            # 如果没有时区信息，假设是 UTC 时间
-            feedback_created_at = feedback_created_at.replace(tzinfo=timezone.utc)
-        
         return {
             "id": feedback.id,
             "orderId": feedback.order_id,
             "deliverableId": feedback.deliverable_id,
             "content": feedback.content,
             "type": feedback.type.value,
-            "createdAt": feedback_created_at.isoformat(),
+            "createdAt": beijing_iso(feedback.created_at),
             "createdBy": feedback.created_by,
             "createdByName": current_user.username
         }
@@ -1363,12 +1408,12 @@ class OrderService:
         
         # 保存合同信息到 order_data
         order_data = order.order_data.copy()
-        utc_now = datetime.now(timezone.utc)
+        now = beijing_now()
         order_data["contractInfo"] = {
             "contractNumber": contract_number,
             "paymentAmount": payment_amount,
             "note": note or "",
-            "confirmedAt": utc_now.isoformat(),
+            "confirmedAt": now.isoformat(),
             "confirmedBy": current_user.id,
             "confirmedByName": current_user.real_name or current_user.username
         }
@@ -1397,15 +1442,15 @@ class OrderService:
         user_result = await db.execute(select(User).where(User.id == order.user_id))
         user = user_result.scalar_one_or_none()
         if user and user.email:
-            await EmailService.send_order_status_notification(
+            email_sent = await EmailService.send_order_status_notification(
                 user.email,
                 order.order_number,
                 old_status.value,
                 OrderStatus.IN_PRODUCTION.value
             )
-            log_business_event(
-                logger,
+            _log_email_result(
                 "order_status_email_sent",
+                email_sent,
                 order_id=order.id,
                 order_number=order.order_number,
                 user_id=order.user_id,
@@ -1469,10 +1514,10 @@ class OrderService:
         
         # 保存取消原因到 order_data
         order_data = order.order_data.copy()
-        utc_now = datetime.now(timezone.utc)
+        now = beijing_now()
         order_data["cancelInfo"] = {
             "reason": reason or "",
-            "cancelledAt": utc_now.isoformat(),
+            "cancelledAt": now.isoformat(),
             "cancelledBy": current_user.id,
             "cancelledByName": current_user.real_name or current_user.username
         }
@@ -1501,15 +1546,15 @@ class OrderService:
         cancel_reason_text = f"取消原因：{reason}" if reason else ""
         
         if user and user.email:
-            await EmailService.send_order_status_notification(
+            email_sent = await EmailService.send_order_status_notification(
                 user.email,
                 order.order_number,
                 old_status.value,
                 OrderStatus.CANCELLED.value
             )
-            log_business_event(
-                logger,
+            _log_email_result(
                 "order_status_email_sent",
+                email_sent,
                 order_id=order.id,
                 order_number=order.order_number,
                 user_id=order.user_id,
@@ -1572,31 +1617,16 @@ class OrderService:
             creator_result = await db.execute(select(User).where(User.id == feedback.created_by))
             creator = creator_result.scalar_one_or_none()
             
-            # 确保时间包含时区信息（UTC）
-            feedback_created_at = feedback.created_at
-            if feedback_created_at.tzinfo is None:
-                # 如果没有时区信息，假设是 UTC 时间
-                feedback_created_at = feedback_created_at.replace(tzinfo=timezone.utc)
-            
             feedback_responses.append({
                 "id": feedback.id,
                 "orderId": feedback.order_id,
                 "deliverableId": feedback.deliverable_id,
                 "content": feedback.content,
                 "type": feedback.type.value,
-                "createdAt": feedback_created_at.isoformat(),
+                "createdAt": beijing_iso(feedback.created_at),
                 "createdBy": feedback.created_by,
                 "createdByName": creator.username if creator else None
             })
-        
-        # 确保订单时间包含时区信息（UTC）
-        order_created_at = order.created_at
-        if order_created_at.tzinfo is None:
-            order_created_at = order_created_at.replace(tzinfo=timezone.utc)
-        
-        order_updated_at = order.updated_at
-        if order_updated_at.tzinfo is None:
-            order_updated_at = order_updated_at.replace(tzinfo=timezone.utc)
         
         # 基础响应数据
         base_response = {
@@ -1610,8 +1640,8 @@ class OrderService:
             "userPhone": user.phone if user else None,
             "userEmail": user.email if user else None,
             "assignees": assignees_data,
-            "createdAt": order_created_at.isoformat(),
-            "updatedAt": order_updated_at.isoformat(),
+            "createdAt": beijing_iso(order.created_at),
+            "updatedAt": beijing_iso(order.updated_at),
             "feedbacks": feedback_responses,
             "revisionCount": order.revision_count,
             "previewHistory": order.order_data.get("previewHistory", []),  # 预览历史记录
@@ -1635,7 +1665,7 @@ class OrderService:
                     ContractorAssignment.order_id == order.id,
                     ContractorDeliverable.is_published_to_user == True
                 )
-                .order_by(ContractorDeliverable.stage_order.asc(), ContractorDeliverable.created_at.asc())
+                .order_by(ContractorDeliverable.published_at.desc(), ContractorDeliverable.created_at.desc())
             )
             published_deliverables = published_dlv_result.scalars().all()
             
@@ -1650,7 +1680,8 @@ class OrderService:
                         "files": dlv.files or [],
                         "description": dlv.description,
                         "publishedNote": dlv.published_note,
-                        "publishedAt": dlv.published_at.isoformat() if dlv.published_at else None,
+                        "publishedAt": _iso_beijing(dlv.published_at),
+                        "createdAt": _iso_beijing(dlv.created_at),
                     }
                     base_response["publishedDeliverables"].append(dlv_item)
         except Exception as e:
@@ -1674,11 +1705,20 @@ def _sign_file_urls_in_response(data: dict):
     - previewHistory[].files[].url
     - site_photos[].url / site_photos[].file_url
     """
-    from app.services.oss_service import maybe_sign_url
+    from app.services.oss_service import extract_object_key, maybe_sign_url
 
     # 签名单个文件对象的 url 字段
     def _sign_file_item(item):
         if isinstance(item, dict):
+            object_key = item.get("object_key") or item.get("objectKey")
+            if not object_key:
+                object_key = extract_object_key(item.get("url") or item.get("file_url") or "")
+            if object_key:
+                item["object_key"] = object_key
+                item["url"] = maybe_sign_url(object_key)
+                if "file_url" in item:
+                    item["file_url"] = item["url"]
+                return
             if "url" in item and item["url"]:
                 item["url"] = maybe_sign_url(item["url"])
             if "file_url" in item and item["file_url"]:

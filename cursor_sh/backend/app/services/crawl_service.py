@@ -14,6 +14,7 @@ from app.config import settings
 from app.services.ai_client import post_chat_completion
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_now_iso
 
 
 logger = get_module_logger("ai")
@@ -208,7 +209,8 @@ async def _verify_website(url: str, company_name: str, company_short: str) -> tu
     except httpx.TimeoutException:
         return False, "连接超时，网站可能无法访问"
     except Exception as e:
-        return False, f"请求异常: {str(e)[:50]}"
+        log_business_event(logger, "crawl_homepage_request_failed", level="warning", url=url, error=str(e))
+        return False, "请求异常，网站暂时无法访问"
 
     # 2. 解析 HTML
     soup = BeautifulSoup(html, "html.parser")
@@ -434,15 +436,13 @@ async def crawl_and_extract(company_name: str) -> dict:
     # Step 3: LLM 提取结构化信息
     extracted = await extract_company_info(raw_text)
 
-    from datetime import datetime
-
     company_info = {
         "name": company_name,
         "website": website_url,
         "description": extracted.get("description", ""),
         "advantages": extracted.get("advantages", []),
         "past_cases": extracted.get("past_cases", []),
-        "crawled_at": datetime.now().isoformat(),
+        "crawled_at": beijing_now_iso(),
         "crawl_status": "success",
     }
 

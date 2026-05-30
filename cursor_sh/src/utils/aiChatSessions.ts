@@ -1,3 +1,5 @@
+import { formatServerMonthDayTime, formatServerShortTime } from './time'
+
 export type AiAgentSessionMeta = {
   agentKey: string
   agentLabel?: string
@@ -54,13 +56,7 @@ export const makeAiChatSessionTitle = (messages: any[] = [], fallback = '新的�
 }
 
 const formatRemoteMessageTime = (value?: string) => {
-  if (!value) return ''
-  const time = Date.parse(value)
-  if (!Number.isFinite(time)) return value
-  return new Date(time).toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return formatServerShortTime(value, '')
 }
 
 export const getAiChatAgentMeta = (sessionType?: string, businessType?: string) => {
@@ -117,14 +113,7 @@ export const createAiChatSessionFromRemote = (
     businessType: remote.businessType || 'ai_3d_custom',
     stateSnapshot: null,
     updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now(),
-    savedAt: new Date(Number.isFinite(updatedAt) ? updatedAt : Date.now()).toLocaleString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }),
+    savedAt: formatServerMonthDayTime(new Date(Number.isFinite(updatedAt) ? updatedAt : Date.now()).toISOString()),
   }
 }
 

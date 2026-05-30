@@ -15,6 +15,7 @@ from fastapi import HTTPException, status
 from app.config import settings
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.retry import retry_sync
 
 
 logger = get_module_logger("auth")
@@ -107,7 +108,13 @@ async def _send_via_dypnsapi(phone: str) -> dict:
         )
 
         runtime = util_models.RuntimeOptions()
-        resp = client.send_sms_verify_code_with_options(request, runtime)
+        resp = retry_sync(
+            lambda: client.send_sms_verify_code_with_options(request, runtime),
+            logger=logger,
+            event="sms_send_provider_call",
+            attempts=settings.SMS_RETRY_ATTEMPTS,
+            fields={"phone": phone, "provider": "aliyun"},
+        )
 
         body = resp.body
         if body and body.code == "OK":
@@ -124,8 +131,8 @@ async def _send_via_dypnsapi(phone: str) -> dict:
                 error=error_msg,
             )
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"短信发送失败: {error_msg}"
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="短信发送失败，请稍后重试"
             )
     except HTTPException:
         raise
@@ -138,9 +145,10 @@ async def _send_via_dypnsapi(phone: str) -> dict:
             provider="aliyun",
             error=str(e),
         )
-        # 回退到本地模式
-        log_business_event(logger, "sms_send_fallback", level="warning", phone=phone, fallback="local")
-        return _send_local(phone)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="短信服务暂时不可用，请稍后重试"
+        )
 
 
 def _send_local(phone: str) -> dict:
@@ -205,7 +213,13 @@ async def _verify_via_dypnsapi(phone: str, code: str) -> bool:
         )
 
         runtime = util_models.RuntimeOptions()
-        resp = client.check_sms_verify_code_with_options(request, runtime)
+        resp = retry_sync(
+            lambda: client.check_sms_verify_code_with_options(request, runtime),
+            logger=logger,
+            event="sms_verify_provider_call",
+            attempts=settings.SMS_RETRY_ATTEMPTS,
+            fields={"phone": phone, "provider": "aliyun"},
+        )
 
         body = resp.body
         if body and body.code == "OK":
@@ -224,8 +238,10 @@ async def _verify_via_dypnsapi(phone: str, code: str) -> bool:
             provider="aliyun",
             error=str(e),
         )
-        # 回退到本地校验
-        return _verify_local(phone, code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="短信验证服务暂时不可用，请稍后重试"
+        )
 
 
 def _verify_local(phone: str, code: str, consume: bool = True) -> bool:

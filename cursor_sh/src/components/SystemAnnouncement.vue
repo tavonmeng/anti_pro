@@ -52,6 +52,7 @@
 import { ref, onMounted } from 'vue'
 import { ChatDotRound } from '@element-plus/icons-vue'
 import { announcementApi } from '@/utils/api'
+import { formatServerTime } from '@/utils/time'
 import type { Announcement } from '@/utils/api'
 
 const props = defineProps({
@@ -67,16 +68,7 @@ const hasUnread = ref(false)
 const announcements = ref<Announcement[]>([])
 
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  const date = new Date(timeString)
-  if (isNaN(date.getTime())) return timeString
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return formatServerTime(timeString)
 }
 
 const togglePopover = () => {

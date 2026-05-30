@@ -1,8 +1,8 @@
 """客户资料模型 — 用于 Agent Memory 知识导入"""
 
 from sqlalchemy import Column, String, DateTime, Integer, Text, JSON, ForeignKey
-from sqlalchemy.sql import func
 from app.database import Base
+from app.utils.timezone import beijing_now
 
 
 class CustomerDocument(Base):
@@ -23,8 +23,8 @@ class CustomerDocument(Base):
     status = Column(String(30), default="uploaded", index=True)
     processing_error = Column(Text)
     uploaded_by = Column(String(50))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
+    updated_at = Column(DateTime(timezone=True), default=beijing_now, onupdate=beijing_now)
 
     def __repr__(self):
         return f"<CustomerDocument(id={self.id}, user_id={self.user_id}, filename={self.original_filename})>"
@@ -45,8 +45,8 @@ class CustomerDocumentExtraction(Base):
     review_note = Column(Text)
     reviewed_by = Column(String(50))
     reviewed_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
+    updated_at = Column(DateTime(timezone=True), default=beijing_now, onupdate=beijing_now)
 
     def __repr__(self):
         return f"<CustomerDocumentExtraction(document_id={self.document_id}, status={self.status})>"

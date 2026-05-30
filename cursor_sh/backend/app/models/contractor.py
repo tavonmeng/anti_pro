@@ -1,8 +1,8 @@
 """承包商模型"""
 
 from sqlalchemy import Column, String, Boolean, DateTime, JSON
-from sqlalchemy.sql import func
 from app.database import Base
+from app.utils.timezone import beijing_now
 
 
 class Contractor(Base):
@@ -22,8 +22,8 @@ class Contractor(Base):
     showcase_cases = Column(JSON, default=list)  # 优秀案例（最多2个视频）
     avatar = Column(String(255))
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
+    updated_at = Column(DateTime(timezone=True), default=beijing_now, onupdate=beijing_now)
 
     @property
     def role(self):

@@ -16,7 +16,9 @@ services:
     container_name: anti-pro-backend
     restart: always
     env_file:
-      - ./cursor_sh/backend/.env
+      # Production example:
+      #   BACKEND_ENV_FILE=./cursor_sh/backend/.env.external DEPLOYMENT_MODE=external docker compose up -d --build
+      - ${BACKEND_ENV_FILE:-./cursor_sh/backend/.env}
     volumes:
       # 数据持久化：数据库和上传文件挂载到宿主机，容器销毁数据不丢
       - backend-data:/app/data_persist
@@ -37,8 +39,13 @@ services:
       args:
         VITE_API_BASE_URL: /api
         VITE_ENABLE_VOICE_INPUT: "false"
+        VITE_DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-all}
     container_name: anti-pro-frontend
     restart: always
+    environment:
+      # Used by cursor_sh/docker-entrypoint-custom.sh to select
+      # nginx.external.conf or nginx.internal.conf at container startup.
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-all}
     ports:
       - "8080:8080"
     depends_on:

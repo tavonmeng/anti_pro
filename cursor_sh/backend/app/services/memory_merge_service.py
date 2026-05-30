@@ -1,7 +1,7 @@
 """将审核后的客户资料合并写入 UserMemory。"""
 
-from datetime import datetime
 from app.models.user_memory import UserMemory
+from app.utils.timezone import beijing_now_iso
 
 
 def merge_document_knowledge(memory: UserMemory, reviewed_data: dict, document_meta: dict) -> dict:
@@ -28,7 +28,7 @@ def merge_document_knowledge(memory: UserMemory, reviewed_data: dict, document_m
         )
 
     company_info["memory_source"] = "document"
-    company_info["document_updated_at"] = datetime.now().isoformat()
+    company_info["document_updated_at"] = beijing_now_iso()
 
     past_cases = company_info.get("past_cases") or []
     past_cases = _merge_objects(

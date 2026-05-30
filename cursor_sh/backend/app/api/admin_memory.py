@@ -15,6 +15,7 @@ from app.models.order import Order
 from app.models.user_memory import UserMemory
 from app.utils.dependencies import require_admin
 from app.services import memory_service
+from app.utils.timezone import beijing_iso
 
 router = APIRouter(prefix="/admin/memory", tags=["管理员 — 用户画像"])
 
@@ -90,7 +91,7 @@ async def get_customer_list(
         memory_map[m[0]] = {
             "hasCrawl": ci.get("crawl_status") == "success",
             "crawlStatus": ci.get("crawl_status", ""),
-            "updatedAt": m[2].isoformat() if m[2] else None,
+            "updatedAt": beijing_iso(m[2]),
         }
 
     items = []
@@ -102,7 +103,7 @@ async def get_customer_list(
             "phone": r[2],
             "email": r[3],
             "company": r[5] or r[4] or "",  # enterprise_name 优先
-            "createdAt": r[6].isoformat() if r[6] else None,
+            "createdAt": beijing_iso(r[6]),
             "orderCount": r[7],
             "memory": memory_map.get(user_id, {"hasCrawl": False, "crawlStatus": "", "updatedAt": None}),
         })
@@ -173,8 +174,8 @@ async def get_user_memory(
             past_projects=memory.past_projects or [],
             interaction_stats=memory.interaction_stats or {},
             agent_notes=memory.agent_notes or "",
-            created_at=memory.created_at.isoformat() if memory.created_at else None,
-            updated_at=memory.updated_at.isoformat() if memory.updated_at else None,
+            created_at=beijing_iso(memory.created_at),
+            updated_at=beijing_iso(memory.updated_at),
         )
 
     return {"code": 200, "data": data.model_dump()}
@@ -228,4 +229,3 @@ async def clear_crawl_cache(
         "screen_resources": [],
     })
     return {"code": 200, "data": None, "message": "爬取缓存已清除"}
-

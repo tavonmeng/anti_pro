@@ -98,6 +98,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { formatServerMonthDayTime } from '@/utils/time'
 
 const router = useRouter()
 const activeTab = ref('all')
@@ -130,8 +131,7 @@ const statusTagType = (s: string) => ({
 const totalDays = (schedule: any[]) => schedule?.reduce((sum: number, s: any) => sum + (s.days || 0), 0) || 0
 
 const formatTime = (iso: string) => {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return formatServerMonthDayTime(iso, '—')
 }
 
 const fetchAssignments = async () => {

@@ -250,15 +250,27 @@ const addWorkdays = (start: Date, days: number): Date => {
   const result = new Date(start)
   let added = 0
   while (added < days) {
-    result.setDate(result.getDate() + 1)
-    const dow = result.getDay()
+    result.setUTCDate(result.getUTCDate() + 1)
+    const dow = result.getUTCDay()
     if (dow !== 0 && dow !== 6) added++
   }
   return result
 }
 
+const getBeijingToday = (): Date => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date())
+  const pick = (type: string) => Number(parts.find(part => part.type === type)?.value)
+  return new Date(Date.UTC(pick('year'), pick('month') - 1, pick('day'), 12))
+}
+
 const formatDate = (date: Date): string => {
   return date.toLocaleDateString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -267,20 +279,20 @@ const formatDate = (date: Date): string => {
 }
 
 const startDate = computed(() => {
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrow = getBeijingToday()
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
   // 如果是周末，跳到周一
-  while (tomorrow.getDay() === 0 || tomorrow.getDay() === 6) {
-    tomorrow.setDate(tomorrow.getDate() + 1)
+  while (tomorrow.getUTCDay() === 0 || tomorrow.getUTCDay() === 6) {
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
   }
   return formatDate(tomorrow)
 })
 
 const endDate = computed(() => {
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  while (tomorrow.getDay() === 0 || tomorrow.getDay() === 6) {
-    tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrow = getBeijingToday()
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+  while (tomorrow.getUTCDay() === 0 || tomorrow.getUTCDay() === 6) {
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
   }
   return formatDate(addWorkdays(tomorrow, productionDays.value))
 })

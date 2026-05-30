@@ -56,6 +56,7 @@
 import { ref, watch } from 'vue'
 import { ElMessage, type UploadFile, type UploadInstance, type UploadUserFile } from 'element-plus'
 import { UploadFilled, Document, Delete } from '@element-plus/icons-vue'
+import { formatServerTime } from '@/utils/time'
 import type { UploadedFile } from '@/types'
 
 interface Props {
@@ -85,38 +86,45 @@ watch(() => props.modelValue, (newVal) => {
   uploadedFiles.value = newVal || []
 })
 
-// 模拟文件上传到localStorage
-const simulateUpload = (file: File): Promise<UploadedFile> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const isImage = isImageFile(file.name, file.type)
-      const uploadedFile: UploadedFile = {
-        id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        isImage,
-        previewUrl: isImage ? URL.createObjectURL(file) : undefined,
-        uploadTime: new Date().toISOString(),
-        url: `mock://files/${file.name}` // 模拟URL
-      }
-      
-      // 保存文件元数据到localStorage
-      const existingFiles = JSON.parse(localStorage.getItem('mockFiles') || '[]')
-      const storedFile = { ...uploadedFile }
-      delete storedFile.previewUrl
-      existingFiles.push(storedFile)
-      localStorage.setItem('mockFiles', JSON.stringify(existingFiles))
-      
-      resolve(uploadedFile)
-    }, 300) // 模拟上传延迟
+const uploadFile = async (file: File): Promise<UploadedFile> => {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const headers: Record<string, string> = {}
+  const token = localStorage.getItem('token')
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  const response = await fetch('/api/upload/file', {
+    method: 'POST',
+    headers,
+    body: formData
   })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok || payload?.code !== 200) {
+    throw new Error(payload?.detail || payload?.message || '上传失败')
+  }
+
+  const data = payload.data || {}
+  const isImage = isImageFile(data.filename || file.name, data.mime_type || file.type)
+  return {
+    id: data.object_key || data.url || `${file.name}-${Date.now()}`,
+    name: data.filename || file.name,
+    size: data.size ?? file.size,
+    type: data.mime_type || file.type,
+    isImage,
+    uploadTime: data.uploadedAt || new Date().toISOString(),
+    url: data.url,
+    file_url: data.url,
+    object_key: data.object_key || ''
+  }
 }
 
 const handleFileChange = async (uploadFile: UploadFile) => {
   if (uploadFile.raw) {
     try {
-      const uploaded = await simulateUpload(uploadFile.raw)
+      const uploaded = await uploadFile(uploadFile.raw)
       uploadedFiles.value.push(uploaded)
       emit('update:modelValue', uploadedFiles.value)
       ElMessage.success(`${uploadFile.name} 上传成功`)
@@ -144,11 +152,6 @@ const removeUploadedFile = (fileId: string) => {
   uploadedFiles.value = uploadedFiles.value.filter(f => f.id !== fileId)
   emit('update:modelValue', uploadedFiles.value)
   
-  // 从localStorage中移除
-  const existingFiles = JSON.parse(localStorage.getItem('mockFiles') || '[]')
-  const updatedFiles = existingFiles.filter((f: UploadedFile) => f.id !== fileId)
-  localStorage.setItem('mockFiles', JSON.stringify(updatedFiles))
-  
   ElMessage.success('文件已删除')
 }
 
@@ -158,7 +161,7 @@ const isImageFile = (name = '', type = '') => {
 
 const getPreviewSrc = (file: UploadedFile) => {
   const src = file.previewUrl || file.file_url || file.url || ''
-  return src.startsWith('mock://') ? '' : src
+  return src
 }
 
 const isPreviewableImage = (file: UploadedFile) => {
@@ -188,14 +191,7 @@ const formatFileSize = (bytes: number): string => {
 }
 
 const formatTime = (timeString: string): string => {
-  const date = new Date(timeString)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return formatServerTime(timeString)
 }
 </script>
 

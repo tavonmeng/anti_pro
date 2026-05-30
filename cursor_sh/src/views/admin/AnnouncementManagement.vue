@@ -159,6 +159,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { announcementApi, homepageBarApi } from '@/utils/api'
 import type { Announcement } from '@/utils/api'
+import { formatServerTime } from '@/utils/time'
 
 const loading = ref(false)
 const announcements = ref<Announcement[]>([])
@@ -198,16 +199,7 @@ const rules = reactive<FormRules>({
 
 // 格式化时间
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  const date = new Date(timeString)
-  if (isNaN(date.getTime())) return timeString
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return formatServerTime(timeString)
 }
 
 // 获取公告列表 (管理员获取所有)

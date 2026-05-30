@@ -9,6 +9,20 @@ declare module 'axios' {
   }
 }
 
+const ENABLE_REQUEST_DEBUG = import.meta.env.DEV || import.meta.env.VITE_DEBUG_LOGS === 'true'
+
+const debugLog = (...args: unknown[]) => {
+  if (ENABLE_REQUEST_DEBUG) {
+    console.log(...args)
+  }
+}
+
+const debugError = (...args: unknown[]) => {
+  if (ENABLE_REQUEST_DEBUG) {
+    console.error(...args)
+  }
+}
+
 // 创建axios实例
 const request: AxiosInstance = axios.create({
   baseURL: '/api',
@@ -37,7 +51,7 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response: AxiosResponse<ApiResponse>) => {
     // 调试日志
-    console.log('Response received:', response.data)
+    debugLog('Response received:', response.data)
     
     const { code, message, data } = response.data
     
@@ -46,7 +60,7 @@ request.interceptors.response.use(
       return data
     } else {
       const errorMsg = message || '请求失败'
-      console.error('API Error:', { code, message, data })
+      debugError('API Error:', { code, message, data })
       
       // 检查请求配置中是否有 silent 标记
       const isSilent = response.config?.silent === true
@@ -59,7 +73,7 @@ request.interceptors.response.use(
   },
   (error) => {
     // 调试日志
-    console.error('Request error:', error)
+    debugError('Request error:', error)
     
     // 检查请求配置中是否有 silent 标记（静默模式，不显示错误消息）
     const isSilent = error.config?.silent === true
@@ -67,7 +81,7 @@ request.interceptors.response.use(
     // 处理HTTP错误
     if (error.response) {
       const { status, data } = error.response
-      console.error('Error response:', { status, data })
+      debugError('Error response:', { status, data })
       
       // 获取错误信息，优先使用 detail，其次使用 message
       const errorMessage = data?.detail || data?.message || '请求失败'
@@ -108,13 +122,13 @@ request.interceptors.response.use(
       }
     } else if (error.request) {
       // 请求已发送但没有收到响应
-      console.error('No response received:', error.request)
+      debugError('No response received:', error.request)
       if (!isSilent) {
         ElMessage.error('网络连接失败，请检查后端服务是否启动')
       }
     } else {
       // 请求配置错误
-      console.error('Request config error:', error.message)
+      debugError('Request config error:', error.message)
       if (!isSilent) {
         ElMessage.error('请求配置错误: ' + (error.message || '未知错误'))
       }
@@ -124,4 +138,3 @@ request.interceptors.response.use(
 )
 
 export default request
-

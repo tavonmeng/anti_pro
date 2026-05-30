@@ -112,11 +112,18 @@
 
           <div v-if="stageDeliverables.length > 0" class="deliverable-history">
             <h4 class="sub-title">历史提交记录</h4>
-            <div v-for="d in stageDeliverables" :key="d.id" class="history-item">
+            <div
+              v-for="(d, dlvIndex) in stageDeliverables"
+              :key="d.id"
+              class="history-item"
+              :class="{ 'is-alt': dlvIndex % 2 === 1 }"
+            >
               <div class="history-header">
-                <div style="display: flex; align-items: center; gap: 8px;">
+                <div class="history-title-row">
+                  <span class="history-stage-label">{{ getDeliverableStageLabel(d) }}</span>
                   <span>V{{ d.version }}</span>
                   <el-tag :type="deliverableStatusType(d.status)" size="small">{{ deliverableStatusLabel(d.status) }}</el-tag>
+                  <el-tag v-if="isCurrentStageDeliverable(d)" type="primary" size="small" effect="plain">当前环节</el-tag>
                 </div>
                 <span v-if="d.createdAt" class="history-time">{{ formatDate(d.createdAt) }}</span>
               </div>
@@ -124,6 +131,18 @@
                 <strong>管理员备注 ({{ formatDate(d.adminReviewedAt) || '暂无时间' }})：</strong>
                 {{ d.adminReviewNote }}
               </p>
+              <div v-if="d.files && d.files.length" class="history-files">
+                <a
+                  v-for="(file, fileIndex) in d.files"
+                  :key="fileKey(file, fileIndex)"
+                  :href="fileUrl(file)"
+                  class="history-file-link"
+                  target="_blank"
+                  @click.prevent="openFilePreview(file)"
+                >
+                  {{ file.name || file.filename || file.originalName || '交付文件' }}
+                </a>
+              </div>
               <!-- 管理员评论列表 -->
               <div v-if="d.adminComments && d.adminComments.length > 0" class="admin-comments-section">
                 <strong class="admin-comments-title">💬 管理员评论：</strong>
@@ -292,6 +311,7 @@
     <el-icon class="loading-icon" :size="32"><Loading /></el-icon>
     <p>加载中...</p>
   </div>
+  <FilePreviewDialog v-model="filePreviewVisible" :file="previewingFile" />
 </template>
 
 <script setup lang="ts">
@@ -304,6 +324,8 @@ import {
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
+import { formatServerTime, parseServerTime } from '@/utils/time'
+import FilePreviewDialog from '@/components/FilePreviewDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -316,6 +338,8 @@ const uploadRef = ref()
 const fileList = ref<any[]>([])
 const uploadedFiles = ref<any[]>([])
 const currentDeliverableId = ref<string | null>(null)
+const filePreviewVisible = ref(false)
+const previewingFile = ref<Record<string, any> | null>(null)
 
 const deliverableForm = reactive({
   description: '',
@@ -368,12 +392,46 @@ const isCategoryAllChecked = (category: { items: string[] }) =>
 const getCategoryCheckedCount = (category: { items: string[] }) =>
   category.items.filter(item => deliverableForm.selfReviewChecks[item]).length
 
-// 当前环节的交付物历史
+const deliverableSortTime = (deliverable: any) => {
+  return parseServerTime(deliverable?.createdAt || deliverable?.adminReviewedAt)?.getTime() || 0
+}
+
+// 展示全部环节的交付物历史，避免进入下一环节后看不到上一环节信息
 const stageDeliverables = computed(() =>
-  (assignment.value?.deliverables || []).filter(
-    (d: any) => d.stageOrder === currentStageOrder.value
-  )
+  [...(assignment.value?.deliverables || [])]
+    .sort((a: any, b: any) => {
+      const timeDiff = deliverableSortTime(b) - deliverableSortTime(a)
+      if (timeDiff !== 0) return timeDiff
+      const stageDiff = Number(b.stageOrder || 0) - Number(a.stageOrder || 0)
+      if (stageDiff !== 0) return stageDiff
+      return Number(b.version || 0) - Number(a.version || 0)
+    })
 )
+
+const getDeliverableStageLabel = (deliverable: any) => {
+  const stageOrder = Number(deliverable?.stageOrder || 0)
+  const stage = (assignment.value?.schedule || []).find(
+    (item: any) => Number(item.display_order || 0) === stageOrder
+  )
+  const stageName = deliverable?.stageName || stage?.name || '交付环节'
+  return stageOrder ? `第 ${stageOrder} 环节 · ${stageName}` : stageName
+}
+
+const isCurrentStageDeliverable = (deliverable: any) =>
+  Number(deliverable?.stageOrder || 0) === currentStageOrder.value
+
+const fileUrl = (file: any) => file?.url || file?.file_url || file?.fileUrl || file?.href || ''
+const fileKey = (file: any, index = 0) =>
+  file?.id || file?.url || file?.file_url || file?.fileUrl || file?.href || file?.object_key || file?.filename || file?.name || index
+
+const openFilePreview = (file: any) => {
+  if (!fileUrl(file)) {
+    ElMessage.warning('文件地址为空，无法预览')
+    return
+  }
+  previewingFile.value = file
+  filePreviewVisible.value = true
+}
 
 // 订单信息展示
 const orderFields = computed(() => {
@@ -415,9 +473,7 @@ const deliverableStatusType = (s: string) => ({
 }[s] || 'info')
 
 const formatDate = (dateStr: string) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  return formatServerTime(dateStr, '')
 }
 
 const fetchDetail = async () => {
@@ -462,13 +518,16 @@ const beforeUpload = (file: File) => {
 
 const handleUploadSuccess = (res: any, file: any) => {
   // el-upload 的 res 是原始 HTTP 响应体，不经过 axios 拦截器
-  const url = res?.data?.url || res?.url
+  const data = res?.data || res || {}
+  const url = data.url
   if (url) {
     uploadedFiles.value.push({
       name: file.name,
       url: url,
+      object_key: data.object_key || '',
+      filename: data.filename || file.name,
       size: file.size,
-      mime_type: file.raw?.type || '',
+      mime_type: data.mime_type || file.raw?.type || '',
     })
   }
 }
@@ -673,11 +732,39 @@ onMounted(fetchDetail)
 /* 交付物历史 */
 .deliverable-history { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #F0F0F0; }
 .history-item {
-  padding: 8px 12px; background: #F9F9F9; border-radius: 8px; margin-bottom: 8px;
+  padding: 10px 12px; background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 8px; margin-bottom: 8px;
+  &.is-alt { background: #F6F7F9; border-color: #D9DDE4; }
 }
-.history-header { display: flex; justify-content: space-between; align-items: center; }
+.history-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.history-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.history-stage-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #A0522D;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(160, 82, 45, 0.1);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
 .history-time { font-size: 12px; color: #86868B; }
 .review-note { font-size: 13px; color: #E6A23C; margin: 6px 0 0; line-height: 1.5; }
+.history-files { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.history-file-link {
+  font-size: 13px;
+  color: var(--uv-ws-action-button-bg, #A0522D);
+  text-decoration: none;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: rgba(160, 82, 45, 0.08);
+  &:hover { text-decoration: underline; background: rgba(160, 82, 45, 0.14); }
+}
 
 /* 自审核 */
 .self-review-section { margin-top: 20px; padding: 20px; background: #FFFBE6; border-radius: 10px; border: 1px solid #FFF1B8; }

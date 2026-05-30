@@ -23,16 +23,21 @@ from app.middleware.audit_logger import (
     start_audit_log_workers,
     stop_audit_log_workers,
 )
-from app.utils.log_setup import init_loguru
+from app.utils.log_setup import get_module_logger, init_loguru
+from app.utils.error_handlers import install_exception_handlers
+
+settings.validate_startup_config()
 
 # 创建 FastAPI 应用
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="VR+AI 裸眼3D内容定制管理系统后端 API",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url="/docs" if settings.docs_enabled else None,
+    redoc_url="/redoc" if settings.docs_enabled else None,
+    openapi_url="/openapi.json" if settings.docs_enabled else None,
 )
+install_exception_handlers(app)
 
 # 配置 CORS
 setup_cors(app)
@@ -48,13 +53,13 @@ if not settings.OSS_ENABLED:
     app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
 # 挂载案例视频/封面图静态目录（仅用户端需要，官网 Landing Page 使用）
-if settings.DEPLOYMENT_MODE in ("all", "external"):
+if settings.deploy_mode in ("all", "external"):
     _cases_static = os.path.join(os.path.dirname(__file__), "data", "cases")
     os.makedirs(_cases_static, exist_ok=True)
     app.mount("/static/cases", StaticFiles(directory=_cases_static), name="cases_static")
 
 # ========== 根据部署模式注册路由 ==========
-deploy_mode = settings.DEPLOYMENT_MODE  # all / external / internal
+deploy_mode = settings.deploy_mode  # all / external / internal
 
 # 通用路由（所有模式都需要）
 app.include_router(auth.router, prefix="/api")
@@ -138,37 +143,44 @@ async def startup_event():
     """应用启动事件"""
     # 初始化日志系统（在数据库之前，以便记录启动过程）
     init_loguru()
+    startup_logger = get_module_logger("system")
 
     async with _startup_database_lock():
         # 初始化主业务数据库
         await init_db()
         print(f"✅ 主业务数据库初始化完成 (app.db)")
 
-        # 移除 notifications 表的外键约束（支持给 admin/staff/contractor 发通知）
-        if deploy_mode in ("all", "internal", "external"):
+        if settings.is_production and not settings.AUTO_CREATE_TABLES:
+            startup_logger.info("生产环境跳过启动时零散数据库迁移，schema 由 Alembic 管理")
+        else:
+            # 移除 notifications 表的外键约束（支持给 admin/staff/contractor 发通知）
+            if deploy_mode in ("all", "internal", "external"):
+                try:
+                    from migrations.drop_notification_fks import drop_notification_fks
+                    await drop_notification_fks()
+                except Exception:
+                    startup_logger.exception("notifications FK 迁移异常（不影响启动）")
+
+            # 反馈系统字段迁移（feedbacks.deliverable_id + contractor_deliverables.admin_comments）
             try:
-                from migrations.drop_notification_fks import drop_notification_fks
-                await drop_notification_fks()
-            except Exception as e:
-                print(f"⚠️  notifications FK 迁移异常（不影响启动）: {e}")
+                from scripts.migrate_feedback_system import migrate as migrate_feedback
+                await migrate_feedback()
+            except Exception:
+                startup_logger.exception("反馈系统迁移异常（不影响启动）")
 
-        # 反馈系统字段迁移（feedbacks.deliverable_id + contractor_deliverables.admin_comments）
-        try:
-            from scripts.migrate_feedback_system import migrate as migrate_feedback
-            await migrate_feedback()
-        except Exception as e:
-            print(f"⚠️  反馈系统迁移异常（不影响启动）: {e}")
+            # AI 聊天消息幂等字段迁移（client_message_id + 唯一索引）
+            try:
+                from scripts.migrate_ai_chat_message_ids import migrate as migrate_ai_chat_message_ids
+                await migrate_ai_chat_message_ids()
+            except Exception:
+                startup_logger.exception("AI 聊天消息幂等迁移异常（不影响启动）")
 
-        # AI 聊天消息幂等字段迁移（client_message_id + 唯一索引）
-        try:
-            from scripts.migrate_ai_chat_message_ids import migrate as migrate_ai_chat_message_ids
-            await migrate_ai_chat_message_ids()
-        except Exception as e:
-            print(f"⚠️  AI聊天消息幂等迁移异常（不影响启动）: {e}")
-
-        # 初始化审计日志独立数据库（与主库物理隔离）
-        await init_audit_db()
-        print(f"✅ 审计日志数据库初始化完成 (audit.db)")
+        if settings.LOG_DB_ENABLED:
+            # 初始化审计日志独立数据库（与主库物理隔离）
+            await init_audit_db()
+            print("✅ 审计日志数据库初始化完成")
+        else:
+            startup_logger.info("审计日志数据库写入已关闭，跳过审计库初始化")
 
         if settings.LOG_ENABLED:
             start_audit_log_workers()
@@ -179,8 +191,8 @@ async def startup_event():
             from scripts.init_admin import ensure_admin
             try:
                 await ensure_admin()
-            except Exception as e:
-                print(f"⚠️  管理员初始化异常（不影响启动）: {e}")
+            except Exception:
+                startup_logger.exception("管理员初始化异常（不影响启动）")
 
             # 确保工作流环节配置存在（幂等，仅首次初始化）
             from scripts.init_workflow import ensure_workflow_stages
@@ -188,8 +200,8 @@ async def startup_event():
             try:
                 async with async_session_maker() as session:
                     await ensure_workflow_stages(session)
-            except Exception as e:
-                print(f"⚠️  工作流配置初始化异常（不影响启动）: {e}")
+            except Exception:
+                startup_logger.exception("工作流配置初始化异常（不影响启动）")
 
     # 确保上传目录存在（仅本地存储模式）
     if not settings.OSS_ENABLED:
@@ -201,7 +213,8 @@ async def startup_event():
     mode_label = {"all": "全量", "external": "外部（用户端）", "internal": "内部系统"}
     print(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} 启动成功")
     print(f"📋 部署模式: {mode_label.get(deploy_mode, deploy_mode)}")
-    print(f"📚 API 文档: http://{settings.HOST}:{settings.PORT}/docs")
+    if settings.docs_enabled:
+        print(f"📚 API 文档: http://{settings.HOST}:{settings.PORT}/docs")
 
 
 @app.on_event("shutdown")
@@ -218,8 +231,8 @@ async def root():
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "deployment_mode": settings.DEPLOYMENT_MODE,
-        "docs": "/docs",
-        "redoc": "/redoc"
+        "docs": "/docs" if settings.docs_enabled else None,
+        "redoc": "/redoc" if settings.docs_enabled else None,
     }
 
 

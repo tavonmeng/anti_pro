@@ -17,13 +17,29 @@ except ImportError:
 
 from app.config import settings
 
+
+def _audit_connect_args() -> dict:
+    return {"init_command": "SET time_zone = '+08:00'"} if settings.is_audit_mysql else {}
+
+
+def _create_audit_engine():
+    kwargs = {
+        "echo": False,  # 审计库不打印 SQL，避免日志风暴
+        "future": True,
+    }
+    if settings.is_audit_mysql:
+        kwargs.update({
+            "pool_size": settings.DB_POOL_SIZE,
+            "max_overflow": settings.DB_MAX_OVERFLOW,
+            "pool_timeout": settings.DB_POOL_TIMEOUT,
+            "pool_recycle": settings.DB_POOL_RECYCLE,
+            "pool_pre_ping": settings.DB_POOL_PRE_PING,
+            "connect_args": _audit_connect_args(),
+        })
+    return create_async_engine(settings.audit_database_url, **kwargs)
+
 # 审计日志专用引擎（与主业务库完全隔离）
-audit_engine = create_async_engine(
-    settings.AUDIT_DATABASE_URL,
-    echo=False,            # 审计库不打印 SQL，避免日志风暴
-    future=True,
-    pool_pre_ping=True,
-)
+audit_engine = _create_audit_engine()
 
 # 审计日志专用会话工厂
 audit_session_maker = async_sessionmaker(

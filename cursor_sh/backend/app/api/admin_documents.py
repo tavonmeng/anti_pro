@@ -5,7 +5,6 @@
 
 import os
 import uuid
-from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy import select, desc
@@ -18,6 +17,7 @@ from app.models.user import User
 from app.utils.dependencies import require_admin
 from app.services.document_extract_service import empty_extraction
 from app.services.document_pipeline_service import process_document, approve_document_extraction
+from app.utils.timezone import beijing_iso, beijing_now
 
 router = APIRouter(prefix="/admin/documents", tags=["管理员 — 客户资料导入"])
 
@@ -80,7 +80,7 @@ async def upload_customer_document(
 
     doc_id = str(uuid.uuid4())
     safe_original = _safe_filename(original_filename)
-    stored_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{doc_id[:8]}_{safe_original}"
+    stored_filename = f"{beijing_now().strftime('%Y%m%d_%H%M%S')}_{doc_id[:8]}_{safe_original}"
     file_path = None
     file_url = ""
     object_key = ""
@@ -91,7 +91,7 @@ async def upload_customer_document(
             upload_bytes(contents, object_key, file.content_type or "")
             file_url = object_key
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"OSS 上传失败: {exc}")
+            raise HTTPException(status_code=500, detail="OSS 上传失败，请稍后重试") from exc
     else:
         upload_dir = os.path.join(settings.UPLOAD_DIR, "customer_documents", user_id)
         os.makedirs(upload_dir, exist_ok=True)
@@ -155,7 +155,7 @@ async def approve_customer_document(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"写入 Memory 失败: {exc}")
+        raise HTTPException(status_code=500, detail="写入 Memory 失败，请稍后重试") from exc
 
 
 async def _get_document_or_404(db: AsyncSession, document_id: str) -> CustomerDocument:
@@ -186,8 +186,8 @@ async def _serialize_document(db: AsyncSession, doc: CustomerDocument) -> dict:
         "status": doc.status,
         "processing_error": doc.processing_error,
         "uploaded_by": doc.uploaded_by,
-        "created_at": doc.created_at.isoformat() if doc.created_at else None,
-        "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
+        "created_at": beijing_iso(doc.created_at),
+        "updated_at": beijing_iso(doc.updated_at),
         "extraction": {
             "id": extraction.id,
             "status": extraction.status,
@@ -195,7 +195,7 @@ async def _serialize_document(db: AsyncSession, doc: CustomerDocument) -> dict:
             "extracted_data": extraction.extracted_data or empty_extraction(),
             "reviewed_data": extraction.reviewed_data or extraction.extracted_data or empty_extraction(),
             "reviewed_by": extraction.reviewed_by,
-            "reviewed_at": extraction.reviewed_at.isoformat() if extraction.reviewed_at else None,
+            "reviewed_at": beijing_iso(extraction.reviewed_at),
         } if extraction else None,
     }
 

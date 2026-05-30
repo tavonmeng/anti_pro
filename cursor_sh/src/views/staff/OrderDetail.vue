@@ -282,6 +282,7 @@ import { ArrowLeft, Upload, ArrowDown, Picture, Document as DocumentIcon, VideoP
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useOrderStore } from '@/stores/order'
 import { orderApi } from '@/utils/api'
+import { formatServerTime, parseServerTime } from '@/utils/time'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
 import type { Order, OrderStatus, VideoPurchaseOrder, DigitalArtOrder, UploadedFile, TimelineItem } from '@/types'
@@ -334,8 +335,8 @@ const timelineItems = computed<TimelineItem[]>(() => {
   
   // 按时间排序（从早到晚）
   return items.sort((a, b) => {
-    const timeA = new Date(a.data.createdAt).getTime()
-    const timeB = new Date(b.data.createdAt).getTime()
+    const timeA = parseServerTime(a.data.createdAt)?.getTime() || 0
+    const timeB = parseServerTime(b.data.createdAt)?.getTime() || 0
     return timeA - timeB
   })
 })
@@ -415,26 +416,7 @@ const getArtDirectionText = () => {
 }
 
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  // 解析时间字符串（支持带时区和不带时区的格式）
-  const date = new Date(timeString)
-  
-  // 检查日期是否有效
-  if (isNaN(date.getTime())) {
-    return timeString
-  }
-  
-  // 使用北京时间（UTC+8）格式化时间
-  // 将 UTC 时间转换为北京时间显示
-  return date.toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
+  return formatServerTime(timeString)
 }
 
 const formatFileSize = (bytes: number): string => {

@@ -6,7 +6,6 @@ import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime
 from typing import Optional, List
 
 from app.config import settings
@@ -14,11 +13,16 @@ from app.config import settings
 from app.database import get_db
 from app.models.user import User, EnterpriseStatus
 from app.schemas.response import ApiResponse
-from app.utils.dependencies import get_current_user, require_admin, AnyUser
+from app.utils.dependencies import (
+    get_current_user_for_public_deployment,
+    require_internal_admin,
+    AnyUser,
+)
 from app.services.notification_service import NotificationService
 from app.models.notification import NotificationType
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_iso, beijing_now, beijing_now_iso
 
 router = APIRouter(prefix="/enterprise", tags=["企业认证"])
 logger = get_module_logger("system")
@@ -75,7 +79,7 @@ def _get_status(user) -> str:
 
 @router.get("/status", response_model=ApiResponse[dict])
 async def get_enterprise_status(
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """获取当前用户的企业认证状态"""
@@ -95,8 +99,8 @@ async def get_enterprise_status(
         "enterprise_name": current_user.enterprise_name,
         "business_license_url": maybe_sign_url(current_user.business_license_url or ""),
         "enterprise_reject_reason": current_user.enterprise_reject_reason,
-        "enterprise_submitted_at": current_user.enterprise_submitted_at.isoformat() if current_user.enterprise_submitted_at else None,
-        "enterprise_reviewed_at": current_user.enterprise_reviewed_at.isoformat() if current_user.enterprise_reviewed_at else None
+        "enterprise_submitted_at": beijing_iso(current_user.enterprise_submitted_at),
+        "enterprise_reviewed_at": beijing_iso(current_user.enterprise_reviewed_at)
     })
 
 
@@ -104,7 +108,7 @@ async def get_enterprise_status(
 async def submit_enterprise_auth(
     enterprise_name: str = Form(...),
     business_license: Optional[UploadFile] = File(None),
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """提交企业认证申请（企业名称 + 营业执照图片）"""
@@ -127,7 +131,7 @@ async def submit_enterprise_auth(
         
         # 保存文件
         file_ext = os.path.splitext(os.path.basename(business_license.filename or ""))[1] or '.jpg'
-        file_name = "license_%d%s" % (int(datetime.utcnow().timestamp()), file_ext)
+        file_name = "license_%d%s" % (int(beijing_now().timestamp()), file_ext)
         tmp_path, _size = await _stream_upload_to_temp(business_license, BUSINESS_LICENSE_MAX_SIZE)
 
         try:
@@ -160,7 +164,7 @@ async def submit_enterprise_auth(
     current_user.enterprise_name = enterprise_name
     current_user.enterprise_status = EnterpriseStatus.PENDING
     current_user.enterprise_reject_reason = None  # 清除之前的拒绝原因
-    current_user.enterprise_submitted_at = datetime.utcnow()
+    current_user.enterprise_submitted_at = beijing_now()
     
     await db.commit()
     await db.refresh(current_user)
@@ -203,13 +207,13 @@ async def submit_enterprise_auth(
     return ApiResponse(code=200, message="企业认证申请已提交，请等待审核", data={
         "enterprise_status": "pending",
         "enterprise_name": enterprise_name,
-        "submittedAt": current_user.enterprise_submitted_at.isoformat() if current_user.enterprise_submitted_at else datetime.utcnow().isoformat(),
+        "submittedAt": beijing_iso(current_user.enterprise_submitted_at) or beijing_now_iso(),
     })
 
 
 @router.get("/pending", response_model=ApiResponse[List[dict]])
 async def get_pending_enterprise_auths(
-    current_user: AnyUser = Depends(require_admin),
+    current_user: AnyUser = Depends(require_internal_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """管理员获取所有待审核、已审核的企业认证列表"""
@@ -231,8 +235,8 @@ async def get_pending_enterprise_auths(
             "business_license_url": maybe_sign_url(u.business_license_url or ""),
             "enterprise_status": status_val,
             "enterprise_reject_reason": u.enterprise_reject_reason,
-            "submitted_at": u.enterprise_submitted_at.isoformat() if u.enterprise_submitted_at else None,
-            "reviewed_at": u.enterprise_reviewed_at.isoformat() if u.enterprise_reviewed_at else None
+            "submitted_at": beijing_iso(u.enterprise_submitted_at),
+            "reviewed_at": beijing_iso(u.enterprise_reviewed_at)
         })
     
     return ApiResponse(code=200, message="获取成功", data=items)
@@ -243,7 +247,7 @@ async def review_enterprise_auth(
     user_id: str,
     action: str = Form(...),
     reject_reason: Optional[str] = Form(None),
-    current_user: AnyUser = Depends(require_admin),
+    current_user: AnyUser = Depends(require_internal_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """管理员审核企业认证：通过或拒绝"""
@@ -260,7 +264,7 @@ async def review_enterprise_auth(
     if action == "approve":
         target_user.enterprise_status = EnterpriseStatus.APPROVED
         target_user.enterprise_reject_reason = None
-        target_user.enterprise_reviewed_at = datetime.utcnow()
+        target_user.enterprise_reviewed_at = beijing_now()
         # 认证通过后，用户名更新为企业名称
         target_user.username = target_user.enterprise_name
         target_user.company = target_user.enterprise_name
@@ -301,7 +305,7 @@ async def review_enterprise_auth(
         return ApiResponse(code=200, message="企业认证已通过", data={
             "enterprise_status": "approved",
             "username": target_user.username,
-            "reviewedAt": target_user.enterprise_reviewed_at.isoformat() if target_user.enterprise_reviewed_at else datetime.utcnow().isoformat(),
+            "reviewedAt": beijing_iso(target_user.enterprise_reviewed_at) or beijing_now_iso(),
         })
     
     elif action == "reject":
@@ -310,7 +314,7 @@ async def review_enterprise_auth(
         
         target_user.enterprise_status = EnterpriseStatus.REJECTED
         target_user.enterprise_reject_reason = reject_reason
-        target_user.enterprise_reviewed_at = datetime.utcnow()
+        target_user.enterprise_reviewed_at = beijing_now()
         
         await db.commit()
         await db.refresh(target_user)
@@ -349,7 +353,7 @@ async def review_enterprise_auth(
         return ApiResponse(code=200, message="已拒绝企业认证", data={
             "enterprise_status": "rejected",
             "reject_reason": reject_reason,
-            "reviewedAt": target_user.enterprise_reviewed_at.isoformat() if target_user.enterprise_reviewed_at else datetime.utcnow().isoformat(),
+            "reviewedAt": beijing_iso(target_user.enterprise_reviewed_at) or beijing_now_iso(),
         })
     
     else:
@@ -359,7 +363,7 @@ async def review_enterprise_auth(
 @router.post("/update-username", response_model=ApiResponse[dict])
 async def update_enterprise_username(
     username: str = Form(...),
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """企业用户修改用户名（简称）"""

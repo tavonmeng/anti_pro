@@ -173,6 +173,7 @@ import { useRouter } from 'vue-router'
 import { Loading, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { humanHandoffApi } from '@/utils/api'
+import { formatServerMonthDayTime } from '@/utils/time'
 
 const router = useRouter()
 
@@ -237,19 +238,7 @@ const goToDraft = (orderId: string) => {
 }
 
 const formatTime = (ts: string) => {
-  if (!ts) return '-'
-  try {
-    return new Date(ts).toLocaleString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    })
-  } catch {
-    return ts
-  }
+  return formatServerMonthDayTime(ts)
 }
 
 const statusLabel = (status: string) => {

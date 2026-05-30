@@ -10,6 +10,7 @@ from typing import List, Optional, Dict
 from app.config import settings
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.retry import retry_async
 
 
 logger = get_module_logger("notification")
@@ -39,7 +40,7 @@ class EmailService:
                 to_emails=to_emails,
                 reason="smtp_not_configured",
             )
-            return
+            return False
         
         # 创建邮件
         message = MIMEMultipart("mixed")
@@ -74,15 +75,28 @@ class EmailService:
             tls_context.check_hostname = False
             tls_context.verify_mode = ssl.CERT_NONE
 
-            # 发送邮件
-            result = await aiosmtplib.send(
-                message,
-                hostname=settings.SMTP_HOST,
-                port=settings.SMTP_PORT,
-                username=settings.SMTP_USER,
-                password=settings.SMTP_PASSWORD,
-                use_tls=True,
-                tls_context=tls_context
+            async def _send_once():
+                return await aiosmtplib.send(
+                    message,
+                    hostname=settings.SMTP_HOST,
+                    port=settings.SMTP_PORT,
+                    username=settings.SMTP_USER,
+                    password=settings.SMTP_PASSWORD,
+                    use_tls=True,
+                    tls_context=tls_context,
+                    timeout=settings.SMTP_TIMEOUT,
+                )
+
+            await retry_async(
+                _send_once,
+                logger=logger,
+                event="email_send_provider_call",
+                attempts=settings.EMAIL_RETRY_ATTEMPTS,
+                fields={
+                    "subject": subject,
+                    "to_emails": to_emails,
+                    "attachment_count": len(attachments or []),
+                },
             )
             log_business_event(
                 logger,
@@ -102,13 +116,14 @@ class EmailService:
                 attachment_count=len(attachments or []),
                 error=str(e),
             )
+            return False
     
     @staticmethod
     async def send_order_confirmation(
         user_email: str,
         order_number: str,
         pdf_bytes: bytes
-    ):
+    ) -> bool:
         """发送订单确认通知，含需求确认函 PDF"""
         subject = f"需求已确认 - 订单 {order_number} 将进入制作流程"
         
@@ -157,7 +172,7 @@ class EmailService:
             "content": pdf_bytes
         }]
         
-        await EmailService.send_email(
+        return await EmailService.send_email(
             [user_email], 
             subject, 
             html_content, 
@@ -171,7 +186,7 @@ class EmailService:
         order_number: str,
         old_status: str,
         new_status: str
-    ):
+    ) -> bool:
         """发送订单状态变更通知"""
         status_names = {
             "pending_assign": "待分配",
@@ -233,14 +248,14 @@ class EmailService:
         Unique Vision AI
         """
         
-        await EmailService.send_email([user_email], subject, html_content, text_content)
+        return await EmailService.send_email([user_email], subject, html_content, text_content)
     
     @staticmethod
     async def send_preview_ready_notification(
         user_email: str,
         order_number: str,
         preview_type: str = "初稿"
-    ):
+    ) -> bool:
         """发送预览文件就绪通知"""
         subject = f"{preview_type}预览已就绪 - {order_number}"
         
@@ -266,7 +281,7 @@ class EmailService:
         </html>
         """
         
-        await EmailService.send_email([user_email], subject, html_content)
+        return await EmailService.send_email([user_email], subject, html_content)
 
     @staticmethod
     async def send_assignment_notification(
@@ -313,8 +328,7 @@ class EmailService:
         """
         
         try:
-            await EmailService.send_email([contractor_email], subject, html_content)
-            return True
+            return await EmailService.send_email([contractor_email], subject, html_content)
         except Exception as e:
             log_business_event(
                 logger,

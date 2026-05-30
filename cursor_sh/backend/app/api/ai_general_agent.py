@@ -218,4 +218,4 @@ async def ai_general(request: GeneralRequest, raw_request: Request):
             history_count=len(request.history or []),
             error=str(e),
         )
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e

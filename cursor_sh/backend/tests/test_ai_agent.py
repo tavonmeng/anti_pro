@@ -8,6 +8,15 @@ def _request_without_auth() -> Request:
     return Request({"type": "http", "headers": []})
 
 
+class _FakeUser:
+    id = "user-test"
+    username = "测试用户"
+
+
+def _fake_user() -> _FakeUser:
+    return _FakeUser()
+
+
 async def _no_existing_handoff(**_):
     return None
 
@@ -33,6 +42,7 @@ async def test_ai_chat_returns_mock_reply_without_ai_key(monkeypatch):
             history=[],
         ),
         _request_without_auth(),
+        _fake_user(),
     )
 
     assert "message" in response
@@ -52,6 +62,7 @@ async def test_ai_chat_mock_completion_uses_frontend_completion_marker(monkeypat
             history=[],
         ),
         _request_without_auth(),
+        _fake_user(),
     )
 
     assert "【需求收集完成】" in response["message"]
@@ -70,6 +81,7 @@ async def test_ai_chat_mock_completion_ignores_negative_completion_text(monkeypa
             history=[],
         ),
         _request_without_auth(),
+        _fake_user(),
     )
 
     assert "【需求收集完成】" not in response["message"]
@@ -90,6 +102,7 @@ async def test_ai_chat_handoff_request_stops_requirement_collection(monkeypatch)
             history=[],
         ),
         _request_without_auth(),
+        _fake_user(),
     )
 
     assert response["handoff"] is True
@@ -111,6 +124,7 @@ async def test_ai_chat_handoff_negative_phrase_does_not_trigger(monkeypatch):
             history=[],
         ),
         _request_without_auth(),
+        _fake_user(),
     )
 
     assert response.get("handoff") is not True
@@ -151,6 +165,7 @@ async def test_ai_chat_handoff_does_not_match_artificial_intelligence(monkeypatc
             history=[],
         ),
         _request_without_auth(),
+        _fake_user(),
     )
 
     assert response.get("handoff") is not True
@@ -170,6 +185,7 @@ async def test_ai_chat_existing_handoff_appends_followup(monkeypatch):
             history=[],
         ),
         _request_without_auth(),
+        _fake_user(),
     )
 
     assert response["handoff"] is True
@@ -220,6 +236,7 @@ async def test_media_ai_chat_strips_early_completion_without_upload_wrapup(monke
             ],
         ),
         _request_without_auth(),
+        _fake_user(),
     )
 
     assert "【需求收集完成】" not in response["message"]
@@ -257,6 +274,7 @@ async def test_ai_chat_stream_qwen_uses_chat_completions_without_responses_probe
             history=[],
         ),
         _request_without_auth(),
+        _fake_user(),
     )
 
     chunks = []

@@ -405,7 +405,12 @@
             <!-- 交付物 -->
             <div v-if="assignment.deliverables && assignment.deliverables.length > 0" class="ca-deliverables">
               <h4>交付物</h4>
-              <div v-for="d in assignment.deliverables" :key="d.id" class="ca-deliverable-item">
+              <div
+                v-for="(d, dlvIndex) in sortedDeliverables(assignment.deliverables)"
+                :key="d.id"
+                class="ca-deliverable-item"
+                :class="{ 'is-alt': dlvIndex % 2 === 1 }"
+              >
                 <div class="ca-dlv-header">
                   <div style="display: flex; align-items: center; gap: 8px;">
                     <span>{{ d.stageName }} V{{ d.version }}</span>
@@ -415,8 +420,15 @@
                   <span v-if="d.createdAt" style="font-size: 12px; color: #86868B;">{{ formatTime(d.createdAt) }}</span>
                 </div>
                 <div v-if="d.files && d.files.length" class="ca-dlv-files">
-                  <a v-for="f in d.files" :key="f.url" :href="f.url" target="_blank" class="ca-dlv-file">
-                    {{ f.name || f.filename }}
+                  <a
+                    v-for="(f, fileIndex) in d.files"
+                    :key="fileKey(f, fileIndex)"
+                    :href="fileUrl(f)"
+                    target="_blank"
+                    class="ca-dlv-file"
+                    @click.prevent="openFilePreview(f)"
+                  >
+                    {{ f.name || f.filename || f.originalName || '交付文件' }}
                   </a>
                 </div>
                 <p v-if="d.description" class="ca-dlv-desc">{{ d.description }}</p>
@@ -789,6 +801,7 @@
         </el-button>
       </template>
     </el-dialog>
+    <FilePreviewDialog v-model="filePreviewVisible" :file="previewingFile" />
   </div>
 </template>
 
@@ -800,9 +813,11 @@ import { ElMessageBox, ElMessage } from 'element-plus'
 import { useOrderStore } from '@/stores/order'
 import { orderApi, authApi, contractorAdminApi } from '@/utils/api'
 import request from '@/utils/request'
+import { formatServerTime, parseServerTime } from '@/utils/time'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import AssigneeDialog from '@/components/AssigneeDialog.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
+import FilePreviewDialog from '@/components/FilePreviewDialog.vue'
 import type { Order, OrderStatus, VideoPurchaseOrder, DigitalArtOrder, UploadedFile } from '@/types'
 
 const router = useRouter()
@@ -832,11 +847,34 @@ const stageDeadlines = ref<Record<string, string>>({})
 // 交付物评论状态
 const dlvCommentInputs = ref<Record<string, string>>({})
 const commentingDlvId = ref<string | null>(null)
+const filePreviewVisible = ref(false)
+const previewingFile = ref<Record<string, any> | null>(null)
 
 // 获取某个交付物关联的客户反馈
 const getDeliverableFeedbacks = (deliverableId: string) => {
   if (!order.value || !order.value.feedbacks) return []
   return order.value.feedbacks.filter((fb: any) => fb.deliverableId === deliverableId)
+}
+
+const deliverableSortTime = (deliverable: any) => {
+  return parseServerTime(deliverable?.publishedAt || deliverable?.createdAt || deliverable?.adminReviewedAt)?.getTime() || 0
+}
+
+const sortedDeliverables = (deliverables: any[] = []) => {
+  return [...deliverables].sort((a, b) => deliverableSortTime(b) - deliverableSortTime(a))
+}
+
+const fileUrl = (file: any) => file?.url || file?.file_url || file?.fileUrl || file?.href || ''
+const fileKey = (file: any, index = 0) =>
+  file?.id || file?.url || file?.file_url || file?.fileUrl || file?.href || file?.object_key || file?.filename || file?.name || index
+
+const openFilePreview = (file: any) => {
+  if (!fileUrl(file)) {
+    ElMessage.warning('文件地址为空，无法预览')
+    return
+  }
+  previewingFile.value = file
+  filePreviewVisible.value = true
 }
 
 // 管理员给交付物添加评论（Contractor 可见）
@@ -899,17 +937,7 @@ const hasPreferences = computed(() => {
 
 // ISO 时间格式化为简短显示
 const formatShortTime = (iso: string | undefined) => {
-  if (!iso) return '-'
-  try {
-    const d = new Date(iso)
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    const hour = String(d.getHours()).padStart(2, '0')
-    const min = String(d.getMinutes()).padStart(2, '0')
-    return `${d.getFullYear()}-${month}-${day} ${hour}:${min}`
-  } catch {
-    return iso.slice(0, 16).replace('T', ' ')
-  }
+  return formatServerTime(iso || undefined)
 }
 
 const contractForm = ref({
@@ -945,7 +973,7 @@ const hasPreviewFiles = computed(() => {
 const previewHistoryList = computed(() => {
   if (!order.value?.previewHistory) return []
   return [...order.value.previewHistory].sort((a, b) => {
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    return (parseServerTime(b.createdAt)?.getTime() || 0) - (parseServerTime(a.createdAt)?.getTime() || 0)
   })
 })
 
@@ -1063,7 +1091,7 @@ const loadContractorData = async (orderId: string) => {
     for (const assignment of assignments) {
       try {
         const dlvRes: any = await contractorAdminApi.getAssignmentDeliverables(assignment.id)
-        assignment.deliverables = Array.isArray(dlvRes) ? dlvRes : (dlvRes?.data || [])
+        assignment.deliverables = sortedDeliverables(Array.isArray(dlvRes) ? dlvRes : (dlvRes?.data || []))
       } catch {
         assignment.deliverables = []
       }
@@ -1301,20 +1329,7 @@ const getArtDirectionText = () => {
 }
 
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  const date = new Date(timeString)
-  if (isNaN(date.getTime())) {
-    return timeString
-  }
-  return date.toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
+  return formatServerTime(timeString)
 }
 
 const formatFileSize = (bytes: number): string => {
@@ -1771,10 +1786,23 @@ const handleAdminCancel = async () => {
 .ca-deliverable-item {
   background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 8px;
   border: 1px solid #E5E7EB;
+  &.is-alt {
+    background: #F6F7F9;
+    border-color: #D9DDE4;
+  }
 }
 .ca-dlv-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: 500; }
 .ca-dlv-files { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-.ca-dlv-file { font-size: 13px; color: #409eff; text-decoration: none; &:hover { text-decoration: underline; } }
+.ca-dlv-file {
+  font-size: 13px;
+  color: var(--uv-ws-action-button-bg, #A0522D);
+  text-decoration: none;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: rgba(160, 82, 45, 0.08);
+  cursor: pointer;
+  &:hover { text-decoration: underline; background: rgba(160, 82, 45, 0.14); }
+}
 .ca-dlv-desc { font-size: 13px; color: #515154; margin: 0 0 8px; }
 .ca-dlv-actions { display: flex; gap: 8px; }
 .ca-dlv-note { font-size: 13px; color: #E6A23C; margin-top: 8px; line-height: 1.5; }

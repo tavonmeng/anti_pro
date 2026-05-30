@@ -3,7 +3,6 @@
 import os
 import re
 import uuid
-from datetime import datetime
 
 import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
@@ -20,9 +19,10 @@ from app.schemas.auth import (
 from app.schemas.response import ApiResponse
 from app.services.auth_service import login, register, change_password, reset_password
 from app.services.sms_service import send_sms_verify_code, verify_sms_code
-from app.utils.dependencies import get_current_user, AnyUser
+from app.utils.dependencies import get_current_user_for_public_deployment, AnyUser
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_now
 from pydantic import BaseModel, EmailStr
 
 class VerifySmsRequest(BaseModel):
@@ -128,7 +128,7 @@ async def api_login(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("/send-sms", response_model=ApiResponse[dict])
@@ -142,7 +142,7 @@ async def api_send_sms(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 
@@ -187,7 +187,7 @@ async def api_register(
             username=register_data.username,
             error=str(e),
         )
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("/reset-password", response_model=ApiResponse[dict])
@@ -202,7 +202,7 @@ async def api_reset_password(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("/logout", response_model=ApiResponse[None])
@@ -214,7 +214,7 @@ async def api_logout():
 
 @router.get("/me", response_model=ApiResponse[dict])
 async def api_get_current_profile(
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
 ):
     """获取当前登录用户资料，用于刷新前端缓存和头像签名 URL。"""
     return ApiResponse(code=200, message="获取成功", data=_profile_payload(current_user))
@@ -223,7 +223,7 @@ async def api_get_current_profile(
 @router.put("/change-password", response_model=ApiResponse[dict])
 async def api_change_password(
     password_data: ChangePasswordRequest,
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """修改密码"""
@@ -233,12 +233,12 @@ async def api_change_password(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 @router.put("/profile", response_model=ApiResponse[dict])
 async def update_profile_api(
     profile_data: ProfileUpdate,
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """更新当前用户个人资料"""
@@ -259,13 +259,13 @@ async def update_profile_api(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("/avatar", response_model=ApiResponse[dict])
 async def upload_avatar_api(
     avatar: UploadFile = File(...),
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """企业认证通过后上传头像。"""
@@ -279,7 +279,7 @@ async def upload_avatar_api(
         raise HTTPException(status_code=400, detail="头像仅支持 JPG/PNG/WEBP 格式")
 
     file_ext = os.path.splitext(os.path.basename(avatar.filename or ""))[1].lower() or ".jpg"
-    file_name = "avatar_%d%s" % (int(datetime.utcnow().timestamp()), file_ext)
+    file_name = "avatar_%d%s" % (int(beijing_now().timestamp()), file_ext)
     tmp_path, _size = await _stream_upload_to_temp(avatar, AVATAR_MAX_SIZE, "头像图片不能超过5MB")
 
     try:
@@ -313,7 +313,7 @@ async def upload_avatar_api(
 @router.post("/change-phone", response_model=ApiResponse[dict])
 async def change_phone_api(
     data: ChangePhoneRequest,
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """更换手机号：用旧手机号验证码确认身份后修改。"""

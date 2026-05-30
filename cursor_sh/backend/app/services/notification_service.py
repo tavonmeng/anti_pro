@@ -1,7 +1,6 @@
 """
 消息通知服务
 """
-from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
@@ -11,6 +10,7 @@ from app.models.notification import Notification, NotificationType
 from app.schemas.notification import NotificationCreate, NotificationResponse
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_now
 
 
 logger = get_module_logger("notification")
@@ -217,9 +217,17 @@ class NotificationService:
         # 更新为已读
         if not notification.is_read:
             notification.is_read = True
-            notification.read_at = datetime.now(timezone.utc)
+            notification.read_at = beijing_now()
             await db.commit()
             await db.refresh(notification)
+            log_business_event(
+                logger,
+                "notification_marked_read",
+                notification_id=notification.id,
+                user_id=user_id,
+                notification_type=notification.type,
+                order_id=notification.order_id,
+            )
         
         return notification
 
@@ -244,11 +252,17 @@ class NotificationService:
             )
         ).values(
             is_read=True,
-            read_at=datetime.now(timezone.utc)
+            read_at=beijing_now()
         )
         
         result = await db.execute(stmt)
         await db.commit()
+        log_business_event(
+            logger,
+            "notifications_marked_all_read",
+            user_id=user_id,
+            updated_count=result.rowcount,
+        )
         
         return result.rowcount
 
@@ -283,5 +297,15 @@ class NotificationService:
                 detail="无权访问此消息"
             )
         
+        notification_type = notification.type
+        order_id = notification.order_id
         await db.delete(notification)
         await db.commit()
+        log_business_event(
+            logger,
+            "notification_deleted",
+            notification_id=notification_id,
+            user_id=user_id,
+            notification_type=notification_type,
+            order_id=order_id,
+        )

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -22,6 +21,7 @@ from app.services.platform_service_catalog import (
 )
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_now, beijing_now_iso
 from app.utils.validators import generate_id, generate_order_number
 
 
@@ -35,9 +35,9 @@ def _messages_snapshot(history: list[dict], user_msg: str, assistant_msg: str = 
         content = item.get("content")
         if role in {"user", "assistant"} and content:
             messages.append({"role": role, "content": content, "timestamp": item.get("timestamp", "")})
-    messages.append({"role": "user", "content": user_msg, "timestamp": datetime.now(timezone.utc).isoformat()})
+    messages.append({"role": "user", "content": user_msg, "timestamp": beijing_now_iso()})
     if assistant_msg:
-        messages.append({"role": "assistant", "content": assistant_msg, "timestamp": datetime.now(timezone.utc).isoformat()})
+        messages.append({"role": "assistant", "content": assistant_msg, "timestamp": beijing_now_iso()})
     return messages
 
 
@@ -233,7 +233,7 @@ async def record_handoff(
         handoff.chat_snapshot = messages
         handoff.extracted_data = extracted
         handoff.message_count = len(messages)
-        handoff.updated_at = datetime.now(timezone.utc)
+        handoff.updated_at = beijing_now()
 
         if user and is_orderable_business_type(business_type):
             order_type = _order_type_from_business_type(business_type)
@@ -260,7 +260,7 @@ async def record_handoff(
             if not base_data:
                 base_data = _empty_order_data(business_type)
             draft_order.order_data = _merge_order_data(base_data, extracted, messages, session_id, handoff.id, handoff.status)
-            draft_order.updated_at = datetime.now(timezone.utc)
+            draft_order.updated_at = beijing_now()
 
         if is_new:
             admin_result = await db.execute(select(Admin).where(Admin.is_active == True))

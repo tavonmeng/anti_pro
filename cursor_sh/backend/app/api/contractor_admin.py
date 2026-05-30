@@ -3,9 +3,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm.attributes import flag_modified
 from typing import Optional
 from pydantic import BaseModel
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import secrets
 
 from app.database import get_db
@@ -21,9 +22,29 @@ from app.utils.validators import generate_id
 from app.config import settings
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_iso, beijing_now, beijing_now_iso, ensure_beijing
 
 router = APIRouter(prefix="/contractor-admin", tags=["承包商管理（管理端）"])
 logger = get_module_logger("contractor")
+
+
+def _iso_beijing(dt: datetime | None) -> str | None:
+    if not dt:
+        return None
+    return beijing_iso(dt)
+
+
+def _normalize_admin_comments(comments: list | None) -> list:
+    normalized = []
+    for comment in comments or []:
+        if not isinstance(comment, dict):
+            continue
+        item = {**comment}
+        created_at = item.get("createdAt")
+        if isinstance(created_at, str) and created_at and not created_at.endswith("Z") and "+" not in created_at[10:]:
+            item["createdAt"] = f"{created_at.replace(' ', 'T')}+08:00"
+        normalized.append(item)
+    return normalized
 
 
 # ========== Schemas ==========
@@ -70,7 +91,7 @@ async def create_invitation(
     """生成承包商邀请链接"""
     try:
         token = secrets.token_urlsafe(32)
-        expires_at = datetime.now(timezone.utc) + timedelta(days=data.expires_days)
+        expires_at = beijing_now() + timedelta(days=data.expires_days)
         
         invitation = ContractorInvitation(
             id=generate_id("invite"),
@@ -89,7 +110,7 @@ async def create_invitation(
             "contractor_invitation_created",
             admin_id=current_user.id,
             invitation_id=invitation.id,
-            expires_at=invitation.expires_at.isoformat() if invitation.expires_at else None,
+            expires_at=beijing_iso(invitation.expires_at),
             has_note=bool(data.note),
         )
         
@@ -102,12 +123,12 @@ async def create_invitation(
             "token": token,
             "inviteUrl": invite_url,
             "note": invitation.note,
-            "expiresAt": invitation.expires_at.isoformat(),
+            "expiresAt": beijing_iso(invitation.expires_at),
             "isUsed": False,
-            "createdAt": invitation.created_at.isoformat() if invitation.created_at else None,
+            "createdAt": beijing_iso(invitation.created_at),
         })
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.get("/invitations")
@@ -134,8 +155,9 @@ async def get_invitations(
                 if contractor:
                     used_by_name = contractor.username
             
-            now = datetime.now(timezone.utc)
-            is_expired = inv.expires_at.replace(tzinfo=timezone.utc) < now if inv.expires_at else False
+            now = beijing_now()
+            expires_at = ensure_beijing(inv.expires_at)
+            is_expired = expires_at < now if expires_at else False
             
             items.append({
                 "id": inv.id,
@@ -145,13 +167,13 @@ async def get_invitations(
                 "isExpired": is_expired,
                 "usedBy": inv.used_by,
                 "usedByName": used_by_name,
-                "expiresAt": inv.expires_at.isoformat() if inv.expires_at else None,
-                "createdAt": inv.created_at.isoformat() if inv.created_at else None,
+                "expiresAt": beijing_iso(inv.expires_at),
+                "createdAt": beijing_iso(inv.created_at),
             })
         
         return ApiResponse(code=200, message="获取成功", data=items)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.delete("/invitations/{invitation_id}")
@@ -180,7 +202,7 @@ async def revoke_invitation(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 # ========== 承包商列表管理 ==========
@@ -242,12 +264,12 @@ async def get_contractor_list(
                 "expertise": c.expertise,
                 "isActive": c.is_active,
                 "activeOrders": active_orders,
-                "createdAt": c.created_at.isoformat() if c.created_at else None,
+                "createdAt": beijing_iso(c.created_at),
             })
         
         return ApiResponse(code=200, message="获取成功", data={"data": items, "total": total})
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.put("/{contractor_id}")
@@ -287,12 +309,12 @@ async def update_contractor(
             "id": contractor.id,
             "username": contractor.username,
             "isActive": contractor.is_active,
-            "updatedAt": datetime.now(timezone.utc).isoformat(),
+            "updatedAt": beijing_now_iso(),
         })
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 # ========== AI方案设计 ==========
 
@@ -323,7 +345,7 @@ async def save_design_plan(
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
     
-    now = datetime.now(timezone.utc).isoformat()
+    now = beijing_now_iso()
     plan = order.design_plan or {}
     if data.content is not None:
         plan["content"] = data.content
@@ -391,7 +413,7 @@ async def assign_order_to_contractor(
         
         if data.workflow_type == "ai":
             # AI制作流程：两个阶段（Demo + 终稿）
-            today = datetime.now(timezone.utc).date()
+            today = beijing_now().date()
             
             if data.demo_deadline:
                 demo_date = datetime.fromisoformat(data.demo_deadline).date() if isinstance(data.demo_deadline, str) else data.demo_deadline
@@ -433,7 +455,7 @@ async def assign_order_to_contractor(
             if not stages:
                 raise HTTPException(status_code=400, detail="尚未配置工作流环节，请先在工作流配置中添加环节")
             
-            current_date = datetime.now(timezone.utc).date()
+            current_date = beijing_now().date()
             adjustments = {adj['stage_config_id']: adj for adj in (data.schedule_adjustments or [])}
             
             for stage in stages:
@@ -550,13 +572,13 @@ async def assign_order_to_contractor(
             "contractorName": contractor.username,
             "status": assignment.status.value,
             "schedule": assignment.schedule,
-            "assignedAt": assignment.assigned_at.isoformat() if assignment.assigned_at else None,
+            "assignedAt": beijing_iso(assignment.assigned_at),
             "notificationStatus": notification_status,
         })
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.get("/assignments")
@@ -623,14 +645,14 @@ async def get_all_assignments(
                 "currentStageOrder": a.current_stage_order,
                 "pendingReviewCount": pending_review,
                 "totalDeliverables": len(deliverables),
-                "assignedAt": a.assigned_at.isoformat() if a.assigned_at else None,
-                "respondedAt": a.responded_at.isoformat() if a.responded_at else None,
-                "completedAt": a.completed_at.isoformat() if a.completed_at else None,
+                "assignedAt": beijing_iso(a.assigned_at),
+                "respondedAt": beijing_iso(a.responded_at),
+                "completedAt": beijing_iso(a.completed_at),
             })
         
         return ApiResponse(code=200, message="获取成功", data={"data": items, "total": total})
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 # ========== 交付物管理 ==========
@@ -646,7 +668,7 @@ async def get_assignment_deliverables(
         result = await db.execute(
             select(ContractorDeliverable)
             .where(ContractorDeliverable.assignment_id == assignment_id)
-            .order_by(ContractorDeliverable.stage_order, ContractorDeliverable.version.desc())
+            .order_by(ContractorDeliverable.created_at.desc(), ContractorDeliverable.stage_order.asc(), ContractorDeliverable.version.desc())
         )
         deliverables = result.scalars().all()
         
@@ -674,18 +696,18 @@ async def get_assignment_deliverables(
                 "status": d.status.value,
                 "adminReviewNote": d.admin_review_note,
                 "adminReviewedBy": d.admin_reviewed_by,
-                "adminReviewedAt": d.admin_reviewed_at.isoformat() if d.admin_reviewed_at else None,
+                "adminReviewedAt": _iso_beijing(d.admin_reviewed_at),
                 "isPublishedToUser": d.is_published_to_user,
                 "publishedNote": d.published_note,
                 "publishedBy": d.published_by,
-                "publishedAt": d.published_at.isoformat() if d.published_at else None,
-                "adminComments": d.admin_comments or [],
-                "createdAt": d.created_at.isoformat() if d.created_at else None,
+                "publishedAt": _iso_beijing(d.published_at),
+                "adminComments": _normalize_admin_comments(d.admin_comments),
+                "createdAt": _iso_beijing(d.created_at),
             })
         
         return ApiResponse(code=200, message="获取成功", data=items)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.put("/deliverables/{deliverable_id}/review")
@@ -708,7 +730,7 @@ async def review_deliverable(
         if deliverable.status != DeliverableStatus.SUBMITTED:
             raise HTTPException(status_code=400, detail="该交付物当前状态不可审核")
         
-        now = datetime.now(timezone.utc)
+        now = beijing_now()
         
         if data.approved:
             deliverable.status = DeliverableStatus.ADMIN_APPROVED
@@ -775,12 +797,12 @@ async def review_deliverable(
             "status": deliverable.status.value,
             "adminReviewNote": deliverable.admin_review_note,
             "adminReviewedBy": current_user.id,
-            "adminReviewedAt": deliverable.admin_reviewed_at.isoformat() if deliverable.admin_reviewed_at else now.isoformat(),
+            "adminReviewedAt": _iso_beijing(deliverable.admin_reviewed_at) or now.isoformat(),
         })
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.put("/deliverables/{deliverable_id}/publish")
@@ -803,7 +825,7 @@ async def publish_deliverable_to_user(
         if deliverable.status != DeliverableStatus.ADMIN_APPROVED:
             raise HTTPException(status_code=400, detail="只有审核通过的交付物才能推送给用户")
         
-        now = datetime.now(timezone.utc)
+        now = beijing_now()
         deliverable.is_published_to_user = True
         deliverable.published_note = data.published_note
         deliverable.published_at = now
@@ -877,12 +899,12 @@ async def publish_deliverable_to_user(
             "isPublishedToUser": True,
             "publishedNote": deliverable.published_note,
             "publishedBy": current_user.id,
-            "publishedAt": deliverable.published_at.isoformat() if deliverable.published_at else now.isoformat(),
+            "publishedAt": _iso_beijing(deliverable.published_at) or now.isoformat(),
         })
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.put("/assignments/{assignment_id}/advance")
@@ -904,9 +926,36 @@ async def advance_to_next_stage(
         if assignment.status not in [AssignmentStatus.ACCEPTED, AssignmentStatus.IN_PROGRESS]:
             raise HTTPException(status_code=400, detail="当前派单状态不可推进")
         
-        # 解析排期，找到下一个环节
+        # 解析排期，找到当前和下一个环节
         schedule = assignment.schedule or []
-        current_order = int(assignment.current_stage_order or "1")
+        if not schedule:
+            raise HTTPException(status_code=400, detail="当前派单未配置工作流排期")
+
+        try:
+            current_order = int(assignment.current_stage_order or "1")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="当前派单工作流状态异常")
+
+        def _is_current_stage(stage: dict) -> bool:
+            try:
+                return int(stage.get("display_order")) == current_order
+            except (TypeError, ValueError):
+                return False
+
+        current_stage = next((s for s in schedule if _is_current_stage(s)), None)
+        if not current_stage:
+            raise HTTPException(status_code=400, detail="当前工作流环节不存在")
+
+        approved_result = await db.execute(
+            select(func.count()).select_from(ContractorDeliverable).where(
+                ContractorDeliverable.assignment_id == assignment.id,
+                ContractorDeliverable.stage_config_id == current_stage.get("stage_config_id"),
+                ContractorDeliverable.stage_order == current_order,
+                ContractorDeliverable.status == DeliverableStatus.ADMIN_APPROVED,
+            )
+        )
+        if (approved_result.scalar() or 0) < 1:
+            raise HTTPException(status_code=400, detail="当前环节需要至少一个已审核通过的交付物才能推进")
         
         # 标记当前环节为完成
         for stage in schedule:
@@ -927,7 +976,7 @@ async def advance_to_next_stage(
         else:
             # 所有环节完成
             assignment.status = AssignmentStatus.COMPLETED
-            assignment.completed_at = datetime.now(timezone.utc)
+            assignment.completed_at = beijing_now()
             message = "所有环节已完成"
             
             # 同步推进订单状态：制作中 → 初稿交付
@@ -941,6 +990,7 @@ async def advance_to_next_stage(
                 message += "，订单已推进到「初稿交付」"
         
         assignment.schedule = schedule  # 更新 JSON 字段
+        flag_modified(assignment, "schedule")
         
         await db.commit()
         await db.refresh(assignment)
@@ -997,13 +1047,13 @@ async def advance_to_next_stage(
             "status": assignment.status.value,
             "currentStageOrder": assignment.current_stage_order,
             "schedule": assignment.schedule,
-            "advancedAt": datetime.now(timezone.utc).isoformat(),
-            "completedAt": assignment.completed_at.isoformat() if assignment.completed_at else None,
+            "advancedAt": beijing_now_iso(),
+            "completedAt": _iso_beijing(assignment.completed_at),
         })
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 # ========== 管理员评论（给 Contractor 的反馈） ==========
@@ -1032,7 +1082,7 @@ async def add_admin_comment(
         if not data.content.strip():
             raise HTTPException(status_code=400, detail="评论内容不能为空")
         
-        now = datetime.now(timezone.utc)
+        now = beijing_now()
         admin_name = current_user.username if hasattr(current_user, 'username') else '管理员'
         
         # 追加到 admin_comments JSON 数组
@@ -1092,9 +1142,9 @@ async def add_admin_comment(
         
         return ApiResponse(code=200, message="评论已添加", data={
             "id": deliverable.id,
-            "adminComments": deliverable.admin_comments,
+            "adminComments": _normalize_admin_comments(deliverable.admin_comments),
         })
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
