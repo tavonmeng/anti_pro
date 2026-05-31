@@ -11,7 +11,10 @@
 
         <!-- 标题 -->
         <div class="modal-header">
-          <h2 class="modal-title">Unique Vision</h2>
+          <div class="modal-brand">
+            <img class="modal-logo" src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
+            <h2 class="modal-title">Unique Vision</h2>
+          </div>
         </div>
 
         <!-- Tab 切换 -->
@@ -361,7 +364,22 @@ function handleLoginSuccess() {
 .modal-close-btn:hover { background: #e8e8ed; color: #1d1d1f; }
 
 /* 标题 */
-.modal-header { text-align: center; margin-bottom: 20px; }
+.modal-header {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+.modal-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.modal-logo {
+  width: 24px;
+  height: 36px;
+  display: block;
+  object-fit: contain;
+}
 .modal-title {
   font-size: 24px;
   font-weight: 600;

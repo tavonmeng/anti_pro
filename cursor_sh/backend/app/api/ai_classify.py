@@ -100,7 +100,7 @@ async def ai_classify(request: ClassifyRequest):
     返回值：
     - order_create: 咨询下单 / 描述项目需求
     - order_query: 查看订单状态 / 进度
-    - business_intro: 了解公司业务 / 看案例
+    - business_intro: 了解公司业务 / 咨询顾问
     - general: 其他闲聊或通用问题
     """
     msg = request.message.strip()
@@ -120,7 +120,7 @@ async def ai_classify(request: ClassifyRequest):
                 "你是一个意图分类器。根据用户消息判断意图，只返回以下4个词之一，不要输出任何其他内容：\n"
                 "- order_create: 用户想咨询下单、描述项目需求、定制内容\n"
                 "- order_query: 用户想查看订单状态、进度、历史订单\n"
-                "- business_intro: 用户想了解公司业务、看案例、咨询服务范围\n"
+                "- business_intro: 用户想了解公司业务、咨询顾问、咨询服务范围\n"
                 "- general: 其他闲聊或通用问题"
             )
             data = await post_chat_completion(

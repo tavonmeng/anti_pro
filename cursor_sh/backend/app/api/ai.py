@@ -523,7 +523,7 @@ async def ai_start(session_id: str, business_type: str | None = None):
 
 **咨询下单** — 描述您的媒体资源与项目需求，由我协助梳理并生成完整需求单
 **查看订单** — 查询您名下的订单进展与状态
-**了解业务** — 了解我们的服务体系与过往案例
+**了解业务** — 了解我们的服务体系与咨询顾问
 
 请直接告知您的需求，或通过下方快捷入口进入对应流程。"""
     else:
@@ -535,7 +535,7 @@ async def ai_start(session_id: str, business_type: str | None = None):
 
 **咨询下单** — 描述您的项目需求，由我协助梳理并生成完整需求单
 **查看订单** — 查询您名下的订单进展与状态
-**了解业务** — 了解我们的服务体系与过往案例
+**了解业务** — 了解我们的服务体系与咨询顾问
 
 请直接告知您的需求，或通过下方快捷入口进入对应流程。"""
     return {"reply": reply, "agent_mode": settings.AGENT_MODE}
@@ -1461,29 +1461,13 @@ async def ai_assess(request: AssessRequest):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 案例数据接口
+# 案例数据接口（线上 Agent 已停用案例展示）
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.get("/cases")
 async def ai_get_cases(category: str = None):
-    """获取案例列表（含视频链接）"""
-    try:
-        from app.utils.knowledge import get_knowledge_file
-        cases_path = get_knowledge_file('cases.json')
-        with open(cases_path, "r", encoding="utf-8") as f:
-            cases = json.load(f)
-        if category:
-            cases = [c for c in cases if c.get("category") == category]
-        return {"cases": cases}
-    except Exception as e:
-        log_business_event(
-            logger,
-            "ai_cases_load_failed",
-            level="warning",
-            category=category,
-            error=str(e),
-        )
-        return {"cases": []}
+    """线上不再通过 Agent 展示案例。"""
+    return {"cases": []}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

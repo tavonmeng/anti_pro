@@ -52,7 +52,7 @@
                       </div>
                       <div class="option-card stitch-card" @click="selectMode('business_intro')">
                         <span class="opt-text">了解业务</span>
-                        <span class="opt-desc">服务体系与过往案例</span>
+                        <span class="opt-desc">服务体系与咨询顾问</span>
                       </div>
                     </div>
                     <p class="welcome-hint">也可以直接在下方输入您的问题</p>
@@ -250,30 +250,6 @@
                         </div>
                         <div class="order-card-footer">
                           <span class="view-detail-link">查看详情 →</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <!-- 案例视频卡片 -->
-                  <div v-if="msg.isCaseList && msg.cases" class="inline-form-section">
-                    <div class="case-video-cards">
-                      <div v-for="c in msg.cases" :key="c.id" class="case-card">
-                        <div class="case-card-video" v-if="c.video_url">
-                          <video
-                            :src="c.video_url"
-                            controls
-                            preload="metadata"
-                            :poster="c.thumbnail_url || ''"
-                            class="case-video-player"
-                          ></video>
-                        </div>
-                        <div class="case-card-info">
-                          <div class="case-title">{{ c.title }}</div>
-                          <div class="case-desc">{{ c.description }}</div>
-                          <div class="case-meta">
-                            <span class="case-tag">{{ getTypeText(c.category) }}</span>
-                            <span class="case-duration" v-if="c.duration">{{ c.duration }}</span>
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -1133,7 +1109,7 @@ const displayedMessages = computed(() => {
   return messages.value.filter(m => {
     // 包含文本，或者是有卡片内容的特殊气泡
     if (m.content && m.content.toLowerCase().includes(q)) return true
-    if (m.isOrderList || m.isCaseList || m.isGuideToOrder || m.isPurchasePrompt || m.isCompletePrompt || m.isHumanHandoff) return true
+    if (m.isOrderList || m.isGuideToOrder || m.isPurchasePrompt || m.isCompletePrompt || m.isHumanHandoff) return true
     return false
   })
 })
@@ -1143,7 +1119,7 @@ type SavedSession = AiChatSavedSession
 const agentRegistry: Record<string, { label: string; sessionType: string; selectedMode: string | null; businessType?: string }> = {
   general: { label: '通用问答', sessionType: 'general', selectedMode: null },
   business_intro: { label: '业务介绍', sessionType: 'business_intro', selectedMode: 'business_intro' },
-  case_intro: { label: '案例介绍', sessionType: 'case_intro', selectedMode: 'business_intro' },
+  case_intro: { label: '咨询顾问', sessionType: 'business_intro', selectedMode: 'business_intro' },
   order_query: { label: '订单查询', sessionType: 'order_query', selectedMode: 'order_query' },
   requirement_ai_3d_custom: { label: 'AI驱动3D OOH内容定制', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'ai_3d_custom' },
   requirement_video_purchase: { label: '3D OOH数字内容资源库', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'video_purchase' },
@@ -1166,8 +1142,7 @@ const getCurrentAgentKey = () => {
   }
   if (selectedMode.value === 'order_query') return 'order_query'
   if (selectedMode.value === 'business_intro') {
-    const hasCaseContext = messages.value.some(m => m?.isCaseList || m?.isCaseDetour || /案例|作品|过往项目/.test(m?.content || ''))
-    return hasCaseContext ? 'case_intro' : 'business_intro'
+    return 'business_intro'
   }
   return 'general'
 }
@@ -1877,7 +1852,7 @@ const selectMode = async (mode: string) => {
       const cleanMsg = (data.message || '').replace(/【引导下单(?::[^】]+)?】/g, '').trim()
       typewriterEffect(cleanMsg)
     } catch (e) {
-      const fallback = 'Unique Vision AI 提供六大平台服务：\n\n**3D OOH数字内容资源库**\nReady-to-Deploy 3D DOOH Assets：即用型裸眼3D数字内容资产\nScreen-Adaptive Content Packages：多屏适配内容方案\nGlobal Landmark Screen Formats：全球地标大屏内容规格适配\n\n**AI驱动3D OOH内容定制**\nAI-Based Creative Development：AI创意内容开发\nSite-Specific 3D Screen Adaptation：场景化裸眼3D空间适配\nReal-World Playback Simulation：真实环境播放模拟\nEnd-to-End DOOH Content Production：一站式DOOH内容制作\n\n**数字艺术与沉浸式视觉设计**\nArt Direction & Visual Design：艺术指导与视觉设计\nVirtual Installation Art：虚拟装置艺术\nImmersive Spatial Visuals：沉浸式空间视觉\nExperimental Digital Art Content：实验性数字艺术内容\n\n**广告视觉与动态影像制作**\nStatic Advertising Visuals：平面广告视觉设计\nTVC Production：TVC广告影片制作\nFOOH Campaign Content：FOOH数字传播内容\nVJ Visual Performance Content：VJ视觉演出内容\nMotion Graphic Design：动态视觉设计\n\n**户外媒体后期制作服务**\nHigh-End Retouching：高端精修图像处理\nCinematic Video Finishing：电影级视频精修\nCGI Enhancement：CGI视觉增强\nCommercial Photography & Filming：商业摄影与视频拍摄\nDrone Cinematography：航拍影像制作\n\n**广告投放分析与效果报告**\nDOOH Campaign Analytics：DOOH广告投放数据分析\nAudience Performance Reports：受众效果分析报告\nVisual Impact Assessment：视觉传播效果评估\nDownloadable Data Reports：可下载数据报告系统\n\n如需了解某个板块的详细信息或过往案例，请直接告知。'
+      const fallback = 'Unique Vision AI 提供六大平台服务：\n\n**3D OOH数字内容资源库**\nReady-to-Deploy 3D DOOH Assets：即用型裸眼3D数字内容资产\nScreen-Adaptive Content Packages：多屏适配内容方案\nGlobal Landmark Screen Formats：全球地标大屏内容规格适配\n\n**AI驱动3D OOH内容定制**\nAI-Based Creative Development：AI创意内容开发\nSite-Specific 3D Screen Adaptation：场景化裸眼3D空间适配\nReal-World Playback Simulation：真实环境播放模拟\nEnd-to-End DOOH Content Production：一站式DOOH内容制作\n\n**数字艺术与沉浸式视觉设计**\nArt Direction & Visual Design：艺术指导与视觉设计\nVirtual Installation Art：虚拟装置艺术\nImmersive Spatial Visuals：沉浸式空间视觉\nExperimental Digital Art Content：实验性数字艺术内容\n\n**广告视觉与动态影像制作**\nStatic Advertising Visuals：平面广告视觉设计\nTVC Production：TVC广告影片制作\nFOOH Campaign Content：FOOH数字传播内容\nVJ Visual Performance Content：VJ视觉演出内容\nMotion Graphic Design：动态视觉设计\n\n**户外媒体后期制作服务**\nHigh-End Retouching：高端精修图像处理\nCinematic Video Finishing：电影级视频精修\nCGI Enhancement：CGI视觉增强\nCommercial Photography & Filming：商业摄影与视频拍摄\nDrone Cinematography：航拍影像制作\n\n**广告投放分析与效果报告**\nDOOH Campaign Analytics：DOOH广告投放数据分析\nAudience Performance Reports：受众效果分析报告\nVisual Impact Assessment：视觉传播效果评估\nDownloadable Data Reports：可下载数据报告系统\n\n如需了解某个板块的详细信息，或需要项目资料支持，我可以为您衔接咨询顾问。'
       typewriterEffect(fallback)
     } finally {
       isLoading.value = false
@@ -1974,15 +1949,6 @@ const sendMessage = async () => {
   }
   
   // 根据当前意图路由到对应 handler
-  // 跨模式拦截：任何模式下用户问案例，都走 business_intro（它有真实案例库）
-  const _caseKeywords = ['案例', '作品', '看看你们做过', '之前做过', '过往项目', '成功案例', '看看案例', '展示一下']
-  if (_caseKeywords.some(kw => messageContent.includes(kw))) {
-    // 标记用户的案例请求消息，避免污染需求收集上下文
-    const lastUserMsg = messages.value[messages.value.length - 1]
-    if (lastUserMsg && lastUserMsg.role === 'user') lastUserMsg.isCaseDetour = true
-    await handleBusinessIntro(messageContent, true)
-    return
-  }
 
   if (isHumanHandoffRequest(messageContent)) {
     selectedMode.value = 'order_create'
@@ -2042,7 +2008,7 @@ const goToOrderDetail = (orderId: string) => {
 }
 
 // ===== 业务介绍 handler =====
-const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = false) => {
+const handleBusinessIntro = async (userText: string) => {
   isLoading.value = true
   try {
     const historyMsgs = messages.value
@@ -2059,28 +2025,11 @@ const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = fal
     const replyContent = data.message || ''
     // 显示时清洗掉内部标记
     const cleanMsg = replyContent.replace(/【推荐案例:case_\w+】/g, '').replace(/【引导下单(?::[^】]+)?】/g, '').trim()
-    const cases = data.cases || []
     
     typewriterEffect(cleanMsg, () => {
-      // 打字结束后，用原始内容（含案例标记）覆盖 content
-      // 这样下一轮历史发给 LLM 时，它能看到之前推荐过哪些案例
       const lastMsg = messages.value[messages.value.length - 1]
       if (lastMsg && lastMsg.role === 'assistant') {
         lastMsg.content = replyContent
-      }
-      // 标记案例回复，避免污染需求收集上下文
-      if (isCaseDetour) {
-        const lastAssistantMsg = messages.value[messages.value.length - 1]
-        if (lastAssistantMsg && lastAssistantMsg.role === 'assistant') lastAssistantMsg.isCaseDetour = true
-      }
-      // 如果有案例数据，附加到当前消息上（与订单卡片同理）
-      if (cases.length > 0) {
-        const lastMsg = messages.value[messages.value.length - 1]
-        if (lastMsg && lastMsg.role === 'assistant') {
-          lastMsg.isCaseList = true
-          lastMsg.cases = cases
-        }
-        scrollToBottom()
       }
       // 如果 AI 建议引导下单
       const guide = data.guide || {}
@@ -2218,7 +2167,7 @@ const applyCustomAiChatFinalState = async (data: any, replyContent: string, assi
 const buildRequirementChatPayload = (userText: string, userMessageId?: string, assistantMessageId?: string) => {
   const historyMessages = messages.value.slice(0, messages.value.length - 1)
   const formattedHistory = historyMessages
-    .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.isCaseDetour)
+    .filter(m => m.role === 'user' || m.role === 'assistant')
     .map(m => ({ role: m.role, content: m.content }))
 
   return {
@@ -4186,78 +4135,6 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   border-color: var(--uv-ws-action-button-bg, #A0522D);
   color: var(--uv-ws-action-button-bg, #A0522D);
   background: var(--uv-ws-module-active-bg, #F3E7E1);
-}
-
-/* ===== 案例视频卡片 ===== */
-.case-video-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.case-card {
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 12px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.7);
-  transition: box-shadow 0.2s, transform 0.15s;
-}
-
-.case-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
-}
-
-.case-card-video {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: #0a0a0a;
-  position: relative;
-}
-
-.case-video-player {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.case-card-info {
-  padding: 10px 14px 12px;
-}
-
-.case-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1a1c1c;
-  margin-bottom: 4px;
-}
-
-.case-desc {
-  font-size: 12px;
-  color: #555;
-  line-height: 1.5;
-  margin-bottom: 8px;
-}
-
-.case-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.case-tag {
-  font-size: 10px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: var(--uv-ws-module-active-bg, #F3E7E1);
-  color: var(--uv-ws-action-button-bg, #A0522D);
-  font-weight: 500;
-}
-
-.case-duration {
-  font-size: 11px;
-  color: #86868b;
 }
 
 /* ========== 语音输入样式 ========== */

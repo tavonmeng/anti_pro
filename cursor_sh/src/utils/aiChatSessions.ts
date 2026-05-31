@@ -67,7 +67,7 @@ export const getAiChatAgentMeta = (sessionType?: string, businessType?: string) 
     return { agentKey: 'business_intro', agentLabel: '业务介绍', mode: 'business_intro' }
   }
   if (sessionType === 'case_intro') {
-    return { agentKey: 'case_intro', agentLabel: '案例介绍', mode: 'business_intro' }
+    return { agentKey: 'business_intro', agentLabel: '咨询顾问', mode: 'business_intro' }
   }
   if (sessionType === 'requirement') {
     const type = businessType || 'ai_3d_custom'

@@ -116,7 +116,7 @@ async def _classify_general_route(request: GeneralRequest) -> dict[str, Any]:
         "intent 只能是以下之一：\n"
         "- order_create: 用户想下单、开始项目、定制内容、描述项目需求、希望有人协助梳理需求\n"
         "- order_query: 用户想查看订单、进度、状态、历史订单\n"
-        "- business_intro: 用户想了解公司、业务、案例、服务范围\n"
+        "- business_intro: 用户想了解公司、业务、咨询顾问、服务范围\n"
         "- general: 其他闲聊或通用问题\n\n"
         "business_type 只能是 ai_3d_custom、video_purchase、digital_art、motion_content、media_post_production、campaign_analytics 或 null。\n"
         "如果 intent=order_create 但无法判断具体业务，在媒体端默认使用 ai_3d_custom。\n"
@@ -166,7 +166,7 @@ async def ai_general(request: GeneralRequest, raw_request: Request):
             "我可以协助您：\n"
             "- 咨询下单 — 梳理项目需求并创建订单\n"
             "- 查看订单 — 查询订单进展与状态\n"
-            "- 了解业务 — 了解服务体系与过往案例\n\n"
+            "- 了解业务 — 了解服务体系与咨询顾问\n\n"
             "请问您需要哪方面的支持？"
         )
         return {"message": reply, **route}

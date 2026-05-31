@@ -1,21 +1,17 @@
 <template>
   <section id="hero" class="hero-section">
     
-    <!-- 视频背景 -->
+    <!-- 背景图 -->
     <div class="video-container" ref="bgRef">
-      <video class="hero-video" autoplay muted loop playsinline>
-        <source src="/landing/video1.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
+      <img class="hero-video" src="/video-library-images/2.jpg" alt="" />
       <div class="video-overlay"></div>
     </div>
     
     <div class="hero-container">
       <div class="hero-content">
         <h1 class="hero-title hover-target">
-          <span class="line-wrap"><span class="line-text" ref="textLine1">Let's Create</span></span>
-          <span class="line-wrap"><span class="outline-text hover-target line-text" ref="textLine2">Something</span></span>
-          <span class="line-wrap"><span class="hover-target line-text" ref="textLine3">Extraordinary</span></span>
+          <span class="line-wrap"><span class="outline-text hover-target line-text" ref="textLine1">WE CREATE</span></span>
+          <span class="line-wrap"><span class="hover-target line-text" ref="textLine2">EXTRAORDINARY</span></span>
         </h1>
       </div>
     </div>
@@ -58,12 +54,11 @@ const props = defineProps({
 const bgRef = ref(null)
 const textLine1 = ref(null)
 const textLine2 = ref(null)
-const textLine3 = ref(null)
 const textLine4 = ref(null)
 const textLine5 = ref(null)
 
 const playHeroAnimation = () => {
-  const lines = [textLine1.value, textLine2.value, textLine3.value, textLine4.value, textLine5.value]
+  const lines = [textLine1.value, textLine2.value, textLine4.value, textLine5.value]
   
   const tl = gsap.timeline()
   
@@ -92,7 +87,7 @@ onMounted(() => {
     playHeroAnimation()
   } else {
     // Hide initially until loader completes
-    gsap.set([textLine1.value, textLine2.value, textLine3.value, textLine4.value, textLine5.value], { y: '120%', opacity: 0 })
+    gsap.set([textLine1.value, textLine2.value, textLine4.value, textLine5.value], { y: '120%', opacity: 0 })
     gsap.set(bgRef.value, { scale: 1.15, opacity: 0 })
   }
 })

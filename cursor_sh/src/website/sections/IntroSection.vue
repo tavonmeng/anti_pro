@@ -43,7 +43,7 @@
         <div class="container">
           <div class="left-content static-left" ref="leftContentRef">
             <h2 class="main-heading">
-              这是一个<br>
+              我们是<br>
               <span class="desc-highlight">idea+AI驱动的</span><br>
               3D OOH内容平台
             </h2>
@@ -324,32 +324,32 @@ onUnmounted(() => {
 /* 加深纯黑渐变：左侧95%纯黑以彻底保护静态白字，中部拉平，右侧微露 20% 原图光芒 */
 .slide-bg-1 {
   background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.2) 100%), 
-                    url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop');
+                    url('/service-images/2.jpg');
 }
 
 .slide-bg-2 {
   background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.3) 100%), 
-                    url('https://images.unsplash.com/photo-1634152962476-4b8a00e1915c?q=80&w=2121&auto=format&fit=crop');
+                    url('/service-images/1.jpg');
 }
 
 .slide-bg-3 {
   background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.4) 100%), 
-                    url('https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2100&auto=format&fit=crop');
+                    url('/service-images/3.jpg');
 }
 
 .slide-bg-4 {
   background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.34) 100%),
-                    url('https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=2070&auto=format&fit=crop');
+                    url('/service-images/4.jpg');
 }
 
 .slide-bg-5 {
   background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.36) 100%),
-                    url('https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=2088&auto=format&fit=crop');
+                    url('/service-images/5.jpg');
 }
 
 .slide-bg-6 {
   background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.36) 100%),
-                    url('https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2070&auto=format&fit=crop');
+                    url('/service-images/6.jpg');
 }
 
 /* 幻灯片内的网格布局区域计算（和静态层完美重合） */
