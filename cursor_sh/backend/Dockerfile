@@ -5,7 +5,9 @@ WORKDIR /app
 ENV TZ=Asia/Shanghai
 
 # 系统依赖（中文字体用于 PDF 生成）
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i 's|http://deb.debian.org|https://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update \
+    && apt-get install -y --no-install-recommends \
     tzdata \
     fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/* \

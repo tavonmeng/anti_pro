@@ -1701,32 +1701,28 @@ def _sign_file_urls_in_response(data: dict):
     处理字段：
     - scenePhotos[].url
     - scenePhotos[].file_url
+    - materials[].url
+    - materials[].file_url
     - previewFiles[].url
     - previewHistory[].files[].url
     - site_photos[].url / site_photos[].file_url
+    - designPlan.files[].url / designPlan.files[].file_url
+    - publishedDeliverables[].files[].url / publishedDeliverables[].files[].file_url
     """
-    from app.services.oss_service import extract_object_key, maybe_sign_url
+    from app.services.oss_service import sign_file_url_fields
 
     # 签名单个文件对象的 url 字段
     def _sign_file_item(item):
         if isinstance(item, dict):
-            object_key = item.get("object_key") or item.get("objectKey")
-            if not object_key:
-                object_key = extract_object_key(item.get("url") or item.get("file_url") or "")
-            if object_key:
-                item["object_key"] = object_key
-                item["url"] = maybe_sign_url(object_key)
-                if "file_url" in item:
-                    item["file_url"] = item["url"]
-                return
-            if "url" in item and item["url"]:
-                item["url"] = maybe_sign_url(item["url"])
-            if "file_url" in item and item["file_url"]:
-                item["file_url"] = maybe_sign_url(item["file_url"])
+            sign_file_url_fields(item)
 
     # scenePhotos
     for photo in data.get("scenePhotos", []) or []:
         _sign_file_item(photo)
+
+    # digital_art materials
+    for material in data.get("materials", []) or []:
+        _sign_file_item(material)
 
     # site_photos（承包商端脱敏后的字段名）
     for photo in data.get("site_photos", []) or []:
@@ -1745,3 +1741,8 @@ def _sign_file_urls_in_response(data: dict):
     for dlv in data.get("publishedDeliverables", []) or []:
         for f in dlv.get("files", []) or []:
             _sign_file_item(f)
+
+    # designPlan -> files
+    design_plan = data.get("designPlan") or data.get("design_plan") or {}
+    for f in design_plan.get("files", []) or []:
+        _sign_file_item(f)

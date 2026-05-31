@@ -212,4 +212,10 @@ def _document_file_url(doc: CustomerDocument) -> str:
             return get_signed_url(doc.object_key, expires=3600)
         except Exception:
             return doc.object_key
+    if settings.OSS_ENABLED and doc.file_url:
+        try:
+            from app.services.oss_service import maybe_sign_url
+            return maybe_sign_url(doc.file_url, expires=3600)
+        except Exception:
+            return doc.file_url
     return doc.file_url or ""

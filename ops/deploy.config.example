@@ -1,0 +1,20 @@
+# Copy to ops/deploy.config and fill in real values.
+
+SSH_USER=root
+SSH_PORT=22
+SSH_KEY=
+REMOTE_DIR=/root/service/anti_pro
+
+# Two staging servers
+STAGING_EXTERNAL_HOST=
+STAGING_INTERNAL_HOST=
+
+# Two production servers
+PRODUCTION_EXTERNAL_HOST=
+PRODUCTION_INTERNAL_HOST=
+
+# Env files already stored on each server.
+STAGING_EXTERNAL_ENV=./cursor_sh/backend/.env.staging.external
+STAGING_INTERNAL_ENV=./cursor_sh/backend/.env.staging.internal
+PRODUCTION_EXTERNAL_ENV=./cursor_sh/backend/.env.production.external
+PRODUCTION_INTERNAL_ENV=./cursor_sh/backend/.env.production.internal

@@ -13,8 +13,18 @@
             <span>仅限授权人员访问</span>
           </div>
         </div>
+
+        <div class="admin-login-tabs">
+          <button type="button" class="tab-btn" :class="{ active: loginMode === 'password' }" @click="setLoginMode('password')">
+            密码登录
+          </button>
+          <button type="button" class="tab-btn" :class="{ active: loginMode === 'sms' }" @click="setLoginMode('sms')">
+            验证码登录
+          </button>
+        </div>
         
         <el-form
+          v-if="loginMode === 'password'"
           ref="loginFormRef"
           :model="loginForm"
           :rules="loginRules"
@@ -67,36 +77,110 @@
             </el-button>
           </el-form-item>
         </el-form>
+
+        <el-form
+          v-else
+          ref="smsFormRef"
+          :model="smsForm"
+          :rules="smsRules"
+          class="admin-login-form"
+          @submit.prevent="handleSmsLogin"
+        >
+          <el-form-item prop="phone">
+            <el-input
+              v-model="smsForm.phone"
+              placeholder="管理员手机号"
+              size="large"
+              class="admin-input"
+              maxlength="11"
+            >
+              <template #prefix>
+                <el-icon class="input-icon"><User /></el-icon>
+              </template>
+            </el-input>
+          </el-form-item>
+
+          <el-form-item prop="smsCode">
+            <div class="sms-code-row">
+              <el-input
+                v-model="smsForm.smsCode"
+                placeholder="短信验证码"
+                size="large"
+                class="admin-input sms-code-input"
+                maxlength="6"
+                @keyup.enter="handleSmsLogin"
+              >
+                <template #prefix>
+                  <el-icon class="input-icon"><Message /></el-icon>
+                </template>
+              </el-input>
+              <el-button
+                class="sms-send-button"
+                :disabled="smsCooldown > 0 || !isSmsPhoneValid"
+                :loading="smsSending"
+                @click="openSmsCaptcha"
+              >
+                {{ smsCooldown > 0 ? `${smsCooldown}s` : '发送验证码' }}
+              </el-button>
+            </div>
+          </el-form-item>
+
+          <el-form-item>
+            <el-button
+              type="primary"
+              size="large"
+              class="admin-login-button"
+              :loading="loading"
+              @click="handleSmsLogin"
+            >
+              <span v-if="!loading">登录系统</span>
+              <span v-else>验证中...</span>
+            </el-button>
+          </el-form-item>
+        </el-form>
         
         <div class="admin-login-footer">
           <p class="security-tips">
             <el-icon><InfoFilled /></el-icon>
             系统将记录所有登录行为
           </p>
-          <p class="back-link">
-            <el-link @click="goToHome">← 返回首页</el-link>
-          </p>
         </div>
       </div>
     </div>
+
+    <el-dialog v-model="smsCaptchaVisible" width="360px" :show-close="false" class="captcha-dialog" append-to-body>
+      <template #header>
+        <span class="dialog-title">安全验证</span>
+      </template>
+      <Captcha ref="dialogCaptchaRef" v-model="dialogCaptcha" @verify="handleDialogCaptchaVerify" />
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { User, Lock, Warning, InfoFilled } from '@element-plus/icons-vue'
+import { User, Lock, Warning, InfoFilled, Message } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import type { UserRole } from '@/types'
+import { authApi } from '@/utils/api'
+import type { LoginRequest, UserRole } from '@/types'
 import Captcha from '@/components/Captcha.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const loginMode = ref<'password' | 'sms'>('password')
 const loginFormRef = ref<FormInstance>()
+const smsFormRef = ref<FormInstance>()
 const loading = ref(false)
 const captchaValid = ref(false)
 const captchaRef = ref<InstanceType<typeof Captcha>>()
+const smsSending = ref(false)
+const smsCooldown = ref(0)
+const smsCaptchaVisible = ref(false)
+const dialogCaptcha = ref('')
+const dialogCaptchaRef = ref<InstanceType<typeof Captcha>>()
+let smsCooldownTimer: ReturnType<typeof setInterval> | undefined
 
 const loginForm = reactive({
   phone: '',
@@ -104,6 +188,13 @@ const loginForm = reactive({
   role: 'admin' as UserRole,  // 固定为 admin
   captcha: ''
 })
+
+const smsForm = reactive({
+  phone: '',
+  smsCode: ''
+})
+
+const isSmsPhoneValid = computed(() => /^1[3-9]\d{9}$/.test(smsForm.phone))
 
 const validatePhone = (rule: any, value: string, callback: Function) => {
   if (!value) {
@@ -125,6 +216,16 @@ const validatePassword = (rule: any, value: string, callback: Function) => {
   }
 }
 
+const validateSmsCode = (rule: any, value: string, callback: Function) => {
+  if (!value) {
+    callback(new Error('请输入短信验证码'))
+  } else if (value.length < 4) {
+    callback(new Error('验证码格式不正确'))
+  } else {
+    callback()
+  }
+}
+
 const validateCaptcha = (rule: any, value: string, callback: Function) => {
   if (!value) {
     callback(new Error('请输入验证码'))
@@ -141,10 +242,67 @@ const loginRules: FormRules = {
   captcha: [{ validator: validateCaptcha, trigger: 'blur' }]
 }
 
+const smsRules: FormRules = {
+  phone: [{ validator: validatePhone, trigger: 'blur' }],
+  smsCode: [{ validator: validateSmsCode, trigger: 'blur' }]
+}
+
+const setLoginMode = (mode: 'password' | 'sms') => {
+  loginMode.value = mode
+  if (mode === 'sms') {
+    smsForm.phone = loginForm.phone
+  } else {
+    loginForm.phone = smsForm.phone
+  }
+}
+
 const handleCaptchaVerify = (isValid: boolean) => {
   captchaValid.value = isValid
   if (loginFormRef.value) {
     loginFormRef.value.validateField('captcha')
+  }
+}
+
+const routeAfterInternalLogin = () => {
+  const redirect = router.currentRoute.value.query.redirect as string || undefined
+
+  if (authStore.isAdmin()) {
+    router.push(redirect || '/admin')
+  } else if (authStore.isStaff()) {
+    router.push(redirect || '/staff')
+  } else if (authStore.isContractor()) {
+    router.push(redirect || '/contractor')
+  } else {
+    ElMessage.error('您没有内部系统访问权限')
+    authStore.logout()
+  }
+}
+
+const tryInternalLogin = async (payload: Omit<LoginRequest, 'role'>) => {
+  const roles: UserRole[] = ['admin', 'staff', 'contractor']
+
+  for (const role of roles) {
+    try {
+      const success = await authStore.login({ ...payload, role }, true)
+      if (success) {
+        ElMessage.success('登录成功')
+        routeAfterInternalLogin()
+        return true
+      }
+    } catch {
+      // Continue with the next internal role; show one clear error after all attempts fail.
+    }
+  }
+
+  ElMessage.error('手机号、密码或验证码错误')
+  return false
+}
+
+const resetPasswordCaptcha = () => {
+  if (captchaRef.value) {
+    captchaRef.value.refresh()
+    loginForm.captcha = ''
+    captchaValid.value = false
   }
 }
 
@@ -161,64 +319,15 @@ const handleLogin = async () => {
       
       loading.value = true
       try {
-        // 先尝试 admin 角色登录（静默模式，不显示错误）
-        let loginData = { ...loginForm, role: 'admin' as UserRole }
-        let success = await authStore.login(loginData, true)
-        const firstAttemptSuccess = success
-        
-        // 如果 admin 登录失败，尝试 staff 角色
-        if (!success) {
-          loginData = { ...loginForm, role: 'staff' as UserRole }
-          try {
-            success = await authStore.login(loginData, true)
-          } catch { success = false }
-        }
-        
-        // 如果 staff 也失败，尝试 contractor 角色
-        if (!success) {
-          loginData = { ...loginForm, role: 'contractor' as UserRole }
-          success = await authStore.login(loginData, false) // 最后一次显示错误
-        }
-        
-        if (success) {
-          // 如果第一次是静默登录且成功，需要显示成功消息
-          if (firstAttemptSuccess) {
-            ElMessage.success('登录成功')
-          }
-          
-          if (authStore.isAdmin()) {
-            const redirect = router.currentRoute.value.query.redirect as string || undefined
-            router.push(redirect || '/admin')
-          } else if (authStore.isStaff()) {
-            const redirect = router.currentRoute.value.query.redirect as string || undefined
-            router.push(redirect || '/staff')
-          } else if (authStore.isContractor()) {
-            const redirect = router.currentRoute.value.query.redirect as string || undefined
-            router.push(redirect || '/contractor')
-          } else {
-            ElMessage.error('您没有内部系统访问权限')
-            if (captchaRef.value) {
-              captchaRef.value.refresh()
-              loginForm.captcha = ''
-              captchaValid.value = false
-            }
-          }
-        } else {
-          // 登录失败，刷新验证码
-          if (captchaRef.value) {
-            captchaRef.value.refresh()
-            loginForm.captcha = ''
-            captchaValid.value = false
-          }
-        }
+        const success = await tryInternalLogin({
+          phone: loginForm.phone,
+          password: loginForm.password,
+          captcha: loginForm.captcha
+        })
+        if (!success) resetPasswordCaptcha()
       } catch (error: any) {
         console.error('登录失败:', error)
-        // 登录失败，刷新验证码
-        if (captchaRef.value) {
-          captchaRef.value.refresh()
-          loginForm.captcha = ''
-          captchaValid.value = false
-        }
+        resetPasswordCaptcha()
       } finally {
         loading.value = false
       }
@@ -226,9 +335,69 @@ const handleLogin = async () => {
   })
 }
 
-const goToHome = () => {
-  router.push('/')
+const openSmsCaptcha = () => {
+  if (!isSmsPhoneValid.value) {
+    ElMessage.warning('请输入有效的11位手机号')
+    return
+  }
+  dialogCaptcha.value = ''
+  smsCaptchaVisible.value = true
+  setTimeout(() => dialogCaptchaRef.value?.refresh(), 100)
 }
+
+const handleDialogCaptchaVerify = (isValid: boolean) => {
+  if (!isValid) return
+  smsCaptchaVisible.value = false
+  handleSendSms()
+}
+
+const handleSendSms = async () => {
+  if (!isSmsPhoneValid.value) {
+    ElMessage.warning('请输入有效的11位手机号')
+    return
+  }
+
+  smsSending.value = true
+  try {
+    await authApi.sendSms(smsForm.phone)
+    ElMessage.success('验证码已发送，请注意查收短信')
+    smsCooldown.value = 60
+    if (smsCooldownTimer) clearInterval(smsCooldownTimer)
+    smsCooldownTimer = setInterval(() => {
+      smsCooldown.value--
+      if (smsCooldown.value <= 0 && smsCooldownTimer) {
+        clearInterval(smsCooldownTimer)
+        smsCooldownTimer = undefined
+      }
+    }, 1000)
+  } catch (error) {
+    console.error('发送验证码失败:', error)
+  } finally {
+    smsSending.value = false
+  }
+}
+
+const handleSmsLogin = async () => {
+  if (!smsFormRef.value) return
+
+  await smsFormRef.value.validate(async (valid) => {
+    if (!valid) return
+
+    loading.value = true
+    try {
+      await tryInternalLogin({
+        phone: smsForm.phone,
+        sms_code: smsForm.smsCode
+      })
+    } finally {
+      loading.value = false
+    }
+  })
+}
+
+onBeforeUnmount(() => {
+  if (smsCooldownTimer) clearInterval(smsCooldownTimer)
+})
 </script>
 
 <style lang="scss" scoped>
@@ -306,6 +475,32 @@ const goToHome = () => {
   gap: 16px;
 }
 
+.admin-login-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 20px;
+}
+
+.tab-btn {
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn.active,
+.tab-btn:hover {
+  background: #fff;
+  color: #000;
+  border-color: #fff;
+}
+
 :deep(.el-form-item) {
   margin-bottom: 0 !important; 
   width: 100%;
@@ -347,6 +542,30 @@ const goToHome = () => {
 
 .input-border { display: none !important; }
 .input-icon { color: #888; font-size: 18px; }
+
+.sms-code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px;
+  gap: 10px;
+  width: 100%;
+  align-items: center;
+}
+
+.sms-send-button {
+  height: 40px;
+  border-radius: 999px !important;
+  border: 1px solid rgba(255, 255, 255, 0.32) !important;
+  background: transparent !important;
+  color: #fff !important;
+  padding: 0 12px !important;
+  font-size: 13px;
+  white-space: nowrap;
+
+  &:hover:not(.is-disabled) {
+    border-color: #fff !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+  }
+}
 
 /* 按钮 */
 .login-button, .admin-login-button, .register-button {
@@ -412,5 +631,19 @@ const goToHome = () => {
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
   background-color: #000; z-index: 1; pointer-events: none;
 }
-</style>
 
+.dialog-title {
+  color: #111;
+  font-weight: 700;
+}
+
+@media (max-width: 420px) {
+  .sms-code-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sms-send-button {
+    width: 100%;
+  }
+}
+</style>

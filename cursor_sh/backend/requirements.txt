@@ -34,9 +34,9 @@ reportlab==4.4.1
 oss2==2.19.1
 
 # 阿里云号码认证服务（短信验证码）
-alibabacloud_dypnsapi20170525==2.0.24
-alibabacloud_credentials==0.3.6
-alibabacloud_tea_openapi==0.3.14
+alibabacloud_dypnsapi20170525==2.0.0
+alibabacloud_credentials==1.0.2
+alibabacloud_tea_openapi==0.3.16
 alibabacloud_tea_util==0.3.13
 
 # 邮件

@@ -1,5 +1,6 @@
 """承包商端 API 路由"""
 
+import copy
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -44,6 +45,15 @@ def _normalize_admin_comments(comments: list | None) -> list:
             item["createdAt"] = f"{created_at.replace(' ', 'T')}+08:00"
         normalized.append(item)
     return normalized
+
+
+def _sign_file_items(items: list | None) -> list:
+    copied = copy.deepcopy(items or [])
+    if settings.OSS_ENABLED and copied:
+        from app.services.oss_service import sign_file_url_fields
+        for item in copied:
+            sign_file_url_fields(item)
+    return copied
 
 
 def _stage_order_value(stage: dict) -> int | None:
@@ -301,25 +311,16 @@ async def get_assignment_detail(
                 "target_group": order_data.get("target_group"),
                 "background": order_data.get("background"),
                 "prohibited_content": order_data.get("prohibited_content"),
-                "site_photos": order_data.get("site_photos") or order_data.get("scenePhotos"),
+                "site_photos": _sign_file_items(order_data.get("site_photos") or order_data.get("scenePhotos")),
                 "createdAt": beijing_iso(order.created_at),
             }
             # 附加 AI 设计方案（管理员编写的方案，contractor 可见）
             if order.design_plan:
                 order_info["designPlan"] = {
                     "content": order.design_plan.get("content", ""),
-                    "files": order.design_plan.get("files", []),
+                    "files": _sign_file_items(order.design_plan.get("files", [])),
                     "status": order.design_plan.get("status", "draft"),
                 }
-            # OSS 模式下签名 site_photos 中的文件 URL
-            if settings.OSS_ENABLED and order_info.get("site_photos"):
-                from app.services.oss_service import maybe_sign_url
-                for photo in order_info["site_photos"]:
-                    if isinstance(photo, dict):
-                        if photo.get("url"):
-                            photo["url"] = maybe_sign_url(photo["url"])
-                        if photo.get("file_url"):
-                            photo["file_url"] = maybe_sign_url(photo["file_url"])
         
         # 获取所有交付物
         d_result = await db.execute(
@@ -331,13 +332,7 @@ async def get_assignment_detail(
         
         deliverables_data = []
         for d in deliverables:
-            files = d.files or []
-            # OSS 模式下签名交付物文件 URL
-            if settings.OSS_ENABLED and files:
-                from app.services.oss_service import maybe_sign_url
-                for f in files:
-                    if isinstance(f, dict) and f.get("url"):
-                        f["url"] = maybe_sign_url(f["url"])
+            files = _sign_file_items(d.files)
             deliverables_data.append({
                 "id": d.id,
                 "stageConfigId": d.stage_config_id,
@@ -870,7 +865,7 @@ async def get_contractor_profile(
         "address": current_user.address,
         "specialty": current_user.specialty,
         "expertise": current_user.expertise,
-        "showcaseCases": current_user.showcase_cases or [],
+        "showcaseCases": _sign_file_items(current_user.showcase_cases),
         "createdAt": beijing_iso(current_user.created_at),
     })
 

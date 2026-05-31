@@ -86,7 +86,7 @@ watch(() => props.modelValue, (newVal) => {
   uploadedFiles.value = newVal || []
 })
 
-const uploadFile = async (file: File): Promise<UploadedFile> => {
+const uploadSelectedFile = async (file: File): Promise<UploadedFile> => {
   const formData = new FormData()
   formData.append('file', file)
 
@@ -121,20 +121,21 @@ const uploadFile = async (file: File): Promise<UploadedFile> => {
   }
 }
 
-const handleFileChange = async (uploadFile: UploadFile) => {
-  if (uploadFile.raw) {
+const handleFileChange = async (changedFile: UploadFile) => {
+  if (changedFile.raw) {
     try {
-      const uploaded = await uploadFile(uploadFile.raw)
+      const uploaded = await uploadSelectedFile(changedFile.raw)
       uploadedFiles.value.push(uploaded)
       emit('update:modelValue', uploadedFiles.value)
-      ElMessage.success(`${uploadFile.name} 上传成功`)
+      ElMessage.success(`${changedFile.name} 上传成功`)
       
       // 清空上传列表
       if (uploadRef.value) {
         uploadRef.value.clearFiles()
       }
     } catch (error) {
-      ElMessage.error(`${uploadFile.name} 上传失败`)
+      const message = error instanceof Error ? error.message : ''
+      ElMessage.error(message ? `${changedFile.name} 上传失败（${message}）` : `${changedFile.name} 上传失败`)
     }
   }
 }
@@ -170,9 +171,9 @@ const isPreviewableImage = (file: UploadedFile) => {
 
 const beforeUpload = (rawFile: File) => {
   // 可以在这里添加文件大小限制等验证
-  const maxSize = 50 * 1024 * 1024 // 50MB
+  const maxSize = 200 * 1024 * 1024 // 200MB
   if (rawFile.size > maxSize) {
-    ElMessage.error('文件大小不能超过 50MB')
+    ElMessage.error('文件大小不能超过 200MB')
     return false
   }
   return true

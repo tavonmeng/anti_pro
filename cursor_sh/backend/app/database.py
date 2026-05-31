@@ -52,9 +52,10 @@ def _create_engine():
             max_overflow=settings.DB_MAX_OVERFLOW,
             pool_timeout=settings.DB_POOL_TIMEOUT,
             pool_recycle=settings.DB_POOL_RECYCLE,
-            # pool_pre_ping: 每次从池中取连接前先 ping 一下
-            # 防止 RDS 在空闲超时后关闭连接导致 "MySQL server has gone away"
-            pool_pre_ping=settings.DB_POOL_PRE_PING,
+            # SQLAlchemy 2.0.41 + aiomysql 0.2.0 的 async pre-ping 会调用
+            # aiomysql.Connection.ping() 且缺少 reconnect 参数，导致登录等
+            # 复用连接的请求 500。保留 pool_recycle 处理 RDS 空闲连接回收。
+            pool_pre_ping=False,
             connect_args={"init_command": "SET time_zone = '+08:00'"},
         )
     else:

@@ -30,6 +30,8 @@ router = APIRouter(prefix="/upload", tags=["文件上传"])
 logger = get_module_logger("order")
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024
+UPLOAD_MAX_SIZE = 200 * 1024 * 1024
+UPLOAD_MAX_SIZE_MESSAGE = "文件大小不能超过200MB"
 
 
 def _safe_filename(filename: str | None, fallback: str) -> str:
@@ -258,7 +260,7 @@ async def upload_site_photo(
         raise HTTPException(status_code=400, detail="不支持的文件类型: %s" % ext)
 
     filename = _safe_filename(file.filename, "upload%s" % ext)
-    tmp_path, size = await _stream_upload_to_temp(file, 50 * 1024 * 1024, "文件大小不能超过50MB")
+    tmp_path, size = await _stream_upload_to_temp(file, UPLOAD_MAX_SIZE, UPLOAD_MAX_SIZE_MESSAGE)
 
     try:
         if settings.OSS_ENABLED:
@@ -316,7 +318,7 @@ async def upload_generic_file(
     file: UploadFile = File(...),
     current_user: AnyUser = Depends(get_current_user_for_public_deployment),
 ):
-    """通用文件上传（支持图片、视频、文档，最大 50MB）
+    """通用文件上传（支持图片、视频、文档，最大 200MB）
 
     用于承包商交付物上传等场景。
     """
@@ -342,7 +344,7 @@ async def upload_generic_file(
         raise HTTPException(status_code=400, detail="不支持的文件类型: %s" % ext)
 
     filename = _safe_filename(file.filename, "upload%s" % ext)
-    tmp_path, size = await _stream_upload_to_temp(file, 50 * 1024 * 1024, "文件大小不能超过50MB")
+    tmp_path, size = await _stream_upload_to_temp(file, UPLOAD_MAX_SIZE, UPLOAD_MAX_SIZE_MESSAGE)
 
     try:
         if settings.OSS_ENABLED:

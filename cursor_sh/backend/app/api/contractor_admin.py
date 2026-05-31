@@ -1,5 +1,6 @@
 """管理员管理承包商 API 路由"""
 
+import copy
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -45,6 +46,21 @@ def _normalize_admin_comments(comments: list | None) -> list:
             item["createdAt"] = f"{created_at.replace(' ', 'T')}+08:00"
         normalized.append(item)
     return normalized
+
+
+def _sign_file_items(items: list | None) -> list:
+    copied = copy.deepcopy(items or [])
+    if settings.OSS_ENABLED and copied:
+        from app.services.oss_service import sign_file_url_fields
+        for item in copied:
+            sign_file_url_fields(item)
+    return copied
+
+
+def _signed_design_plan(plan: dict | None) -> dict:
+    signed = copy.deepcopy(plan or {})
+    signed["files"] = _sign_file_items(signed.get("files"))
+    return signed
 
 
 # ========== Schemas ==========
@@ -329,7 +345,7 @@ async def get_design_plan(
     order = result.scalar_one_or_none()
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
-    return ApiResponse(code=200, message="获取成功", data=order.design_plan or {})
+    return ApiResponse(code=200, message="获取成功", data=_signed_design_plan(order.design_plan))
 
 
 @router.put("/orders/{order_id}/design-plan")
@@ -362,7 +378,7 @@ async def save_design_plan(
     flag_modified(order, "design_plan")
     
     await db.commit()
-    return ApiResponse(code=200, message="保存成功", data=plan)
+    return ApiResponse(code=200, message="保存成功", data=_signed_design_plan(plan))
 
 
 # ========== 派单管理 ==========
@@ -674,13 +690,7 @@ async def get_assignment_deliverables(
         
         items = []
         for d in deliverables:
-            files = d.files or []
-            # OSS 签名
-            if settings.OSS_ENABLED and files:
-                from app.services.oss_service import maybe_sign_url
-                for f in files:
-                    if isinstance(f, dict) and f.get("url"):
-                        f["url"] = maybe_sign_url(f["url"])
+            files = _sign_file_items(d.files)
             
             items.append({
                 "id": d.id,

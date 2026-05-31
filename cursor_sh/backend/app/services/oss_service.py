@@ -5,7 +5,7 @@ OSS_ENABLED=False 时自动回退到本地磁盘存储（开发环境）。
 """
 
 import os
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urlparse, urlunparse
 
 from app.config import settings
 from app.utils.business_log import log_business_event
@@ -46,6 +46,36 @@ def _oss_endpoint() -> str:
     if endpoint and not endpoint.startswith(("http://", "https://")):
         endpoint = "https://" + endpoint
     return endpoint
+
+
+def _oss_public_endpoint() -> str:
+    endpoint = (settings.OSS_PUBLIC_ENDPOINT or "").strip()
+    if not endpoint:
+        endpoint = (settings.OSS_ENDPOINT or "").strip().replace("-internal", "")
+    if endpoint and not endpoint.startswith(("http://", "https://")):
+        endpoint = "https://" + endpoint
+    return endpoint
+
+
+def _rewrite_to_public_endpoint(url: str) -> str:
+    public_endpoint = _oss_public_endpoint()
+    if not public_endpoint:
+        return url
+
+    public_host = urlparse(public_endpoint).netloc
+    if not public_host:
+        return url
+
+    parsed = urlparse(url)
+    if not parsed.netloc:
+        return url
+
+    bucket_name = settings.OSS_BUCKET_NAME
+    if bucket_name and parsed.netloc.startswith(f"{bucket_name}."):
+        public_netloc = f"{bucket_name}.{public_host}"
+    else:
+        public_netloc = public_host
+    return urlunparse(parsed._replace(netloc=public_netloc))
 
 
 def _get_bucket():
@@ -149,7 +179,7 @@ def get_signed_url(object_key: str, expires: int = 3600) -> str:
     if url.startswith("http://"):
         url = "https://" + url[7:]
 
-    return url
+    return _rewrite_to_public_endpoint(url)
 
 
 def extract_object_key(url_or_key: str) -> str:
@@ -176,6 +206,8 @@ def extract_object_key(url_or_key: str) -> str:
     bucket_name = settings.OSS_BUCKET_NAME
     endpoint = settings.OSS_ENDPOINT or ""
     endpoint_host = urlparse(endpoint if "://" in endpoint else f"https://{endpoint}").netloc
+    public_endpoint = _oss_public_endpoint()
+    public_endpoint_host = urlparse(public_endpoint).netloc if public_endpoint else ""
     object_path = unquote(parsed.path.lstrip("/"))
     if not object_path:
         return ""
@@ -184,6 +216,12 @@ def extract_object_key(url_or_key: str) -> str:
         if host == f"{bucket_name}.{endpoint_host}":
             return object_path
         if host == endpoint_host and object_path.startswith(f"{bucket_name}/"):
+            return object_path[len(bucket_name) + 1:]
+
+    if bucket_name and public_endpoint_host:
+        if host == f"{bucket_name}.{public_endpoint_host}":
+            return object_path
+        if host == public_endpoint_host and object_path.startswith(f"{bucket_name}/"):
             return object_path[len(bucket_name) + 1:]
 
     if bucket_name and host.startswith(f"{bucket_name}.") and ".aliyuncs.com" in host:
@@ -358,3 +396,33 @@ def maybe_sign_url(url_or_key: str, expires: int = 3600) -> str:
 
     # 是 OSS object_key，生成签名 URL
     return get_signed_url(url_or_key, expires)
+
+
+def sign_file_url_fields(file_item: dict, expires: int = 3600) -> dict:
+    """Refresh common browser-facing URL fields on a file metadata dict."""
+    if not isinstance(file_item, dict):
+        return file_item
+
+    object_key = file_item.get("object_key") or file_item.get("objectKey")
+    if not object_key:
+        object_key = extract_object_key(
+            file_item.get("url") or file_item.get("file_url") or file_item.get("href") or ""
+        )
+
+    if object_key:
+        signed_url = maybe_sign_url(object_key, expires)
+        file_item["object_key"] = object_key
+        if "objectKey" in file_item:
+            file_item["objectKey"] = object_key
+        if "url" in file_item or not any(file_item.get(key) for key in ("file_url", "href")):
+            file_item["url"] = signed_url
+        if "file_url" in file_item:
+            file_item["file_url"] = signed_url
+        if "href" in file_item:
+            file_item["href"] = signed_url
+        return file_item
+
+    for key in ("url", "file_url", "href"):
+        if file_item.get(key):
+            file_item[key] = maybe_sign_url(file_item[key], expires)
+    return file_item

@@ -99,7 +99,12 @@
                         class="message-attachment-preview"
                         :title="file.name"
                       >
-                        <img v-if="file.isImage && file.url" :src="file.url" class="message-attachment-thumb" />
+                        <img
+                          v-if="file.isImage && file.url && !file.previewFailed"
+                          :src="file.url"
+                          class="message-attachment-thumb"
+                          @error="markPreviewFailed(file)"
+                        />
                         <div v-else class="message-file-preview">
                           <el-icon><PictureRounded /></el-icon>
                           <span>{{ getFileExtension(file.name) }}</span>
@@ -189,7 +194,12 @@
                             class="form-attachment-item"
                             :title="file.name"
                           >
-                            <img v-if="file.isImage && file.url" :src="file.url" class="form-attachment-thumb" />
+                            <img
+                              v-if="file.isImage && file.url && !file.previewFailed"
+                              :src="file.url"
+                              class="form-attachment-thumb"
+                              @error="markPreviewFailed(file)"
+                            />
                             <div v-else class="form-file-thumb">
                               <el-icon><PictureRounded /></el-icon>
                             </div>
@@ -333,7 +343,12 @@
             <!-- 已上传文件预览条 -->
             <div v-if="uploadedFiles.length > 0" class="uploaded-files-strip">
               <div v-for="(file, idx) in uploadedFiles" :key="idx" class="uploaded-file-chip">
-                <img v-if="file.isImage" :src="file.url" class="file-thumb" />
+                <img
+                  v-if="file.isImage && file.url && !file.previewFailed"
+                  :src="file.url"
+                  class="file-thumb"
+                  @error="markPreviewFailed(file)"
+                />
                 <el-icon v-else class="file-icon-placeholder"><PictureRounded /></el-icon>
                 <span class="file-name">{{ file.name }}</span>
                 <span class="file-status">待发送</span>
@@ -790,6 +805,7 @@ type UploadedFile = {
   name: string
   url: string
   isImage: boolean
+  previewFailed?: boolean
   size: number
   type: string
   uploadTime: string
@@ -861,8 +877,15 @@ const handleFileSelected = async (e: Event) => {
         })
         uploadedNames.push(file.name)
       } else {
+        let message = ''
+        try {
+          const errorData = await res.json()
+          message = errorData?.detail || errorData?.message || ''
+        } catch {
+          message = await res.text().catch(() => '')
+        }
         failedNames.push(file.name)
-        ElMessage.error(`上传失败: ${file.name}`)
+        ElMessage.error(message ? `上传失败: ${file.name}（${message}）` : `上传失败: ${file.name}`)
       }
     } catch (err) {
       failedNames.push(file.name)
@@ -886,6 +909,10 @@ const handleFileSelected = async (e: Event) => {
 
 const removeUploadedFile = (index: number) => {
   uploadedFiles.value.splice(index, 1)
+}
+
+const markPreviewFailed = (file: UploadedFile) => {
+  file.previewFailed = true
 }
 
 const buildFileSummaryText = (files: UploadedFile[]) => {

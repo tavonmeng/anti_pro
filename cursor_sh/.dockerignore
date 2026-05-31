@@ -3,6 +3,8 @@ dist
 .vite
 .DS_Store
 .git
+.env
+.env.*
 *.md
 # 排除测试和脚本文件，减少 COPY . . 传输量
 *.sh

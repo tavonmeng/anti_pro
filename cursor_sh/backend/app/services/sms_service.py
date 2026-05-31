@@ -230,13 +230,24 @@ async def _verify_via_dypnsapi(phone: str, code: str) -> bool:
         log_business_event(logger, "sms_verify_failed", level="warning", phone=phone, provider="aliyun")
         return False
     except Exception as e:
+        error_text = str(e)
+        if "ValidateFail" in error_text or "验证失败" in error_text:
+            log_business_event(
+                logger,
+                "sms_verify_failed",
+                level="warning",
+                phone=phone,
+                provider="aliyun",
+                reason="validate_fail",
+            )
+            return False
         log_business_event(
             logger,
             "sms_verify_failed",
             level="error",
             phone=phone,
             provider="aliyun",
-            error=str(e),
+            error=error_text,
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
