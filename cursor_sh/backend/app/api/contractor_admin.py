@@ -178,6 +178,7 @@ async def get_invitations(
             items.append({
                 "id": inv.id,
                 "token": inv.token,
+                "inviteUrl": f"{settings.CONTRACTOR_BASE_URL}/contractor/register?invite={inv.token}",
                 "note": inv.note,
                 "isUsed": inv.is_used,
                 "isExpired": is_expired,

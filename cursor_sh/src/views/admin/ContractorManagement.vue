@@ -16,8 +16,8 @@
         <el-table-column label="邀请链接" min-width="280">
           <template #default="{ row }">
             <div class="invite-url" v-if="!row.isUsed && !row.isExpired">
-              <code>{{ getInviteUrl(row.token) }}</code>
-              <el-button link size="small" @click="copyLink(row.token)">复制</el-button>
+              <code>{{ row.inviteUrl || getInviteUrl(row.token) }}</code>
+              <el-button link size="small" @click="copyLink(row)">复制</el-button>
             </div>
             <span v-else class="token-masked">{{ row.token.substring(0, 8) }}...</span>
           </template>
@@ -154,8 +154,8 @@ const getInviteUrl = (token: string) => {
   return `${base}/contractor/register?invite=${token}`
 }
 
-const copyLink = async (token: string) => {
-  const url = getInviteUrl(token)
+const copyLink = async (row: any) => {
+  const url = row?.inviteUrl || getInviteUrl(row?.token || '')
   await navigator.clipboard.writeText(url)
   ElMessage.success('链接已复制')
 }

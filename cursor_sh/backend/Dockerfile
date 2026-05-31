@@ -16,7 +16,8 @@ RUN sed -i 's|http://deb.debian.org|https://mirrors.aliyun.com|g' /etc/apt/sourc
 # Python 依赖（挂载 pip 缓存，第二次构建秒装）
 COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
+    pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple --retries 5 --timeout 60 -r requirements.txt \
+    || pip install --index-url https://pypi.org/simple --retries 5 --timeout 60 -r requirements.txt
 
 # 拷贝代码
 COPY . .

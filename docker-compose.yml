@@ -47,8 +47,13 @@ services:
       # nginx.external.conf or nginx.internal.conf at container startup.
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-all}
     ports:
-      - "80:8080"
-      - "8080:8080"
+      # Production HTTPS is terminated by host-level Caddy:
+      #   external: www.uniquevisionx.com -> 127.0.0.1:8080
+      #   internal: admin/contractor.uniquevisionx.com -> 127.0.0.1:8080
+      # Keep this bound to localhost. Do not publish "80:8080" or it will
+      # conflict with Caddy, break automatic SSL renewal, and expose Docker
+      # directly on the public HTTP port.
+      - "127.0.0.1:8080:8080"
     depends_on:
       - backend
     networks:
