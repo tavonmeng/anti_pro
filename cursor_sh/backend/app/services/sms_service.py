@@ -66,8 +66,6 @@ async def send_sms_verify_code(phone: str) -> dict:
             detail="请输入有效的11位手机号"
         )
 
-    _sms_rate_limit[phone] = time.time()
-
     if _can_use_cloud():
         return await _send_via_dypnsapi(phone)
     else:
@@ -118,6 +116,7 @@ async def _send_via_dypnsapi(phone: str) -> dict:
 
         body = resp.body
         if body and body.code == "OK":
+            _sms_rate_limit[phone] = time.time()
             log_business_event(logger, "sms_sent", phone=phone, provider="aliyun")
             return {"success": True, "message": "验证码已发送"}
         else:
@@ -145,6 +144,11 @@ async def _send_via_dypnsapi(phone: str) -> dict:
             provider="aliyun",
             error=str(e),
         )
+        if "check frequency" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="验证码发送频繁，请稍后重试"
+            )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="短信服务暂时不可用，请稍后重试"
@@ -156,6 +160,7 @@ def _send_local(phone: str) -> dict:
     code = _generate_code(settings.SMS_CODE_LENGTH)
     expire_at = time.time() + settings.SMS_VALID_TIME
     _sms_code_cache[phone] = (code, expire_at)
+    _sms_rate_limit[phone] = time.time()
     log_business_event(
         logger,
         "sms_sent",

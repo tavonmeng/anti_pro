@@ -16,7 +16,7 @@
         <el-table-column label="邀请链接" min-width="280">
           <template #default="{ row }">
             <div class="invite-url" v-if="!row.isUsed && !row.isExpired">
-              <code>{{ row.inviteUrl || getInviteUrl(row.token) }}</code>
+              <code>{{ row.token ? getInviteUrl(row.token) : row.inviteUrl }}</code>
               <el-button link size="small" @click="copyLink(row)">复制</el-button>
             </div>
             <span v-else class="token-masked">{{ row.token.substring(0, 8) }}...</span>
@@ -144,18 +144,18 @@ const inviteNote = ref('')
 const inviteDays = ref(7)
 const generating = ref(false)
 const generatedUrl = ref('')
+const contractorBaseUrl = (import.meta.env.VITE_CONTRACTOR_BASE_URL || 'https://contractor.uniquevisionx.com').replace(/\/$/, '')
 
 const formatTime = (iso: string) => {
   return formatServerTime(iso, '—')
 }
 
 const getInviteUrl = (token: string) => {
-  const base = window.location.origin
-  return `${base}/contractor/register?invite=${token}`
+  return `${contractorBaseUrl}/contractor/register?invite=${token}`
 }
 
 const copyLink = async (row: any) => {
-  const url = row?.inviteUrl || getInviteUrl(row?.token || '')
+  const url = row?.token ? getInviteUrl(row.token) : (row?.inviteUrl || '')
   await navigator.clipboard.writeText(url)
   ElMessage.success('链接已复制')
 }
@@ -204,7 +204,7 @@ const confirmGenerate = async () => {
     inviteDialogVisible.value = false
     // res is already the inner data from ApiResponse
     const token = res?.token || ''
-    generatedUrl.value = res?.inviteUrl || (token ? getInviteUrl(token) : '')
+    generatedUrl.value = token ? getInviteUrl(token) : (res?.inviteUrl || '')
     resultDialogVisible.value = true
     fetchInvitations()
   } catch (e: any) {

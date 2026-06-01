@@ -86,8 +86,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Iphone, Message, Warning, InfoFilled, Suitcase } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -96,6 +96,7 @@ import request from '@/utils/request'
 import { isExternalDeployment } from '@/utils/deployment'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const loginFormRef = ref<FormInstance>()
 const loading = ref(false)
@@ -106,6 +107,13 @@ const loginForm = reactive({
   phone: '',
   sms_code: '',
   role: 'contractor' as UserRole,
+})
+
+onMounted(() => {
+  const phone = route.query.phone
+  if (typeof phone === 'string' && /^1[3-9]\d{9}$/.test(phone)) {
+    loginForm.phone = phone
+  }
 })
 
 const loginRules: FormRules = {

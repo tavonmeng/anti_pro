@@ -85,9 +85,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Suitcase, Loading, CircleCloseFilled } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 const formRef = ref<FormInstance>()
 
 const validating = ref(true)
@@ -195,8 +197,18 @@ const handleRegister = async () => {
         password: form.password,
         email: form.email,
       })
-      ElMessage.success('注册成功，请登录')
-      router.push('/contractor/login')
+      try {
+        await authStore.login({
+          phone: form.phone,
+          password: form.password,
+          role: 'contractor',
+        }, true)
+        ElMessage.success('注册成功，已登录')
+        router.push('/contractor')
+      } catch {
+        ElMessage.success('注册成功，请登录')
+        router.push({ path: '/contractor/login', query: { phone: form.phone } })
+      }
     } catch (e: any) {
       ElMessage.error(e?.response?.data?.detail || '注册失败')
     } finally {

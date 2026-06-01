@@ -29,6 +29,14 @@ router = APIRouter(prefix="/contractor-admin", tags=["承包商管理（管理�
 logger = get_module_logger("contractor")
 
 
+def _contractor_base_url() -> str:
+    return (settings.CONTRACTOR_BASE_URL or "https://contractor.uniquevisionx.com").rstrip("/")
+
+
+def _contractor_invite_url(token: str) -> str:
+    return f"{_contractor_base_url()}/contractor/register?invite={token}"
+
+
 def _iso_beijing(dt: datetime | None) -> str | None:
     if not dt:
         return None
@@ -130,14 +138,10 @@ async def create_invitation(
             has_note=bool(data.note),
         )
         
-        # 生成完整的邀请链接
-        base_url = getattr(settings, 'CONTRACTOR_BASE_URL', '') or f"http://localhost:3000"
-        invite_url = f"{base_url}/contractor/register?invite={token}"
-        
         return ApiResponse(code=201, message="邀请链接生成成功", data={
             "id": invitation.id,
             "token": token,
-            "inviteUrl": invite_url,
+            "inviteUrl": _contractor_invite_url(token),
             "note": invitation.note,
             "expiresAt": beijing_iso(invitation.expires_at),
             "isUsed": False,
@@ -178,7 +182,7 @@ async def get_invitations(
             items.append({
                 "id": inv.id,
                 "token": inv.token,
-                "inviteUrl": f"{settings.CONTRACTOR_BASE_URL}/contractor/register?invite={inv.token}",
+                "inviteUrl": _contractor_invite_url(inv.token),
                 "note": inv.note,
                 "isUsed": inv.is_used,
                 "isExpired": is_expired,
@@ -557,8 +561,7 @@ async def assign_order_to_contractor(
                 if order.design_plan and order.design_plan.get("content"):
                     design_summary = order.design_plan["content"]
                 
-                login_url = getattr(settings, 'CONTRACTOR_BASE_URL', '') or 'http://localhost:3000'
-                login_url += '/contractor/login'
+                login_url = f"{_contractor_base_url()}/contractor/login"
                 
                 email_sent = await EmailService.send_assignment_notification(
                     contractor_email=contractor.email,

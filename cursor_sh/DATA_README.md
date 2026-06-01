@@ -481,8 +481,8 @@ mysql -h NEW_RDS_HOST -u USER -p NEW_DB_NAME < anti_pro.sql
 
 Last verified environment:
 
-- External server: `47.114.118.52`
-- Internal server: `116.62.88.121`
+- External server: `8.141.111.94`
+- Internal server: `101.201.58.68`
 - Main DB: Aliyun RDS MySQL, database `unique_video_test`
 - Audit DB: Aliyun RDS MySQL, database `unique_video_audit`
 - OSS: enabled, bucket `uv-test`, endpoint `oss-cn-hangzhou.aliyuncs.com`
@@ -566,7 +566,7 @@ Run on each old ECS. These commands print only storage-related config and avoid 
 External:
 
 ```bash
-ssh root@47.114.118.52 '
+ssh root@8.141.111.94 '
 cd /root/service/anti_pro/cursor_sh/backend
 printf "ENV_STORAGE_KEYS:\n"
 awk -F= '"'"'
@@ -583,7 +583,7 @@ find . -maxdepth 2 \( -name "*.db" -o -name "uploads" -o -name "logs" \) -print 
 Internal:
 
 ```bash
-ssh -i /path/to/ssh.pem root@116.62.88.121 '
+ssh -i /path/to/ssh.pem root@101.201.58.68 '
 cd /root/service/anti_pro/cursor_sh/backend
 printf "ENV_STORAGE_KEYS:\n"
 awk -F= '"'"'
