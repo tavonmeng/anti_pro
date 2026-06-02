@@ -5,6 +5,7 @@ from app.models.admin import Admin
 from app.models.staff_member import StaffMember
 from app.models.contractor import Contractor
 from app.models.contractor_invitation import ContractorInvitation
+from app.models.user_invitation import UserInvitation
 from app.models.contractor_assignment import ContractorAssignment, AssignmentStatus
 from app.models.contractor_deliverable import ContractorDeliverable, DeliverableStatus
 from app.models.workflow import WorkflowStageConfig
@@ -25,6 +26,7 @@ __all__ = [
     "Admin",
     "StaffMember",
     "Contractor", "ContractorInvitation",
+    "UserInvitation",
     "ContractorAssignment", "AssignmentStatus",
     "ContractorDeliverable", "DeliverableStatus",
     "WorkflowStageConfig",

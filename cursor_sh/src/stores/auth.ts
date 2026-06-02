@@ -16,16 +16,18 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('user', JSON.stringify(nextUser))
   }
 
+  const setSession = (nextToken: string, nextUser: User) => {
+    token.value = nextToken
+    lastProfileRefreshAt.value = Date.now()
+    localStorage.setItem('token', nextToken)
+    persistUser(nextUser)
+  }
+
   // 登录
   const login = async (loginData: LoginRequest, silent = false) => {
     try {
       const response = await authApi.login(loginData, silent)
-      token.value = response.token
-      lastProfileRefreshAt.value = Date.now()
-      
-      // 保存到localStorage
-      localStorage.setItem('token', response.token)
-      persistUser(response.user)
+      setSession(response.token, response.user)
       
       if (!silent) {
         ElMessage.success('登录成功')
@@ -116,6 +118,7 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     token,
     user,
+    setSession,
     login,
     logout,
     refreshCurrentUser,

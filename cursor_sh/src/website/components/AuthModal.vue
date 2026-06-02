@@ -20,7 +20,7 @@
         <!-- Tab 切换 -->
         <div class="modal-tabs">
           <button class="modal-tab" :class="{ active: activeTab === 'login' }" @click="activeTab = 'login'">登录</button>
-          <button class="modal-tab" :class="{ active: activeTab === 'register' }" @click="activeTab = 'register'">注册</button>
+          <button class="modal-tab" :class="{ active: activeTab === 'register', muted: !canRegister }" @click="handleRegisterTabClick">注册</button>
         </div>
 
         <!-- ===== 登录表单 ===== -->
@@ -76,6 +76,9 @@
 
         <!-- ===== 注册表单 ===== -->
         <div v-if="activeTab === 'register'" class="modal-body">
+          <div v-if="inviteCompanyName" class="invite-banner">
+            受邀公司：{{ inviteCompanyName }}
+          </div>
           <el-form ref="registerFormRef" :model="registerForm" :rules="registerRules" @submit.prevent="handleRegister">
             <el-form-item prop="phone">
               <el-input v-model="registerForm.phone" placeholder="请输入手机号" size="large" class="modal-input" maxlength="11">
@@ -140,18 +143,40 @@ import { authApi } from '@/utils/api'
 import type { UserRole } from '@/types'
 import Captcha from '@/components/Captcha.vue'
 
-const props = defineProps<{ visible: boolean, initialTab?: 'login' | 'register' }>()
+const props = defineProps<{
+  visible: boolean
+  initialTab?: 'login' | 'register'
+  inviteToken?: string
+  inviteCompanyName?: string
+}>()
 const emit = defineEmits(['close'])
 
 const router = useRouter()
 const authStore = useAuthStore()
 const loading = ref(false)
 const activeTab = ref<'login' | 'register'>('login')
+const canRegister = computed(() => Boolean((props.inviteToken || '').trim()))
+const inviteCompanyName = computed(() => props.inviteCompanyName || '')
 
 // 当弹窗打开时，同步 initialTab
 watch(() => props.visible, (v) => {
-  if (v && props.initialTab) activeTab.value = props.initialTab
+  if (v && props.initialTab) {
+    if (props.initialTab === 'register' && !canRegister.value) {
+      activeTab.value = 'login'
+      ElMessage.info('当前仍在内测阶段，仅支持受邀用户注册。请联系管理员获取邀请链接。')
+    } else {
+      activeTab.value = props.initialTab
+    }
+  }
 })
+
+const handleRegisterTabClick = () => {
+  if (!canRegister.value) {
+    ElMessage.info('当前仍在内测阶段，仅支持受邀用户注册。请联系管理员获取邀请链接。')
+    return
+  }
+  activeTab.value = 'register'
+}
 
 // ========== 密码登录 ==========
 const loginMode = ref<'password' | 'sms'>('sms')
@@ -179,7 +204,7 @@ const handleLogin = async () => {
       } catch (error: any) {
         if (error?.message?.includes('尚未注册')) {
           ElMessageBox.confirm('该手机号尚未注册，是否去注册？', '提示', { confirmButtonText: '去注册', cancelButtonText: '取消', type: 'warning', center: true })
-            .then(() => { activeTab.value = 'register' }).catch(() => {})
+            .then(() => { handleRegisterTabClick() }).catch(() => {})
         }
         captchaRef.value?.refresh(); loginForm.captcha = ''; captchaValid.value = false
       } finally { loading.value = false }
@@ -209,7 +234,7 @@ const handleSmsLogin = async () => {
       } catch (error: any) {
         if (error?.message?.includes('尚未注册')) {
           ElMessageBox.confirm('该手机号尚未注册，是否去注册？', '提示', { confirmButtonText: '去注册', cancelButtonText: '取消', type: 'warning', center: true })
-            .then(() => { activeTab.value = 'register' }).catch(() => {})
+            .then(() => { handleRegisterTabClick() }).catch(() => {})
         }
       } finally { loading.value = false }
     }
@@ -239,17 +264,16 @@ const handleRegister = async () => {
     if (valid) {
       loading.value = true
       try {
-        const success = await authApi.register({
+        const session = await authApi.register({
           phone: registerForm.phone, sms_code: registerForm.smsCode,
           username: registerForm.username, email: registerForm.email,
-          password: registerForm.password, role: registerForm.role
+          password: registerForm.password, role: registerForm.role,
+          invite_token: props.inviteToken
         })
-        if (success) {
-          ElMessage.success('注册成功！请登录')
-          activeTab.value = 'login'
-          loginMode.value = 'sms'
-          smsForm.phone = registerForm.phone
-        }
+        authStore.setSession(session.token, session.user)
+        ElMessage.success('注册成功，已自动登录')
+        emit('close')
+        router.push('/user/workspace')
       } catch (error: any) {
         // 注册失败后，只清空验证码，保留其他已填写的资料
         registerForm.smsCode = ''
@@ -414,6 +438,20 @@ function handleLoginSuccess() {
   background: #ffffff;
   color: #1d1d1f;
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+.modal-tab.muted {
+  color: rgba(0,0,0,0.28);
+}
+
+.invite-banner {
+  background: #f5f8ff;
+  border: 1px solid rgba(0,113,227,0.16);
+  border-radius: 8px;
+  color: #1d1d1f;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+  padding: 9px 12px;
 }
 
 /* 登录方式 Tab */

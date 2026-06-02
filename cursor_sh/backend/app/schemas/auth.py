@@ -44,6 +44,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=6)
     role: UserRole = UserRole.USER
+    invite_token: Optional[str] = None
     # 反注册机
     behavior: Optional[RegisterBehavior] = None
     website: Optional[str] = None                         # 蜜罐字段（前端隐藏，机器人会填）

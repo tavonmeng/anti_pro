@@ -1,19 +1,23 @@
 """将审核后的客户资料合并写入 UserMemory。"""
 
 from app.models.user_memory import UserMemory
+from app.services.memory_sanitizer import (
+    sanitize_agent_notes,
+    sanitize_document_memory_data,
+    sanitize_screen_resources,
+)
 from app.utils.timezone import beijing_now_iso
 
 
 def merge_document_knowledge(memory: UserMemory, reviewed_data: dict, document_meta: dict) -> dict:
     """合并资料抽取结果到 memory，返回更新字段。"""
-    reviewed_data = reviewed_data or {}
+    reviewed_data = sanitize_document_memory_data(reviewed_data or {})
     source = {
         "type": "document",
         "document_id": document_meta.get("document_id", ""),
-        "filename": document_meta.get("filename", ""),
     }
 
-    company_info = dict(memory.company_info or {})
+    company_info = sanitize_document_memory_data(dict(memory.company_info or {}))
     incoming_company = reviewed_data.get("company_info") or {}
     if incoming_company.get("name"):
         company_info["name"] = incoming_company["name"]
@@ -44,12 +48,12 @@ def merge_document_knowledge(memory: UserMemory, reviewed_data: dict, document_m
     company_info["past_cases"] = past_cases[-30:]
 
     screen_resources = _merge_objects(
-        memory.screen_resources or [],
+        sanitize_screen_resources(memory.screen_resources or []),
         _with_source(reviewed_data.get("screen_resources") or [], source),
         keys=["city", "location", "name", "type"],
     )
 
-    agent_notes = memory.agent_notes or ""
+    agent_notes = sanitize_agent_notes(memory.agent_notes or "")
     notes = reviewed_data.get("important_notes") or []
     note_lines = []
     for item in notes:
@@ -57,15 +61,13 @@ def merge_document_knowledge(memory: UserMemory, reviewed_data: dict, document_m
         if note and note not in agent_notes:
             note_lines.append(f"- {note}")
     if note_lines:
-        section = "\n【客户资料导入备注 - %s】\n%s" % (
-            document_meta.get("filename", "客户资料"),
-            "\n".join(note_lines),
-        )
+        section = "\n【客户资料导入备注】\n%s" % "\n".join(note_lines)
         agent_notes = (agent_notes + "\n" + section).strip()
+        agent_notes = sanitize_agent_notes(agent_notes)
 
     return {
         "company_info": company_info,
-        "screen_resources": screen_resources[-50:],
+        "screen_resources": sanitize_screen_resources(screen_resources[-50:]),
         "agent_notes": agent_notes,
     }
 
@@ -82,7 +84,9 @@ def _with_source(items: list, base_source: dict) -> list:
             **item_source,
             "type": "document",
         }
-        enriched.append(item)
+        sanitized = sanitize_document_memory_data(item)
+        if isinstance(sanitized, dict):
+            enriched.append(sanitized)
     return enriched
 
 

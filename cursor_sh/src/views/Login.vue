@@ -445,7 +445,7 @@ function handleLoginSuccess() {
 }
 
 const goToRegister = () => {
-  router.push('/register')
+  ElMessage.info('当前仍在内测阶段，仅支持受邀用户注册。请联系管理员获取邀请链接。')
 }
 </script>
 

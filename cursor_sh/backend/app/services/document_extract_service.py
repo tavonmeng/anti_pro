@@ -4,6 +4,7 @@ import json
 import re
 from app.config import settings
 from app.services.ai_client import post_chat_completion
+from app.services.memory_sanitizer import sanitize_document_memory_data
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
 
@@ -69,26 +70,26 @@ async def _extract_customer_knowledge_chunk(
         "{\n"
         '  "company_info": {"name": "", "description": "", "city_intro": "", "city_positioning": "", "business_context": "", "audience_profile": "", "media_value": "", "advantages": []},\n'
         '  "screen_resources": [\n'
-        '    {"city": "", "district": "", "business_district": "", "location": "", "media_position": "", "location_intro": "", "surrounding_landmarks": "", "name": "", "type": "", "size": "", "area": "", "resolution": "", "specs": "", "play_frequency": "", "play_time": "", "list_price": "", "daily_traffic": "", "holiday_traffic": "", "audience_profile": "", "media_advantages": [], "viewing_path": "", "highlights": "", "notes": "", "source": {"filename": "", "page": ""}}\n'
+        '    {"city": "", "district": "", "business_district": "", "location": "", "media_position": "", "location_intro": "", "surrounding_landmarks": "", "name": "", "type": "", "size": "", "area": "", "resolution": "", "specs": "", "play_frequency": "", "play_time": "", "daily_traffic": "", "holiday_traffic": "", "audience_profile": "", "media_advantages": [], "viewing_path": "", "highlights": "", "notes": "", "source": {"page": ""}}\n'
         "  ],\n"
         '  "past_cases": [\n'
-        '    {"title": "", "brand": "", "city": "", "location": "", "year": "", "content_type": "", "highlights": "", "source": {"filename": "", "page": ""}}\n'
+        '    {"title": "", "brand": "", "city": "", "location": "", "year": "", "content_type": "", "highlights": "", "source": {"page": ""}}\n'
         "  ],\n"
-        '  "important_notes": [{"note": "", "source": {"filename": "", "page": ""}}]\n'
+        '  "important_notes": [{"note": "", "source": {"page": ""}}]\n'
         "}\n\n"
         "抽取重点：\n"
-        "1. 尽量完整抽取媒体资料里的所有有业务价值的信息，不只抽参数。包括城市介绍、城市定位、商圈背景、位置介绍、周边地标、目标受众/人群画像、媒体优势、传播价值、投放规则、价格、播放时间、播放频次、客流/接触人次、案例等。\n"
-        "2. 屏幕资源必须尽量完整保留媒体资料里的原始字段，不要只抽屏幕名。尤其遇到这些标签时必须逐项抽取：媒体位置、播放频次、媒体规格、尺寸、面积、分辨率、播放时间、刊例价、日媒体接触人次、人流量、客流量、节假日客流。\n"
-        "3. 字段映射规则：媒体位置填 location 和 media_position；行政区填 district；播放频次填 play_frequency；播放时间填 play_time；刊例价/报价填 list_price；日媒体接触人次填 daily_traffic；节假日接触人次填 holiday_traffic；长宽高/面积填 size 和 area；分辨率填 resolution。\n"
-        "4. 城市整体介绍、城市消费力、交通枢纽、商业氛围、核心商圈等属于 company_info 的 city_intro / business_context / media_value；如果是某块屏所在点位的介绍，放到对应 screen_resources[].location_intro / surrounding_landmarks / media_advantages / audience_profile。\n"
-        "5. specs 要汇总屏幕物理规格和分辨率，例如“长40.32m*高13.44m=542㎡，分辨率6048*2016”；notes 只保留无法归入独立字段的补充说明/投放规则，不要把商圈、周边、受众、媒体优势、播放频次、播放时间、刊例价、接触人次重复塞进 notes。\n"
-        "6. 如果文本类似“媒体位置 庐阳区淮河路步行街银泰中心北侧 / 播放频次 15s/60次/天 / 媒体规格 长40.32m*高13.44m=542㎡ 分辨率：6048*2016 / 播放时间 10：00~23：00 / 刊例价 300000元/周 / 日媒体接触人次 100万人次/天”，这些内容必须出现在同一条 screen_resources 里。\n"
-        "7. 对“位置介绍/项目优势/媒体优势/资源亮点/周边介绍/城市介绍”这类段落不要忽略，要压缩成短句保留。不要为了结构化而丢掉解释性文字。\n"
-        "8. 同一条资源内不要重复输出同一信息；字段里已有的内容不要在 notes 中反复复述多遍。\n"
-        "9. 案例要优先输出户外屏幕/裸眼3D/商圈LED案例；普通公司新闻或非屏幕案例不要优先输出。\n"
-        "10. 不要编造资料中没有的信息；没有就留空字符串或空数组。\n"
-        "11. 每条资源、案例、备注都尽量标注来源页码。来源文本里有【来源：第X页】或【来源：第X页幻灯片】。\n"
-        f"12. source.filename 固定填：{filename}\n"
+        "1. 尽量完整抽取媒体资料里的所有有业务价值的信息，不只抽参数。包括城市介绍、城市定位、商圈背景、位置介绍、周边地标、目标受众/人群画像、媒体优势、传播价值、投放规则、播放时间、播放频次、客流/接触人次、案例等。\n"
+        "2. 严禁抽取或输出任何价格、报价、刊例价、制作费、费用、成本、预算金额、含税/未税等敏感价格信息；遇到这些内容直接忽略，不要放进任何字段、notes 或 important_notes。\n"
+        "3. 屏幕资源必须尽量完整保留媒体资料里的非价格原始字段，不要只抽屏幕名。尤其遇到这些标签时必须逐项抽取：媒体位置、播放频次、媒体规格、尺寸、面积、分辨率、播放时间、日媒体接触人次、人流量、客流量、节假日客流。\n"
+        "4. 字段映射规则：媒体位置填 location 和 media_position；行政区填 district；播放频次填 play_frequency；播放时间填 play_time；日媒体接触人次填 daily_traffic；节假日接触人次填 holiday_traffic；长宽高/面积填 size 和 area；分辨率填 resolution。\n"
+        "5. 城市整体介绍、城市消费力、交通枢纽、商业氛围、核心商圈等属于 company_info 的 city_intro / business_context / media_value；如果是某块屏所在点位的介绍，放到对应 screen_resources[].location_intro / surrounding_landmarks / media_advantages / audience_profile。\n"
+        "6. specs 要汇总屏幕物理规格和分辨率，例如“长40.32m*高13.44m=542㎡，分辨率6048*2016”；notes 只保留无法归入独立字段的补充说明/投放规则，不要把商圈、周边、受众、媒体优势、播放频次、播放时间、接触人次重复塞进 notes。\n"
+        "7. 如果文本类似“媒体位置 庐阳区淮河路步行街银泰中心北侧 / 播放频次 15s/60次/天 / 媒体规格 长40.32m*高13.44m=542㎡ 分辨率：6048*2016 / 播放时间 10：00~23：00 / 刊例价 300000元/周 / 日媒体接触人次 100万人次/天”，必须忽略刊例价，只把非价格内容放进同一条 screen_resources。\n"
+        "8. 对“位置介绍/项目优势/媒体优势/资源亮点/周边介绍/城市介绍”这类段落不要忽略，要压缩成短句保留。不要为了结构化而丢掉解释性文字。\n"
+        "9. 同一条资源内不要重复输出同一信息；字段里已有的内容不要在 notes 中反复复述多遍。\n"
+        "10. 案例要优先输出户外屏幕/裸眼3D/商圈LED案例；普通公司新闻或非屏幕案例不要优先输出。\n"
+        "11. 不要编造资料中没有的信息；没有就留空字符串或空数组。\n"
+        "12. 每条资源、案例、备注都尽量标注来源页码。来源文本里有【来源：第X页】或【来源：第X页幻灯片】。不要输出源文件名。\n"
     )
 
     try:
@@ -184,13 +185,14 @@ def normalize_extraction(data: dict, filename: str = "") -> dict:
     result["screen_resources"] = _normalize_screen_resources(_normalize_list(data.get("screen_resources"), filename))
     result["past_cases"] = _normalize_list(data.get("past_cases"), filename)
     result["important_notes"] = _normalize_list(data.get("important_notes"), filename, note_mode=True)
-    return result
+    return sanitize_document_memory_data(result)
 
 
 def _normalize_screen_resources(items: list[dict]) -> list[dict]:
     normalized = []
     for raw in items:
         item = dict(raw)
+        item.pop("list_price", None)
         media_position = str(item.get("media_position") or "").strip()
         if media_position and not item.get("location"):
             item["location"] = media_position
@@ -221,7 +223,6 @@ def _normalize_list(value, filename: str, note_mode: bool = False) -> list:
         source = raw.get("source") if isinstance(raw.get("source"), dict) else {}
         item["source"] = {
             "type": "document",
-            "filename": source.get("filename") or filename,
             "page": source.get("page") or "",
         }
         items.append(item)

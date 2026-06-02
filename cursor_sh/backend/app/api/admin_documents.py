@@ -18,6 +18,7 @@ from app.models.user_memory import UserMemory
 from app.utils.dependencies import require_admin
 from app.services.document_extract_service import empty_extraction
 from app.services.document_pipeline_service import process_document, approve_document_extraction
+from app.services.memory_sanitizer import sanitize_document_memory_data
 from app.utils.timezone import beijing_iso, beijing_now
 
 router = APIRouter(prefix="/admin/documents", tags=["管理员 — 客户资料导入"])
@@ -182,6 +183,11 @@ async def _serialize_document(db: AsyncSession, doc: CustomerDocument) -> dict:
         select(CustomerDocumentExtraction).where(CustomerDocumentExtraction.document_id == doc.id)
     )
     extraction = result.scalar_one_or_none()
+    extracted_data = sanitize_document_memory_data(extraction.extracted_data or empty_extraction()) if extraction else None
+    reviewed_data = sanitize_document_memory_data(
+        extraction.reviewed_data or extraction.extracted_data or empty_extraction()
+    ) if extraction else None
+
     return {
         "id": doc.id,
         "user_id": doc.user_id,
@@ -201,8 +207,8 @@ async def _serialize_document(db: AsyncSession, doc: CustomerDocument) -> dict:
             "id": extraction.id,
             "status": extraction.status,
             "summary": extraction.summary,
-            "extracted_data": extraction.extracted_data or empty_extraction(),
-            "reviewed_data": extraction.reviewed_data or extraction.extracted_data or empty_extraction(),
+            "extracted_data": extracted_data or empty_extraction(),
+            "reviewed_data": reviewed_data or empty_extraction(),
             "reviewed_by": extraction.reviewed_by,
             "reviewed_at": beijing_iso(extraction.reviewed_at),
         } if extraction else None,

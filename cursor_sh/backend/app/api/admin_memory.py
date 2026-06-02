@@ -1,6 +1,6 @@
 """用户画像 Memory — 管理员 API 端点
 
-管理员可以：查看用户 Memory、手动触发爬取、编辑备忘录、查看客户列表
+管理员可以：查看用户 Memory、编辑备忘录、查看客户列表
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -16,6 +16,11 @@ from app.models.order import Order
 from app.models.user_memory import UserMemory
 from app.utils.dependencies import require_admin
 from app.services import memory_service
+from app.services.memory_sanitizer import (
+    sanitize_agent_notes,
+    sanitize_document_memory_data,
+    sanitize_screen_resources,
+)
 from app.utils.timezone import beijing_iso
 
 router = APIRouter(prefix="/admin/memory", tags=["管理员 — 用户画像"])
@@ -328,12 +333,12 @@ async def get_user_memory(
         data = MemoryResponse(
             user_id=memory.user_id,
             user_company=user_company or (memory.company_info or {}).get("name", ""),
-            company_info=memory.company_info or {},
-            screen_resources=memory.screen_resources or [],
+            company_info=sanitize_document_memory_data(memory.company_info or {}),
+            screen_resources=sanitize_screen_resources(memory.screen_resources or []),
             project_preferences=memory.project_preferences or {},
             past_projects=memory.past_projects or [],
             interaction_stats=memory.interaction_stats or {},
-            agent_notes=memory.agent_notes or "",
+            agent_notes=sanitize_agent_notes(memory.agent_notes),
             created_at=beijing_iso(memory.created_at),
             updated_at=beijing_iso(memory.updated_at),
         )
@@ -348,7 +353,7 @@ async def update_agent_notes(
     current_admin=Depends(require_admin),
 ):
     """管理员编辑 Agent 备忘录"""
-    await memory_service.update_memory(user_id, {"agent_notes": request.agent_notes})
+    await memory_service.update_memory(user_id, {"agent_notes": sanitize_agent_notes(request.agent_notes)})
     return {"code": 200, "data": None, "message": "备忘录已更新"}
 
 
@@ -359,23 +364,8 @@ async def trigger_crawl(
     current_admin=Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """管理员手动触发公司官网爬取"""
-    company_name = request.company_name.strip()
-
-    # 如果未提供公司名，自动从用户记录获取
-    if not company_name:
-        company_name = await _get_user_company(user_id, db)
-
-    if not company_name:
-        raise HTTPException(status_code=400, detail="该用户未填写公司名称，请手动输入")
-
-    # 确保 memory 记录存在
-    await memory_service.get_or_create_memory(user_id)
-
-    # 触发后台爬取
-    await memory_service.trigger_crawl(user_id, company_name)
-
-    return {"code": 200, "data": None, "message": f"已触发爬取: {company_name}，结果将在数秒后更新"}
+    """公司官网分析功能已下线。"""
+    raise HTTPException(status_code=410, detail="官网分析功能已下线，请通过上传客户资料维护 Memory")
 
 
 @router.delete("/{user_id}/crawl-cache")
@@ -383,9 +373,5 @@ async def clear_crawl_cache(
     user_id: str,
     current_admin=Depends(require_admin),
 ):
-    """清除用户的爬取缓存，允许重新爬取"""
-    await memory_service.update_memory(user_id, {
-        "company_info": {},
-        "screen_resources": [],
-    })
-    return {"code": 200, "data": None, "message": "爬取缓存已清除"}
+    """公司官网分析功能已下线。"""
+    raise HTTPException(status_code=410, detail="官网分析功能已下线，无需清除爬取缓存")

@@ -290,6 +290,12 @@ class Settings(BaseSettings):
     
     # 承包商端基础 URL（用于生成邀请链接）
     CONTRACTOR_BASE_URL: str = "https://contractor.uniquevisionx.com"
+
+    # 用户端官网基础 URL（用于生成普通用户邀请链接）
+    USER_SITE_BASE_URL: str = "https://www.uniquevisionx.com"
+
+    # 内测阶段默认关闭开放注册；设为 true 时普通用户无需邀请 token 也可注册。
+    ALLOW_OPEN_USER_REGISTRATION: bool = False
     
     # Agent 模式切换：brand（品牌方需求收集）/ media（媒体方需求收集）
     AGENT_MODE: str = "media"

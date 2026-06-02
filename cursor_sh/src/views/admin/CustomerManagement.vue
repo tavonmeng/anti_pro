@@ -2,7 +2,7 @@
   <div class="customer-page">
     <div class="page-header">
       <h2>👤 客户画像管理</h2>
-      <p class="page-desc">以客户为维度管理画像、查看订单、分析官网</p>
+      <p class="page-desc">以客户为维度管理画像、查看订单、导入客户资料</p>
     </div>
 
     <!-- 搜索栏 -->
@@ -59,11 +59,8 @@
 
       <el-table-column label="画像状态" width="120" align="center">
         <template #default="{ row }">
-          <el-tag v-if="row.memory?.hasCrawl" type="success" size="small">已分析</el-tag>
-          <el-tag v-else-if="row.memory?.hasMemory" type="success" size="small">已建档</el-tag>
-          <el-tag v-else-if="row.memory?.crawlStatus === 'pending'" type="warning" size="small">分析中</el-tag>
-          <el-tag v-else-if="row.memory?.crawlStatus === 'failed'" type="danger" size="small">分析失败</el-tag>
-          <el-tag v-else type="info" size="small">未分析</el-tag>
+          <el-tag v-if="row.memory?.hasMemory || row.memory?.hasCrawl" type="success" size="small">已建档</el-tag>
+          <el-tag v-else type="info" size="small">未建档</el-tag>
         </template>
       </el-table-column>
 
@@ -73,7 +70,7 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="操作" width="260" fixed="right">
+      <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
           <div class="table-actions">
             <el-button size="small" type="primary" link @click="openProfile(row)">
@@ -90,15 +87,6 @@
                 上传资料
               </el-button>
             </el-upload>
-            <el-button
-              size="small"
-              type="warning"
-              link
-              :loading="row._crawling"
-              @click="triggerCrawl(row)"
-            >
-              {{ row.memory?.hasCrawl ? '重新分析' : '分析官网' }}
-            </el-button>
           </div>
         </template>
       </el-table-column>
@@ -225,7 +213,7 @@
             <el-descriptions-item label="核心优势" v-if="profileData.company_info.advantages?.length">
               <el-tag v-for="adv in profileData.company_info.advantages" :key="adv" size="small" style="margin-right: 4px;">{{ adv }}</el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="分析时间">{{ profileData.company_info.crawled_at || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="更新时间">{{ profileData.company_info.document_updated_at || profileData.company_info.crawled_at || '-' }}</el-descriptions-item>
           </el-descriptions>
         </div>
 
@@ -243,7 +231,7 @@
             <el-table-column label="参数摘要" min-width="180" show-overflow-tooltip>
               <template #default="{ row }">{{ row.specs || [row.type, row.size, row.area, row.resolution && `分辨率${row.resolution}`].filter(Boolean).join('，') || '-' }}</template>
             </el-table-column>
-            <el-table-column label="投放/价格" min-width="220" show-overflow-tooltip>
+            <el-table-column label="投放/客流" min-width="220" show-overflow-tooltip>
               <template #default="{ row }">{{ screenDeliveryText(row) }}</template>
             </el-table-column>
             <el-table-column label="受众/优势" min-width="240" show-overflow-tooltip>
@@ -330,7 +318,7 @@
 
         <!-- 空状态 -->
         <div v-if="!profileData.company_info?.description && !profileData.company_info?.past_cases?.length && !profileData.screen_resources?.length && !profileData.past_projects?.length && !profileData.interaction_stats?.total_sessions" class="empty-profile">
-          暂无画像数据。点击「分析官网」可自动爬取客户公司信息。
+          暂无画像数据。可先上传客户资料，审核后写入 Memory。
         </div>
       </div>
     </el-drawer>
@@ -390,6 +378,21 @@
           <el-form-item label="公司简介">
             <el-input v-model="reviewForm.company_info.description" type="textarea" :rows="3" />
           </el-form-item>
+          <el-form-item label="城市介绍">
+            <el-input v-model="reviewForm.company_info.city_intro" type="textarea" :rows="3" />
+          </el-form-item>
+          <el-form-item label="城市定位">
+            <el-input v-model="reviewForm.company_info.city_positioning" type="textarea" :rows="2" />
+          </el-form-item>
+          <el-form-item label="商圈背景">
+            <el-input v-model="reviewForm.company_info.business_context" type="textarea" :rows="3" />
+          </el-form-item>
+          <el-form-item label="受众画像">
+            <el-input v-model="reviewForm.company_info.audience_profile" type="textarea" :rows="2" />
+          </el-form-item>
+          <el-form-item label="媒体价值">
+            <el-input v-model="reviewForm.company_info.media_value" type="textarea" :rows="3" />
+          </el-form-item>
           <el-form-item label="核心优势（每行一条）">
             <el-input v-model="reviewAdvantagesText" type="textarea" :rows="3" />
           </el-form-item>
@@ -418,7 +421,7 @@
               <el-table-column label="参数摘要" min-width="170">
                 <template #default="{ row }"><el-input v-model="row.specs" size="small" placeholder="如 30m×20m，3:2比例" /></template>
               </el-table-column>
-              <el-table-column label="投放/价格" min-width="190">
+              <el-table-column label="投放/客流" min-width="190">
                 <template #default="{ row }"><span class="review-readonly">{{ screenDeliveryText(row) }}</span></template>
               </el-table-column>
               <el-table-column label="受众/优势" min-width="190">
@@ -541,6 +544,11 @@ const hasCompanyInfo = computed(() => {
 })
 
 const joinParts = (parts: any[]) => parts.map((part) => String(part || '').trim()).filter(Boolean).join('；') || '-'
+const omitSensitiveScreenFields = (screen: any) => {
+  const safeScreen = { ...(screen || {}) }
+  delete safeScreen.list_price
+  return safeScreen
+}
 
 const screenLocationText = (row: any) => joinParts([
   row.business_district && `商圈：${row.business_district}`,
@@ -551,7 +559,6 @@ const screenLocationText = (row: any) => joinParts([
 const screenDeliveryText = (row: any) => joinParts([
   row.play_frequency && `播放频次：${row.play_frequency}`,
   row.play_time && `播放时间：${row.play_time}`,
-  row.list_price && `刊例价：${row.list_price}`,
   row.daily_traffic && `日媒体接触人次：${row.daily_traffic}`,
   row.holiday_traffic && `节假日接触人次：${row.holiday_traffic}`,
 ])
@@ -809,12 +816,15 @@ function normalizeReviewData(data: any) {
       advantages: Array.isArray(copy.company_info?.advantages) ? copy.company_info.advantages : [],
     },
     screen_resources: Array.isArray(copy.screen_resources)
-      ? copy.screen_resources.map((screen: any) => ({
-          ...screen,
-          media_advantages_text: Array.isArray(screen.media_advantages)
-            ? screen.media_advantages.join('；')
-            : (screen.media_advantages || ''),
-        }))
+      ? copy.screen_resources.map((screen: any) => {
+          const safeScreen = omitSensitiveScreenFields(screen)
+          return {
+            ...safeScreen,
+            media_advantages_text: Array.isArray(screen.media_advantages)
+              ? screen.media_advantages.join('；')
+              : (screen.media_advantages || ''),
+          }
+        })
       : [],
     past_cases: Array.isArray(copy.past_cases) ? copy.past_cases : [],
     important_notes: Array.isArray(copy.important_notes) ? copy.important_notes : [],
@@ -832,16 +842,19 @@ function buildReviewedPayload() {
     .map((note) => note.trim())
     .filter(Boolean)
     .map((note) => ({ note }))
-  data.screen_resources = (data.screen_resources || []).map((s: any) => ({
-    ...s,
-    name: s.name || s.media_position || s.location || '',
-    specs: s.specs || [s.type, s.size, s.area, s.resolution && `分辨率${s.resolution}`].filter(Boolean).join('，'),
-    media_advantages: String(s.media_advantages_text || '')
-      .split(/[；;\n]/)
-      .map((item) => item.trim())
-      .filter(Boolean),
-    notes: s.notes || '',
-  })).filter((s: any) => s.city || s.name || s.specs)
+  data.screen_resources = (data.screen_resources || []).map((s: any) => {
+    const safeScreen = omitSensitiveScreenFields(s)
+    return {
+      ...safeScreen,
+      name: s.name || s.media_position || s.location || '',
+      specs: s.specs || [s.type, s.size, s.area, s.resolution && `分辨率${s.resolution}`].filter(Boolean).join('，'),
+      media_advantages: String(s.media_advantages_text || '')
+        .split(/[；;\n]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+      notes: s.notes || '',
+    }
+  }).filter((s: any) => s.city || s.name || s.specs)
   data.past_cases = (data.past_cases || []).filter((c: any) => c.title || c.brand)
   return data
 }
@@ -866,25 +879,6 @@ const docStatusType = (status: string) => {
     failed: 'danger',
   }
   return map[status] || 'info'
-}
-
-const triggerCrawl = async (row: any) => {
-  row._crawling = true
-  try {
-    await request.post(`/admin/memory/${row.userId}/crawl`, {
-      company_name: row.company || '',
-    })
-    ElMessage.success('已触发官网分析，请稍后查看结果')
-    // 8 秒后刷新
-    setTimeout(() => {
-      loadCustomers()
-      row._crawling = false
-    }, 8000)
-  } catch (e: any) {
-    const detail = e?.response?.data?.detail || '触发分析失败'
-    ElMessage.error(detail)
-    row._crawling = false
-  }
 }
 
 const saveNotes = async () => {

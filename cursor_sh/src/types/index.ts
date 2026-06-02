@@ -255,6 +255,7 @@ export interface RegisterRequest {
   email: string
   password: string
   role: UserRole
+  invite_token?: string
   behavior?: RegisterBehavior
   website?: string               // 蜜罐字段
 }

@@ -9,43 +9,88 @@
     <div class="section-card">
       <div class="section-header">
         <h2 class="section-title">邀请链接</h2>
-        <el-button type="primary" size="small" @click="generateInvite">生成邀请链接</el-button>
+        <el-button type="primary" size="small" @click="generateInvite(invitationTab)">生成邀请链接</el-button>
       </div>
 
-      <el-table :data="invitations" border size="small" class="invite-table">
-        <el-table-column label="邀请链接" min-width="280">
-          <template #default="{ row }">
-            <div class="invite-url" v-if="!row.isUsed && !row.isExpired">
-              <code>{{ row.token ? getInviteUrl(row.token) : row.inviteUrl }}</code>
-              <el-button link size="small" @click="copyLink(row)">复制</el-button>
-            </div>
-            <span v-else class="token-masked">{{ row.token.substring(0, 8) }}...</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="备注" prop="note" width="120" />
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag v-if="row.isUsed" type="success" size="small">已使用</el-tag>
-            <el-tag v-else-if="row.isExpired" type="info" size="small">已过期</el-tag>
-            <el-tag v-else type="warning" size="small">待使用</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="使用者" prop="usedByName" width="100" />
-        <el-table-column label="创建时间" width="150">
-          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="80">
-          <template #default="{ row }">
-            <el-button
-              v-if="!row.isUsed"
-              type="danger"
-              link
-              size="small"
-              @click="revokeInvite(row.id)"
-            >撤销</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <el-tabs v-model="invitationTab" class="invite-tabs">
+        <el-tab-pane label="用户邀请" name="user">
+          <el-table :data="userInvitations" border size="small" class="invite-table">
+            <el-table-column label="邀请链接" min-width="280">
+              <template #default="{ row }">
+                <div class="invite-url" v-if="!row.isUsed && !row.isExpired">
+                  <code>{{ row.inviteUrl }}</code>
+                  <el-button link size="small" @click="copyLink(row)">复制</el-button>
+                </div>
+                <span v-else class="token-masked">{{ row.token?.substring(0, 8) }}...</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="公司" prop="companyName" width="140" />
+            <el-table-column label="绑定 Memory" width="150">
+              <template #default="{ row }">{{ row.memoryLabel || row.memoryUserId || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="备注" prop="note" width="120" />
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <el-tag v-if="row.isUsed" type="success" size="small">已使用</el-tag>
+                <el-tag v-else-if="row.isExpired" type="info" size="small">已过期</el-tag>
+                <el-tag v-else type="warning" size="small">待使用</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="使用者" prop="usedByName" width="100" />
+            <el-table-column label="创建时间" width="150">
+              <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="80">
+              <template #default="{ row }">
+                <el-button
+                  v-if="!row.isUsed"
+                  type="danger"
+                  link
+                  size="small"
+                  @click="revokeInvite(row.id, 'user')"
+                >撤销</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
+
+        <el-tab-pane label="承包商邀请" name="contractor">
+          <el-table :data="invitations" border size="small" class="invite-table">
+            <el-table-column label="邀请链接" min-width="280">
+              <template #default="{ row }">
+                <div class="invite-url" v-if="!row.isUsed && !row.isExpired">
+                  <code>{{ row.token ? getInviteUrl(row.token) : row.inviteUrl }}</code>
+                  <el-button link size="small" @click="copyLink(row)">复制</el-button>
+                </div>
+                <span v-else class="token-masked">{{ row.token.substring(0, 8) }}...</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="备注" prop="note" width="120" />
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <el-tag v-if="row.isUsed" type="success" size="small">已使用</el-tag>
+                <el-tag v-else-if="row.isExpired" type="info" size="small">已过期</el-tag>
+                <el-tag v-else type="warning" size="small">待使用</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="使用者" prop="usedByName" width="100" />
+            <el-table-column label="创建时间" width="150">
+              <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="80">
+              <template #default="{ row }">
+                <el-button
+                  v-if="!row.isUsed"
+                  type="danger"
+                  link
+                  size="small"
+                  @click="revokeInvite(row.id, 'contractor')"
+                >撤销</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
+      </el-tabs>
     </div>
 
     <!-- 承包商列表 -->
@@ -95,13 +140,35 @@
     </div>
 
     <!-- 生成邀请对话框 -->
-    <el-dialog v-model="inviteDialogVisible" title="生成邀请链接" width="420px">
+    <el-dialog v-model="inviteDialogVisible" :title="inviteType === 'user' ? '生成用户邀请链接' : '生成承包商邀请链接'" width="520px">
       <el-form label-position="top">
+        <template v-if="inviteType === 'user'">
+          <el-form-item label="公司名称">
+            <el-input v-model="inviteCompanyName" placeholder="注册后写入用户公司名称，可后续修改" />
+          </el-form-item>
+          <el-form-item label="绑定用户 Memory（选填）">
+            <el-select
+              v-model="inviteMemoryUserId"
+              placeholder="选择已 ingest 的客户 Memory"
+              clearable
+              filterable
+              style="width: 100%"
+              @visible-change="(open: boolean) => open && fetchMemoryOptions()"
+            >
+              <el-option
+                v-for="item in memoryOptions"
+                :key="item.userId"
+                :label="memoryOptionLabel(item)"
+                :value="item.userId"
+              />
+            </el-select>
+          </el-form-item>
+        </template>
         <el-form-item label="备注（选填）">
           <el-input v-model="inviteNote" placeholder="如：给XX公司的邀请" />
         </el-form-item>
         <el-form-item label="有效天数">
-          <el-input-number v-model="inviteDays" :min="1" :max="30" />
+          <el-input-number v-model="inviteDays" :min="1" :max="inviteType === 'user' ? 7 : 30" :disabled="inviteType === 'user'" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -113,7 +180,7 @@
     <!-- 生成结果对话框 -->
     <el-dialog v-model="resultDialogVisible" title="邀请链接已生成" width="500px">
       <div class="result-content">
-        <p>请将以下链接发送给承包商：</p>
+        <p>请将以下链接发送给{{ inviteType === 'user' ? '受邀用户' : '承包商' }}：</p>
         <el-input :model-value="generatedUrl" readonly>
           <template #append>
             <el-button @click="copyGeneratedLink">复制</el-button>
@@ -131,6 +198,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { formatServerTime } from '@/utils/time'
 
+type InvitationTab = 'user' | 'contractor'
+
+const invitationTab = ref<InvitationTab>('user')
+const userInvitations = ref<any[]>([])
 const invitations = ref<any[]>([])
 const contractors = ref<any[]>([])
 const keyword = ref('')
@@ -140,10 +211,15 @@ const total = ref(0)
 
 const inviteDialogVisible = ref(false)
 const resultDialogVisible = ref(false)
+const inviteType = ref<InvitationTab>('user')
 const inviteNote = ref('')
 const inviteDays = ref(7)
+const inviteCompanyName = ref('')
+const inviteMemoryUserId = ref('')
 const generating = ref(false)
 const generatedUrl = ref('')
+const memoryOptions = ref<any[]>([])
+const memoryOptionsLoading = ref(false)
 const contractorBaseUrl = (import.meta.env.VITE_CONTRACTOR_BASE_URL || 'https://contractor.uniquevisionx.com').replace(/\/$/, '')
 
 const formatTime = (iso: string) => {
@@ -155,7 +231,7 @@ const getInviteUrl = (token: string) => {
 }
 
 const copyLink = async (row: any) => {
-  const url = row?.token ? getInviteUrl(row.token) : (row?.inviteUrl || '')
+  const url = row?.inviteUrl || (row?.token ? getInviteUrl(row.token) : '')
   await navigator.clipboard.writeText(url)
   ElMessage.success('链接已复制')
 }
@@ -170,6 +246,35 @@ const fetchInvitations = async () => {
     const res: any = await request.get('/contractor-admin/invitations')
     invitations.value = Array.isArray(res) ? res : (res?.data || [])
   } catch { /* ignore */ }
+}
+
+const fetchUserInvitations = async () => {
+  try {
+    const res: any = await request.get('/user-admin/invitations')
+    userInvitations.value = Array.isArray(res) ? res : (res?.data || [])
+  } catch { /* ignore */ }
+}
+
+const fetchMemoryOptions = async () => {
+  if (memoryOptionsLoading.value) return
+  memoryOptionsLoading.value = true
+  try {
+    const res: any = await request.get('/admin/memory/customers', {
+      params: { page: 1, pageSize: 100 },
+    })
+    memoryOptions.value = res?.data || []
+  } catch { /* ignore */ }
+  finally { memoryOptionsLoading.value = false }
+}
+
+const memoryOptionLabel = (item: any) => {
+  const parts = [
+    item.company || '',
+    item.username || '',
+    item.phone || '',
+    item.isProspect ? '未注册' : '已注册',
+  ].filter(Boolean)
+  return parts.join(' / ')
 }
 
 const fetchContractors = async () => {
@@ -188,25 +293,38 @@ const fetchContractors = async () => {
   } catch { /* ignore */ }
 }
 
-const generateInvite = () => {
+const generateInvite = (type: InvitationTab) => {
+  inviteType.value = type
   inviteNote.value = ''
   inviteDays.value = 7
+  inviteCompanyName.value = ''
+  inviteMemoryUserId.value = ''
+  if (type === 'user') fetchMemoryOptions()
   inviteDialogVisible.value = true
 }
 
 const confirmGenerate = async () => {
   generating.value = true
   try {
-    const res: any = await request.post('/contractor-admin/invitations', {
+    const payload: any = {
       note: inviteNote.value,
       expires_days: inviteDays.value,
-    })
+    }
+    let res: any
+    if (inviteType.value === 'user') {
+      payload.company_name = inviteCompanyName.value
+      payload.memory_user_id = inviteMemoryUserId.value || undefined
+      res = await request.post('/user-admin/invitations', payload)
+    } else {
+      res = await request.post('/contractor-admin/invitations', payload)
+    }
     inviteDialogVisible.value = false
     // res is already the inner data from ApiResponse
     const token = res?.token || ''
-    generatedUrl.value = token ? getInviteUrl(token) : (res?.inviteUrl || '')
+    generatedUrl.value = res?.inviteUrl || (token ? getInviteUrl(token) : '')
     resultDialogVisible.value = true
-    fetchInvitations()
+    if (inviteType.value === 'user') fetchUserInvitations()
+    else fetchInvitations()
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || '生成失败')
   } finally {
@@ -214,12 +332,14 @@ const confirmGenerate = async () => {
   }
 }
 
-const revokeInvite = async (id: string) => {
+const revokeInvite = async (id: string, type: InvitationTab) => {
   try {
     await ElMessageBox.confirm('撤销后该邀请链接将无法使用', '确认撤销')
-    await request.delete(`/contractor-admin/invitations/${id}`)
+    if (type === 'user') await request.delete(`/user-admin/invitations/${id}`)
+    else await request.delete(`/contractor-admin/invitations/${id}`)
     ElMessage.success('已撤销')
-    fetchInvitations()
+    if (type === 'user') fetchUserInvitations()
+    else fetchInvitations()
   } catch { /* cancelled */ }
 }
 
@@ -234,6 +354,7 @@ const toggleActive = async (row: any) => {
 }
 
 onMounted(() => {
+  fetchUserInvitations()
   fetchInvitations()
   fetchContractors()
 })

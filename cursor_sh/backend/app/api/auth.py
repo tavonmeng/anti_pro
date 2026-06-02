@@ -17,12 +17,13 @@ from app.schemas.auth import (
     ChangePasswordRequest, SendSmsRequest, ResetPasswordRequest
 )
 from app.schemas.response import ApiResponse
-from app.services.auth_service import login, register, change_password, reset_password
+from app.services.auth_service import login, register, change_password, reset_password, validate_user_invitation
 from app.services.sms_service import send_sms_verify_code, verify_sms_code
 from app.utils.dependencies import get_current_user_for_public_deployment, AnyUser
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
 from app.utils.timezone import beijing_now
+from app.utils.timezone import beijing_iso
 from pydantic import BaseModel, EmailStr
 
 class VerifySmsRequest(BaseModel):
@@ -161,6 +162,27 @@ async def api_pre_verify_sms(data: VerifySmsRequest):
     if not is_valid:
         raise HTTPException(status_code=400, detail="验证码错误或已过期")
     return ApiResponse(code=200, message="验证码正确", data=True)
+
+
+@router.get("/validate-invite/{token}", response_model=ApiResponse[dict])
+async def api_validate_user_invite(
+    token: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """验证普通用户邀请链接是否有效（公开接口，无需登录）"""
+    try:
+        data = await validate_user_invitation(db, token)
+        return ApiResponse(code=200, message="邀请链接有效", data={
+            **data,
+            "expiresAt": beijing_iso(data.get("expiresAt")),
+        })
+    except HTTPException as e:
+        reason = "invalid"
+        if "已被使用" in str(e.detail):
+            reason = "used"
+        elif "已过期" in str(e.detail):
+            reason = "expired"
+        return ApiResponse(code=400, message=str(e.detail), data={"valid": False, "reason": reason})
 
 @router.post("/register", response_model=ApiResponse[dict])
 async def api_register(

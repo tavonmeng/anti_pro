@@ -97,6 +97,8 @@ if deploy_mode in ("all", "internal"):
     # 承包商相关路由
     app.include_router(contractor_api.router, prefix="/api")
     app.include_router(contractor_admin_api.router, prefix="/api")
+    from app.api import user_admin as user_admin_api
+    app.include_router(user_admin_api.router, prefix="/api")
     app.include_router(workflow_config_api.router, prefix="/api")
     # 用户画像 Memory 管理（管理员端）
     from app.api import admin_memory

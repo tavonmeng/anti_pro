@@ -9,7 +9,10 @@ from app.models.admin import Admin
 from app.models.staff_member import StaffMember
 from app.models.contractor import Contractor
 from app.models.contractor_invitation import ContractorInvitation
+from app.models.customer_document import CustomerDocument, CustomerDocumentExtraction
 from app.models.security_event import SecurityEvent, SecurityEventType
+from app.models.user_invitation import UserInvitation
+from app.models.user_memory import UserMemory
 from app.config import settings
 from app.schemas.auth import (
     LoginRequest, RegisterRequest, LoginResponse, 
@@ -76,6 +79,96 @@ def _get_model_for_role(role: UserRole):
         return Contractor
     else:
         return User
+
+
+def _normalize_invite_token(token: str | None) -> str:
+    return (token or "").strip()
+
+
+async def _get_valid_user_invitation(
+    db: AsyncSession,
+    invite_token: str | None,
+    *,
+    required: bool,
+) -> UserInvitation | None:
+    """Return a usable user invitation or raise an HTTP error."""
+    from app.utils.timezone import beijing_now, ensure_beijing
+
+    token = _normalize_invite_token(invite_token)
+    if not token:
+        if required:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="当前内测阶段仅支持邀请注册，请联系管理员获取邀请链接",
+            )
+        return None
+
+    result = await db.execute(select(UserInvitation).where(UserInvitation.token == token))
+    invitation = result.scalar_one_or_none()
+    if not invitation:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邀请链接无效")
+    if invitation.is_used:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邀请链接已被使用")
+
+    expires_at = ensure_beijing(invitation.expires_at)
+    if expires_at and expires_at < beijing_now():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邀请链接已过期")
+
+    return invitation
+
+
+async def validate_user_invitation(db: AsyncSession, invite_token: str) -> dict:
+    """Public validation payload for the website registration modal."""
+    invitation = await _get_valid_user_invitation(db, invite_token, required=True)
+    return {
+        "valid": True,
+        "companyName": invitation.company_name,
+        "memoryUserId": invitation.memory_user_id,
+        "note": invitation.note,
+        "expiresAt": invitation.expires_at,
+    }
+
+
+async def _bind_invitation_memory(db: AsyncSession, invitation: UserInvitation, user: User) -> None:
+    """Move a selected Memory and its imported documents to the newly registered user."""
+    if not invitation.memory_user_id:
+        return
+    source_memory_user_id = invitation.memory_user_id
+
+    result = await db.execute(
+        select(UserMemory).where(UserMemory.user_id == source_memory_user_id)
+    )
+    selected_memory = result.scalar_one_or_none()
+    if not selected_memory:
+        return
+
+    target_result = await db.execute(
+        select(UserMemory).where(UserMemory.user_id == user.id)
+    )
+    target_memory = target_result.scalar_one_or_none()
+    if target_memory and target_memory.id != selected_memory.id:
+        await db.delete(target_memory)
+        await db.flush()
+
+    company_info = dict(selected_memory.company_info or {})
+    company_info.pop("is_prospect", None)
+    if invitation.company_name:
+        company_info["name"] = invitation.company_name
+    selected_memory.company_info = company_info
+    selected_memory.user_id = user.id
+
+    docs_result = await db.execute(
+        select(CustomerDocument).where(CustomerDocument.user_id == source_memory_user_id)
+    )
+    for document in docs_result.scalars().all():
+        document.user_id = user.id
+
+    extractions_result = await db.execute(
+        select(CustomerDocumentExtraction).where(CustomerDocumentExtraction.user_id == source_memory_user_id)
+    )
+    for extraction in extractions_result.scalars().all():
+        extraction.user_id = user.id
+    invitation.memory_user_id = user.id
 
 
 async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
@@ -220,6 +313,12 @@ async def register(db: AsyncSession, register_data: RegisterRequest, client_ip: 
             detail="接口不存在",
         )
 
+    invitation = await _get_valid_user_invitation(
+        db,
+        register_data.invite_token,
+        required=not settings.ALLOW_OPEN_USER_REGISTRATION,
+    )
+
     # 构建行为数据快照（用于写入安全事件表）
     behavior = register_data.behavior
     behavior_snapshot = behavior.model_dump() if behavior else None
@@ -357,18 +456,49 @@ async def register(db: AsyncSession, register_data: RegisterRequest, client_ip: 
             phone=register_data.phone,
             password_hash=get_password_hash(register_data.password),
             role=UserRole.USER,
+            company=invitation.company_name if invitation and invitation.company_name else None,
             is_active=True,
             register_ip=client_ip[:50] if client_ip else None,
             register_user_agent=user_agent[:500] if user_agent else None,
         )
         
         db.add(new_user)
+
+        if invitation:
+            await _bind_invitation_memory(db, invitation, new_user)
+            invitation.is_used = True
+            invitation.used_by = new_user.id
         
         # 6. 记录注册成功事件
         await _log_event(SecurityEventType.REGISTER_SUCCESS, user_id=new_user.id)
         
         await db.commit()
         await db.refresh(new_user)
+
+        token_data = {
+            "user_id": new_user.id,
+            "username": new_user.username,
+            "role": UserRole.USER.value,
+        }
+        token = create_access_token(token_data)
+        user_response = UserResponse(
+            id=new_user.id,
+            username=new_user.username,
+            role=UserRole.USER,
+            email=new_user.email,
+            phone=new_user.phone,
+            real_name=new_user.real_name,
+            avatar=maybe_sign_url(getattr(new_user, "avatar", None) or "", expires=7 * 24 * 3600),
+            is_active=new_user.is_active,
+            enterprise_status=(
+                new_user.enterprise_status.value
+                if hasattr(new_user.enterprise_status, "value")
+                else str(new_user.enterprise_status or "none").lower()
+            ),
+            enterprise_name=new_user.enterprise_name,
+            enterprise_reject_reason=new_user.enterprise_reject_reason,
+            created_at=new_user.created_at,
+        )
         log_business_event(
             logger,
             "register_success",
@@ -377,9 +507,10 @@ async def register(db: AsyncSession, register_data: RegisterRequest, client_ip: 
             phone=new_user.phone,
             email=new_user.email,
             client_ip=client_ip,
+            invitation_id=invitation.id if invitation else None,
         )
         
-        return {"success": True}
+        return {"success": True, "token": token, "user": user_response.model_dump()}
     except HTTPException:
         raise
     except Exception as e:

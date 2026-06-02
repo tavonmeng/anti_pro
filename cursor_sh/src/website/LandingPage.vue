@@ -24,12 +24,19 @@
     </div>
 
     <!-- 登录/注册弹窗 -->
-    <AuthModal :visible="authModalVisible" :initial-tab="authModalTab" @close="authModalVisible = false" />
+    <AuthModal
+      :visible="authModalVisible"
+      :initial-tab="authModalTab"
+      :invite-token="inviteToken"
+      :invite-company-name="inviteCompanyName"
+      @close="authModalVisible = false"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import TheHeader from './components/TheHeader.vue'
 import MarketingTopBar from './components/MarketingTopBar.vue'
 import AuthModal from './components/AuthModal.vue'
@@ -41,6 +48,7 @@ import IntroSection from './sections/IntroSection.vue'
 import BrandsSection from './sections/BrandsSection.vue'
 import ContactSection from './sections/ContactSection.vue'
 import TheFooter from './sections/TheFooter.vue'
+import { authApi } from '@/utils/api'
 
 // 状态
 const isMarketingBarVisible = ref(true)
@@ -55,8 +63,14 @@ const headerTopOffset = computed(() => (
 // 登录/注册弹窗
 const authModalVisible = ref(false)
 const authModalTab = ref('login')
+const inviteToken = ref('')
+const inviteCompanyName = ref('')
 
 const openAuth = (tab) => {
+  if (tab === 'register' && !inviteToken.value) {
+    ElMessage.info('当前仍在内测阶段，仅支持受邀用户注册。请联系管理员获取邀请链接。')
+    return
+  }
   authModalTab.value = tab
   authModalVisible.value = true
 }
@@ -74,12 +88,33 @@ const handleLoadComplete = () => {
 onMounted(() => {
   // 设置官网专属背景色
   document.body.classList.add('landing-active')
+  handleInviteLink()
 })
 
 onUnmounted(() => {
   // 离开官网时恢复背景色
   document.body.classList.remove('landing-active')
 })
+
+const handleInviteLink = async () => {
+  const params = new URLSearchParams(window.location.search)
+  const token = (params.get('invite') || params.get('user_invite') || '').trim()
+  if (!token) return
+
+  try {
+    const data = await authApi.validateInvite(token)
+    if (data?.valid) {
+      inviteToken.value = token
+      inviteCompanyName.value = data.companyName || ''
+      openAuth('register')
+    } else {
+      ElMessage.warning(data?.message || '邀请链接无效或已过期')
+    }
+  } catch (e) {
+    const message = e?.response?.data?.message || e?.message || '邀请链接无效或已过期'
+    ElMessage.warning(message)
+  }
+}
 </script>
 
 <style>

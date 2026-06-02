@@ -170,20 +170,32 @@ export const authApi = {
   },
   
   // 注册
-  async register(data: RegisterRequest): Promise<boolean> {
+  async register(data: RegisterRequest): Promise<LoginResponse> {
     if (ENABLE_MOCK) {
       try {
-        await request.post('/auth/register', data)
-        return true
+        return await request.post('/auth/register', data)
       } catch (error) {
         console.log('使用模拟注册功能')
         await mockRegister(data)
-        return true
+        return {
+          token: `mock-token-${Date.now()}`,
+          user: {
+            id: `user-${Date.now()}`,
+            username: data.username,
+            role: data.role,
+            email: data.email,
+            phone: data.phone,
+          },
+        }
       }
     } else {
-      await request.post('/auth/register', data)
-      return true
+      return request.post('/auth/register', data)
     }
+  },
+
+  // 验证普通用户邀请链接
+  async validateInvite(token: string): Promise<any> {
+    return request.get(`/auth/validate-invite/${token}`, { silent: true })
   },
   
   // 发送短信验证码

@@ -10,6 +10,7 @@ from app.database import async_session_maker
 from app.models.customer_document import CustomerDocument, CustomerDocumentExtraction
 from app.services.document_parser_service import parse_document, build_llm_text_chunks
 from app.services.document_extract_service import extract_customer_knowledge, empty_extraction
+from app.services.memory_sanitizer import sanitize_document_memory_data
 from app.services.memory_service import get_or_create_memory
 from app.services.memory_merge_service import merge_document_knowledge
 from app.utils.business_log import log_business_event
@@ -100,6 +101,7 @@ async def process_document(document_id: str):
 
 async def approve_document_extraction(document_id: str, reviewed_data: dict, admin_id: str = "") -> dict:
     """审核通过并写入 UserMemory。"""
+    reviewed_data = sanitize_document_memory_data(reviewed_data or empty_extraction())
     async with async_session_maker() as session:
         doc_result = await session.execute(
             select(CustomerDocument).where(CustomerDocument.id == document_id)

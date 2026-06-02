@@ -525,15 +525,10 @@
             <div style="display: flex; align-items: center; gap: 8px;">
               <el-icon><User /></el-icon>
               <h3 style="margin: 0;">客户画像</h3>
-              <el-tag v-if="memoryData?.company_info?.crawl_status === 'success'" type="success" size="small">已分析</el-tag>
-              <el-tag v-else-if="memoryData?.company_info?.crawl_status === 'pending'" type="warning" size="small">分析中</el-tag>
-              <el-tag v-else-if="memoryData?.company_info?.crawl_status === 'failed'" type="danger" size="small">分析失败</el-tag>
-              <el-tag v-else type="info" size="small">未分析</el-tag>
+              <el-tag v-if="hasMemoryProfile" type="success" size="small">已建档</el-tag>
+              <el-tag v-else type="info" size="small">未建档</el-tag>
             </div>
             <div style="display: flex; gap: 8px;">
-              <el-button size="small" @click="handleTriggerCrawl" :loading="crawlLoading">
-                {{ memoryData?.company_info?.crawl_status === 'success' ? '重新分析' : '分析官网' }}
-              </el-button>
               <el-button size="small" @click="showMemory = !showMemory">
                 {{ showMemory ? '收起' : '展开' }}
               </el-button>
@@ -557,7 +552,7 @@
               <el-descriptions-item label="核心优势" v-if="memoryData.company_info.advantages?.length">
                 <el-tag v-for="adv in memoryData.company_info.advantages" :key="adv" size="small" style="margin-right: 4px;">{{ adv }}</el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="分析时间">{{ memoryData.company_info.crawled_at || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="更新时间">{{ memoryData.company_info.document_updated_at || memoryData.company_info.crawled_at || '-' }}</el-descriptions-item>
             </el-descriptions>
           </div>
 
@@ -635,7 +630,7 @@
 
           <!-- 空状态 -->
           <div v-if="!memoryData?.company_info?.description && !memoryData?.screen_resources?.length && !memoryData?.past_projects?.length" style="text-align: center; padding: 20px; color: #999;">
-            暂无画像数据。点击「分析官网」可自动爬取客户公司信息。
+            暂无画像数据。可在客户画像管理中上传客户资料后写入 Memory。
           </div>
         </div>
       </el-card>
@@ -924,8 +919,19 @@ const uploadHeaders = computed(() => {
 const memoryData = ref<any>(null)
 const showMemory = ref(false)
 const agentNotes = ref('')
-const crawlLoading = ref(false)
 const notesLoading = ref(false)
+
+const hasMemoryProfile = computed(() => {
+  const data = memoryData.value || {}
+  const ci = data.company_info || {}
+  return Boolean(
+    ci.description ||
+    ci.past_cases?.length ||
+    data.screen_resources?.length ||
+    data.past_projects?.length ||
+    data.agent_notes
+  )
+})
 
 // 判断偏好是否有实质内容（排除内部时间戳字段）
 const hasPreferences = computed(() => {
@@ -1214,45 +1220,12 @@ const loadMemory = async (userId: string) => {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     if (resp.ok) {
-      memoryData.value = await resp.json()
+      const payload = await resp.json()
+      memoryData.value = payload?.data || payload
       agentNotes.value = memoryData.value?.agent_notes || ''
     }
   } catch (e) {
     console.error('Memory 加载失败:', e)
-  }
-}
-
-const handleTriggerCrawl = async () => {
-  if (!order.value?.userId) return
-  // 使用 memory 返回的 user_company，或发送空字符串让后端自动获取
-  const companyName = memoryData.value?.user_company || ''
-  crawlLoading.value = true
-  try {
-    const token = localStorage.getItem('token')
-    const resp = await fetch(`/api/admin/memory/${order.value.userId}/crawl`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ company_name: companyName })
-    })
-    if (resp.ok) {
-      ElMessage.success('已触发官网分析，请稍后刷新查看结果')
-      // 5 秒后自动刷新 memory
-      setTimeout(async () => {
-        if (order.value?.userId) {
-          await loadMemory(order.value.userId)
-        }
-        crawlLoading.value = false
-      }, 8000)
-    } else {
-      ElMessage.error('触发分析失败')
-      crawlLoading.value = false
-    }
-  } catch (e) {
-    ElMessage.error('触发分析失败')
-    crawlLoading.value = false
   }
 }
 
