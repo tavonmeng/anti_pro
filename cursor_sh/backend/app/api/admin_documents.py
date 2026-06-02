@@ -14,6 +14,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.customer_document import CustomerDocument, CustomerDocumentExtraction
 from app.models.user import User
+from app.models.user_memory import UserMemory
 from app.utils.dependencies import require_admin
 from app.services.document_extract_service import empty_extraction
 from app.services.document_pipeline_service import process_document, approve_document_extraction
@@ -65,8 +66,7 @@ async def upload_customer_document(
     db: AsyncSession = Depends(get_db),
 ):
     """上传客户资料，并触发后台抽取。"""
-    user_result = await db.execute(select(User.id).where(User.id == user_id))
-    if not user_result.scalar_one_or_none():
+    if not await _customer_exists(db, user_id):
         raise HTTPException(status_code=404, detail="客户不存在")
 
     contents = await file.read()
@@ -166,6 +166,15 @@ async def _get_document_or_404(db: AsyncSession, document_id: str) -> CustomerDo
     if not doc:
         raise HTTPException(status_code=404, detail="资料不存在")
     return doc
+
+
+async def _customer_exists(db: AsyncSession, user_id: str) -> bool:
+    user_result = await db.execute(select(User.id).where(User.id == user_id))
+    if user_result.scalar_one_or_none():
+        return True
+
+    memory_result = await db.execute(select(UserMemory.id).where(UserMemory.user_id == user_id))
+    return memory_result.scalar_one_or_none() is not None
 
 
 async def _serialize_document(db: AsyncSession, doc: CustomerDocument) -> dict:

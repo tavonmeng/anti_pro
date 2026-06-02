@@ -86,6 +86,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useUiStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { ArrowDown } from '@element-plus/icons-vue'
@@ -100,7 +101,7 @@ import {
   type AiChatSavedSession,
   type AiChatRemoteSession,
 } from '@/utils/aiChatSessions'
-import { getServiceBadgeLabel, isOrderableServiceType, platformServices, type ServiceType } from '@/data/platformServices'
+import { getServiceBadgeLabel, platformServices, type ServiceType } from '@/data/platformServices'
 
 const router = useRouter()
 const uiStore = useUiStore()
@@ -200,12 +201,15 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
   uiStore.setSecondarySidebar(true)
   uiStore.toggleSidebar(true)
   uiStore.setActiveModule(type)
-  if (type === 'video_purchase') {
-    await router.push('/user/video-marketplace')
-  } else if (isOrderableServiceType(type)) {
-    await router.push(`/user/create-order/${type}`)
-  } else {
-    await router.push(`/user/create-order/${type}`)
+  const targetPath = type === 'video_purchase'
+    ? '/user/video-marketplace'
+    : `/user/create-order/${type}`
+
+  try {
+    await router.push(targetPath)
+  } catch (error) {
+    console.error('业务模块页面加载失败:', error)
+    ElMessage.error('业务模块页面加载失败，请稍后重试')
   }
 }
 </script>

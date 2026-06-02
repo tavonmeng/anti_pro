@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import async_session_maker
 from app.models.customer_document import CustomerDocument, CustomerDocumentExtraction
-from app.services.document_parser_service import parse_document, build_llm_text
+from app.services.document_parser_service import parse_document, build_llm_text_chunks
 from app.services.document_extract_service import extract_customer_knowledge, empty_extraction
 from app.services.memory_service import get_or_create_memory
 from app.services.memory_merge_service import merge_document_knowledge
@@ -42,10 +42,14 @@ async def process_document(document_id: str):
         if parse_file_path != document.file_path:
             temp_file_path = parse_file_path
         sections = parse_document(parse_file_path, document.original_filename)
-        document_text = build_llm_text(sections)
-        if not document_text.strip():
+        document_chunks = build_llm_text_chunks(
+            sections,
+            max_chunk_chars=settings.DOCUMENT_EXTRACT_CHUNK_CHARS,
+            max_total_chars=settings.DOCUMENT_EXTRACT_MAX_TOTAL_CHARS,
+        )
+        if not any(chunk.strip() for chunk in document_chunks):
             raise ValueError("资料没有可提取文本，可能是扫描件或图片版文件")
-        extracted = await extract_customer_knowledge(document_text, document.original_filename)
+        extracted = await extract_customer_knowledge(document_chunks, document.original_filename)
         summary = _build_summary(extracted)
     except Exception as exc:
         error = str(exc)
@@ -152,6 +156,15 @@ def _build_summary(data: dict) -> str:
     parts = []
     if company.get("description"):
         parts.append("公司介绍 1 条")
+    rich_company_fields = [
+        company.get("city_intro"),
+        company.get("city_positioning"),
+        company.get("business_context"),
+        company.get("audience_profile"),
+        company.get("media_value"),
+    ]
+    if any(rich_company_fields):
+        parts.append("城市/商圈/媒体价值信息 1 组")
     if screens:
         parts.append(f"屏幕资源 {len(screens)} 条")
     if cases:

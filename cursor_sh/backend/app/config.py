@@ -272,6 +272,10 @@ class Settings(BaseSettings):
     AI_RESPONSES_BASE_URL: str = ""
     AI_MODEL_NAME: str = "gpt-3.5-turbo"
     AI_HTTP_TIMEOUT: float = 120.0
+    DOCUMENT_EXTRACT_MODEL: str = "qwen3.7-max"
+    DOCUMENT_EXTRACT_TIMEOUT: float = 180.0
+    DOCUMENT_EXTRACT_CHUNK_CHARS: int = 18000
+    DOCUMENT_EXTRACT_MAX_TOTAL_CHARS: int = 120000
     AI_PREFER_RESPONSES_API: bool = False
     AI_ENABLE_THINKING: bool = False
     AI_MAX_CONCURRENT_REQUESTS: int = 4

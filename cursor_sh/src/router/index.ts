@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
-import { isExternalDeployment, isInternalRoute } from '@/utils/deployment'
+import { isExternalDeployment, isInternalDeployment, isInternalRoute, isUserRoute, loginPathForRoute } from '@/utils/deployment'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -237,14 +237,37 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
+  const authenticatedHome = () => {
+    if (authStore.isAdmin()) return '/admin'
+    if (authStore.isStaff()) return '/staff'
+    if (authStore.isContractor()) return '/contractor'
+    return isInternalDeployment ? '/admin/login' : '/user/workspace'
+  }
+
   if (isExternalDeployment && isInternalRoute(to.path)) {
     next('/')
     return
   }
+
+  if (isInternalDeployment && authStore.isAuthenticated() && authStore.isUser()) {
+    authStore.token = null
+    authStore.user = null
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    next({ name: 'AdminLogin' })
+    return
+  }
+
+  if (isInternalDeployment) {
+    if (to.path === '/' || to.name === 'Login' || to.name === 'Register' || isUserRoute(to.path)) {
+      next(authStore.isAuthenticated() ? authenticatedHome() : { name: 'AdminLogin', query: to.meta.requiresAuth ? { redirect: to.fullPath } : {} })
+      return
+    }
+  }
   
   // 检查是否需要认证
   if (to.meta.requiresAuth && !authStore.isAuthenticated()) {
-    next({ name: 'Login', query: { redirect: to.fullPath } })
+    next({ path: loginPathForRoute(to.path), query: { redirect: to.fullPath } })
     return
   }
 
@@ -253,7 +276,7 @@ router.beforeEach(async (to, from, next) => {
       await authStore.refreshCurrentUser()
     } catch (error) {
       if (to.meta.requiresAuth) {
-        next({ name: 'Login', query: { redirect: to.fullPath } })
+        next({ path: loginPathForRoute(to.path), query: { redirect: to.fullPath } })
         return
       }
     }
@@ -289,7 +312,7 @@ router.beforeEach(async (to, from, next) => {
       } else if (authStore.isContractor()) {
         next('/contractor')
       } else {
-        next('/login')
+        next(loginPathForRoute(to.path))
       }
       return
     }
@@ -300,7 +323,7 @@ router.beforeEach(async (to, from, next) => {
       } else if (authStore.isStaff()) {
         next('/staff')
       } else {
-        next('/login')
+        next(loginPathForRoute(to.path))
       }
       return
     }

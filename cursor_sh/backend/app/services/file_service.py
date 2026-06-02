@@ -150,8 +150,8 @@ class FileService:
             file_type = file_upload.get('type')
             upload_time = file_upload.get('uploadTime')
             # 优先使用前端传入的 URL（可能是 OSS 签名 URL 或本地路径）
-            existing_url = file_upload.get('url') or file_upload.get('file_url')
-            object_key = file_upload.get('object_key')
+            existing_url = file_upload.get('url') or file_upload.get('file_url') or file_upload.get('href')
+            object_key = file_upload.get('object_key') or file_upload.get('objectKey')
         else:
             # 如果是 FileUpload 对象
             file_id = file_upload.id
@@ -161,6 +161,9 @@ class FileService:
             upload_time = file_upload.uploadTime
             existing_url = file_upload.url or file_upload.file_url
             object_key = file_upload.object_key
+
+        if not file_id or len(str(file_id)) > 50:
+            file_id = generate_id("file")
         
         # 使用已有的 URL（来自之前的上传接口），否则生成本地路径
         file_url = existing_url or "/uploads/%s/%s" % (order_id, file_name)

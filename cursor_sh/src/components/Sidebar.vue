@@ -16,6 +16,11 @@
         <el-icon><Document /></el-icon>
         <template #title>订单管理</template>
       </el-menu-item>
+
+      <el-menu-item index="customers">
+        <el-icon><UserFilled /></el-icon>
+        <template #title>客户 Memory</template>
+      </el-menu-item>
       
       <el-menu-item index="staff">
         <el-icon><User /></el-icon>
@@ -52,10 +57,6 @@
         <template #title>转人工客户</template>
       </el-menu-item>
       
-      <el-menu-item index="customers">
-        <el-icon><UserFilled /></el-icon>
-        <template #title>客户画像</template>
-      </el-menu-item>
     </template>
     
     <!-- 负责人菜单 -->
@@ -123,6 +124,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Grid, Document, User, Setting, SwitchButton, EditPen, ChatDotRound, OfficeBuilding, Suitcase, SetUp, ChatLineSquare, UserFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useOrderStore } from '@/stores/order'
+import { loginPathForRole } from '@/utils/deployment'
 import NotificationBell from './NotificationBell.vue'
 
 interface Props {
@@ -226,12 +228,9 @@ const handleMenuSelect = (index: string) => {
 }
 
 const handleLogout = async () => {
+  const previousRole = authStore.user?.role
   await authStore.logout()
-  if (isContractor.value || isAdmin.value || isStaff.value) {
-    router.push('/admin/login')
-  } else {
-    router.push('/login')
-  }
+  router.push(loginPathForRole(previousRole))
 }
 </script>
 
@@ -242,6 +241,8 @@ const handleLogout = async () => {
   background: #FFFFFF;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .sidebar-header {

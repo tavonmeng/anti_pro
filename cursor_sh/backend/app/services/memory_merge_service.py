@@ -21,6 +21,11 @@ def merge_document_knowledge(memory: UserMemory, reviewed_data: dict, document_m
         current_desc = company_info.get("description") or ""
         if not current_desc or len(incoming_company["description"]) >= len(current_desc):
             company_info["description"] = incoming_company["description"]
+    for key in ("city_intro", "city_positioning", "business_context", "audience_profile", "media_value"):
+        if incoming_company.get(key):
+            current_value = company_info.get(key) or ""
+            if not current_value or len(incoming_company[key]) >= len(current_value):
+                company_info[key] = incoming_company[key]
     if incoming_company.get("advantages"):
         company_info["advantages"] = _merge_unique_strings(
             company_info.get("advantages") or [],

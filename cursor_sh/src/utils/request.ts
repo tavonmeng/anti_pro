@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
 import type { ApiResponse } from '@/types'
+import { loginPathForRoute } from '@/utils/deployment'
 
 // 扩展 AxiosRequestConfig 以支持 silent 标记
 declare module 'axios' {
@@ -96,11 +97,11 @@ request.interceptors.response.use(
           // 登录页面或弹窗中的401错误不跳转，只显示错误信息
           const currentPath = window.location.pathname
           const isAuthModalOpen = !!document.querySelector('.auth-modal-overlay')
-          if (currentPath !== '/login' && currentPath !== '/admin/login' && currentPath !== '/register' && !isAuthModalOpen) {
+          if (currentPath !== '/login' && currentPath !== '/admin/login' && currentPath !== '/contractor/login' && currentPath !== '/register' && !isAuthModalOpen) {
             ElMessage.error('未授权，请重新登录')
             localStorage.removeItem('token')
             localStorage.removeItem('user')
-            window.location.href = '/login'
+            window.location.href = loginPathForRoute(currentPath)
           } else {
             ElMessage.error(errorMessage)
           }

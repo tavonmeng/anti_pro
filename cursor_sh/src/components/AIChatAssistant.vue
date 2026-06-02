@@ -778,6 +778,7 @@ const clonePlain = <T,>(value: T): T => JSON.parse(JSON.stringify(value))
 
 // ===== 文件上传相关 =====
 type UploadedFile = {
+  id?: string
   name: string
   url: string
   isImage: boolean
@@ -787,6 +788,22 @@ type UploadedFile = {
   uploadTime: string
   objectKey?: string
 }
+
+const createUploadedFileId = () => {
+  const random = Math.random().toString(36).slice(2, 10)
+  return `file-${Date.now()}-${random}`
+}
+
+const toOrderFileUpload = (file: UploadedFile, index: number) => ({
+  id: file.id || `upload_${Date.now()}_${index}`,
+  name: file.name,
+  size: file.size || 0,
+  type: file.type || 'application/octet-stream',
+  uploadTime: file.uploadTime || new Date().toISOString(),
+  url: file.url,
+  file_url: file.url,
+  object_key: file.objectKey || ''
+})
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const genericFileInputRef = ref<HTMLInputElement | null>(null)
@@ -843,6 +860,7 @@ const handleFileSelected = async (e: Event) => {
         const data = await res.json()
         const isImage = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.name)
         uploadedFiles.value.push({
+          id: data.id || createUploadedFileId(),
           name: file.name,
           url: data.url || data.file_url || '',
           isImage,
@@ -2444,15 +2462,7 @@ const autoExtractAndSaveDraft = async () => {
     try {
       const orderType = businessType.value
       // 构造 scenePhotos 数组（后端需要 FileUpload 格式的对象数组）
-      const scenePhotos = submittedFiles.value.map((f, idx) => ({
-        id: `upload_${Date.now()}_${idx}`,
-        name: f.name,
-        size: f.size || 0,
-        type: f.type || 'application/octet-stream',
-        uploadTime: f.uploadTime || new Date().toISOString(),
-        url: f.url,
-        object_key: f.objectKey || ''
-      }))
+      const scenePhotos = submittedFiles.value.map(toOrderFileUpload)
       const newOrder = await orderStore.createOrder({ orderType, ...extracted, scenePhotos }, true)
       draftSavedOrderId.value = newOrder.id
     } catch (e) {
@@ -2494,15 +2504,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   showConfirmation.value = false
   try {
     // 构造 scenePhotos 数组（后端需要 FileUpload 格式的对象数组）
-    const scenePhotos = submittedFiles.value.map((f, idx) => ({
-      id: `upload_${Date.now()}_${idx}`,
-      name: f.name,
-      size: f.size || 0,
-      type: f.type || 'application/octet-stream',
-      uploadTime: f.uploadTime || new Date().toISOString(),
-      url: f.url,
-      object_key: f.objectKey || ''
-    }))
+    const scenePhotos = submittedFiles.value.map(toOrderFileUpload)
     if (draftSavedOrderId.value) {
       await orderStore.updateOrder(draftSavedOrderId.value, {
         orderType: confirmOrderType.value,

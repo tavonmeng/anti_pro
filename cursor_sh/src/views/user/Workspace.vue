@@ -72,6 +72,43 @@
           <div class="full-ai-container" v-else-if="uiStore.isAiExpanded">
             <AIChatAssistant @close="handleAiExpand(false)" @mode-change="handleModeChange" />
           </div>
+
+          <!-- Service focus fallback while lazy-loaded business routes resolve -->
+          <div v-else class="service-focus-state">
+            <div v-if="activeService" class="service-focus-panel">
+              <div class="service-focus-media" :style="{ background: activeService.gradient }">
+                <img class="service-focus-image" :src="activeService.image" :alt="activeService.title" />
+                <div class="service-focus-badge">{{ getServiceBadgeLabel(activeService.badge) }}</div>
+              </div>
+              <div class="service-focus-copy">
+                <div class="section-label">SERVICE DETAIL</div>
+                <h2 class="service-focus-title">{{ activeService.title }}</h2>
+                <p class="service-focus-subtitle">{{ activeService.subtitle }}</p>
+                <p class="service-focus-description">{{ activeService.description }}</p>
+                <div class="service-focus-features">
+                  <span v-for="feature in activeService.features" :key="feature">{{ feature }}</span>
+                </div>
+                <div class="service-focus-actions">
+                  <el-button type="primary" @click="goToActiveService">
+                    {{ activeService.type === 'video_purchase' ? '查看资源库' : (activeService.orderable ? '填写需求' : '咨询服务') }}
+                    <el-icon class="action-icon"><Right /></el-icon>
+                  </el-button>
+                  <el-button @click="handleAiExpand(true)">AI 顾问</el-button>
+                </div>
+              </div>
+            </div>
+            <div v-else class="overview-state">
+              <div class="hero-banner">
+                <h1 class="hero-title">Unique Vision AI智能体 | 咨询·需求·下单，一站式协助</h1>
+                <div class="hero-input-area" @click="handleAiExpand(true)">
+                  <input type="text" :placeholder="placeholderText" class="hero-input" readonly />
+                  <div class="generate-btn">
+                    发送 <span class="sparkle" aria-hidden="true"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </transition>
 
       </div> <!-- end main-column -->
@@ -84,12 +121,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, onUnmounted } from 'vue'
+import { computed, onMounted, ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { Right } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { useUiStore } from '@/stores/ui'
-import { getServiceBadgeLabel, platformServices, type ServiceType } from '@/data/platformServices'
+import { getServiceBadgeLabel, getServiceByType, platformServices, type ServiceType } from '@/data/platformServices'
 import AIChatAssistant from '@/components/AIChatAssistant.vue'
 import StyleInspirationSidebar from '@/components/StyleInspirationSidebar.vue'
 import { logger } from '@/utils/logger'
@@ -100,6 +138,7 @@ const uiStore = useUiStore()
 
 const aiSelectedMode = ref<string | null>(null)
 const showInspiration = ref(true)
+const activeService = computed(() => getServiceByType(uiStore.activeModule))
 
 const promptTexts = [
   "我想做一个关于蒙牛品牌推广的3D视频，主题是...",
@@ -195,18 +234,30 @@ const handleModeChange = (mode: string) => {
   logger.logAction('Workspace', 'switch_ai_mode', { mode })
 }
 
+const getServiceTargetPath = (targetType: ServiceType) => {
+  return targetType === 'video_purchase'
+    ? '/user/video-marketplace'
+    : `/user/create-order/${targetType}`
+}
+
+const goToActiveService = async () => {
+  const type = activeService.value?.type
+  if (!type) return
+  await triggerChoreography(type)
+}
+
 const triggerChoreography = async (targetType: ServiceType | null) => {
-  // B2B direct routing layout shift: instantly navigate and apply system states
   if (targetType) {
     logger.logAction('Workspace', 'click_service_card', { targetType })
     uiStore.setIsAiExpanded(false)
     uiStore.setSecondarySidebar(true)
     uiStore.toggleSidebar(true)
     uiStore.setActiveModule(targetType)
-    if (targetType === 'video_purchase') {
-      await router.push('/user/video-marketplace')
-    } else {
-      await router.push(`/user/create-order/${targetType}`)
+    try {
+      await router.push(getServiceTargetPath(targetType))
+    } catch (error) {
+      console.error('业务模块页面加载失败:', error)
+      ElMessage.error('业务模块页面加载失败，请稍后重试')
     }
   } else {
     handleAiExpand(true)
@@ -557,6 +608,118 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
   font-size: 18px;
 }
 
+.service-focus-state {
+  height: 100%;
+  padding: 32px 40px;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.service-focus-panel {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+  max-width: 1080px;
+}
+
+.service-focus-media {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.service-focus-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.service-focus-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  max-width: calc(100% - 24px);
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: #000;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-focus-copy {
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.section-label {
+  font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: #747474;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 16px;
+}
+
+.service-focus-title {
+  margin: 0 0 8px;
+  color: var(--uv-ws-service-title, #1b1b1c);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.service-focus-subtitle {
+  margin: 0 0 18px;
+  color: var(--uv-ws-service-subtitle, #414754);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.service-focus-description {
+  margin: 0 0 20px;
+  max-width: 680px;
+  color: var(--uv-ws-service-intro, #646a78);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.service-focus-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 28px;
+}
+
+.service-focus-features span {
+  border: 1px solid var(--uv-ws-service-tag-border, #c1c6d6);
+  border-radius: 4px;
+  padding: 5px 9px;
+  font-size: 12px;
+  color: var(--uv-ws-service-tag-text, #414754);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.service-focus-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.action-icon {
+  margin-left: 4px;
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.4s ease, transform 0.4s ease;
@@ -597,6 +760,21 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
   font-size: 12px;
   color: var(--uv-ws-business-subtitle, #646a78);
   transition: opacity 0.4s ease;
+}
+
+@media (max-width: 900px) {
+  .service-focus-state {
+    padding: 24px;
+  }
+
+  .service-focus-panel {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .service-focus-title {
+    font-size: 24px;
+  }
 }
 
 .figma-divider {

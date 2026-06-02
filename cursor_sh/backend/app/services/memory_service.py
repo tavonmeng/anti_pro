@@ -555,11 +555,24 @@ def build_memory_context(memory: UserMemory | None) -> str:
 
     # 公司信息
     ci = memory.company_info or {}
+    company_context_lines = []
     if ci.get("description"):
+        company_context_lines.append(f"简介：{ci.get('description', '')}")
+    if ci.get("city_intro"):
+        company_context_lines.append(f"城市介绍：{ci.get('city_intro', '')}")
+    if ci.get("city_positioning"):
+        company_context_lines.append(f"城市定位：{ci.get('city_positioning', '')}")
+    if ci.get("business_context"):
+        company_context_lines.append(f"商圈/商业背景：{ci.get('business_context', '')}")
+    if ci.get("audience_profile"):
+        company_context_lines.append(f"受众画像：{ci.get('audience_profile', '')}")
+    if ci.get("media_value"):
+        company_context_lines.append(f"媒体价值：{ci.get('media_value', '')}")
+    if company_context_lines:
         sections.append(
-            f"\n【客户背景信息 — 来自公司官网】\n"
+            f"\n【客户背景信息 — 来自客户资料】\n"
             f"公司：{ci.get('name', '未知')}\n"
-            f"简介：{ci.get('description', '')}\n"
+            + "\n".join(company_context_lines) + "\n"
         )
         if ci.get("advantages"):
             sections.append(f"核心优势：{'、'.join(ci['advantages'])}\n")
@@ -569,19 +582,41 @@ def build_memory_context(memory: UserMemory | None) -> str:
     if screens:
         lines = []
         for s in screens:
-            parts = [s.get("city", ""), s.get("name", "") or s.get("location", "")]
+            location = s.get("media_position") or s.get("location", "")
+            parts = [s.get("city", ""), s.get("district", ""), s.get("name", "") or location]
             if s.get("specs"):
                 parts.append(s["specs"])
             if s.get("type"):
                 parts.append(s["type"])
             if s.get("size"):
                 parts.append(s["size"])
+            if s.get("area"):
+                parts.append(s["area"])
             if s.get("resolution"):
                 parts.append(s["resolution"])
+            if s.get("play_frequency"):
+                parts.append(f"播放频次{s['play_frequency']}")
+            if s.get("play_time"):
+                parts.append(f"播放时间{s['play_time']}")
+            if s.get("list_price"):
+                parts.append(f"刊例价{s['list_price']}")
+            if s.get("location_intro"):
+                parts.append(f"位置介绍{s['location_intro']}")
+            if s.get("business_district"):
+                parts.append(f"商圈{s['business_district']}")
+            if s.get("surrounding_landmarks"):
+                parts.append(f"周边{s['surrounding_landmarks']}")
+            if s.get("audience_profile"):
+                parts.append(f"受众{s['audience_profile']}")
+            media_advantages = s.get("media_advantages") or []
+            if isinstance(media_advantages, list) and media_advantages:
+                parts.append(f"媒体优势{'、'.join(str(x) for x in media_advantages if str(x).strip())}")
             if s.get("notes"):
                 parts.append(s["notes"])
             if s.get("daily_traffic"):
-                parts.append(f"日均客流{s['daily_traffic']}")
+                parts.append(f"日媒体接触人次{s['daily_traffic']}")
+            if s.get("holiday_traffic"):
+                parts.append(f"节假日接触人次{s['holiday_traffic']}")
             if s.get("viewing_path"):
                 parts.append(f"观看动线{s['viewing_path']}")
             lines.append(f"  • {' | '.join(p for p in parts if p)}")

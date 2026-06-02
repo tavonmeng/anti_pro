@@ -32,13 +32,24 @@ def _role_value(role) -> str:
 
 
 def _ensure_role_allowed_for_deployment(role: UserRole) -> None:
-    """External deployment is customer-facing and must not expose internal auth."""
+    """Keep external customer auth and internal actor auth on separate deployments."""
     role_value = _role_value(role)
     deploy_mode = (settings.DEPLOYMENT_MODE or "").strip().lower()
     if deploy_mode == "external" and role_value != UserRole.USER.value:
         log_business_event(
             logger,
             "internal_role_auth_blocked_on_external",
+            level="warning",
+            role=role_value,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="接口不存在",
+        )
+    if deploy_mode == "internal" and role_value == UserRole.USER.value:
+        log_business_event(
+            logger,
+            "user_role_auth_blocked_on_internal",
             level="warning",
             role=role_value,
         )
@@ -203,6 +214,12 @@ async def register(db: AsyncSession, register_data: RegisterRequest, client_ip: 
     注册只允许 user 角色。admin 和 staff 由管理员后台创建。
     包含反注册机行为分析 + 安全事件审计。
     """
+    if (settings.DEPLOYMENT_MODE or "").strip().lower() == "internal":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="接口不存在",
+        )
+
     # 构建行为数据快照（用于写入安全事件表）
     behavior = register_data.behavior
     behavior_snapshot = behavior.model_dump() if behavior else None

@@ -52,6 +52,42 @@ def build_llm_text(sections: list[ParsedSection]) -> str:
     return "\n\n".join(parts)
 
 
+def build_llm_text_chunks(
+    sections: list[ParsedSection],
+    *,
+    max_chunk_chars: int = 18000,
+    max_total_chars: int = 120000,
+) -> list[str]:
+    """构建可分段送入 LLM 的带来源文本块。"""
+    chunks: list[str] = []
+    current_parts: list[str] = []
+    current_len = 0
+    total = 0
+    max_chunk_chars = max(4000, int(max_chunk_chars or 18000))
+    max_total_chars = max(max_chunk_chars, int(max_total_chars or 120000))
+
+    for section in sections:
+        text = _clean_text(section.text)
+        if not text:
+            continue
+        if len(text) > MAX_SECTION_CHARS:
+            text = text[:MAX_SECTION_CHARS] + "\n...(本页内容已截断)"
+        block = f"【来源：{section.label}】\n{text}"
+        if total + len(block) > max_total_chars:
+            break
+        if current_parts and current_len + len(block) > max_chunk_chars:
+            chunks.append("\n\n".join(current_parts))
+            current_parts = []
+            current_len = 0
+        current_parts.append(block)
+        current_len += len(block)
+        total += len(block)
+
+    if current_parts:
+        chunks.append("\n\n".join(current_parts))
+    return chunks
+
+
 def _parse_pdf(file_path: str) -> list[ParsedSection]:
     try:
         from pypdf import PdfReader

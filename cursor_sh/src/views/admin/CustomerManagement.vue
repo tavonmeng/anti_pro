@@ -20,6 +20,7 @@
       </el-input>
       <el-button type="primary" @click="loadCustomers">搜索</el-button>
       <el-button @click="searchKeyword = ''; loadCustomers()">重置</el-button>
+      <el-button type="success" @click="prospectDialogVisible = true">新增未注册客户</el-button>
     </div>
 
     <!-- 客户列表 -->
@@ -38,6 +39,7 @@
             <div>
               <div class="username">{{ row.username }}</div>
               <div class="user-phone" v-if="row.phone">{{ row.phone }}</div>
+              <el-tag v-if="row.isProspect" type="warning" size="small" effect="plain">未注册</el-tag>
             </div>
           </div>
         </template>
@@ -58,6 +60,7 @@
       <el-table-column label="画像状态" width="120" align="center">
         <template #default="{ row }">
           <el-tag v-if="row.memory?.hasCrawl" type="success" size="small">已分析</el-tag>
+          <el-tag v-else-if="row.memory?.hasMemory" type="success" size="small">已建档</el-tag>
           <el-tag v-else-if="row.memory?.crawlStatus === 'pending'" type="warning" size="small">分析中</el-tag>
           <el-tag v-else-if="row.memory?.crawlStatus === 'failed'" type="danger" size="small">分析失败</el-tag>
           <el-tag v-else type="info" size="small">未分析</el-tag>
@@ -70,20 +73,33 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="操作" width="180" fixed="right">
+      <el-table-column label="操作" width="260" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" type="primary" link @click="openProfile(row)">
-            查看画像
-          </el-button>
-          <el-button
-            size="small"
-            type="warning"
-            link
-            :loading="row._crawling"
-            @click="triggerCrawl(row)"
-          >
-            {{ row.memory?.hasCrawl ? '重新分析' : '分析官网' }}
-          </el-button>
+          <div class="table-actions">
+            <el-button size="small" type="primary" link @click="openProfile(row)">
+              查看画像
+            </el-button>
+            <el-upload
+              class="inline-upload"
+              :show-file-list="false"
+              :http-request="(options: any) => uploadCustomerDocumentForRow(options, row)"
+              :before-upload="beforeCustomerDocumentUpload"
+              accept=".pdf,.docx,.pptx"
+            >
+              <el-button size="small" type="success" link :icon="Upload" :loading="row._uploading">
+                上传资料
+              </el-button>
+            </el-upload>
+            <el-button
+              size="small"
+              type="warning"
+              link
+              :loading="row._crawling"
+              @click="triggerCrawl(row)"
+            >
+              {{ row.memory?.hasCrawl ? '重新分析' : '分析官网' }}
+            </el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -117,10 +133,21 @@
           <h4>📋 基本信息</h4>
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item label="用户名">{{ activeCustomer?.username }}</el-descriptions-item>
+            <el-descriptions-item label="客户类型">{{ activeCustomer?.isProspect ? '未注册客户' : '已注册客户' }}</el-descriptions-item>
             <el-descriptions-item label="手机号">{{ activeCustomer?.phone || '-' }}</el-descriptions-item>
             <el-descriptions-item label="公司">{{ profileData.user_company || activeCustomer?.company || '-' }}</el-descriptions-item>
             <el-descriptions-item label="订单数">{{ activeCustomer?.orderCount || 0 }}</el-descriptions-item>
           </el-descriptions>
+          <div class="company-editor">
+            <el-input
+              v-model="companyNameDraft"
+              placeholder="公司名称，可由资料自动提取后手动修正"
+              clearable
+            />
+            <el-button type="primary" :loading="companyNameSaving" @click="saveCompanyName">
+              保存公司名称
+            </el-button>
+          </div>
         </div>
 
         <!-- 客户资料导入 -->
@@ -179,8 +206,8 @@
         </div>
 
         <!-- 公司分析结果 -->
-        <div v-if="profileData.company_info?.description" class="profile-section">
-          <h4>🏢 公司官网分析</h4>
+        <div v-if="hasCompanyInfo" class="profile-section">
+          <h4>🏢 客户资料背景</h4>
           <el-descriptions :column="1" border size="small">
             <el-descriptions-item label="公司名称">{{ profileData.company_info.name || '-' }}</el-descriptions-item>
             <el-descriptions-item label="官网">
@@ -190,6 +217,11 @@
               <span v-else>-</span>
             </el-descriptions-item>
             <el-descriptions-item label="简介">{{ profileData.company_info.description }}</el-descriptions-item>
+            <el-descriptions-item v-if="profileData.company_info.city_intro" label="城市介绍">{{ profileData.company_info.city_intro }}</el-descriptions-item>
+            <el-descriptions-item v-if="profileData.company_info.city_positioning" label="城市定位">{{ profileData.company_info.city_positioning }}</el-descriptions-item>
+            <el-descriptions-item v-if="profileData.company_info.business_context" label="商圈背景">{{ profileData.company_info.business_context }}</el-descriptions-item>
+            <el-descriptions-item v-if="profileData.company_info.audience_profile" label="受众画像">{{ profileData.company_info.audience_profile }}</el-descriptions-item>
+            <el-descriptions-item v-if="profileData.company_info.media_value" label="媒体价值">{{ profileData.company_info.media_value }}</el-descriptions-item>
             <el-descriptions-item label="核心优势" v-if="profileData.company_info.advantages?.length">
               <el-tag v-for="adv in profileData.company_info.advantages" :key="adv" size="small" style="margin-right: 4px;">{{ adv }}</el-tag>
             </el-descriptions-item>
@@ -203,13 +235,22 @@
           <el-table :data="profileData.screen_resources" size="small" border stripe>
             <el-table-column prop="city" label="城市" width="80" />
             <el-table-column label="屏幕/点位" min-width="160" show-overflow-tooltip>
-              <template #default="{ row }">{{ row.name || row.location || '-' }}</template>
+              <template #default="{ row }">{{ row.name || row.media_position || row.location || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="商圈/位置" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ screenLocationText(row) }}</template>
             </el-table-column>
             <el-table-column label="参数摘要" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">{{ row.specs || [row.type, row.size, row.resolution].filter(Boolean).join('，') || '-' }}</template>
+              <template #default="{ row }">{{ row.specs || [row.type, row.size, row.area, row.resolution && `分辨率${row.resolution}`].filter(Boolean).join('，') || '-' }}</template>
             </el-table-column>
-            <el-table-column label="备注" min-width="220" show-overflow-tooltip>
-              <template #default="{ row }">{{ row.notes || [row.daily_traffic && `日均客流${row.daily_traffic}`, row.viewing_path && `观看动线${row.viewing_path}`, row.highlights].filter(Boolean).join('；') || '-' }}</template>
+            <el-table-column label="投放/价格" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ screenDeliveryText(row) }}</template>
+            </el-table-column>
+            <el-table-column label="受众/优势" min-width="240" show-overflow-tooltip>
+              <template #default="{ row }">{{ screenValueText(row) }}</template>
+            </el-table-column>
+            <el-table-column label="备注" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.notes || '-' }}</template>
             </el-table-column>
           </el-table>
         </div>
@@ -295,6 +336,37 @@
     </el-drawer>
 
     <el-dialog
+      v-model="prospectDialogVisible"
+      title="新增未注册客户"
+      width="520px"
+      destroy-on-close
+    >
+      <el-form label-position="top">
+        <el-form-item label="公司名称">
+          <el-input v-model="prospectForm.company_name" placeholder="可先留空，上传资料后自动提取" />
+        </el-form-item>
+        <el-form-item label="联系人">
+          <el-input v-model="prospectForm.contact_name" placeholder="选填" />
+        </el-form-item>
+        <el-form-item label="手机号">
+          <el-input v-model="prospectForm.phone" placeholder="选填" />
+        </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input v-model="prospectForm.email" placeholder="选填" />
+        </el-form-item>
+        <el-form-item label="Agent 备忘">
+          <el-input v-model="prospectForm.agent_notes" type="textarea" :rows="3" placeholder="选填，AI 对话时会参考" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="prospectDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="prospectLoading" @click="createProspect">
+          创建并导入资料
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
       v-model="reviewDialogVisible"
       title="客户资料审核"
       width="920px"
@@ -334,11 +406,26 @@
               <el-table-column label="屏幕/点位" min-width="150">
                 <template #default="{ row }"><el-input v-model="row.name" size="small" /></template>
               </el-table-column>
+              <el-table-column label="商圈" min-width="130">
+                <template #default="{ row }"><el-input v-model="row.business_district" size="small" /></template>
+              </el-table-column>
+              <el-table-column label="位置介绍" min-width="190">
+                <template #default="{ row }"><el-input v-model="row.location_intro" size="small" /></template>
+              </el-table-column>
+              <el-table-column label="周边" min-width="160">
+                <template #default="{ row }"><el-input v-model="row.surrounding_landmarks" size="small" /></template>
+              </el-table-column>
               <el-table-column label="参数摘要" min-width="170">
                 <template #default="{ row }"><el-input v-model="row.specs" size="small" placeholder="如 30m×20m，3:2比例" /></template>
               </el-table-column>
+              <el-table-column label="投放/价格" min-width="190">
+                <template #default="{ row }"><span class="review-readonly">{{ screenDeliveryText(row) }}</span></template>
+              </el-table-column>
+              <el-table-column label="受众/优势" min-width="190">
+                <template #default="{ row }"><el-input v-model="row.media_advantages_text" size="small" placeholder="每条用分号隔开" /></template>
+              </el-table-column>
               <el-table-column label="备注" min-width="200">
-                <template #default="{ row }"><el-input v-model="row.notes" size="small" placeholder="观看动线、客流、遮挡等" /></template>
+                <template #default="{ row }"><el-input v-model="row.notes" size="small" placeholder="补充说明/投放规则" /></template>
               </el-table-column>
               <el-table-column label="操作" width="70">
                 <template #default="{ $index }">
@@ -409,9 +496,20 @@ const profileData = ref<any>(null)
 const profileLoading = ref(false)
 const agentNotes = ref('')
 const notesLoading = ref(false)
+const companyNameDraft = ref('')
+const companyNameSaving = ref(false)
 const customerDocuments = ref<any[]>([])
 const documentsLoading = ref(false)
 const docUploadLoading = ref(false)
+const prospectDialogVisible = ref(false)
+const prospectLoading = ref(false)
+const prospectForm = ref({
+  company_name: '',
+  contact_name: '',
+  phone: '',
+  email: '',
+  agent_notes: '',
+})
 const reviewDialogVisible = ref(false)
 const activeDocument = ref<any>(null)
 const approveLoading = ref(false)
@@ -428,6 +526,42 @@ const hasPreferences = computed(() => {
     pp.budget_range || pp.typical_duration || pp.notes
   )
 })
+
+const hasCompanyInfo = computed(() => {
+  const ci = profileData.value?.company_info || {}
+  return Boolean(
+    ci.description ||
+    ci.city_intro ||
+    ci.city_positioning ||
+    ci.business_context ||
+    ci.audience_profile ||
+    ci.media_value ||
+    ci.advantages?.length
+  )
+})
+
+const joinParts = (parts: any[]) => parts.map((part) => String(part || '').trim()).filter(Boolean).join('；') || '-'
+
+const screenLocationText = (row: any) => joinParts([
+  row.business_district && `商圈：${row.business_district}`,
+  row.location_intro && `位置：${row.location_intro}`,
+  row.surrounding_landmarks && `周边：${row.surrounding_landmarks}`,
+])
+
+const screenDeliveryText = (row: any) => joinParts([
+  row.play_frequency && `播放频次：${row.play_frequency}`,
+  row.play_time && `播放时间：${row.play_time}`,
+  row.list_price && `刊例价：${row.list_price}`,
+  row.daily_traffic && `日媒体接触人次：${row.daily_traffic}`,
+  row.holiday_traffic && `节假日接触人次：${row.holiday_traffic}`,
+])
+
+const screenValueText = (row: any) => joinParts([
+  row.audience_profile && `受众：${row.audience_profile}`,
+  ...(Array.isArray(row.media_advantages) ? row.media_advantages.map((adv) => `媒体优势：${adv}`) : []),
+  row.viewing_path && `观看动线：${row.viewing_path}`,
+  row.highlights,
+])
 
 const loadCustomers = async () => {
   loading.value = true
@@ -460,11 +594,65 @@ const openProfile = async (row: any) => {
     const res: any = await request.get(`/admin/memory/${row.userId}`)
     profileData.value = res
     agentNotes.value = res?.agent_notes || ''
+    companyNameDraft.value = res?.company_info?.name || res?.user_company || row.company || ''
     await loadDocuments()
   } catch (e) {
     console.error('加载画像失败:', e)
   } finally {
     profileLoading.value = false
+  }
+}
+
+const createProspect = async () => {
+  if (!prospectForm.value.company_name.trim() && !prospectForm.value.contact_name.trim()) {
+    ElMessage.error('请至少填写公司名称或联系人')
+    return
+  }
+  prospectLoading.value = true
+  try {
+    const created: any = await request.post('/admin/memory/prospects', prospectForm.value)
+    ElMessage.success('未注册客户已创建，可以上传资料了')
+    prospectDialogVisible.value = false
+    prospectForm.value = {
+      company_name: '',
+      contact_name: '',
+      phone: '',
+      email: '',
+      agent_notes: '',
+    }
+    await loadCustomers()
+    if (created?.userId) {
+      await openProfile(created)
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '创建未注册客户失败')
+  } finally {
+    prospectLoading.value = false
+  }
+}
+
+const saveCompanyName = async () => {
+  if (!activeCustomer.value?.userId) return
+  const companyName = companyNameDraft.value.trim()
+  if (!companyName) {
+    ElMessage.error('公司名称不能为空')
+    return
+  }
+  companyNameSaving.value = true
+  try {
+    await request.put(`/admin/memory/${activeCustomer.value.userId}/company-name`, {
+      company_name: companyName,
+    })
+    if (!profileData.value.company_info) profileData.value.company_info = {}
+    profileData.value.company_info.name = companyName
+    profileData.value.user_company = companyName
+    activeCustomer.value.company = companyName
+    ElMessage.success('公司名称已保存')
+    await loadCustomers()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '保存公司名称失败')
+  } finally {
+    companyNameSaving.value = false
   }
 }
 
@@ -494,25 +682,42 @@ const beforeCustomerDocumentUpload = (file: File) => {
   return true
 }
 
+const uploadCustomerDocumentForRow = async (options: any, row: any) => {
+  await uploadCustomerDocumentForCustomer(options, row, true)
+}
+
 const uploadCustomerDocument = async (options: any) => {
-  if (!activeCustomer.value?.userId) return
+  await uploadCustomerDocumentForCustomer(options, activeCustomer.value, false)
+}
+
+const uploadCustomerDocumentForCustomer = async (options: any, customer: any, openAfterUpload: boolean) => {
+  if (!customer?.userId) {
+    ElMessage.error('请先选择客户')
+    return
+  }
   docUploadLoading.value = true
+  customer._uploading = true
   const formData = new FormData()
   formData.append('file', options.file)
   try {
-    await request.post(`/admin/documents/${activeCustomer.value.userId}/upload`, formData, {
+    await request.post(`/admin/documents/${customer.userId}/upload`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 60000,
     })
     options.onSuccess?.({}, options.file)
     ElMessage.success('资料已上传，正在抽取客户知识')
-    await loadDocuments()
+    if (openAfterUpload) {
+      await openProfile(customer)
+    } else {
+      await loadDocuments()
+    }
     setTimeout(loadDocuments, 4000)
   } catch (e: any) {
     options.onError?.(e)
     ElMessage.error(e?.response?.data?.detail || '上传资料失败')
   } finally {
     docUploadLoading.value = false
+    customer._uploading = false
   }
 }
 
@@ -559,7 +764,14 @@ const approveDocument = async () => {
 
 const addScreenResource = () => {
   reviewForm.value.screen_resources.push({
-    city: '', name: '', specs: '', notes: ''
+    city: '',
+    name: '',
+    business_district: '',
+    location_intro: '',
+    surrounding_landmarks: '',
+    specs: '',
+    media_advantages_text: '',
+    notes: '',
   })
 }
 
@@ -571,7 +783,16 @@ const addPastCase = () => {
 
 function emptyReviewData() {
   return {
-    company_info: { name: '', description: '', advantages: [] },
+    company_info: {
+      name: '',
+      description: '',
+      city_intro: '',
+      city_positioning: '',
+      business_context: '',
+      audience_profile: '',
+      media_value: '',
+      advantages: [],
+    },
     screen_resources: [],
     past_cases: [],
     important_notes: [],
@@ -587,7 +808,14 @@ function normalizeReviewData(data: any) {
       ...(copy.company_info || {}),
       advantages: Array.isArray(copy.company_info?.advantages) ? copy.company_info.advantages : [],
     },
-    screen_resources: Array.isArray(copy.screen_resources) ? copy.screen_resources : [],
+    screen_resources: Array.isArray(copy.screen_resources)
+      ? copy.screen_resources.map((screen: any) => ({
+          ...screen,
+          media_advantages_text: Array.isArray(screen.media_advantages)
+            ? screen.media_advantages.join('；')
+            : (screen.media_advantages || ''),
+        }))
+      : [],
     past_cases: Array.isArray(copy.past_cases) ? copy.past_cases : [],
     important_notes: Array.isArray(copy.important_notes) ? copy.important_notes : [],
   }
@@ -606,9 +834,13 @@ function buildReviewedPayload() {
     .map((note) => ({ note }))
   data.screen_resources = (data.screen_resources || []).map((s: any) => ({
     ...s,
-    name: s.name || s.location || '',
-    specs: s.specs || [s.type, s.size, s.resolution].filter(Boolean).join('，'),
-    notes: s.notes || [s.daily_traffic && `日均客流${s.daily_traffic}`, s.viewing_path && `观看动线${s.viewing_path}`, s.highlights].filter(Boolean).join('；'),
+    name: s.name || s.media_position || s.location || '',
+    specs: s.specs || [s.type, s.size, s.area, s.resolution && `分辨率${s.resolution}`].filter(Boolean).join('，'),
+    media_advantages: String(s.media_advantages_text || '')
+      .split(/[；;\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+    notes: s.notes || '',
   })).filter((s: any) => s.city || s.name || s.specs)
   data.past_cases = (data.past_cases || []).filter((c: any) => c.title || c.brand)
   return data
@@ -734,10 +966,26 @@ onMounted(() => {
   color: #909399;
 }
 
+.user-cell .el-tag {
+  margin-top: 4px;
+}
+
 .pagination-wrapper {
   display: flex;
   justify-content: center;
   margin-top: 16px;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.inline-upload {
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Drawer Profile */
@@ -756,6 +1004,17 @@ onMounted(() => {
 
 .profile-section {
   margin-bottom: 24px;
+}
+
+.company-editor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.company-editor .el-input {
+  max-width: 420px;
 }
 
 .section-header,
@@ -823,6 +1082,14 @@ onMounted(() => {
 
 .review-error {
   color: #f56c6c;
+}
+
+.review-readonly {
+  display: inline-block;
+  color: #606266;
+  font-size: 12px;
+  line-height: 1.4;
+  max-width: 220px;
 }
 
 .review-block {

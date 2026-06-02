@@ -31,6 +31,16 @@ def test_internal_deployment_allows_internal_role_auth(monkeypatch):
     auth_service._ensure_role_allowed_for_deployment(UserRole.ADMIN)
 
 
+def test_internal_deployment_blocks_user_role_auth(monkeypatch):
+    monkeypatch.setattr(auth_service.settings, "DEPLOYMENT_MODE", "internal")
+    monkeypatch.setattr(auth_service, "log_business_event", lambda *_, **__: None)
+
+    with pytest.raises(HTTPException) as exc:
+        auth_service._ensure_role_allowed_for_deployment(UserRole.USER)
+
+    assert exc.value.status_code == 404
+
+
 def test_external_password_reset_searches_only_users(monkeypatch):
     monkeypatch.setattr(auth_service.settings, "DEPLOYMENT_MODE", "external")
 

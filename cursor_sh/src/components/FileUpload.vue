@@ -82,6 +82,11 @@ const uploadRef = ref<UploadInstance>()
 const fileList = ref<UploadUserFile[]>([])
 const uploadedFiles = ref<UploadedFile[]>(props.modelValue || [])
 
+const createUploadFileId = () => {
+  const random = Math.random().toString(36).slice(2, 10)
+  return `file-${Date.now()}-${random}`
+}
+
 watch(() => props.modelValue, (newVal) => {
   uploadedFiles.value = newVal || []
 })
@@ -109,7 +114,7 @@ const uploadSelectedFile = async (file: File): Promise<UploadedFile> => {
   const data = payload.data || {}
   const isImage = isImageFile(data.filename || file.name, data.mime_type || file.type)
   return {
-    id: data.object_key || data.url || `${file.name}-${Date.now()}`,
+    id: data.id || createUploadFileId(),
     name: data.filename || file.name,
     size: data.size ?? file.size,
     type: data.mime_type || file.type,
