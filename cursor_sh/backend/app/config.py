@@ -221,7 +221,7 @@ class Settings(BaseSettings):
     SMS_VALID_TIME: int = 300        # 验证码有效期（秒）5分钟
     
     # 邮件配置
-    SMTP_HOST: str = "smtp.qq.com"
+    SMTP_HOST: str = "smtp.qiye.aliyun.com"
     SMTP_PORT: int = 465
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""

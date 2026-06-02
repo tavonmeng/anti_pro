@@ -90,7 +90,7 @@
               邮件联系
             </h5>
             <ul>
-              <li><a href="mailto:service@uniquevisionx.com">service@uniquevisionx.com</a></li>
+              <li><a href="mailto:support@uniquevisionx.com">support@uniquevisionx.com</a></li>
             </ul>
           </div>
         </nav>

@@ -682,8 +682,8 @@ const beforeCustomerDocumentUpload = (file: File) => {
     ElMessage.error('仅支持 PDF / Word(docx) / PPT(pptx)')
     return false
   }
-  if (file.size > 50 * 1024 * 1024) {
-    ElMessage.error('文件大小不能超过50MB')
+  if (file.size > 200 * 1024 * 1024) {
+    ElMessage.error('文件大小不能超过200MB')
     return false
   }
   return true
@@ -709,7 +709,7 @@ const uploadCustomerDocumentForCustomer = async (options: any, customer: any, op
   try {
     await request.post(`/admin/documents/${customer.userId}/upload`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 60000,
+      timeout: 300000,
     })
     options.onSuccess?.({}, options.file)
     ElMessage.success('资料已上传，正在抽取客户知识')

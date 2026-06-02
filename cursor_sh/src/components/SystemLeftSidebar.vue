@@ -347,7 +347,7 @@ const navigate = async (name: string) => {
 
 const showHelp = () => {
   ElMessageBox.alert(
-    '请您联系我们的设计专家<br>电话：400-888-8888<br>邮件：service@uniquevisionx.com',
+    '请您联系我们的设计专家<br>电话：400-888-8888<br>邮件：support@uniquevisionx.com',
     '帮助与支持',
     {
       dangerouslyUseHTMLString: true,

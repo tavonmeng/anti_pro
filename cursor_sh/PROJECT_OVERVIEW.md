@@ -532,9 +532,9 @@ npm run dev
 
 ### 团队联系
 
-- **产品团队**: service@uniquevisionx.com
-- **技术团队**: service@uniquevisionx.com
-- **运维团队**: service@uniquevisionx.com
+- **产品团队**: support@uniquevisionx.com
+- **技术团队**: support@uniquevisionx.com
+- **运维团队**: support@uniquevisionx.com
 
 ---
 

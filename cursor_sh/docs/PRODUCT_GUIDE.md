@@ -702,7 +702,7 @@ Unique Vision AI
 ### 技术支持
 
 - 在线客服（工作时间）
-- 邮件支持（service@uniquevisionx.com）
+- 邮件支持（support@uniquevisionx.com）
 - 问题工单系统
 - 定期用户回访
 

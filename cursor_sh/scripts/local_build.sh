@@ -35,7 +35,7 @@ EXTERNAL_SERVER="8.141.111.94"
 EXTERNAL_SSH_USER="root"
 EXTERNAL_SSH_OPTS=""
 EXTERNAL_DEPLOYMENT_MODE="external"
-EXTERNAL_BACKEND_ENV_FILE="./cursor_sh/backend/.env.external"
+EXTERNAL_BACKEND_ENV_FILE="./cursor_sh/backend/.env.production.external"
 
 # Internal（管理端）—— 密码登录
 INTERNAL_SERVER="101.201.58.68"
@@ -140,7 +140,7 @@ deploy_to_server() {
     local SERVICES="$*"
 
     sync_code_to_server "$SERVER_IP" "$SERVER_NAME" "$SSH_USER" "$SSH_OPTS"
-    remote_compose "$SERVER_IP" "$SERVER_NAME" "$SSH_USER" "$SSH_OPTS" "$DEPLOYMENT_MODE" "$BACKEND_ENV_FILE" "$ACTION" $SERVICES
+    remote_compose "$SERVER_IP" "$SERVER_NAME" "$SSH_USER" "$SSH_OPTS" "$DEPLOYMENT_MODE" "$BACKEND_ENV_FILE" "$ACTION" "$SERVICES"
     info "${SERVER_NAME} 完成！"
 }
 
@@ -148,8 +148,8 @@ run_all_servers() {
     local ACTION="$1"
     shift
     local SERVICES="$*"
-    deploy_to_server "$EXTERNAL_SERVER" "External（用户端）" "$EXTERNAL_SSH_USER" "$EXTERNAL_SSH_OPTS" "$EXTERNAL_DEPLOYMENT_MODE" "$EXTERNAL_BACKEND_ENV_FILE" "$ACTION" $SERVICES
-    deploy_to_server "$INTERNAL_SERVER" "Internal（管理端）" "$INTERNAL_SSH_USER" "$INTERNAL_SSH_OPTS" "$INTERNAL_DEPLOYMENT_MODE" "$INTERNAL_BACKEND_ENV_FILE" "$ACTION" $SERVICES
+    deploy_to_server "$EXTERNAL_SERVER" "External（用户端）" "$EXTERNAL_SSH_USER" "$EXTERNAL_SSH_OPTS" "$EXTERNAL_DEPLOYMENT_MODE" "$EXTERNAL_BACKEND_ENV_FILE" "$ACTION" "$SERVICES"
+    deploy_to_server "$INTERNAL_SERVER" "Internal（管理端）" "$INTERNAL_SSH_USER" "$INTERNAL_SSH_OPTS" "$INTERNAL_DEPLOYMENT_MODE" "$INTERNAL_BACKEND_ENV_FILE" "$ACTION" "$SERVICES"
 }
 
 show_status() {

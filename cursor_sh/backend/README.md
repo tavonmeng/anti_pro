@@ -78,27 +78,27 @@ cp .env.example .env
 
 #### 重要配置说明
 
-**邮件配置（QQ邮箱）：**
+**邮件配置（阿里企业邮箱）：**
 ```env
-SMTP_HOST=smtp.qq.com
+SMTP_HOST=smtp.qiye.aliyun.com
 SMTP_PORT=465
-SMTP_USER=your-qq-email@qq.com
-SMTP_PASSWORD=your-qq-smtp-auth-code  # 注意：这是授权码，不是QQ密码
-SMTP_FROM=your-qq-email@qq.com
+SMTP_USER=support@uniquevisionx.com
+SMTP_PASSWORD=your-aliyun-mail-password-or-security-password
+SMTP_FROM=support@uniquevisionx.com
+SMTP_FROM_NAME=Unique Vision AI
 ```
 
-**获取 QQ 邮箱授权码：**
-1. 登录 QQ 邮箱
-2. 设置 → 账户
-3. 开启 SMTP 服务
-4. 生成授权码
+**阿里企业邮箱注意事项：**
+1. 后台需开启 SMTP/IMAP 等三方客户端服务
+2. 如启用三方客户端安全密码，`SMTP_PASSWORD` 填安全密码
+3. `SMTP_USER` 与 `SMTP_FROM` 保持同一个邮箱账号
 
 > **💡 邮件通知功能说明**: 
 > 系统内置了完整的邮件自动化通知流程：
 > - **订单状态流转通知**：订单状态变更（如进入制作中、终稿预览等）时自动发送邮件。
 > - **预览审核通知**：管理员上传初稿/终稿后自动通知客户。
 > - **订单需求确认函自动下发**：用户提交订单（含草稿转提交）后，系统会自动寄送一封带有**订单需求确认函 PDF 附件**的邮件至其预留的通知邮箱中，作为留档与核对凭证。
-> 🚨 **注意**: 你只需在 `.env` 中按上述格式填写真实的 `SMTP_HOST`、`SMTP_USER` 和 `SMTP_PASSWORD`（授权码），所有自动化邮件通知和 PDF 下发功能就会**立即生效**，无需修改任何代码。
+> 🚨 **注意**: 你只需在 `.env` 中按上述格式填写真实的 `SMTP_HOST`、`SMTP_USER` 和 `SMTP_PASSWORD`，所有自动化邮件通知和 PDF 下发功能就会**立即生效**，无需修改其他代码。
 
 ### 4. 初始化数据库
 

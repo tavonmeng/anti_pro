@@ -2,9 +2,11 @@
 
 import aiosmtplib
 import ssl
+from email.header import Header
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
+from email.utils import formataddr
 from typing import List, Optional, Dict
 
 from app.config import settings
@@ -42,10 +44,12 @@ class EmailService:
             )
             return False
         
+        from_email = settings.SMTP_FROM or settings.SMTP_USER
+
         # 创建邮件
         message = MIMEMultipart("mixed")
-        message["Subject"] = subject
-        message["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM}>"
+        message["Subject"] = Header(subject, "utf-8")
+        message["From"] = formataddr((str(Header(settings.SMTP_FROM_NAME, "utf-8")), from_email))
         message["To"] = ", ".join(to_emails)
         
         # 邮件正文 (alternative 容器放置 text 和 html)

@@ -5,6 +5,7 @@
 
 import os
 import uuid
+import aiofiles
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy import select, desc
@@ -24,7 +25,9 @@ from app.utils.timezone import beijing_iso, beijing_now
 router = APIRouter(prefix="/admin/documents", tags=["管理员 — 客户资料导入"])
 
 ALLOWED_EXT = {".pdf", ".docx", ".pptx"}
-MAX_SIZE = 50 * 1024 * 1024
+UPLOAD_CHUNK_SIZE = 1024 * 1024
+MAX_SIZE = 200 * 1024 * 1024
+MAX_SIZE_MESSAGE = "文件大小不能超过200MB"
 
 
 class ApproveRequest(BaseModel):
@@ -70,36 +73,37 @@ async def upload_customer_document(
     if not await _customer_exists(db, user_id):
         raise HTTPException(status_code=404, detail="客户不存在")
 
-    contents = await file.read()
-    if len(contents) > MAX_SIZE:
-        raise HTTPException(status_code=413, detail="文件大小不能超过50MB")
-
     original_filename = os.path.basename(file.filename or "customer_document")
     ext = os.path.splitext(original_filename)[1].lower()
     if ext not in ALLOWED_EXT:
         raise HTTPException(status_code=400, detail="仅支持 PDF / Word(docx) / PPT(pptx)")
 
+    tmp_path, size = await _stream_upload_to_temp(file, MAX_SIZE, MAX_SIZE_MESSAGE)
     doc_id = str(uuid.uuid4())
     safe_original = _safe_filename(original_filename)
     stored_filename = f"{beijing_now().strftime('%Y%m%d_%H%M%S')}_{doc_id[:8]}_{safe_original}"
     file_path = None
     file_url = ""
     object_key = ""
-    if settings.OSS_ENABLED:
-        try:
-            from app.services.oss_service import upload_bytes
+    try:
+        if settings.OSS_ENABLED:
+            from app.services.oss_service import upload_file
             object_key = f"customer_documents/{user_id}/{stored_filename}"
-            upload_bytes(contents, object_key, file.content_type or "")
+            upload_file(object_key, tmp_path, file.content_type or "")
             file_url = object_key
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail="OSS 上传失败，请稍后重试") from exc
-    else:
-        upload_dir = os.path.join(settings.UPLOAD_DIR, "customer_documents", user_id)
-        os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, stored_filename)
-        with open(file_path, "wb") as f:
-            f.write(contents)
-        file_url = f"/uploads/customer_documents/{user_id}/{stored_filename}"
+            _cleanup_temp_file(tmp_path)
+        else:
+            upload_dir = os.path.join(settings.UPLOAD_DIR, "customer_documents", user_id)
+            os.makedirs(upload_dir, exist_ok=True)
+            file_path = os.path.join(upload_dir, stored_filename)
+            os.replace(tmp_path, file_path)
+            file_url = f"/uploads/customer_documents/{user_id}/{stored_filename}"
+    except HTTPException:
+        _cleanup_temp_file(tmp_path)
+        raise
+    except Exception as exc:
+        _cleanup_temp_file(tmp_path)
+        raise HTTPException(status_code=500, detail="资料上传失败，请稍后重试") from exc
 
     document = CustomerDocument(
         id=doc_id,
@@ -110,7 +114,7 @@ async def upload_customer_document(
         file_path=file_path,
         file_url=file_url,
         object_key=object_key,
-        size=len(contents),
+        size=size,
         mime_type=file.content_type or "",
         status="uploaded",
         uploaded_by=getattr(current_admin, "id", ""),
@@ -176,6 +180,40 @@ async def _customer_exists(db: AsyncSession, user_id: str) -> bool:
 
     memory_result = await db.execute(select(UserMemory.id).where(UserMemory.user_id == user_id))
     return memory_result.scalar_one_or_none() is not None
+
+
+async def _stream_upload_to_temp(file: UploadFile, max_size: int, limit_message: str) -> tuple[str, int]:
+    """将上传文件分块写入临时文件，并在读取过程中做大小限制。"""
+    tmp_dir = os.path.join(settings.UPLOAD_DIR, ".tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    tmp_path = os.path.join(tmp_dir, f"{uuid.uuid4().hex}{ext}.part")
+    size = 0
+
+    try:
+        async with aiofiles.open(tmp_path, "wb") as out:
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > max_size:
+                    raise HTTPException(status_code=413, detail=limit_message)
+                await out.write(chunk)
+        return tmp_path, size
+    except Exception:
+        _cleanup_temp_file(tmp_path)
+        raise
+
+
+def _cleanup_temp_file(tmp_path: str):
+    if not tmp_path:
+        return
+    try:
+        os.remove(tmp_path)
+    except OSError:
+        pass
 
 
 async def _serialize_document(db: AsyncSession, doc: CustomerDocument) -> dict:

@@ -1125,14 +1125,14 @@ docker-compose logs -f backend
 
 ### 技术支持渠道
 
-- **邮件**: service@uniquevisionx.com
+- **邮件**: support@uniquevisionx.com
 - **文档**: https://docs.your-domain.com
 - **问题跟踪**: https://github.com/your-repo/issues
 
 ### 紧急联系
 
-- **系统管理员**: service@uniquevisionx.com
-- **开发负责人**: service@uniquevisionx.com
+- **系统管理员**: support@uniquevisionx.com
+- **开发负责人**: support@uniquevisionx.com
 - **值班电话**: 123-4567-8901（工作时间）
 
 ---

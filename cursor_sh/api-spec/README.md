@@ -380,5 +380,5 @@ MIT License
 ## 联系方式
 
 如有问题，请联系：
-- Email: service@uniquevisionx.com
+- Email: support@uniquevisionx.com
 - 文档问题: 提交 Issue

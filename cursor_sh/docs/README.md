@@ -302,7 +302,7 @@ cursor_sh/
 如果你发现文档中的错误或有改进建议，请通过以下方式反馈：
 
 - **提交 Issue**: https://github.com/your-repo/issues
-- **邮件联系**: service@uniquevisionx.com
+- **邮件联系**: support@uniquevisionx.com
 - **在线讨论**: https://discuss.your-domain.com
 
 ---
