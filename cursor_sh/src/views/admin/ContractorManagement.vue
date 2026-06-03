@@ -1,14 +1,14 @@
 <template>
   <div class="contractor-mgmt">
     <div class="page-header">
-      <h1 class="page-title">承包商管理</h1>
-      <p class="page-desc">管理邀请链接和承包商列表</p>
+      <h1 class="page-title">承包商和用户邀请管理</h1>
+      <p class="page-desc">管理用户邀请、承包商邀请和承包商列表</p>
     </div>
 
     <!-- 邀请链接区 -->
     <div class="section-card">
       <div class="section-header">
-        <h2 class="section-title">邀请链接</h2>
+        <h2 class="section-title">用户和承包商邀请链接</h2>
         <el-button type="primary" size="small" @click="generateInvite(invitationTab)">生成邀请链接</el-button>
       </div>
 

@@ -193,6 +193,12 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
         select(Model).where(Model.phone == login_data.phone)
     )
     user = result.scalar_one_or_none()
+
+    if login_data.role == UserRole.ADMIN and not login_data.sms_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="管理员仅支持验证码登录"
+        )
     
     if login_data.sms_code:
         # ---- 手机号 + 验证码登录 ----

@@ -14,72 +14,7 @@
           </div>
         </div>
 
-        <div class="admin-login-tabs">
-          <button type="button" class="tab-btn" :class="{ active: loginMode === 'password' }" @click="setLoginMode('password')">
-            密码登录
-          </button>
-          <button type="button" class="tab-btn" :class="{ active: loginMode === 'sms' }" @click="setLoginMode('sms')">
-            验证码登录
-          </button>
-        </div>
-        
         <el-form
-          v-if="loginMode === 'password'"
-          ref="loginFormRef"
-          :model="loginForm"
-          :rules="loginRules"
-          class="admin-login-form"
-          @submit.prevent="handleLogin"
-        >
-          <el-form-item prop="phone">
-            <el-input
-              v-model="loginForm.phone"
-              placeholder="管理员手机号"
-              size="large"
-              class="admin-input"
-            >
-              <template #prefix>
-                <el-icon class="input-icon"><User /></el-icon>
-              </template>
-            </el-input>
-          </el-form-item>
-          
-          <el-form-item prop="password">
-            <el-input
-              v-model="loginForm.password"
-              type="password"
-              placeholder="密码"
-              size="large"
-              class="admin-input"
-              show-password
-              @keyup.enter="handleLogin"
-            >
-              <template #prefix>
-                <el-icon class="input-icon"><Lock /></el-icon>
-              </template>
-            </el-input>
-          </el-form-item>
-          
-          <el-form-item prop="captcha">
-            <Captcha ref="captchaRef" v-model="loginForm.captcha" @verify="handleCaptchaVerify" />
-          </el-form-item>
-          
-          <el-form-item>
-            <el-button
-              type="primary"
-              size="large"
-              class="admin-login-button"
-              :loading="loading"
-              @click="handleLogin"
-            >
-              <span v-if="!loading">登录系统</span>
-              <span v-else>验证中...</span>
-            </el-button>
-          </el-form-item>
-        </el-form>
-
-        <el-form
-          v-else
           ref="smsFormRef"
           :model="smsForm"
           :rules="smsRules"
@@ -169,25 +104,14 @@ import Captcha from '@/components/Captcha.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const loginMode = ref<'password' | 'sms'>('password')
-const loginFormRef = ref<FormInstance>()
 const smsFormRef = ref<FormInstance>()
 const loading = ref(false)
-const captchaValid = ref(false)
-const captchaRef = ref<InstanceType<typeof Captcha>>()
 const smsSending = ref(false)
 const smsCooldown = ref(0)
 const smsCaptchaVisible = ref(false)
 const dialogCaptcha = ref('')
 const dialogCaptchaRef = ref<InstanceType<typeof Captcha>>()
 let smsCooldownTimer: ReturnType<typeof setInterval> | undefined
-
-const loginForm = reactive({
-  phone: '',
-  password: '',
-  role: 'admin' as UserRole,  // 固定为 admin
-  captcha: ''
-})
 
 const smsForm = reactive({
   phone: '',
@@ -206,16 +130,6 @@ const validatePhone = (rule: any, value: string, callback: Function) => {
   }
 }
 
-const validatePassword = (rule: any, value: string, callback: Function) => {
-  if (!value) {
-    callback(new Error('请输入密码'))
-  } else if (value.length < 6) {
-    callback(new Error('密码长度至少6个字符'))
-  } else {
-    callback()
-  }
-}
-
 const validateSmsCode = (rule: any, value: string, callback: Function) => {
   if (!value) {
     callback(new Error('请输入短信验证码'))
@@ -226,41 +140,9 @@ const validateSmsCode = (rule: any, value: string, callback: Function) => {
   }
 }
 
-const validateCaptcha = (rule: any, value: string, callback: Function) => {
-  if (!value) {
-    callback(new Error('请输入验证码'))
-  } else if (!captchaValid.value) {
-    callback(new Error('验证码错误'))
-  } else {
-    callback()
-  }
-}
-
-const loginRules: FormRules = {
-  phone: [{ validator: validatePhone, trigger: 'blur' }],
-  password: [{ validator: validatePassword, trigger: 'blur' }],
-  captcha: [{ validator: validateCaptcha, trigger: 'blur' }]
-}
-
 const smsRules: FormRules = {
   phone: [{ validator: validatePhone, trigger: 'blur' }],
   smsCode: [{ validator: validateSmsCode, trigger: 'blur' }]
-}
-
-const setLoginMode = (mode: 'password' | 'sms') => {
-  loginMode.value = mode
-  if (mode === 'sms') {
-    smsForm.phone = loginForm.phone
-  } else {
-    loginForm.phone = smsForm.phone
-  }
-}
-
-const handleCaptchaVerify = (isValid: boolean) => {
-  captchaValid.value = isValid
-  if (loginFormRef.value) {
-    loginFormRef.value.validateField('captcha')
-  }
 }
 
 const routeAfterInternalLogin = () => {
@@ -294,45 +176,8 @@ const tryInternalLogin = async (payload: Omit<LoginRequest, 'role'>) => {
     }
   }
 
-  ElMessage.error('手机号、密码或验证码错误')
+  ElMessage.error('手机号或验证码错误')
   return false
-}
-
-const resetPasswordCaptcha = () => {
-  if (captchaRef.value) {
-    captchaRef.value.refresh()
-    loginForm.captcha = ''
-    captchaValid.value = false
-  }
-}
-
-const handleLogin = async () => {
-  if (!loginFormRef.value) return
-  
-  await loginFormRef.value.validate(async (valid) => {
-    if (valid) {
-      if (!captchaValid.value) {
-        ElMessage.error('请先通过验证码验证')
-        captchaRef.value?.refresh()
-        return
-      }
-      
-      loading.value = true
-      try {
-        const success = await tryInternalLogin({
-          phone: loginForm.phone,
-          password: loginForm.password,
-          captcha: loginForm.captcha
-        })
-        if (!success) resetPasswordCaptcha()
-      } catch (error: any) {
-        console.error('登录失败:', error)
-        resetPasswordCaptcha()
-      } finally {
-        loading.value = false
-      }
-    }
-  })
 }
 
 const openSmsCaptcha = () => {
@@ -473,32 +318,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.admin-login-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  width: 100%;
-  margin: 0 0 20px;
-}
-
-.tab-btn {
-  height: 36px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 999px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.tab-btn.active,
-.tab-btn:hover {
-  background: #fff;
-  color: #000;
-  border-color: #fff;
 }
 
 :deep(.el-form-item) {

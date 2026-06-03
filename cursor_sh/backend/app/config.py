@@ -265,6 +265,7 @@ class Settings(BaseSettings):
     INIT_ADMIN_PASSWORD: str = "123456"
     INIT_ADMIN_EMAIL: str = "admin@example.com"
     INIT_ADMIN_PHONE: str = "13800000000"  # 管理员登录手机号
+    INIT_ADDITIONAL_ADMINS: str = ""       # JSON 数组: [{"username":"admin2","phone":"138...","password":"...","email":"..."}]
     
     # 大模型 API 配置 
     AI_API_KEY: str = ""

@@ -39,7 +39,7 @@
       
       <el-menu-item index="contractors">
         <el-icon><Suitcase /></el-icon>
-        <template #title>承包商管理</template>
+        <template #title>承包商和用户邀请管理</template>
       </el-menu-item>
       
       <el-menu-item index="workflow-config">
