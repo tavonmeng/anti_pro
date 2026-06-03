@@ -56,6 +56,17 @@ def _can_use_cloud() -> bool:
     )
 
 
+def _is_frequency_limited_error(*values) -> bool:
+    """Return True for provider messages that mean the SMS send was rate-limited."""
+    text = " ".join(str(value).lower() for value in values if value)
+    return (
+        "check frequency" in text
+        or "too frequent" in text
+        or ("frequency" in text and ("fail" in text or "limit" in text))
+        or ("频繁" in text)
+    )
+
+
 async def send_sms_verify_code(phone: str) -> dict:
     """发送短信验证码"""
     _check_rate_limit(phone)
@@ -121,14 +132,22 @@ async def _send_via_dypnsapi(phone: str) -> dict:
             return {"success": True, "message": "验证码已发送"}
         else:
             error_msg = body.message if body else "未知错误"
+            error_code = getattr(body, "code", None) if body else None
+            is_frequency_limited = _is_frequency_limited_error(error_code, error_msg)
             log_business_event(
                 logger,
                 "sms_send_failed",
-                level="error",
+                level="warning" if is_frequency_limited else "error",
                 phone=phone,
                 provider="aliyun",
+                provider_result=error_code,
                 error=error_msg,
             )
+            if is_frequency_limited:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="验证码发送频繁，请稍后重试"
+                )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="短信发送失败，请稍后重试"
@@ -136,15 +155,16 @@ async def _send_via_dypnsapi(phone: str) -> dict:
     except HTTPException:
         raise
     except Exception as e:
+        is_frequency_limited = _is_frequency_limited_error(e)
         log_business_event(
             logger,
             "sms_send_failed",
-            level="error",
+            level="warning" if is_frequency_limited else "error",
             phone=phone,
             provider="aliyun",
             error=str(e),
         )
-        if "check frequency" in str(e).lower():
+        if is_frequency_limited:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="验证码发送频繁，请稍后重试"

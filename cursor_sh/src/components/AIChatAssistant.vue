@@ -1806,6 +1806,77 @@ const switchToOrderCreate = async (type: string = 'ai_3d_custom') => {
   }
 }
 
+const isLikelyOrderCreateRequest = (text: string) => {
+  const normalized = (text || '').replace(/\s+/g, '')
+  if (!normalized) return false
+  const hasOrderQueryContext = /(查询|查看|进度|状态|历史|下过|已下|之前|下单后|订单)/.test(normalized)
+
+  const directCreatePatterns = [
+    /想下单|我要下单|要下单|帮我下单|开始下单|咨询下单/,
+    /创建需求|提交需求|需求单|创建订单|提交订单/,
+  ]
+  if (directCreatePatterns.some(pattern => pattern.test(normalized))) return true
+
+  if (hasOrderQueryContext) return false
+
+  const broadCreatePatterns = [
+    /想做|要做|做一个|做个|需要做|想要做|可以开始/,
+    /定制|想定制|要定制/,
+    /我要买|想买|购买|买一个|买个|买套|成片|模板|现成|成品/,
+  ]
+  if (broadCreatePatterns.some(pattern => pattern.test(normalized))) return true
+
+  return /下单/.test(normalized)
+}
+
+const isLikelyBusinessIntroRequest = (text: string) => {
+  const normalized = (text || '').replace(/\s+/g, '')
+  if (!normalized) return false
+  if (/(订单|进度|状态|查询|查看|历史|下过|已下)/.test(normalized)) return false
+  return /了解|介绍|业务|案例|服务|你们做什么|什么公司|你们公司/.test(normalized)
+}
+
+const classifyMessageRoute = async (message: string) => {
+  try {
+    const response = await fetch('/ai/classify', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ message })
+    })
+    if (!response.ok) return null
+    return await response.json()
+  } catch (e) {
+    return null
+  }
+}
+
+const rerouteFromOrderQueryIfNeeded = async (messageContent: string, userMessageId: string) => {
+  if (selectedMode.value !== 'order_query') return false
+
+  const shouldCreateOrder = isLikelyOrderCreateRequest(messageContent)
+  const shouldIntroduceBusiness = !shouldCreateOrder && isLikelyBusinessIntroRequest(messageContent)
+  if (!shouldCreateOrder && !shouldIntroduceBusiness) return false
+
+  isLoading.value = true
+  const classified = await classifyMessageRoute(messageContent)
+  if (classified?.business_type) businessType.value = classified.business_type
+
+  if (shouldCreateOrder) {
+    businessType.value = classified?.business_type || businessType.value || 'ai_3d_custom'
+    selectedMode.value = 'order_create'
+    emit('mode-change', 'order_create')
+    logger.logAction('AI', 'order_query_rerouted', { intent: 'order_create', businessType: businessType.value, sessionId: session_id.value })
+    await handleCustomAiChat(messageContent, userMessageId)
+    return true
+  }
+
+  selectedMode.value = 'business_intro'
+  emit('mode-change', 'business_intro')
+  logger.logAction('AI', 'order_query_rerouted', { intent: 'business_intro', sessionId: session_id.value })
+  await handleBusinessIntro(messageContent)
+  return true
+}
+
 const selectMode = async (mode: string) => {
   selectedMode.value = mode
   emit('mode-change', mode)
@@ -1972,6 +2043,10 @@ const sendMessage = async () => {
     selectedMode.value = 'order_create'
     emit('mode-change', 'order_create')
     await handleCustomAiChat(messageContent, userMessageId)
+    return
+  }
+
+  if (await rerouteFromOrderQueryIfNeeded(messageContent, userMessageId)) {
     return
   }
 
