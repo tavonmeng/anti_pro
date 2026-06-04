@@ -6,7 +6,7 @@
     @select="handleMenuSelect"
   >
     <div class="sidebar-header">
-      <h2 class="sidebar-title">{{ isAdmin ? '订单管理系统' : isStaff ? '服务工作台' : isContractor ? '承包商工作台' : '用户工作台' }}</h2>
+      <h2 class="sidebar-title">{{ isAdmin ? 'unique vision后端管理系统' : isStaff ? '服务工作台' : isContractor ? '承包商工作台' : '用户工作台' }}</h2>
       <NotificationBell class="notification-bell-sidebar" />
     </div>
     
@@ -134,6 +134,9 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   isCollapse: false
 })
+const emit = defineEmits<{
+  (event: 'select', index: string): void
+}>()
 
 const route = useRoute()
 const router = useRouter()
@@ -184,6 +187,7 @@ const activeMenu = computed(() => {
 })
 
 const handleMenuSelect = (index: string) => {
+  emit('select', index)
   if (index === 'logout') {
     handleLogout()
   } else if (index === 'workspace') {

@@ -269,6 +269,12 @@ const viewDetail = (order: Order) => {
   @media (max-width: 1200px) {
     grid-template-columns: repeat(3, 1fr);
   }
+
+  @media (max-width: 768px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
 }
 
 .stat-card {
@@ -337,6 +343,16 @@ const viewDetail = (order: Order) => {
     :deep(.el-input__wrapper) {
       border-radius: 10px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+  }
+
+  @media (max-width: 768px) {
+    margin-bottom: 14px;
+
+    .search-input,
+    .filter-select {
+      width: 100%;
+      max-width: none;
     }
   }
 }
@@ -469,5 +485,85 @@ const viewDetail = (order: Order) => {
 :deep(.el-button) {
   border-radius: 8px;
   font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .order-management-page {
+    padding: 0;
+    background: transparent;
+    min-height: auto;
+  }
+
+  .page-header {
+    margin-bottom: 16px;
+
+    :deep(.el-button) {
+      width: 100%;
+    }
+  }
+
+  .stat-card {
+    padding: 14px 12px;
+    border-radius: 8px;
+    align-items: flex-start;
+
+    &:hover {
+      transform: none;
+    }
+
+    .stat-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+    }
+  }
+
+  .order-card {
+    border-radius: 8px;
+  }
+
+  .order-card-body {
+    padding: 14px;
+  }
+
+  .order-card-header {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .order-main-info {
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .order-number {
+    max-width: 100%;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+  }
+
+  .order-status-area {
+    flex-shrink: 0;
+  }
+
+  .order-card-meta {
+    gap: 8px 12px;
+  }
+
+  .meta-item {
+    max-width: 100%;
+
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
 }
 </style>
