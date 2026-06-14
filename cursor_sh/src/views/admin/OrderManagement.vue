@@ -110,6 +110,11 @@
           <div class="order-card-summary" v-if="getOrderSummary(order)">
             {{ getOrderSummary(order) }}
           </div>
+
+          <div class="order-card-notes" v-if="getOrderRemarks(order)">
+            <span class="notes-label">备注</span>
+            <span class="notes-text">{{ getOrderRemarks(order) }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -176,7 +181,9 @@ const filteredOrders = computed(() => {
     const kw = searchKeyword.value.toLowerCase()
     result = result.filter(o => 
       (o.orderNumber && o.orderNumber.toLowerCase().includes(kw)) ||
-      (o.userName && o.userName.toLowerCase().includes(kw))
+      (o.userName && o.userName.toLowerCase().includes(kw)) ||
+      getOrderSummary(o).toLowerCase().includes(kw) ||
+      getOrderRemarks(o).toLowerCase().includes(kw)
     )
   }
   return result
@@ -220,10 +227,22 @@ const getStatusColorClass = (status: string) => {
 }
 
 const getOrderSummary = (order: Order) => {
-  const data = (order as any).orderData || {}
-  const parts = [data.brand, data.content, data.city].filter(Boolean)
+  const data = (order as any).orderData || order
+  const parts = [
+    data.project_name,
+    data.brand,
+    data.theme_concept,
+    data.content,
+    data.city_location,
+    data.city,
+  ].filter(Boolean)
   if (parts.length === 0) return ''
   return parts.join(' · ')
+}
+
+const getOrderRemarks = (order: Order) => {
+  const data = (order as any).orderData || order
+  return [data.special_requirements, data.remarks].filter(Boolean).join('；')
 }
 
 const viewDetail = (order: Order) => {
@@ -476,6 +495,33 @@ const viewDetail = (order: Order) => {
   margin-top: 8px;
   font-size: 13px;
   color: #86868b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.order-card-notes {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #515154;
+  min-width: 0;
+}
+
+.notes-label {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #F5F7FA;
+  color: #6B7280;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.notes-text {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

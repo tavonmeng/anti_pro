@@ -299,27 +299,6 @@
           :class="{ 'is-voice-recording': isRecording || isTranscribing }"
         >
           <template v-if="!isRecording && !isTranscribing">
-            <!-- Left icons mock -->
-            <div class="left-tools">
-              <el-icon class="tool-icon" @click="triggerGenericFileUpload" title="上传参考文件（PDF、Word、压缩包等）"><CirclePlusFilled /></el-icon>
-              <el-icon class="tool-icon" @click="triggerFileUpload" title="上传现场实拍图或参考文件"><PictureRounded /></el-icon>
-              <input
-                type="file"
-                ref="fileInputRef"
-                multiple
-                :accept="supportingFileAccept"
-                style="display: none;"
-                @change="handleFileSelected"
-              />
-              <input
-                type="file"
-                ref="genericFileInputRef"
-                multiple
-                :accept="supportingFileAccept"
-                style="display: none;"
-                @change="handleFileSelected"
-              />
-            </div>
             <!-- 已上传文件预览条 -->
             <div v-if="uploadedFiles.length > 0" class="uploaded-files-strip">
               <div v-for="(file, idx) in uploadedFiles" :key="idx" class="uploaded-file-chip">
@@ -337,49 +316,73 @@
               <span class="upload-more-hint">可继续上传更多文件或图片，完成后点击发送</span>
             </div>
 
-          <textarea
-            ref="textareaRef"
-            v-model="inputMsg"
-            placeholder="描述您的需求，或直接输入问题..."
-            class="chat-native-textarea"
-            @input="adjustTextareaHeight"
-            @keydown.enter="handleEnterKey"
-            @compositionstart="isComposing = true"
-            @compositionend="isComposing = false"
-            :disabled="isLoading || isTyping || isRecording"
-            @focus="handleInputFocus"
-            rows="1"
-          ></textarea>
-          
-          <!-- Right tools & send -->
-          <div class="right-tools">
-            <!-- 语音输入按钮 -->
-            <button
-              v-if="ENABLE_VOICE_INPUT"
-              class="voice-btn"
-              :class="{ recording: isRecording }"
-              @click="toggleVoiceInput"
-              :title="isRecording ? '停止录音' : '语音输入'"
-            >
-              <span v-if="isRecording" class="rec-pulse"></span>
-              <svg v-if="!isRecording" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5z"/>
-                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-              </svg>
-              <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <rect x="6" y="6" width="12" height="12" rx="2"/>
-              </svg>
-            </button>
+            <div class="composer-main-row">
+              <!-- Left icons mock -->
+              <div class="left-tools">
+                <el-icon class="tool-icon" @click="triggerGenericFileUpload" title="上传参考文件（PDF、Word、压缩包等）"><CirclePlusFilled /></el-icon>
+                <el-icon class="tool-icon" @click="triggerFileUpload" title="上传现场实拍图或参考文件"><PictureRounded /></el-icon>
+                <input
+                  type="file"
+                  ref="fileInputRef"
+                  multiple
+                  :accept="supportingFileAccept"
+                  style="display: none;"
+                  @change="handleFileSelected"
+                />
+                <input
+                  type="file"
+                  ref="genericFileInputRef"
+                  multiple
+                  :accept="supportingFileAccept"
+                  style="display: none;"
+                  @change="handleFileSelected"
+                />
+              </div>
 
-            <button
-              class="stitch-send-btn"
-              :class="{ disabled: isLoading || isTyping || isUploadingFiles || (!inputMsg.trim() && uploadedFiles.length === 0) }"
-              @click="sendMessage"
-            >
-              <span>发送</span>
-              <el-icon><Top /></el-icon>
-            </button>
-          </div>
+              <textarea
+                ref="textareaRef"
+                v-model="inputMsg"
+                placeholder="描述您的需求，或直接输入问题..."
+                class="chat-native-textarea"
+                @input="adjustTextareaHeight"
+                @keydown.enter="handleEnterKey"
+                @compositionstart="isComposing = true"
+                @compositionend="isComposing = false"
+                :disabled="isLoading || isTyping || isRecording"
+                @focus="handleInputFocus"
+                rows="1"
+              ></textarea>
+              
+              <!-- Right tools & send -->
+              <div class="right-tools">
+                <!-- 语音输入按钮 -->
+                <button
+                  v-if="ENABLE_VOICE_INPUT"
+                  class="voice-btn"
+                  :class="{ recording: isRecording }"
+                  @click="toggleVoiceInput"
+                  :title="isRecording ? '停止录音' : '语音输入'"
+                >
+                  <span v-if="isRecording" class="rec-pulse"></span>
+                  <svg v-if="!isRecording" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <rect x="6" y="6" width="12" height="12" rx="2"/>
+                  </svg>
+                </button>
+
+                <button
+                  class="stitch-send-btn"
+                  :class="{ disabled: isLoading || isTyping || isUploadingFiles || (!inputMsg.trim() && uploadedFiles.length === 0) }"
+                  @click="sendMessage"
+                >
+                  <span>发送</span>
+                  <el-icon><Top /></el-icon>
+                </button>
+              </div>
+            </div>
           </template>
 
           <template v-else>
@@ -1000,6 +1003,7 @@ const _mediaFormFields = [
   { key: 'media_positioning', label: '媒体定位 & 品牌调性', placeholder: '选填，适配的品牌类型', multiline: false },
   { key: 'special_requirements', label: '其他特殊合作要求', placeholder: '选填，特殊定制效果等', multiline: true },
   { key: 'site_photos', label: '现场实拍图', placeholder: '选填，通过左侧上传按钮上传', multiline: false },
+  { key: 'remarks', label: '备注', placeholder: '其他无法归入以上字段的补充说明', multiline: true },
 ]
 
 const formFields = isMediaMode ? _mediaFormFields : _brandFormFields
@@ -3535,24 +3539,25 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .input-area.pill-style {
   background: #f3f3f4; /* surface-container-low */
-  border-radius: 9999px; /* Absolute pill */
-  padding: 4px 6px 4px 16px;
+  border-radius: 22px;
+  padding: 6px;
   border: 2px solid transparent; 
   display: flex;
-  flex-direction: row;
-  align-items: flex-end; /* vertically align tools with bottom of expanding textarea */
-  transition: all 0.2s ease;
-  min-height: 40px; 
+  flex-direction: column;
+  align-items: stretch;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  min-height: 44px; 
   width: 100%;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   box-sizing: border-box;
-  gap: 12px;
+  gap: 6px;
 }
 
 .input-area.pill-style.is-voice-recording {
   background: #ffffff;
   border-color: #e5e5ea;
+  flex-direction: row;
   align-items: center; /* keep waveform visualizer centered */
   padding: 4px 16px;
 }
@@ -3561,22 +3566,34 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   border-color: rgba(0,0,0,0.08); /* ringing effect */
 }
 
+.composer-main-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
 .chat-native-textarea {
   border: none;
   background: transparent;
-  flex: 1;
+  width: 100%;
+  min-width: 0;
   font-family: inherit;
   font-size: 13px;
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: #1a1c1c;
   outline: none;
   resize: none; 
   min-height: 20px;
+  max-height: 160px;
   height: auto;
   line-height: 1.5;
-  padding: 5px 0; 
-  overflow-y: hidden;
+  padding: 6px 0; 
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .chat-native-textarea::placeholder {
@@ -3585,15 +3602,23 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .left-tools {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
   color: #a0a4ae;
-  padding-bottom: 6px; /* Offset to center with 1 line of text */
+  min-height: 32px;
+  padding: 0 0 0 4px;
+  flex-shrink: 0;
 }
 
 .tool-icon {
   font-size: 20px;
   cursor: pointer;
   transition: color 0.2s;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .tool-icon:hover {
@@ -3606,8 +3631,9 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 4px 0;
+  padding: 4px 6px 2px;
   max-width: 100%;
+  min-width: 0;
 }
 
 .uploaded-file-chip {
@@ -3675,6 +3701,9 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 .right-tools {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  min-height: 32px;
+  flex-shrink: 0;
 }
 
 .stitch-send-btn {
@@ -3694,6 +3723,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.15em;
+  white-space: nowrap;
 }
 
 .stitch-send-btn .el-icon {

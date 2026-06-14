@@ -309,3 +309,38 @@ def test_design_thinking_only_for_creative_plan_requests():
     assert not ai_module._should_enable_design_thinking("排期多久")
     assert not ai_module._should_enable_design_thinking("报价方案大概怎么定")
     assert not ai_module._should_enable_design_thinking("怎么落地执行")
+
+
+def test_creative_plan_request_injects_direction_draft_rules(monkeypatch):
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+
+    messages = ai_module._build_requirement_llm_messages(
+        ai_module.ChatRequest(
+            session_id="test-session",
+            message="根据上面的信息帮我生成一个创意方案",
+            history=[{"role": "user", "content": "我们想做杭州西湖主题的裸眼3D内容"}],
+        )
+    )
+
+    system_prompt = messages[0]["content"]
+    assert "创意方向草案" in system_prompt
+    assert "创意方向名称" in system_prompt
+    assert "计划概括" in system_prompt
+    assert "适合的原因" in system_prompt
+    assert "传播价值" in system_prompt
+    assert "完整创意方案需要结合屏幕参数" in system_prompt
+    assert "委婉回到当前需求梳理" in system_prompt
+
+
+def test_non_creative_plan_request_does_not_inject_direction_draft_rules(monkeypatch):
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+
+    messages = ai_module._build_requirement_llm_messages(
+        ai_module.ChatRequest(
+            session_id="test-session",
+            message="这个项目排期多久",
+            history=[],
+        )
+    )
+
+    assert "创意方向草案" not in messages[0]["content"]

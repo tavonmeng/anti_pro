@@ -378,6 +378,8 @@ def _sse_event(event: str, data: dict) -> str:
 
 def _build_requirement_llm_messages(request: ChatRequest, memory_context: str = "") -> list[dict[str, str]]:
     system_prompt = _INTERNAL_SECURITY_RULES + _get_requirement_prompt(request.business_type)
+    if _should_enable_design_thinking(request.message):
+        system_prompt += _CREATIVE_DIRECTION_DRAFT_RULES
     if memory_context:
         system_prompt += memory_context
 
@@ -418,6 +420,22 @@ def _should_enable_design_thinking(message: str) -> bool:
         "出个设计方案", "出个策划方案",
     ]
     return any(keyword in text for keyword in design_plan_keywords)
+
+
+_CREATIVE_DIRECTION_DRAFT_RULES = (
+    "\n\n【用户明确要求创意/设计/策划方案时的处理】\n"
+    "- 这不是正式完整提案，不要承诺已经完成完整创意方案、脚本分镜、报价或排期。\n"
+    "- 可以基于当前已知需求，先给出一个轻量的「创意方向草案」，帮助客户判断大方向是否合适。\n"
+    "- 输出必须简洁，包含以下四项，使用清晰小标题：\n"
+    "  1. 创意方向名称：一句短名称，具有传播记忆点。\n"
+    "  2. 计划概括：用2-3句话概括画面逻辑、空间关系或内容主线。\n"
+    "  3. 适合的原因：说明它为什么适合当前点位、受众、品牌/媒体目标或裸眼3D观看场景。\n"
+    "  4. 传播价值：说明它可能带来的停留、拍摄、社交传播或招商展示价值。\n"
+    "- 输出草案后，必须补一句专业边界说明：完整创意方案需要结合屏幕参数、观看动线、现场素材、品牌限制、制作周期和审核规范，由专业策划与设计团队进行全面分析，通常需要一定时间打磨。\n"
+    "- 随后用一句自然承接，委婉回到当前需求梳理：说明为了让后续策划判断更准确，还需要继续补齐本次项目的其他关键信息。\n"
+    "- 最后只问一个问题，优先追问当前仍缺失的最关键项；如果核心信息已基本齐全，再请客户确认这个方向是否符合想要的气质，或是否有必须保留/避免的元素。\n"
+    "- 不要输出【需求收集完成】，除非普通需求收集规则已经满足完成条件。\n"
+)
 
 
 async def _finalize_ai_chat_reply(

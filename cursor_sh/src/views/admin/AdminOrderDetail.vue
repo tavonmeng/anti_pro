@@ -199,6 +199,10 @@
               <p class="description-text">{{ order.content || '-' }}</p>
               <p><strong>品牌禁忌内容：</strong></p>
               <p class="description-text">{{ order.prohibited_content || '-' }}</p>
+              <p v-if="order.special_requirements"><strong>其他特殊合作要求：</strong></p>
+              <p v-if="order.special_requirements" class="description-text">{{ order.special_requirements }}</p>
+              <p v-if="order.remarks"><strong>备注：</strong></p>
+              <p v-if="order.remarks" class="description-text">{{ order.remarks }}</p>
             </template>
             <div v-if="order.scenePhotos && order.scenePhotos.length > 0">
               <p><strong>现场实拍图和其他文件（{{ order.scenePhotos.length }}个）：</strong></p>
