@@ -94,7 +94,7 @@
             </el-form>
           </div>
 
-          <div class="enterprise-section">
+          <div class="enterprise-section" data-onboarding-target="enterprise-auth-section">
             <div class="section-heading">
               <div>
                 <h3>企业认证</h3>

@@ -10,10 +10,11 @@
 
     
     <div class="sidebar-content">
-      <div class="nav-section">
+      <div class="nav-section" data-onboarding-target="primary-sidebar-nav">
         <div 
           class="nav-item" 
           :class="{ active: activeMenu === 'workspace' }" 
+          data-onboarding-target="workspace-nav"
           @click="navigate('workspace')"
         >
           <el-icon><House /></el-icon>
@@ -22,6 +23,7 @@
         <div 
           class="nav-item" 
           :class="{ active: activeMenu === 'orders' }" 
+          data-onboarding-target="orders-nav"
           @click="navigate('orders')"
         >
           <el-icon><Grid /></el-icon>
@@ -30,6 +32,7 @@
         <div 
           class="nav-item" 
           :class="{ active: activeMenu === 'drafts' }" 
+          data-onboarding-target="drafts-nav"
           @click="navigate('drafts')"
         >
           <el-icon><EditPen /></el-icon>
@@ -76,9 +79,13 @@
     </div>
 
     <div class="sidebar-footer">
-      <div class="bottom-nav">
+      <div class="bottom-nav" data-onboarding-target="sidebar-footer-actions">
         <!-- 企业认证提示模块（已认证后消失） -->
-        <div class="auth-prompt-card" v-if="!uiStore.isSidebarCollapsed && authStore.user?.enterprise_status !== 'approved'">
+        <div
+          class="auth-prompt-card"
+          v-if="!uiStore.isSidebarCollapsed && authStore.user?.enterprise_status !== 'approved'"
+          data-onboarding-target="enterprise-auth-entry"
+        >
           <div class="auth-icon-wrap">
             <el-icon><Top /></el-icon>
           </div>
@@ -99,7 +106,7 @@
         <!-- 公告 -->
         <SystemAnnouncement :show-text="!uiStore.isSidebarCollapsed">
           <template #reference="{ hasUnread }">
-            <div class="nav-item">
+            <div class="nav-item" data-onboarding-target="announcement-nav">
               <el-icon class="announcement-icon-btn" :class="{ 'is-unread': hasUnread }">
                 <ChatDotRound />
               </el-icon>
@@ -111,7 +118,7 @@
 
         <NotificationBell>
           <template #reference="{ unreadCount }">
-            <div class="nav-item">
+            <div class="nav-item" data-onboarding-target="notification-nav">
               <el-badge :value="unreadCount" :max="99" :hidden="!unreadCount || unreadCount === 0">
                 <el-icon><Bell /></el-icon>
               </el-badge>
@@ -119,11 +126,11 @@
             </div>
           </template>
         </NotificationBell>
-        <div class="nav-item" @click="showHelp">
+        <div class="nav-item" data-onboarding-target="help-nav" @click="showHelp">
           <el-icon><Help /></el-icon>
-          <span v-if="!uiStore.isSidebarCollapsed">帮助</span>
+          <span v-if="!uiStore.isSidebarCollapsed">帮助与支持</span>
         </div>
-        <div class="nav-item" @click="navigate('profile')" style="margin-top: 8px;">
+        <div class="nav-item" data-onboarding-target="profile-nav" @click="navigate('profile')" style="margin-top: 8px;">
           <div class="avatar-wrap" style="width: 16px; display: flex; justify-content: center; align-items: center; position: relative;">
             <el-avatar :size="24" class="user-avatar" :src="avatarUrl">{{ userInitial }}</el-avatar>
             <span v-if="authStore.isEnterprise()" class="enterprise-star">★</span>
@@ -345,15 +352,25 @@ const navigate = async (name: string) => {
   else if (name === 'profile') await router.push('/user/profile')
 }
 
+const openSystemGuide = () => {
+  ElMessageBox.close()
+  window.dispatchEvent(new CustomEvent('uv:start-user-onboarding'))
+}
+
 const showHelp = () => {
   ElMessageBox.alert(
-    '请您联系我们的设计专家<br>电话：400-888-8888<br>邮件：support@uniquevisionx.com',
+    '请您联系我们的设计专家<br>电话：400-888-8888<br>邮件：support@uniquevisionx.com<br><br>对系统使用有疑问？点击 <button type="button" class="uv-guide-link">系统引导</button>。',
     '帮助与支持',
     {
       dangerouslyUseHTMLString: true,
       confirmButtonText: '确定'
     }
   )
+
+  window.setTimeout(() => {
+    const guideLink = document.querySelector<HTMLButtonElement>('.uv-guide-link')
+    guideLink?.addEventListener('click', openSystemGuide, { once: true })
+  }, 0)
 }
 
 const handleAuthClick = () => {
@@ -513,6 +530,20 @@ const handleLogout = async () => {
 .nav-item:hover {
   background: var(--uv-ws-sidebar-hover-bg, rgba(234, 231, 231, 0.5));
   color: var(--uv-ws-page-text, #1b1b1c);
+}
+
+:global(.uv-guide-link) {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--uv-ws-action-button-bg, #A0522D);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+:global(.uv-guide-link:hover) {
+  text-decoration: underline;
 }
 
 .nav-item.active {

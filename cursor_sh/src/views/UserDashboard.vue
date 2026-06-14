@@ -9,6 +9,7 @@
         </transition>
       </router-view>
     </div>
+    <UserOnboardingGuide />
   </div>
 </template>
 
@@ -17,6 +18,7 @@ import { watch } from 'vue'
 import { useRoute } from 'vue-router'
 import SystemLeftSidebar from '@/components/SystemLeftSidebar.vue'
 import SecondaryBusinessSidebar from '@/components/SecondaryBusinessSidebar.vue'
+import UserOnboardingGuide from '@/components/UserOnboardingGuide.vue'
 import { useUiStore } from '@/stores/ui'
 
 const route = useRoute()

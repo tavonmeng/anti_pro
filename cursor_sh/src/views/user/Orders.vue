@@ -1,5 +1,5 @@
 <template>
-  <div class="orders-page">
+  <div class="orders-page" data-onboarding-target="orders-page">
     <div class="page-header">
       <div>
         <h1 class="page-title">我的订单</h1>
@@ -193,4 +193,3 @@ const maskOrderForUser = (order: Order): Order => {
   box-shadow: 0 0 0 1px #e4e4e7 inset;
 }
 </style>
-

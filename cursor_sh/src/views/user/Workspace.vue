@@ -10,7 +10,7 @@
           <div v-if="!uiStore.isAiExpanded && !uiStore.isSecondarySidebarVisible" class="overview-state">
             
             <!-- Hero Banner (AI 智能体) -->
-            <div class="hero-banner">
+            <div class="hero-banner" data-onboarding-target="ai-hero-entry">
               <h1 class="hero-title">Unique Vision AI智能体 | 咨询·需求·下单，一站式协助</h1>
               <div class="hero-input-area" @click="handleAiExpand(true)">
                 <input type="text" :placeholder="placeholderText" class="hero-input" readonly />
@@ -32,11 +32,12 @@
           </div>
           
           <!-- 服务入口卡片 -->
-          <div class="service-cards">
+          <div class="service-cards" data-onboarding-target="business-service-list">
             <div
               v-for="service in platformServices"
               :key="service.type"
               class="service-card"
+              :data-onboarding-target="`business-service-card-${service.type}`"
               role="button"
               tabindex="0"
               @click="triggerChoreography(service.type)"
@@ -98,7 +99,7 @@
               </div>
             </div>
             <div v-else class="overview-state">
-              <div class="hero-banner">
+              <div class="hero-banner" data-onboarding-target="ai-hero-entry">
                 <h1 class="hero-title">Unique Vision AI智能体 | 咨询·需求·下单，一站式协助</h1>
                 <div class="hero-input-area" @click="handleAiExpand(true)">
                   <input type="text" :placeholder="placeholderText" class="hero-input" readonly />

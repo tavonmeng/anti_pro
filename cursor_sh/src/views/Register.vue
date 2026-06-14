@@ -446,6 +446,7 @@ const handleRegister = async () => {
         })
         
         authStore.setSession(session.token, session.user)
+        localStorage.setItem(`uv-user-onboarding-new-registration:${session.user.id}`, '1')
         ElMessage.success('注册成功，已自动登录')
         router.push('/user/workspace')
       } catch (error: any) {

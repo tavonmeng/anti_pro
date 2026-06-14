@@ -11,7 +11,7 @@
     <!-- Flat divider instead of card wrapper -->
     <div class="header-divider"></div>
 
-    <div class="form-surface" v-loading="loading">
+    <div class="form-surface" data-onboarding-target="order-form-surface" v-loading="loading">
       <VideoPurchaseForm
         v-if="orderType === 'video_purchase'"
         :order="isEditMode ? (order || undefined) : undefined"

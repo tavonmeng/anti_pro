@@ -54,7 +54,7 @@ services:
       # Keep this bound to localhost. Do not publish "80:8080" or it will
       # conflict with Caddy, break automatic SSL renewal, and expose Docker
       # directly on the public HTTP port.
-      - "127.0.0.1:8080:8080"
+      - "${FRONTEND_PORT_BIND:-127.0.0.1:8080:8080}"
     depends_on:
       - backend
     networks:

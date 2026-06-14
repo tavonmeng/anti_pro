@@ -90,7 +90,7 @@ sync_code() {
 }
 
 deploy_one() {
-  local name="$1" host="$2" mode="$3" env_file="$4" migrate="$5"
+  local name="$1" host="$2" mode="$3" env_file="$4" migrate="$5" frontend_port_bind="$6" health_url="$7"
   [ -n "$host" ] || die "$name host is empty"
 
   log "deploy $name ($host)"
@@ -103,13 +103,14 @@ deploy_one() {
     test -f '$env_file' || { echo 'missing env file: $env_file' >&2; exit 1; }
     export BACKEND_ENV_FILE='$env_file'
     export DEPLOYMENT_MODE='$mode'
+    export FRONTEND_PORT_BIND='$frontend_port_bind'
     docker compose build
     if [ '$migrate' = 'yes' ]; then
       docker compose run --rm backend alembic upgrade head
     fi
     docker compose up -d --remove-orphans
     for i in \$(seq 1 30); do
-      if curl -fsS http://127.0.0.1:8080/api/health; then
+      if curl -fsS '$health_url'; then
         echo
         exit 0
       fi
@@ -122,32 +123,32 @@ deploy_one() {
 }
 
 deploy_staging() {
-  deploy_one "staging external" "$STAGING_EXTERNAL_HOST" external "$STAGING_EXTERNAL_ENV" yes
-  deploy_one "staging internal" "$STAGING_INTERNAL_HOST" internal "$STAGING_INTERNAL_ENV" no
+  deploy_one "staging external" "$STAGING_EXTERNAL_HOST" external "$STAGING_EXTERNAL_ENV" yes "${STAGING_EXTERNAL_FRONTEND_PORT_BIND:-80:8080}" "${STAGING_EXTERNAL_HEALTH_URL:-http://127.0.0.1/api/health}"
+  deploy_one "staging internal" "$STAGING_INTERNAL_HOST" internal "$STAGING_INTERNAL_ENV" no "${STAGING_INTERNAL_FRONTEND_PORT_BIND:-127.0.0.1:8080:8080}" "${STAGING_INTERNAL_HEALTH_URL:-http://127.0.0.1:8080/api/health}"
 }
 
 deploy_production() {
   [ "${CONFIRM_PRODUCTION:-}" = "production" ] || die "Add CONFIRM_PRODUCTION=production to deploy production"
-  deploy_one "production external" "$PRODUCTION_EXTERNAL_HOST" external "$PRODUCTION_EXTERNAL_ENV" yes
-  deploy_one "production internal" "$PRODUCTION_INTERNAL_HOST" internal "$PRODUCTION_INTERNAL_ENV" no
+  deploy_one "production external" "$PRODUCTION_EXTERNAL_HOST" external "$PRODUCTION_EXTERNAL_ENV" yes "${PRODUCTION_EXTERNAL_FRONTEND_PORT_BIND:-127.0.0.1:8080:8080}" "${PRODUCTION_EXTERNAL_HEALTH_URL:-http://127.0.0.1:8080/api/health}"
+  deploy_one "production internal" "$PRODUCTION_INTERNAL_HOST" internal "$PRODUCTION_INTERNAL_ENV" no "${PRODUCTION_INTERNAL_FRONTEND_PORT_BIND:-127.0.0.1:8080:8080}" "${PRODUCTION_INTERNAL_HEALTH_URL:-http://127.0.0.1:8080/api/health}"
 }
 
 health_one() {
-  local name="$1" host="$2"
+  local name="$1" host="$2" health_url="$3"
   [ -n "$host" ] || die "$name host is empty"
   log "health $name ($host)"
-  remote "$host" "curl -fsS http://127.0.0.1:8080/api/health && echo"
+  remote "$host" "curl -fsS '$health_url' && echo"
 }
 
 health_env() {
   case "$1" in
     staging)
-      health_one "staging external" "$STAGING_EXTERNAL_HOST"
-      health_one "staging internal" "$STAGING_INTERNAL_HOST"
+      health_one "staging external" "$STAGING_EXTERNAL_HOST" "${STAGING_EXTERNAL_HEALTH_URL:-http://127.0.0.1/api/health}"
+      health_one "staging internal" "$STAGING_INTERNAL_HOST" "${STAGING_INTERNAL_HEALTH_URL:-http://127.0.0.1:8080/api/health}"
       ;;
     production)
-      health_one "production external" "$PRODUCTION_EXTERNAL_HOST"
-      health_one "production internal" "$PRODUCTION_INTERNAL_HOST"
+      health_one "production external" "$PRODUCTION_EXTERNAL_HOST" "${PRODUCTION_EXTERNAL_HEALTH_URL:-http://127.0.0.1:8080/api/health}"
+      health_one "production internal" "$PRODUCTION_INTERNAL_HOST" "${PRODUCTION_INTERNAL_HEALTH_URL:-http://127.0.0.1:8080/api/health}"
       ;;
     *)
       usage

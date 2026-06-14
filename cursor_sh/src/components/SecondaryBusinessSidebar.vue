@@ -5,6 +5,7 @@
       <div
         class="ai-agent-banner"
         :class="{ active: uiStore.isAiExpanded }"
+        data-onboarding-target="secondary-ai-agent-entry"
         role="button"
         tabindex="0"
         @click="goToService('ai_agent')"
@@ -46,11 +47,12 @@
     <!-- 贯穿首尾的无空隙分割线 -->
     <div class="figma-full-divider"></div>
 
-    <div class="module-list service-module-list">
+    <div class="module-list service-module-list" data-onboarding-target="secondary-business-list">
       <div
         v-for="service in platformServices"
         :key="service.type"
         class="module-group"
+        :data-onboarding-target="`secondary-business-${service.type}`"
         :class="{ active: currentModule === service.type }"
       >
         <div

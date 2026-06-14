@@ -293,7 +293,11 @@
 
       <!-- Input Area — Stitch Style Pill -->
       <div class="input-area-container">
-        <div class="input-area pill-style" :class="{ 'is-voice-recording': isRecording || isTranscribing }">
+        <div
+          class="input-area pill-style"
+          data-onboarding-target="ai-chat-input"
+          :class="{ 'is-voice-recording': isRecording || isTranscribing }"
+        >
           <template v-if="!isRecording && !isTranscribing">
             <!-- Left icons mock -->
             <div class="left-tools">
