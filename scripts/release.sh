@@ -43,6 +43,29 @@ remote() {
   ssh $(ssh_args) "${SSH_USER}@${host}" "$command"
 }
 
+backup_remote() {
+  local name="$1" host="$2"
+  [ -n "$host" ] || die "$name host is empty"
+  log "backup $name ($host)"
+  remote "$host" "
+    set -e
+    if [ ! -d '$REMOTE_DIR' ]; then
+      echo 'skip backup: remote dir does not exist yet'
+      exit 0
+    fi
+    backup_root=\"\${ROLLBACK_BACKUP_DIR:-$(dirname "$REMOTE_DIR")/anti_pro_release_backups}\"
+    mkdir -p \"\$backup_root\"
+    safe_name=\$(printf '%s' '$name' | tr ' /' '__')
+    archive=\"\$backup_root/\$(date +%Y%m%d-%H%M%S)-\$safe_name.tar.gz\"
+    tar -C '$(dirname "$REMOTE_DIR")' \
+      --exclude='$(basename "$REMOTE_DIR")/cursor_sh/hermes_skills' \
+      --exclude='$(basename "$REMOTE_DIR")/ops/deploy.config' \
+      -czf \"\$archive\" '$(basename "$REMOTE_DIR")'
+    echo \"backup=\$archive\"
+    ls -1t \"\$backup_root\"/*.tar.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
+  "
+}
+
 sync_code() {
   local host="$1"
   log "sync -> $host"
@@ -60,6 +83,7 @@ sync_code() {
     --exclude '__pycache__' \
     --exclude '*.pyc' \
     --exclude 'cursor_sh/backend/.env*' \
+    --exclude 'cursor_sh/hermes_skills/' \
     --exclude 'ops/deploy.config' \
     -e "$ssh_cmd" \
     "$ROOT_DIR/" "${SSH_USER}@${host}:${REMOTE_DIR}/"
@@ -70,6 +94,7 @@ deploy_one() {
   [ -n "$host" ] || die "$name host is empty"
 
   log "deploy $name ($host)"
+  backup_remote "$name" "$host"
   sync_code "$host"
 
   remote "$host" "
@@ -83,8 +108,16 @@ deploy_one() {
       docker compose run --rm backend alembic upgrade head
     fi
     docker compose up -d --remove-orphans
-    curl -fsS http://127.0.0.1:8080/api/health
-    echo
+    for i in \$(seq 1 30); do
+      if curl -fsS http://127.0.0.1:8080/api/health; then
+        echo
+        exit 0
+      fi
+      sleep 2
+    done
+    docker compose ps
+    docker compose logs --tail=120 backend
+    exit 1
   "
 }
 

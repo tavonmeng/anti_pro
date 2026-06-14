@@ -156,6 +156,12 @@ const router = createRouter({
           name: 'CustomerManagement',
           component: () => import('../views/admin/CustomerManagement.vue'),
           meta: { requiresAuth: true, role: 'admin' }
+        },
+        {
+          path: 'creative-agent',
+          name: 'CreativeAgent',
+          component: () => import('../views/admin/CreativeAgent.vue'),
+          meta: { requiresAuth: true, role: 'admin' }
         }
       ]
     },

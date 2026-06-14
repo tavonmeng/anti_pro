@@ -203,11 +203,18 @@
             <div v-if="order.scenePhotos && order.scenePhotos.length > 0">
               <p><strong>现场实拍图和其他文件（{{ order.scenePhotos.length }}个）：</strong></p>
               <div class="file-list">
-                <div v-for="file in order.scenePhotos" :key="file.id" class="file-item">
-                  <el-icon><Picture /></el-icon>
-                  <span>{{ file.name }}</span>
+                <button
+                  v-for="(file, fileIndex) in order.scenePhotos"
+                  :key="fileKey(file, fileIndex)"
+                  type="button"
+                  class="file-item file-action"
+                  @click="openFilePreview(file)"
+                >
+                  <el-icon><component :is="isPreviewImage(file) ? Picture : DocumentIcon" /></el-icon>
+                  <span>{{ fileName(file) }}</span>
                   <span class="file-size">{{ formatFileSize(file.size) }}</span>
-                </div>
+                  <span class="file-open-text">{{ isPreviewImage(file) ? '预览' : '下载' }}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -218,11 +225,18 @@
             <div v-if="order.materials.length > 0">
               <p><strong>相关材料（{{ order.materials.length }}个文件）：</strong></p>
               <div class="file-list">
-                <div v-for="file in order.materials" :key="file.id" class="file-item">
-                  <el-icon><Document /></el-icon>
-                  <span>{{ file.name }}</span>
+                <button
+                  v-for="(file, fileIndex) in order.materials"
+                  :key="fileKey(file, fileIndex)"
+                  type="button"
+                  class="file-item file-action"
+                  @click="openFilePreview(file)"
+                >
+                  <el-icon><component :is="isPreviewImage(file) ? Picture : DocumentIcon" /></el-icon>
+                  <span>{{ fileName(file) }}</span>
                   <span class="file-size">{{ formatFileSize(file.size) }}</span>
-                </div>
+                  <span class="file-open-text">{{ isPreviewImage(file) ? '预览' : '下载' }}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -251,10 +265,10 @@
                   <span class="preview-history-user">{{ history.createdByName }}</span>
                 </div>
                 <div class="preview-files">
-                  <div v-for="file in history.files" :key="file.id" class="file-item">
-                    <a :href="file.url" target="_blank" class="file-link">
+                  <div v-for="(file, fileIndex) in history.files" :key="fileKey(file, fileIndex)" class="file-item">
+                    <a :href="fileUrl(file)" target="_blank" class="file-link" @click.prevent="openFilePreview(file)">
                       <el-icon><VideoPlay /></el-icon>
-                      <span>{{ file.name }}</span>
+                      <span>{{ fileName(file) }}</span>
                       <span class="file-size">{{ formatFileSize(file.size) }}</span>
                     </a>
                   </div>
@@ -288,12 +302,18 @@
         <div v-if="hasPreviewFiles" class="preview-section">
           <h3>预览文件</h3>
           <div class="file-list">
-            <div v-for="file in order.previewFiles" :key="file.id" class="file-item preview-file">
+            <button
+              v-for="(file, fileIndex) in order.previewFiles"
+              :key="fileKey(file, fileIndex)"
+              type="button"
+              class="file-item file-action preview-file"
+              @click="openFilePreview(file)"
+            >
               <el-icon><VideoPlay /></el-icon>
-              <span>{{ file.name }}</span>
+              <span>{{ fileName(file) }}</span>
               <span class="file-size">{{ formatFileSize(file.size) }}</span>
               <span class="file-time">{{ formatTime(file.uploadTime) }}</span>
-            </div>
+            </button>
           </div>
         </div>
         
@@ -859,9 +879,14 @@ const sortedDeliverables = (deliverables: any[] = []) => {
   return [...deliverables].sort((a, b) => deliverableSortTime(b) - deliverableSortTime(a))
 }
 
-const fileUrl = (file: any) => file?.url || file?.file_url || file?.fileUrl || file?.href || ''
+const fileUrl = (file: any) => file?.url || file?.previewUrl || file?.file_url || file?.fileUrl || file?.href || ''
+const fileName = (file: any) => file?.name || file?.filename || file?.fileName || file?.originalName || file?.original_filename || '文件'
 const fileKey = (file: any, index = 0) =>
-  file?.id || file?.url || file?.file_url || file?.fileUrl || file?.href || file?.object_key || file?.filename || file?.name || index
+  file?.id || fileUrl(file) || file?.object_key || file?.filename || file?.name || index
+const isPreviewImage = (file: any) => {
+  const mime = String(file?.type || file?.mimeType || file?.mime_type || file?.content_type || '').toLowerCase()
+  return mime.startsWith('image/') || isImage(fileName(file)) || isImage(fileUrl(file).split('?')[0])
+}
 
 const openFilePreview = (file: any) => {
   if (!fileUrl(file)) {
@@ -1688,6 +1713,25 @@ const handleAdminCancel = async () => {
     color: #86868B;
     font-size: 13px;
   }
+}
+
+.file-action {
+  width: 100%;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+
+  &:hover {
+    background: #EEF2FF;
+  }
+}
+
+.file-open-text {
+  margin-left: auto;
+  color: #409EFF !important;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .file-link {

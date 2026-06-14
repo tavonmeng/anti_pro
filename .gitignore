@@ -11,3 +11,10 @@ tools/node-*/
 
 # OS
 .DS_Store
+
+# Deployment secrets / local inventory
+ops/deploy.config
+ops/secure-config-backups/
+
+# Runtime business knowledge edited from the admin Creative Agent UI
+cursor_sh/hermes_skills/

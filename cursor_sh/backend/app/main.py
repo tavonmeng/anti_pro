@@ -108,6 +108,8 @@ if deploy_mode in ("all", "internal"):
     app.include_router(admin_documents.router, prefix="/api")
     from app.api import human_handoffs
     app.include_router(human_handoffs.router, prefix="/api")
+    from app.api import creative_agent as creative_agent_api
+    app.include_router(creative_agent_api.router, prefix="/api")
 
 # 挂载审计日志中间件（放在路由注册之后，确保能拦截所有请求）
 if settings.LOG_ENABLED:
@@ -176,6 +178,25 @@ async def startup_event():
                 await migrate_ai_chat_message_ids()
             except Exception:
                 startup_logger.exception("AI 聊天消息幂等迁移异常（不影响启动）")
+
+            # 创意 Agent 字段/反馈表迁移（开发或显式允许自动建表时执行；生产由 Alembic 管理）
+            try:
+                from scripts.migrate_creative_agent_iterations import migrate as migrate_creative_agent_iterations
+                await migrate_creative_agent_iterations()
+            except Exception:
+                startup_logger.exception("创意 Agent 迭代字段迁移异常（不影响启动）")
+
+            try:
+                from scripts.migrate_creative_agent_react import migrate as migrate_creative_agent_react
+                await migrate_creative_agent_react()
+            except Exception:
+                startup_logger.exception("创意 Agent ReAct 字段迁移异常（不影响启动）")
+
+            try:
+                from scripts.migrate_creative_designer_feedbacks import migrate as migrate_creative_designer_feedbacks
+                await migrate_creative_designer_feedbacks()
+            except Exception:
+                startup_logger.exception("创意 Agent 设计师反馈表迁移异常（不影响启动）")
 
         if settings.LOG_DB_ENABLED:
             # 初始化审计日志独立数据库（与主库物理隔离）

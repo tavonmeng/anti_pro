@@ -211,12 +211,13 @@ class Settings(BaseSettings):
     OSS_PUBLIC_ENDPOINT: str = ""        # 浏览器访问用；留空则从 OSS_ENDPOINT 去掉 -internal
     OSS_SIGNED_URL_EXPIRES: int = 3600   # 签名 URL 有效期（秒），默认 1 小时
     
-    # 阿里云号码认证服务（Dypnsapi - 短信验证码）配置
+    # 阿里云短信服务（Dysmsapi - 短信验证码）配置
     SMS_ENABLED: bool = True
     SMS_ACCESS_KEY_ID: str = ""      # 可与 OSS 共用
     SMS_ACCESS_KEY_SECRET: str = ""
     SMS_SIGN_NAME: str = ""          # 短信签名 (如: "速通互联验证码")
     SMS_TEMPLATE_CODE: str = ""      # 模板CODE (如: "100001")
+    SMS_REGION_ID: str = "cn-qingdao"
     SMS_CODE_LENGTH: int = 6         # 验证码长度
     SMS_VALID_TIME: int = 300        # 验证码有效期（秒）5分钟
     
@@ -285,6 +286,19 @@ class Settings(BaseSettings):
     AI_CRAWL_MAX_CONCURRENT: int = 1
     AI_CRAWL_PENDING_TTL_SECONDS: int = 1800
     STARTUP_DB_LOCK_TIMEOUT: int = 60
+
+    # Hermes Agent API Server（管理员创意工作台使用）
+    # 需要在 Hermes 侧启用 API_SERVER_ENABLED=true，并启动 `hermes gateway`。
+    HERMES_AGENT_ENABLED: bool = False
+    HERMES_API_BASE_URL: str = "http://127.0.0.1:8642/v1"
+    HERMES_API_KEY: str = ""
+    HERMES_HTTP_TIMEOUT: float = 180.0
+    HERMES_CREATIVE_PROFILE: str = "creative-orchestrator"
+    HERMES_CREATIVE_MODEL: str = ""
+    HERMES_CREATIVE_SKILLS_DIR: str = "./hermes_skills"
+    HERMES_CREATIVE_REQUIRED_TOOLSETS: str = "skills,code_execution,memory,session_search"
+    HERMES_CREATIVE_BACKGROUND_TIMEOUT: float = 1200.0
+    HERMES_CREATIVE_POLL_INTERVAL: float = 2.0
     
     # 部署模式：all = 全量（开发用）, external = 用户端, internal = 内部系统
     DEPLOYMENT_MODE: str = "all"

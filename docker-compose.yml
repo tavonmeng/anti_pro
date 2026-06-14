@@ -24,6 +24,7 @@ services:
       - backend-data:/app/data_persist
       - backend-uploads:/app/uploads
       - backend-logs:/app/logs
+      - ./cursor_sh/hermes_skills:/app/hermes_skills
     networks:
       - app-network
     healthcheck:

@@ -102,7 +102,7 @@ async def check_sms_config() -> CheckResult:
             return CheckResult("sms", True, f"sent to {phone[:3]}****{phone[-4:]}")
         return CheckResult("sms", False, str(result))
 
-    import alibabacloud_dypnsapi20170525  # noqa: F401
+    import alibabacloud_dysmsapi20170525  # noqa: F401
 
     return CheckResult("sms", True, "sdk import ok; send test requires a phone number")
 

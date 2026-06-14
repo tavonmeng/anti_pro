@@ -21,6 +21,11 @@
         <el-icon><UserFilled /></el-icon>
         <template #title>客户 Memory</template>
       </el-menu-item>
+
+      <el-menu-item index="creative-agent">
+        <el-icon><EditPen /></el-icon>
+        <template #title>创意 Agent</template>
+      </el-menu-item>
       
       <el-menu-item index="staff">
         <el-icon><User /></el-icon>
@@ -174,6 +179,8 @@ const activeMenu = computed(() => {
     return 'human-handoffs'
   } else if (path.includes('/customers') && isAdmin.value) {
     return 'customers'
+  } else if (path.includes('/creative-agent') && isAdmin.value) {
+    return 'creative-agent'
   } else if (path.includes('/assignments') && isContractor.value) {
     return 'assignments'
   } else if (path.includes('/admin')) {
@@ -226,6 +233,8 @@ const handleMenuSelect = (index: string) => {
     router.push('/admin/human-handoffs')
   } else if (index === 'customers') {
     router.push('/admin/customers')
+  } else if (index === 'creative-agent') {
+    router.push('/admin/creative-agent')
   } else if (index === 'assignments') {
     router.push('/contractor/assignments')
   }

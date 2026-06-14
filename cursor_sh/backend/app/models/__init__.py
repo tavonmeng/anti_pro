@@ -15,6 +15,7 @@ from app.models.feedback import Feedback
 from app.models.notification import Notification
 from app.models.announcement import Announcement
 from app.models.security_event import SecurityEvent, SecurityEventType
+from app.models.sms_verification import SmsVerificationCode
 from app.models.user_memory import UserMemory
 from app.models.ai_chat import AIChatSession, AIChatMessage
 from app.models.human_handoff import HumanHandoff
@@ -34,6 +35,7 @@ __all__ = [
     "File", "Feedback", "Notification",
     "Announcement",
     "SecurityEvent", "SecurityEventType",
+    "SmsVerificationCode",
     "UserMemory",
     "AIChatSession", "AIChatMessage", "HumanHandoff",
     "HomepageBar",
