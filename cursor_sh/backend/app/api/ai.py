@@ -378,7 +378,7 @@ def _sse_event(event: str, data: dict) -> str:
 
 def _build_requirement_llm_messages(request: ChatRequest, memory_context: str = "") -> list[dict[str, str]]:
     system_prompt = _INTERNAL_SECURITY_RULES + _get_requirement_prompt(request.business_type)
-    if _should_enable_design_thinking(request.message):
+    if _should_enable_design_thinking(request.message, request.history):
         system_prompt += _CREATIVE_DIRECTION_DRAFT_RULES
     if memory_context:
         system_prompt += memory_context
@@ -399,8 +399,38 @@ def _build_responses_input(messages: list[dict[str, str]]) -> list[dict[str, str
     ]
 
 
-def _should_enable_design_thinking(message: str) -> bool:
-    """Only enable Qwen thinking for explicit creative/design plan generation."""
+def _has_recent_creative_direction_draft(history: list | None) -> bool:
+    """Detect whether the assistant recently gave a lightweight creative draft."""
+    markers = ("创意方向草案", "创意方向名称", "计划概括", "适合的原因", "传播价值")
+    recent = list(history or [])[-6:]
+    return any(
+        item.get("role") == "assistant"
+        and any(marker in (item.get("content") or "") for marker in markers)
+        for item in recent
+    )
+
+
+def _is_creative_direction_revision_request(message: str, history: list | None = None) -> bool:
+    """Treat feedback after a draft as a lightweight creative revision request."""
+    if not _has_recent_creative_direction_draft(history):
+        return False
+    text = re.sub(r"\s+", "", (message or "").lower())
+    if not text:
+        return False
+
+    revision_keywords = [
+        "不满意", "不太满意", "不喜欢", "不够", "不行", "太普通", "太传统", "太平",
+        "换个", "换一个", "换方向", "另一个", "还有别的", "再来", "再出", "再给",
+        "重新", "重写", "改进", "优化", "调整", "修改", "润色",
+        "更科技", "更年轻", "更高级", "更震撼", "更现代", "更国潮", "更商业",
+        "更艺术", "更东方", "更未来", "更有冲击", "更有记忆点",
+        "不要", "别太", "去掉", "保留", "加强",
+    ]
+    return any(keyword in text for keyword in revision_keywords)
+
+
+def _should_enable_design_thinking(message: str, history: list | None = None) -> bool:
+    """Enable deeper thinking for creative draft requests and draft revisions."""
     text = re.sub(r"\s+", "", (message or "").lower())
     if not text:
         return False
@@ -411,6 +441,9 @@ def _should_enable_design_thinking(message: str) -> bool:
     ]
     if any(keyword in text for keyword in excluded_keywords):
         return False
+
+    if _is_creative_direction_revision_request(message, history):
+        return True
 
     design_plan_keywords = [
         "设计方案", "策划方案", "创意方案", "视觉方案", "内容方案",
@@ -423,17 +456,20 @@ def _should_enable_design_thinking(message: str) -> bool:
 
 
 _CREATIVE_DIRECTION_DRAFT_RULES = (
-    "\n\n【用户明确要求创意/设计/策划方案时的处理】\n"
+    "\n\n【用户要求创意/设计/策划方向，或对上一版草案继续追问时的处理】\n"
+    "- 采用三段策略：第一轮给轻量创意方向草案；后续反馈时基于用户偏好修订一版；连续多轮追问时收束为偏好记录，并继续回到需求收集。\n"
     "- 这不是正式完整提案，不要承诺已经完成完整创意方案、脚本分镜、报价或排期。\n"
     "- 可以基于当前已知需求，先给出一个轻量的「创意方向草案」，帮助客户判断大方向是否合适。\n"
+    "- 如果用户是在上一版草案基础上表达不满意、换方向、改风格或要求优化，先用一句话复述本轮要调整的点，再输出一版「修订方向草案」。\n"
     "- 输出必须简洁，包含以下四项，使用清晰小标题：\n"
     "  1. 创意方向名称：一句短名称，具有传播记忆点。\n"
     "  2. 计划概括：用2-3句话概括画面逻辑、空间关系或内容主线。\n"
     "  3. 适合的原因：说明它为什么适合当前点位、受众、品牌/媒体目标或裸眼3D观看场景。\n"
     "  4. 传播价值：说明它可能带来的停留、拍摄、社交传播或招商展示价值。\n"
-    "- 输出草案后，必须补一句专业边界说明：完整创意方案需要结合屏幕参数、观看动线、现场素材、品牌限制、制作周期和审核规范，由专业策划与设计团队进行全面分析，通常需要一定时间打磨。\n"
-    "- 随后用一句自然承接，委婉回到当前需求梳理：说明为了让后续策划判断更准确，还需要继续补齐本次项目的其他关键信息。\n"
+    "- 输出草案后，必须补一句专业边界说明：完整创意方案需要结合屏幕参数、观看动线、现场素材、品牌限制、制作周期和审核规范，由项目顾问和策划团队继续深化。\n"
+    "- 随后用一句自然承接，转入当前需求梳理：说明为了让后续策划判断更准确，还需要继续补齐本次项目的其他关键信息。\n"
     "- 最后只问一个问题，优先追问当前仍缺失的最关键项；如果核心信息已基本齐全，再请客户确认这个方向是否符合想要的气质，或是否有必须保留/避免的元素。\n"
+    "- 如果用户已经连续多轮围绕创意草案追问，不要无限展开方案；要说明已记录偏好，后续完整方案会由项目顾问和策划团队深化，然后继续追问一个最关键的 brief 缺失项。\n"
     "- 不要输出【需求收集完成】，除非普通需求收集规则已经满足完成条件。\n"
 )
 
@@ -983,7 +1019,7 @@ async def ai_chat(
             {
                 "model": settings.AI_MODEL_NAME,
                 "messages": llm_messages,
-                "enable_thinking": _should_enable_design_thinking(request.message),
+                "enable_thinking": _should_enable_design_thinking(request.message, request.history),
             },
             timeout=settings.AI_HTTP_TIMEOUT,
         )
@@ -1166,7 +1202,7 @@ async def ai_chat_stream(
 
     async def event_generator():
         collected: list[str] = []
-        thinking_enabled = _should_enable_design_thinking(request.message)
+        thinking_enabled = _should_enable_design_thinking(request.message, request.history)
         thinking_sent = False
         yield _sse_event("start", {})
         try:

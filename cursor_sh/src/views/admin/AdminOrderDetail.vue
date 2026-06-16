@@ -1966,4 +1966,210 @@ const handleAdminCancel = async () => {
 .ca-dlv-comment-input {
   margin-top: 10px;
 }
+
+@media (max-width: 768px) {
+  .admin-order-detail-page {
+    padding: 12px;
+  }
+
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .page-header > .el-button,
+  .header-actions > .el-button,
+  .header-actions :deep(.el-dropdown),
+  .header-actions :deep(.el-dropdown .el-button) {
+    width: 100%;
+  }
+
+  .header-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .detail-card {
+    border-radius: 8px;
+
+    :deep(.el-card__body) {
+      padding: 12px;
+    }
+
+    :deep(.el-card__header) {
+      padding: 12px;
+    }
+
+    .card-header,
+    .header-right {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .header-right > .el-button,
+    .header-right :deep(.el-dropdown),
+    .header-right :deep(.el-dropdown .el-button) {
+      width: 100%;
+    }
+
+    .order-number {
+      font-size: 18px;
+      line-height: 1.3;
+      word-break: break-word;
+    }
+  }
+
+  .order-progress {
+    margin-bottom: 16px !important;
+    padding: 12px 8px !important;
+    overflow-x: auto;
+  }
+
+  .order-progress :deep(.el-steps) {
+    min-width: 680px;
+  }
+
+  :deep(.el-descriptions__table) {
+    table-layout: fixed;
+  }
+
+  :deep(.el-descriptions__label),
+  :deep(.el-descriptions__content) {
+    display: block;
+    width: 100% !important;
+    box-sizing: border-box;
+    word-break: break-word;
+  }
+
+  :deep(.el-descriptions__label) {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+
+  :deep(.el-row) {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  :deep(.el-col) {
+    max-width: 100%;
+    flex: 0 0 100%;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .order-specific-info,
+  .preview-section,
+  .preview-history-section,
+  .feedback-section,
+  .contractor-section,
+  .design-plan-section {
+    margin-top: 22px;
+
+    h3 {
+      font-size: 16px;
+      margin-bottom: 12px;
+    }
+  }
+
+  .description-text {
+    padding: 10px;
+    overflow-wrap: anywhere;
+  }
+
+  .preview-history-header,
+  .feedback-header,
+  .ca-header,
+  .ca-dlv-header,
+  .dp-header,
+  .dp-footer,
+  .schedule-stage-picker,
+  .ai-schedule-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .review-actions,
+  .ca-dlv-actions,
+  .dp-footer-btns {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .review-actions :deep(.el-button-group),
+  .review-actions :deep(.el-button-group .el-button),
+  .ca-actions .el-button,
+  .ca-dlv-actions .el-button,
+  .dp-footer-btns .el-button,
+  .dp-upload :deep(.el-button) {
+    width: 100%;
+  }
+
+  .file-item,
+  .file-link,
+  .dp-file-item,
+  .ca-dlv-fb-item,
+  .ca-admin-comment-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .file-open-text,
+  .file-size,
+  .file-time,
+  .ca-fb-meta,
+  .ca-comment-meta {
+    margin-left: 0;
+    white-space: normal;
+  }
+
+  .dp-card,
+  .contractor-assignment-card,
+  .ca-deliverable-item,
+  .workflow-schedule {
+    padding: 12px;
+    border-radius: 8px;
+  }
+
+  .dp-file-name,
+  .ca-dlv-file {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .schedule-stage-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .schedule-stage-picker :deep(.el-date-editor),
+  .ai-schedule-item :deep(.el-date-editor) {
+    width: 100% !important;
+  }
+
+  .memory-card {
+    :deep(.el-card__body) {
+      overflow-x: hidden;
+    }
+  }
+
+  .memory-section {
+    margin-bottom: 18px;
+    overflow-x: auto;
+  }
+
+  .memory-section :deep(.el-table) {
+    min-width: 640px;
+  }
+
+  .memory-section :deep(.el-textarea__inner) {
+    min-height: 92px;
+  }
+}
 </style>

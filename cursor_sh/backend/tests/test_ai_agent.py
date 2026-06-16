@@ -311,6 +311,23 @@ def test_design_thinking_only_for_creative_plan_requests():
     assert not ai_module._should_enable_design_thinking("怎么落地执行")
 
 
+def test_design_thinking_for_creative_draft_revision_requests():
+    history = [
+        {"role": "user", "content": "根据上面的信息帮我生成一个创意方案"},
+        {
+            "role": "assistant",
+            "content": "创意方向名称：西湖未来折叠\n\n计划概括：...\n\n适合的原因：...\n\n传播价值：...",
+        },
+    ]
+
+    assert ai_module._should_enable_design_thinking("不太满意，能不能更科技一点", history)
+    assert ai_module._should_enable_design_thinking("换一个更年轻的方向", history)
+
+
+def test_revision_words_without_recent_creative_draft_do_not_enable_thinking():
+    assert not ai_module._should_enable_design_thinking("不太满意，能不能更科技一点", [])
+
+
 def test_creative_plan_request_injects_direction_draft_rules(monkeypatch):
     monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
 
@@ -329,7 +346,27 @@ def test_creative_plan_request_injects_direction_draft_rules(monkeypatch):
     assert "适合的原因" in system_prompt
     assert "传播价值" in system_prompt
     assert "完整创意方案需要结合屏幕参数" in system_prompt
-    assert "委婉回到当前需求梳理" in system_prompt
+    assert "项目顾问和策划团队继续深化" in system_prompt
+    assert "转入当前需求梳理" in system_prompt
+
+
+def test_creative_revision_request_injects_direction_draft_rules(monkeypatch):
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+
+    messages = ai_module._build_requirement_llm_messages(
+        ai_module.ChatRequest(
+            session_id="test-session",
+            message="不满意，换一个更科技的方向",
+            history=[
+                {"role": "user", "content": "帮我生成一个创意方案"},
+                {"role": "assistant", "content": "创意方向名称：水墨西湖\n\n计划概括：...\n\n传播价值：..."},
+            ],
+        )
+    )
+
+    system_prompt = messages[0]["content"]
+    assert "修订方向草案" in system_prompt
+    assert "项目顾问和策划团队继续深化" in system_prompt
 
 
 def test_non_creative_plan_request_does_not_inject_direction_draft_rules(monkeypatch):

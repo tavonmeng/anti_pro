@@ -415,6 +415,22 @@
                 </div>
 
                 <div class="chat-composer">
+                  <div v-if="activeRun" class="active-run-banner">
+                    <div>
+                      <strong>{{ runTypeLabel(activeRun.run_type) }} · {{ statusLabel(activeRun.status) }}</strong>
+                      <span>{{ activeRunSummary }}</span>
+                    </div>
+                    <el-button
+                      size="small"
+                      plain
+                      type="danger"
+                      :loading="stoppingRun"
+                      :disabled="activeRun.status === 'stopping'"
+                      @click="stopActiveRun"
+                    >
+                      停止
+                    </el-button>
+                  </div>
                   <div v-if="selectedFeedbackIdea" class="composer-context">
                     <span>当前方案：{{ selectedFeedbackIdea.title || selectedFeedbackIdea.id }}</span>
                     <el-button text size="small" @click="clearFeedbackIdea">取消关联</el-button>
@@ -682,6 +698,7 @@ const memorySaving = ref(false)
 const skillLoading = ref(false)
 const skillSaving = ref(false)
 const deletingSessionId = ref('')
+const stoppingRun = ref(false)
 
 const createDialogVisible = ref(false)
 const ideaDialogVisible = ref(false)
@@ -772,6 +789,13 @@ const currentBrief = computed(() => ({
 
 const activeRun = computed(() => {
   return activeSession.value?.runs?.find((run: any) => ['queued', 'running', 'stopping'].includes(run.status))
+})
+
+const activeRunSummary = computed(() => {
+  const run = activeRun.value
+  if (!run) return ''
+  if (run.status === 'stopping') return '正在等待 Agent 确认停止，页面会自动刷新状态。'
+  return `${run.provider === 'direct_ai' ? 'Direct' : 'Hermes'} 正在处理，请等待完成或停止本轮运行。`
 })
 
 const findIdea = (ideaId: string) => {
@@ -1420,6 +1444,22 @@ const ensureNoActiveRun = () => {
   return false
 }
 
+const stopActiveRun = async () => {
+  const runId = activeRun.value?.id
+  const sessionId = activeSession.value?.id
+  if (!runId || !sessionId || stoppingRun.value) return
+  stoppingRun.value = true
+  try {
+    await request.post(`/admin/creative-agent/runs/${runId}/stop`)
+    await loadRunEvents(runId)
+    await openSession(sessionId)
+    syncRunPolling()
+    ElMessage.success('已请求停止 Agent')
+  } finally {
+    stoppingRun.value = false
+  }
+}
+
 const agentProviderLabel = () => agentProvider.value === 'direct_ai' ? 'Direct' : 'Hermes'
 
 const fillBriefForm = (brief: Record<string, any>) => {
@@ -1706,6 +1746,8 @@ const eventLabel = (type: string) => {
     'backend.persisted': '保存方案',
     'backend.completed': '完成',
     'backend.parse_failed': '解析失败',
+    'backend.stopping': '停止中',
+    'backend.stopped': '已停止',
     'direct_ai.completed': '完成',
     'direct_ai.failed': '失败',
     'backend.timeout': '超时',
@@ -3121,6 +3163,41 @@ onBeforeUnmount(stopRunPolling)
   padding: 12px;
 }
 
+.active-run-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  background: #fffbeb;
+}
+
+.active-run-banner > div {
+  min-width: 0;
+}
+
+.active-run-banner strong,
+.active-run-banner span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.active-run-banner strong {
+  color: #92400e;
+  font-size: 13px;
+}
+
+.active-run-banner span {
+  margin-top: 2px;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .composer-context {
   justify-content: space-between;
   margin-bottom: 8px;
@@ -3374,6 +3451,15 @@ onBeforeUnmount(stopRunPolling)
   .composer-context {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .active-run-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .active-run-banner .el-button {
+    width: 100%;
   }
 
   .creative-dialog :deep(.el-dialog) {

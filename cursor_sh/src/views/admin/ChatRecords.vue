@@ -482,17 +482,28 @@ onMounted(() => {
     white-space: nowrap;
   }
 
-  .chat-record-drawer :deep(.el-drawer.rtl) {
+  :deep(.chat-record-drawer.el-drawer.rtl),
+  :deep(.chat-record-drawer .el-drawer.rtl) {
     width: 100% !important;
   }
 
-  .chat-record-drawer :deep(.el-drawer__header) {
+  :deep(.chat-record-drawer .el-drawer__header) {
     margin-bottom: 8px;
     padding: 14px 14px 8px;
+    align-items: flex-start;
+    gap: 10px;
   }
 
-  .chat-record-drawer :deep(.el-drawer__body) {
+  :deep(.chat-record-drawer .el-drawer__title) {
+    min-width: 0;
+    font-size: 15px;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  :deep(.chat-record-drawer .el-drawer__body) {
     padding: 0 10px 12px;
+    overflow-x: hidden;
   }
 
   .chat-messages {
@@ -515,6 +526,14 @@ onMounted(() => {
   .bubble-content {
     font-size: 13px;
     line-height: 1.65;
+    overflow-wrap: anywhere;
+  }
+
+  .bubble-content :deep(a),
+  .bubble-content :deep(code),
+  .bubble-content :deep(pre) {
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
   }
 }
 </style>

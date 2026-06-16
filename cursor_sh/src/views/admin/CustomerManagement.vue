@@ -105,6 +105,7 @@
 
     <!-- 客户画像详情抽屉 -->
     <el-drawer
+      class="customer-profile-drawer"
       v-model="drawerVisible"
       :title="`客户画像 — ${activeCustomer?.username || ''}`"
       size="780px"
@@ -355,6 +356,7 @@
     </el-dialog>
 
     <el-dialog
+      class="customer-review-dialog"
       v-model="reviewDialogVisible"
       title="客户资料审核"
       width="920px"
@@ -1095,5 +1097,183 @@ onMounted(() => {
   padding: 40px 0;
   color: #C0C4CC;
   font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .customer-page {
+    padding: 12px;
+    max-width: none;
+  }
+
+  .page-header h2 {
+    font-size: 18px;
+    line-height: 1.35;
+  }
+
+  .page-desc {
+    margin-bottom: 12px;
+  }
+
+  .search-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .search-bar :deep(.el-input),
+  .search-bar .el-button {
+    width: 100% !important;
+    margin-left: 0;
+  }
+
+  :deep(.el-table) {
+    width: 100%;
+  }
+
+  :deep(.el-table__body-wrapper),
+  :deep(.el-table__header-wrapper) {
+    overflow-x: auto;
+  }
+
+  .pagination-wrapper {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .pagination-wrapper :deep(.el-pagination) {
+    white-space: nowrap;
+  }
+
+  :deep(.customer-profile-drawer.el-drawer.rtl),
+  :deep(.customer-profile-drawer .el-drawer.rtl) {
+    width: 100% !important;
+  }
+
+  :deep(.customer-profile-drawer .el-drawer__header) {
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding: 14px 14px 8px;
+  }
+
+  :deep(.customer-profile-drawer .el-drawer__title) {
+    min-width: 0;
+    font-size: 15px;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  :deep(.customer-profile-drawer .el-drawer__body) {
+    padding: 0 10px 14px;
+    overflow-x: hidden;
+  }
+
+  .profile-detail {
+    padding: 0;
+  }
+
+  .profile-section {
+    margin-bottom: 18px;
+    overflow-x: auto;
+  }
+
+  .profile-section h4 {
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .profile-section :deep(.el-descriptions__table) {
+    table-layout: fixed;
+  }
+
+  .profile-section :deep(.el-descriptions__label),
+  .profile-section :deep(.el-descriptions__content) {
+    display: block;
+    width: 100% !important;
+    box-sizing: border-box;
+    word-break: break-word;
+  }
+
+  .profile-section :deep(.el-descriptions__label) {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+
+  .profile-section :deep(.el-table) {
+    min-width: 640px;
+  }
+
+  .company-editor,
+  .section-header,
+  .review-block-header,
+  .section-actions,
+  .review-meta {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .company-editor .el-input,
+  .company-editor .el-button,
+  .section-actions .el-button,
+  .section-actions :deep(.el-upload),
+  .section-actions :deep(.el-upload .el-button) {
+    width: 100%;
+    max-width: none;
+  }
+
+  .document-empty,
+  .empty-profile {
+    padding: 16px;
+    text-align: left;
+  }
+
+  :deep(.customer-review-dialog.el-dialog),
+  :deep(.customer-review-dialog .el-dialog) {
+    width: calc(100vw - 20px) !important;
+    margin: 10px auto !important;
+  }
+
+  :deep(.customer-review-dialog .el-dialog__header) {
+    padding: 14px 14px 8px;
+  }
+
+  :deep(.customer-review-dialog .el-dialog__body) {
+    padding: 10px 14px;
+  }
+
+  :deep(.customer-review-dialog .el-dialog__footer) {
+    padding: 8px 14px 14px;
+  }
+
+  :deep(.customer-review-dialog .el-dialog__footer .dialog-footer),
+  :deep(.customer-review-dialog .el-dialog__footer) {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  :deep(.customer-review-dialog .el-dialog__footer .el-button) {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .review-dialog {
+    max-height: calc(100vh - 150px);
+    padding-right: 0;
+  }
+
+  .review-block {
+    overflow-x: auto;
+  }
+
+  .review-block :deep(.el-table) {
+    min-width: 920px;
+  }
+
+  .review-readonly {
+    max-width: none;
+    white-space: normal;
+  }
 }
 </style>

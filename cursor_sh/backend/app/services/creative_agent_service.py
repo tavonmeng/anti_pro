@@ -682,7 +682,7 @@ async def refresh_run_from_hermes(db: AsyncSession, run_id: str) -> dict[str, An
         run.finished_at = run.finished_at or datetime.now()
         session.status = "completed"
         await _record_run_event(db, run, "backend.completed", "创意结果已解析并入库", {"run_id": run.id})
-    elif normalized in {"failed", "cancelled"}:
+    elif normalized in {"failed", "cancelled", "stopped"}:
         run.finished_at = run.finished_at or datetime.now()
         run.error = run.error or _extract_hermes_error(hermes_payload)
         session.status = normalized
@@ -835,10 +835,18 @@ async def stop_run(db: AsyncSession, run_id: str) -> dict[str, Any]:
     run = await _get_run_or_404(db, run_id)
     if run.status in TERMINAL_STATUSES:
         return _serialize_run(run)
+    result = await db.execute(select(CreativeSession).where(CreativeSession.id == run.session_id))
+    session = result.scalar_one_or_none()
     if run.hermes_run_id:
         await HermesClient().stop_run(run.hermes_run_id)
-    run.status = "stopping"
-    await _record_run_event(db, run, "backend.stopping", "已向 Hermes 发送停止请求", {"run_id": run.id})
+        run.status = "stopping"
+        await _record_run_event(db, run, "backend.stopping", "已向 Agent 发送停止请求", {"run_id": run.id})
+    else:
+        run.status = "stopped"
+        run.finished_at = run.finished_at or datetime.now()
+        if session:
+            session.status = "stopped"
+        await _record_run_event(db, run, "backend.stopped", "Agent 运行已停止", {"run_id": run.id})
     await db.commit()
     await db.refresh(run)
     return _serialize_run(run)
@@ -3759,7 +3767,7 @@ def _provider_status(*, hermes_healthy: bool) -> list[dict[str, Any]]:
 
 def _normalize_run_status(status: str) -> str:
     value = (status or "").lower()
-    if value in {"completed", "failed", "cancelled"}:
+    if value in {"completed", "failed", "cancelled", "stopped"}:
         return value
     if value in {"stopping"}:
         return "stopping"
