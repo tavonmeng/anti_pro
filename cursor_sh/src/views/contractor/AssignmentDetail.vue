@@ -10,12 +10,60 @@
     <!-- 顶部信息 -->
     <div class="detail-header">
       <div class="header-left">
-        <h1 class="detail-title">{{ assignment.order?.orderNumber || '—' }}</h1>
-        <el-tag :type="statusTagType(assignment.status)" effect="dark" size="small">
-          {{ statusLabel(assignment.status) }}
-        </el-tag>
+        <div>
+          <h1 class="detail-title">{{ orderTitle }}</h1>
+          <p class="detail-breadcrumb">工作台 <span></span> {{ assignment.order?.orderNumber || '—' }}</p>
+        </div>
+        <span class="detail-status">{{ statusLabel(assignment.status) }}</span>
       </div>
     </div>
+
+    <section class="detail-cockpit">
+      <article class="cockpit-card stage-card">
+        <div class="cockpit-topline">
+          <span class="cockpit-icon"><el-icon><Timer /></el-icon></span>
+          <span class="stage-chip">第 {{ currentStageOrder }} 环节</span>
+        </div>
+        <h2>{{ currentStageName }}</h2>
+        <p>当前交付阶段</p>
+        <div class="stage-actions" v-if="assignment.status === 'pending'">
+          <button type="button" class="dark-pill" @click="handleAccept">接受派单</button>
+        </div>
+      </article>
+
+      <article class="cockpit-card calendar-card">
+        <div class="cockpit-topline">
+          <span class="cockpit-icon"><el-icon><Calendar /></el-icon></span>
+          <span class="stage-chip">{{ detailTotalDays }} 天</span>
+        </div>
+        <div class="detail-dot-grid">
+          <span v-for="(dot, index) in detailCalendarDots" :key="index" :class="dot"></span>
+        </div>
+        <p>订单排期日历</p>
+      </article>
+
+      <article class="cockpit-card review-meter-card">
+        <div class="cockpit-topline">
+          <span class="cockpit-icon"><el-icon><WarningFilled /></el-icon></span>
+        </div>
+        <strong>{{ checkedCount }}/{{ totalItems }}</strong>
+        <span>自审核</span>
+        <div class="meter-track">
+          <i :style="{ width: `${reviewPercent}%` }"></i>
+        </div>
+      </article>
+
+      <article class="cockpit-card history-meter-card">
+        <div class="cockpit-topline">
+          <span class="cockpit-icon"><el-icon><Document /></el-icon></span>
+        </div>
+        <strong>{{ stageDeliverables.length }}</strong>
+        <span>提交记录</span>
+        <div class="history-bars">
+          <i v-for="n in 9" :key="n" :style="{ height: `${18 + (n % 5) * 8}px` }"></i>
+        </div>
+      </article>
+    </section>
 
     <div class="detail-grid">
       <!-- 左栏：订单信息 + 排期 -->
@@ -69,7 +117,8 @@
           <el-collapse-item name="aiPlan" class="info-card" v-if="assignment.order?.designPlan?.content">
             <template #title>
               <h3 class="card-title" style="margin: 0; width: 100%; display: flex; align-items: center; gap: 8px;">
-                <span>📐 AI设计方案</span>
+                <el-icon><Document /></el-icon>
+                <span>AI设计方案</span>
                 <el-tag v-if="assignment.order.designPlan.status === 'completed'" type="success" size="small" effect="dark">已完成</el-tag>
               </h3>
             </template>
@@ -145,7 +194,7 @@
               </div>
               <!-- 管理员评论列表 -->
               <div v-if="d.adminComments && d.adminComments.length > 0" class="admin-comments-section">
-                <strong class="admin-comments-title">💬 管理员评论：</strong>
+                <strong class="admin-comments-title">管理员评论：</strong>
                 <div v-for="comment in d.adminComments" :key="comment.id" class="admin-comment-item">
                   <span class="admin-comment-content">{{ comment.content }}</span>
                   <span class="admin-comment-meta">{{ comment.createdByName }} · {{ formatDate(comment.createdAt) }}</span>
@@ -320,7 +369,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   ArrowLeft, Check, UploadFilled, WarningFilled,
-  InfoFilled, CircleCheckFilled, Loading, Lock, ArrowDown, ArrowRight
+  InfoFilled, CircleCheckFilled, Loading, Lock,
+  Calendar, Document, Timer
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
@@ -355,6 +405,22 @@ const currentStage = computed(() =>
   (assignment.value?.schedule || []).find((s: any) => s.display_order === currentStageOrder.value)
 )
 const currentStageName = computed(() => currentStage.value?.name || '—')
+
+const detailTotalDays = computed(() =>
+  (assignment.value?.schedule || []).reduce((sum: number, stage: any) => sum + Number(stage.days || 0), 0)
+)
+
+const detailCalendarDots = computed(() => {
+  const days = Math.max(12, Math.min(24, detailTotalDays.value || 12))
+  const completedStages = (assignment.value?.schedule || []).filter((stage: any) => stage.status === 'completed').length
+  const completed = Math.min(days, completedStages * 4)
+  const active = Math.min(days - 1, Math.max(completed, completed + 2))
+  return Array.from({ length: days }, (_, index) => {
+    if (index < completed) return 'done'
+    if (index === active) return 'active'
+    return 'muted'
+  })
+})
 
 // 审核检查项（按类别分组）
 const reviewCategories = computed(() => [
@@ -437,19 +503,31 @@ const openFilePreview = (file: any) => {
 const orderFields = computed(() => {
   const o = assignment.value?.order || {} as any
   return [
+    { key: 'projectName', label: '项目名称', value: o.projectName || o.project_name },
     { key: 'brand', label: '品牌', value: o.brand },
     { key: 'brand_tone', label: '品牌调性', value: o.brand_tone },
-    { key: 'city', label: '投放城市', value: o.city },
+    { key: 'city', label: '投放城市/位置', value: o.city_location || o.city },
+    { key: 'media_size', label: '媒体尺寸/物理规格', value: o.media_specs || o.media_size },
+    { key: 'time_number', label: '投放时长/数量', value: o.timing_number || o.time_number },
+    { key: 'online_time', label: '预计上刊时间', value: o.online_time },
+    { key: 'theme_concept', label: '主题与核心表达', value: o.theme_concept },
+    { key: 'art_direction', label: '艺术方向/风格', value: o.art_direction || o.style },
+    { key: 'technology', label: '技术需求', value: o.tech_delivery || o.technology },
+    { key: 'background', label: '项目背景', value: o.resource_background || o.background },
+    { key: 'audience_scene', label: '受众/场景', value: o.audience_scene || o.target_group },
+    { key: 'media_positioning', label: '媒体定位', value: o.media_positioning },
+    { key: 'viewing_path', label: '观看路径', value: o.viewing_path },
     { key: 'content', label: '内容需求', value: o.content },
-    { key: 'style', label: '风格偏好', value: o.style },
-    { key: 'target_group', label: '目标受众', value: o.target_group },
-    { key: 'media_size', label: '媒体尺寸', value: o.media_size },
-    { key: 'time_number', label: '投放时长/数量', value: o.time_number },
-    { key: 'technology', label: '技术需求', value: o.technology },
-    { key: 'online_time', label: '上刊时间', value: o.online_time },
-    { key: 'background', label: '项目背景', value: o.background },
+    { key: 'content_review', label: '内容审核要求', value: o.content_review },
+    { key: 'special_requirements', label: '特殊要求', value: o.special_requirements },
     { key: 'prohibited_content', label: '品牌禁忌内容', value: o.prohibited_content },
+    { key: 'remarks', label: '备注', value: o.remarks },
   ].filter(f => f.value !== undefined && f.value !== null)
+})
+
+const orderTitle = computed(() => {
+  const o = assignment.value?.order || {}
+  return o.projectName || o.project_name || o.brand || o.orderNumber || '派单详情'
 })
 
 const uploadHeaders = computed(() => ({
@@ -459,10 +537,6 @@ const uploadHeaders = computed(() => ({
 const statusLabel = (s: string) => ({
   pending: '待处理', in_progress: '进行中', completed: '已完成', rejected: '已拒绝',
 }[s] || s)
-
-const statusTagType = (s: string) => ({
-  pending: 'warning', in_progress: '', completed: 'success', rejected: 'danger',
-}[s] || 'info')
 
 const deliverableStatusLabel = (s: string) => ({
   draft: '草稿', submitted: '待审核', admin_approved: '已通过', admin_rejected: '已驳回',
@@ -552,6 +626,9 @@ const checkedCount = computed(() =>
   allReviewItems.value.filter(item => deliverableForm.selfReviewChecks[item]).length
 )
 const totalItems = computed(() => allReviewItems.value.length)
+const reviewPercent = computed(() =>
+  totalItems.value ? Math.round((checkedCount.value / totalItems.value) * 100) : 0
+)
 
 // 获取全局顺序索引
 const getGlobalIndex = (cIdx: number, idx: number): number => {
@@ -647,11 +724,227 @@ onMounted(fetchDetail)
 </script>
 
 <style lang="scss" scoped>
-.assignment-detail { max-width: 900px; margin: 0 auto; }
-.back-bar { margin-bottom: 16px; }
-.detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-.header-left { display: flex; align-items: center; gap: 12px; }
-.detail-title { font-size: 22px; font-weight: 700; color: #1D1D1F; margin: 0; }
+.assignment-detail { max-width: 1320px; margin: 0 auto; }
+.back-bar { margin-bottom: 18px; }
+.back-bar :deep(.el-button) {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 20px;
+  color: #4B4640;
+  font-weight: 750;
+}
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 44px 52px 24px;
+  border-radius: 34px 34px 0 0;
+  background: #ECEAE7;
+}
+.header-left { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; width: 100%; }
+.detail-title {
+  font-size: clamp(34px, 4vw, 52px);
+  font-weight: 850;
+  line-height: 1;
+  letter-spacing: 0;
+  color: #121212;
+  margin: 0 0 16px;
+}
+.detail-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  color: #5E5954;
+  font-size: 16px;
+  font-weight: 750;
+
+  span {
+    width: 8px;
+    height: 8px;
+    border-top: 2px solid #4B4640;
+    border-right: 2px solid #4B4640;
+    transform: rotate(45deg);
+  }
+}
+.detail-status {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 18px;
+  border-radius: 20px;
+  background: #111111;
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.detail-cockpit {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.3fr) minmax(220px, 0.9fr) minmax(180px, 0.65fr) minmax(180px, 0.65fr);
+  gap: 18px;
+  padding: 20px 52px 30px;
+  border-radius: 0 0 34px 34px;
+  background: #ECEAE7;
+  margin-bottom: 24px;
+}
+
+.cockpit-card {
+  min-height: 210px;
+  padding: 26px 28px;
+  border-radius: 30px;
+  background: #FFFFFF;
+}
+
+.stage-card {
+  background:
+    linear-gradient(135deg, rgba(139, 94, 60, 0.09), transparent 54%),
+    #FFFFFF;
+
+  h2 {
+    margin: 34px 0 8px;
+    color: #151515;
+    font-size: 34px;
+    font-weight: 850;
+    line-height: 1;
+  }
+
+  p {
+    margin: 0;
+    color: #9B948C;
+    font-size: 14px;
+    font-weight: 700;
+  }
+}
+
+.cockpit-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cockpit-icon {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #F4F2EF;
+  color: #121212;
+  border: 1px solid rgba(18, 18, 18, 0.08);
+}
+
+.stage-chip {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+  border-radius: 17px;
+  background: #F7F6F4;
+  color: #4B4640;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.stage-actions { margin-top: 24px; }
+.dark-pill {
+  height: 42px;
+  padding: 0 28px;
+  border: 0;
+  border-radius: 21px;
+  background: #080808;
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.detail-dot-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 7px;
+  margin: 30px 0 20px;
+
+  span {
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: #E5E0DA;
+  }
+
+  .done {
+    background: #BA957C;
+  }
+
+  .active {
+    background: #8B5E3C;
+    box-shadow: 0 0 0 5px rgba(139, 94, 60, 0.12);
+  }
+}
+
+.calendar-card p {
+  margin: 0;
+  color: #9B948C;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.review-meter-card,
+.history-meter-card {
+  display: flex;
+  flex-direction: column;
+
+  strong {
+    margin-top: 30px;
+    color: #151515;
+    font-size: 36px;
+    font-weight: 850;
+    line-height: 1;
+  }
+
+  > span:not(.cockpit-icon) {
+    margin-top: 8px;
+    color: #89827A;
+    font-size: 14px;
+    font-weight: 750;
+  }
+}
+
+.meter-track {
+  height: 10px;
+  margin-top: auto;
+  border-radius: 10px;
+  background: #E5E0DA;
+  overflow: hidden;
+
+  i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: #8B5E3C;
+  }
+}
+
+.history-bars {
+  min-height: 74px;
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  margin-top: auto;
+
+  i {
+    width: 10px;
+    border-radius: 10px;
+    background: #DDD7D0;
+
+    &:nth-child(4),
+    &:nth-child(7) {
+      background: #8B5E3C;
+    }
+  }
+}
 
 /* 改为单列布局，并将左侧参考信息移至下方 */
 .detail-grid { display: flex; flex-direction: column; gap: 24px; }
@@ -659,10 +952,11 @@ onMounted(fetchDetail)
 .detail-right { order: 1; }
 
 .info-card {
-  background: #fff; border-radius: 12px; padding: 24px;
-  border: 1px solid #E5E7EB;
+  background: #fff; border-radius: 28px; padding: 26px;
+  border: 1px solid #EFEDE9;
+  box-shadow: 0 1px 0 rgba(42, 37, 31, 0.04);
 }
-.card-title { font-size: 16px; font-weight: 600; color: #1D1D1F; margin: 0 0 16px; display: flex; align-items: center; }
+.card-title { font-size: 18px; font-weight: 850; color: #1D1D1F; margin: 0 0 16px; display: flex; align-items: center; }
 
 /* 覆盖 el-collapse 样式 */
 :deep(.custom-collapse) {
@@ -691,21 +985,21 @@ onMounted(fetchDetail)
 
 /* AI设计方案 */
 .design-plan-content {
-  background: #F0F7FF; border-radius: 8px; padding: 16px; margin-bottom: 12px;
-  border-left: 3px solid #409eff;
+  background: #F4F1ED; border-radius: 18px; padding: 16px; margin-bottom: 12px;
+  border-left: 3px solid #8B5E3C;
 }
 .plan-text { margin: 0; font-size: 14px; color: #1D1D1F; line-height: 1.7; white-space: pre-wrap; }
 .plan-files { margin-top: 8px; }
 .plan-file-item { margin-bottom: 6px; }
 .plan-file-link {
-  font-size: 13px; color: #409eff; text-decoration: none;
+  font-size: 13px; color: #8B5E3C; text-decoration: none;
   &:hover { text-decoration: underline; }
 }
 .site-photos { display: flex; flex-wrap: wrap; gap: 8px; }
 .photo-link {
-  font-size: 13px; color: #409eff; padding: 6px 12px;
-  background: #F0F7FF; border-radius: 6px; text-decoration: none;
-  &:hover { background: #E0EFFF; }
+  font-size: 13px; color: #8B5E3C; padding: 7px 13px;
+  background: #F4F1ED; border-radius: 14px; text-decoration: none;
+  &:hover { background: #E8DDD4; }
 }
 
 /* 时间线 */
@@ -714,8 +1008,8 @@ onMounted(fetchDetail)
   display: flex; align-items: center; gap: 12px; padding: 12px 0;
   border-left: 2px solid #E5E7EB; margin-left: 12px; padding-left: 20px;
   position: relative;
-  &.active { border-left-color: #409eff; }
-  &.completed { border-left-color: #67C23A; }
+  &.active { border-left-color: #8B5E3C; }
+  &.completed { border-left-color: #111111; }
 }
 .timeline-dot {
   position: absolute; left: -13px;
@@ -723,8 +1017,8 @@ onMounted(fetchDetail)
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 600;
   background: #E5E7EB; color: #86868B;
-  .timeline-item.active & { background: #409eff; color: #fff; }
-  .timeline-item.completed & { background: #67C23A; color: #fff; }
+  .timeline-item.active & { background: #8B5E3C; color: #fff; }
+  .timeline-item.completed & { background: #111111; color: #fff; }
 }
 .stage-name { font-size: 14px; font-weight: 500; color: #1D1D1F; }
 .stage-meta { font-size: 12px; color: #86868B; margin-top: 2px; }
@@ -767,32 +1061,32 @@ onMounted(fetchDetail)
 }
 
 /* 自审核 */
-.self-review-section { margin-top: 20px; padding: 20px; background: #FFFBE6; border-radius: 10px; border: 1px solid #FFF1B8; }
+.self-review-section { margin-top: 20px; padding: 20px; background: #F7F2ED; border-radius: 24px; border: 1px solid #E1CFC0; }
 .review-header {
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
 }
 .review-title {
-  font-size: 14px; font-weight: 600; color: #D48806; margin: 0;
+  font-size: 14px; font-weight: 800; color: #8B5E3C; margin: 0;
   display: flex; align-items: center; gap: 6px;
 }
 .review-progress {
-  font-size: 13px; color: #8C6D1F; font-weight: 500;
-  padding: 2px 10px; border-radius: 10px; background: rgba(214,158,6,0.1);
+  font-size: 13px; color: #6D4A32; font-weight: 750;
+  padding: 2px 10px; border-radius: 10px; background: rgba(139,94,60,0.1);
   &.complete { color: #52C41A; background: rgba(82,196,26,0.1); }
 }
 .review-category { margin-bottom: 16px; &:last-child { margin-bottom: 0; } }
 .category-header {
   display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
-  padding-bottom: 8px; border-bottom: 1px solid #FFF1B8;
+  padding-bottom: 8px; border-bottom: 1px solid #E1CFC0;
 }
 .category-index {
-  width: 22px; height: 22px; border-radius: 50%; background: #D48806; color: #fff;
+  width: 22px; height: 22px; border-radius: 50%; background: #8B5E3C; color: #fff;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 700; flex-shrink: 0;
   transition: background 0.3s;
   &.done { background: #52C41A; }
 }
-.category-title { font-size: 14px; font-weight: 600; color: #8C6D1F; }
+.category-title { font-size: 14px; font-weight: 750; color: #6D4A32; }
 .review-checklist { display: flex; flex-direction: column; gap: 6px; }
 
 /* 审核步骤卡片 */
@@ -815,7 +1109,7 @@ onMounted(fetchDetail)
 
 /* 当前项展开态 */
 .step-active {
-  background: #fff; border: 2px solid #FAAD14; border-radius: 8px;
+  background: #fff; border: 2px solid #8B5E3C; border-radius: 16px;
   animation: stepPulse 0.3s ease;
 }
 @keyframes stepPulse {
@@ -824,22 +1118,22 @@ onMounted(fetchDetail)
 }
 .step-active-header {
   display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px 8px; border-bottom: 1px dashed #FFF1B8;
+  padding: 12px 16px 8px; border-bottom: 1px dashed #E1CFC0;
 }
 .step-number-active {
-  font-size: 14px; font-weight: 700; color: #D48806;
-  background: #FFFBE6; padding: 2px 8px; border-radius: 4px;
+  font-size: 14px; font-weight: 800; color: #8B5E3C;
+  background: #F7F2ED; padding: 2px 8px; border-radius: 10px;
 }
-.step-label { font-size: 12px; color: #8C6D1F; }
+.step-label { font-size: 12px; color: #6D4A32; }
 .step-active-body { padding: 12px 16px 16px; }
 .step-content-text {
   font-size: 15px; font-weight: 500; color: #1D1D1F; line-height: 1.6;
-  padding: 12px; background: #FFFBE6; border-radius: 6px; margin-bottom: 14px;
-  border-left: 3px solid #FAAD14;
+  padding: 12px; background: #F7F2ED; border-radius: 14px; margin-bottom: 14px;
+  border-left: 3px solid #8B5E3C;
 }
 .step-confirm-row { display: flex; align-items: center; }
 .confirm-checkbox {
-  :deep(.el-checkbox__label) { font-size: 13px; color: #D48806; font-weight: 500; }
+  :deep(.el-checkbox__label) { font-size: 13px; color: #8B5E3C; font-weight: 650; }
   :deep(.el-checkbox__input.is-checked .el-checkbox__inner) { background-color: #52C41A; border-color: #52C41A; }
 }
 
@@ -870,14 +1164,14 @@ onMounted(fetchDetail)
 .admin-comments-section {
   margin-top: 10px;
   padding: 10px 12px;
-  background: #ECF5FF;
-  border-radius: 6px;
-  border-left: 3px solid #409EFF;
+  background: #F4F1ED;
+  border-radius: 16px;
+  border-left: 3px solid #8B5E3C;
 }
 
 .admin-comments-title {
   font-size: 13px;
-  color: #409EFF;
+  color: #8B5E3C;
   display: block;
   margin-bottom: 6px;
 }
@@ -888,7 +1182,7 @@ onMounted(fetchDetail)
   gap: 8px;
   padding: 6px 0;
   font-size: 13px;
-  border-bottom: 1px dashed #D9ECFF;
+  border-bottom: 1px dashed #E1CFC0;
   &:last-child { border-bottom: none; }
 }
 
@@ -903,5 +1197,34 @@ onMounted(fetchDetail)
   color: #909399;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+:deep(.el-button--primary) {
+  --el-button-bg-color: #111111;
+  --el-button-border-color: #111111;
+  --el-button-hover-bg-color: #8B5E3C;
+  --el-button-hover-border-color: #8B5E3C;
+}
+
+@media (max-width: 1180px) {
+  .detail-cockpit {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .detail-header,
+  .detail-cockpit {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .detail-cockpit {
+    grid-template-columns: 1fr;
+  }
+
+  .header-left {
+    flex-direction: column;
+  }
 }
 </style>

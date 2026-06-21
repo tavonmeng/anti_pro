@@ -76,9 +76,6 @@
             <el-icon><InfoFilled /></el-icon>
             使用邀请链接注册后可通过手机号登录
           </p>
-          <p v-if="!isExternalDeployment" class="back-link">
-            <el-link @click="goToAdminLogin">← 管理员登录</el-link>
-          </p>
         </div>
       </div>
     </div>
@@ -93,7 +90,6 @@ import { Iphone, Message, Warning, InfoFilled, Suitcase } from '@element-plus/ic
 import { useAuthStore } from '@/stores/auth'
 import type { UserRole } from '@/types'
 import request from '@/utils/request'
-import { isExternalDeployment } from '@/utils/deployment'
 
 const router = useRouter()
 const route = useRoute()
@@ -162,9 +158,6 @@ const handleLogin = async () => {
   })
 }
 
-const goToAdminLogin = () => {
-  router.push('/admin/login')
-}
 </script>
 
 <style lang="scss" scoped>

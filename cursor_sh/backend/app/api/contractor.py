@@ -56,6 +56,14 @@ def _sign_file_items(items: list | None) -> list:
     return copied
 
 
+def _first_text(*values: str | None) -> str | None:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return None
+
+
 def _stage_order_value(stage: dict) -> int | None:
     try:
         return int(stage.get("display_order"))
@@ -238,21 +246,81 @@ async def get_my_assignments(
                     "status": order.status.value if hasattr(order.status, 'value') else order.status,
                     # 脱敏：只展示需求相关字段，不展示用户个人信息
                     "brand": order_data.get("brand"),
+                    "projectName": order_data.get("project_name") or order_data.get("projectName"),
                     "content": order_data.get("content"),
                     "style": order_data.get("style"),
                     "city": order_data.get("city"),
+                    "city_location": order_data.get("city_location"),
                     "media_size": order_data.get("media_size"),
+                    "media_specs": order_data.get("media_specs"),
+                    "time_number": order_data.get("time_number"),
+                    "timing_number": order_data.get("timing_number"),
                     "technology": order_data.get("technology"),
+                    "tech_delivery": order_data.get("tech_delivery"),
                     "online_time": order_data.get("online_time"),
                     "target_group": order_data.get("target_group"),
+                    "audience_scene": order_data.get("audience_scene"),
                     "background": order_data.get("background"),
+                    "resource_background": order_data.get("resource_background"),
+                    "theme_concept": order_data.get("theme_concept"),
+                    "art_direction": order_data.get("art_direction"),
+                    "site_photos": _sign_file_items(order_data.get("site_photos") or order_data.get("scenePhotos")),
+                    "content_review": order_data.get("content_review"),
+                    "special_requirements": order_data.get("special_requirements"),
+                    "remarks": order_data.get("remarks"),
                     "createdAt": beijing_iso(order.created_at),
                 }
+
+            feedback = None
+            d_result = await db.execute(
+                select(ContractorDeliverable)
+                .where(ContractorDeliverable.assignment_id == a.id)
+                .order_by(ContractorDeliverable.created_at.desc())
+            )
+            for deliverable in d_result.scalars().all():
+                admin_note = _first_text(deliverable.admin_review_note)
+                if admin_note:
+                    feedback = {
+                        "source": "admin",
+                        "label": "管理员反馈",
+                        "content": admin_note,
+                        "createdAt": _iso_beijing(deliverable.admin_reviewed_at) or _iso_beijing(deliverable.created_at),
+                    }
+                    break
+                comments = _normalize_admin_comments(deliverable.admin_comments)
+                latest_comment = next(
+                    (comment for comment in reversed(comments) if _first_text(comment.get("content"))),
+                    None,
+                )
+                if latest_comment:
+                    feedback = {
+                        "source": "admin",
+                        "label": "管理员评论",
+                        "content": _first_text(latest_comment.get("content")),
+                        "createdAt": latest_comment.get("createdAt") or _iso_beijing(deliverable.created_at),
+                    }
+                    break
+
+            if not feedback and order:
+                order_data = order.order_data or {}
+                user_feedback = _first_text(
+                    order_data.get("remarks"),
+                    order_data.get("special_requirements"),
+                    order_data.get("content_review"),
+                )
+                if user_feedback:
+                    feedback = {
+                        "source": "user",
+                        "label": "用户反馈",
+                        "content": user_feedback,
+                        "createdAt": beijing_iso(order.created_at),
+                    }
             
             items.append({
                 "id": a.id,
                 "orderId": a.order_id,
                 "order": order_info,
+                "feedback": feedback,
                 "status": a.status.value,
                 "rejectReason": a.reject_reason,
                 "schedule": a.schedule,
@@ -300,16 +368,30 @@ async def get_assignment_detail(
                 "orderType": order.order_type.value if hasattr(order.order_type, 'value') else order.order_type,
                 "status": order.status.value if hasattr(order.status, 'value') else order.status,
                 "brand": order_data.get("brand"),
+                "projectName": order_data.get("project_name") or order_data.get("projectName"),
                 "brand_tone": order_data.get("brand_tone"),
                 "content": order_data.get("content"),
                 "style": order_data.get("style"),
                 "city": order_data.get("city"),
+                "city_location": order_data.get("city_location"),
                 "media_size": order_data.get("media_size"),
+                "media_specs": order_data.get("media_specs"),
                 "time_number": order_data.get("time_number"),
+                "timing_number": order_data.get("timing_number"),
                 "technology": order_data.get("technology"),
+                "tech_delivery": order_data.get("tech_delivery"),
                 "online_time": order_data.get("online_time"),
                 "target_group": order_data.get("target_group"),
+                "audience_scene": order_data.get("audience_scene"),
                 "background": order_data.get("background"),
+                "resource_background": order_data.get("resource_background"),
+                "media_positioning": order_data.get("media_positioning"),
+                "viewing_path": order_data.get("viewing_path"),
+                "art_direction": order_data.get("art_direction"),
+                "theme_concept": order_data.get("theme_concept"),
+                "content_review": order_data.get("content_review"),
+                "special_requirements": order_data.get("special_requirements"),
+                "remarks": order_data.get("remarks"),
                 "prohibited_content": order_data.get("prohibited_content"),
                 "site_photos": _sign_file_items(order_data.get("site_photos") or order_data.get("scenePhotos")),
                 "createdAt": beijing_iso(order.created_at),

@@ -1,13 +1,24 @@
 <template>
   <div class="contractor-profile">
-    <div class="page-header">
-      <h1 class="page-title">个人设置</h1>
-      <p class="page-desc">管理您的承包商账户信息</p>
-    </div>
+    <section class="profile-overview">
+      <div class="profile-heading">
+        <h1 class="page-title">承包商资料</h1>
+        <p class="breadcrumb">工作台 <span></span> 个人设置</p>
+      </div>
+      <div class="profile-meter-card">
+        <div class="meter-copy">
+          <span>资料完整度</span>
+          <strong>{{ profileCompletion }}%</strong>
+        </div>
+        <div class="profile-bars">
+          <i v-for="n in 10" :key="n" :class="{ on: n <= Math.round(profileCompletion / 10) }"></i>
+        </div>
+      </div>
+    </section>
 
     <!-- 资料未完善提示 -->
     <div v-if="showIncompleteAlert" class="incomplete-alert">
-      <div class="alert-icon">⚠️</div>
+      <div class="alert-icon"><el-icon><InfoFilled /></el-icon></div>
       <div class="alert-content">
         <div class="alert-title">请完善您的资料信息</div>
         <div class="alert-desc">以下信息尚未填写，请尽快补充以便接收派单：<strong>{{ missingFields.join('、') }}</strong></div>
@@ -142,7 +153,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus, Loading } from '@element-plus/icons-vue'
+import { InfoFilled, Plus, Loading } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import axios from 'axios'
 
@@ -184,6 +195,12 @@ const missingFields = computed(() => {
 })
 
 const showIncompleteAlert = computed(() => loaded.value && missingFields.value.length > 0)
+const profileCompletion = computed(() => {
+  const fields = [form.realName, form.company, form.specialty, form.expertise, form.email, form.address]
+  const fieldScore = fields.filter(Boolean).length
+  const showcaseScore = Math.min(showcaseCases.value.filter(c => c.url && !c.uploading).length, 2)
+  return Math.round(((fieldScore + showcaseScore) / 8) * 100)
+})
 
 const formatFileSize = (bytes?: number) => {
   if (!bytes) return ''
@@ -309,6 +326,7 @@ const handleSave = async () => {
       expertise: form.expertise,
       showcase_cases: casesToSave,
     })
+    window.dispatchEvent(new CustomEvent('contractor-profile-updated'))
     ElMessage.success('保存成功')
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || '保存失败')
@@ -321,32 +339,125 @@ onMounted(fetchProfile)
 </script>
 
 <style lang="scss" scoped>
-.contractor-profile { max-width: 800px; margin: 0 auto; }
-.page-header { margin-bottom: 24px; }
-.page-title { font-size: 24px; font-weight: 700; color: #1D1D1F; margin: 0 0 4px; }
-.page-desc { font-size: 14px; color: #86868B; margin: 0; }
+.contractor-profile { max-width: 1180px; margin: 0 auto; }
+
+.profile-overview {
+  min-height: 220px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 20px;
+  align-items: stretch;
+  padding: 46px 52px 30px;
+  border-radius: 34px;
+  background: #ECEAE7;
+  margin-bottom: 20px;
+}
+
+.profile-heading {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.page-title {
+  font-size: clamp(36px, 4vw, 54px);
+  font-weight: 850;
+  line-height: 0.98;
+  letter-spacing: 0;
+  color: #121212;
+  margin: 0 0 18px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #5E5954;
+  font-size: 17px;
+  font-weight: 750;
+  margin: 0;
+
+  span {
+    width: 8px;
+    height: 8px;
+    border-top: 2px solid #4B4640;
+    border-right: 2px solid #4B4640;
+    transform: rotate(45deg);
+  }
+}
+
+.profile-meter-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 26px;
+  border-radius: 30px;
+  background: #FFFFFF;
+}
+
+.meter-copy {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+
+  span {
+    color: #8F8780;
+    font-size: 14px;
+    font-weight: 750;
+  }
+
+  strong {
+    color: #151515;
+    font-size: 42px;
+    font-weight: 850;
+    line-height: 0.9;
+  }
+}
+
+.profile-bars {
+  min-height: 80px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+
+  i {
+    width: 14px;
+    height: 28px;
+    border-radius: 14px;
+    background: #E5E0DA;
+
+    &:nth-child(2n) { height: 42px; }
+    &:nth-child(3n) { height: 58px; }
+
+    &.on {
+      background: #8B5E3C;
+    }
+  }
+}
 
 .incomplete-alert {
   display: flex; align-items: flex-start; gap: 12px;
-  background: #FFF8E6; border: 1px solid #FFD666;
-  border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;
+  background: #F4EAE2; border: 1px solid #D8C4B4;
+  border-radius: 24px; padding: 18px 22px; margin-bottom: 20px;
 }
-.alert-icon { font-size: 24px; flex-shrink: 0; line-height: 1; }
+.alert-icon { font-size: 22px; flex-shrink: 0; line-height: 1; color: #8B5E3C; }
 .alert-content { flex: 1; }
-.alert-title { font-size: 15px; font-weight: 600; color: #1D1D1F; margin-bottom: 4px; }
+.alert-title { font-size: 15px; font-weight: 800; color: #1D1D1F; margin-bottom: 4px; }
 .alert-desc { font-size: 13px; color: #86868B; line-height: 1.5;
-  strong { color: #E6770F; font-weight: 600; }
+  strong { color: #8B5E3C; font-weight: 700; }
 }
 
 .profile-card {
-  background: #fff; border-radius: 12px; padding: 32px;
-  border: 1px solid #E5E7EB;
+  background: #fff; border-radius: 30px; padding: 34px;
+  border: 1px solid #EFEDE9;
+  box-shadow: 0 1px 0 rgba(42, 37, 31, 0.04);
 }
 
 .section-title {
-  font-size: 16px; font-weight: 600; color: #1D1D1F;
-  margin: 24px 0 12px; padding-bottom: 8px;
-  border-bottom: 1px solid #F0F0F0;
+  font-size: 18px; font-weight: 850; color: #1D1D1F;
+  margin: 28px 0 16px; padding-bottom: 10px;
+  border-bottom: 1px solid #F1EFEC;
   &:first-child { margin-top: 0; }
 }
 .section-subtitle {
@@ -360,7 +471,7 @@ onMounted(fetchProfile)
 @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
 
 .field-hint {
-  font-size: 12px; color: #E6770F; margin-top: 4px;
+  font-size: 12px; color: #8B5E3C; margin-top: 4px; font-weight: 700;
 }
 
 /* ========== Showcase Cases ========== */
@@ -371,8 +482,8 @@ onMounted(fetchProfile)
 @media (max-width: 600px) { .showcase-grid { grid-template-columns: 1fr; } }
 
 .showcase-item {
-  border: 1px solid #E5E7EB; border-radius: 12px;
-  overflow: hidden; background: #FAFAFA;
+  border: 1px solid #EFEDE9; border-radius: 28px;
+  overflow: hidden; background: #F7F6F4;
   min-height: 200px; display: flex; flex-direction: column;
 }
 
@@ -386,7 +497,7 @@ onMounted(fetchProfile)
 }
 
 .showcase-info {
-  padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;
 }
 
 .showcase-title-input {
@@ -404,10 +515,10 @@ onMounted(fetchProfile)
 .file-size { font-size: 12px; color: #86868B; }
 
 .showcase-add {
-  cursor: pointer; border: 2px dashed #D0D0D5;
+  cursor: pointer; border: 2px dashed #D8C4B4;
   display: flex; align-items: center; justify-content: center;
   transition: all 0.2s;
-  &:hover { border-color: #0071E3; background: #F0F7FF; }
+  &:hover { border-color: #8B5E3C; background: #F4EAE2; }
 }
 
 .add-content {
@@ -423,8 +534,35 @@ onMounted(fetchProfile)
   .el-progress { width: 80%; }
 }
 
-.loading-icon { animation: spin 1s linear infinite; color: #0071E3; }
+.loading-icon { animation: spin 1s linear infinite; color: #8B5E3C; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .form-actions { margin-top: 28px; display: flex; justify-content: flex-end; }
+
+:deep(.el-input__wrapper) {
+  min-height: 44px;
+  border-radius: 22px;
+  background: #F7F6F4;
+  box-shadow: none !important;
+}
+
+:deep(.el-form-item__label) {
+  color: #5F5952;
+  font-weight: 750;
+}
+
+:deep(.el-button--primary) {
+  --el-button-bg-color: #111111;
+  --el-button-border-color: #111111;
+  --el-button-hover-bg-color: #8B5E3C;
+  --el-button-hover-border-color: #8B5E3C;
+  border-radius: 24px;
+}
+
+@media (max-width: 860px) {
+  .profile-overview {
+    grid-template-columns: 1fr;
+    padding: 30px 24px;
+  }
+}
 </style>
