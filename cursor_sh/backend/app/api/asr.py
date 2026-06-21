@@ -13,16 +13,21 @@ import ssl
 import asyncio
 import json
 import uuid
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, UploadFile, File, Depends
 from fastapi.responses import JSONResponse
 import websockets
 from app.config import settings
+from app.utils.business_log import log_business_event
+from app.utils.dependencies import AnyUser, get_current_user_for_public_deployment
+from app.utils.log_setup import get_module_logger
+from app.utils.security import decode_access_token
 
 # 强制忽略系统层面的网络代理
 os.environ["NO_PROXY"] = "dashscope.aliyuncs.com,dashscope-intl.aliyuncs.com,localhost,127.0.0.1"
 os.environ["no_proxy"] = "dashscope.aliyuncs.com,dashscope-intl.aliyuncs.com,localhost,127.0.0.1"
 
 router = APIRouter(tags=["语音识别"])
+logger = get_module_logger("ai")
 
 DASHSCOPE_WSS_URL = "wss://dashscope.aliyuncs.com/api-ws/v1/inference/"
 DASHSCOPE_FILE_API = "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription"
@@ -32,7 +37,10 @@ DASHSCOPE_FILE_API = "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/t
 # 离线一次性识别（推荐）
 # ============================================================
 @router.post("/asr/recognize")
-async def asr_recognize(audio: UploadFile = File(...)):
+async def asr_recognize(
+    audio: UploadFile = File(...),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
+):
     """接收完整 PCM 音频文件，调用 DashScope 识别"""
     import time
     t0 = time.time()
@@ -45,7 +53,7 @@ async def asr_recognize(audio: UploadFile = File(...)):
         # 读取前端发来的 PCM 数据
         pcm_data = await audio.read()
         t1 = time.time()
-        print(f"[ASR] 读取音频: {len(pcm_data)} bytes, 耗时: {(t1-t0)*1000:.0f}ms")
+        log_business_event(logger, "asr_audio_read", size=len(pcm_data), duration_ms=round((t1 - t0) * 1000))
 
         if len(pcm_data) < 100:
             return JSONResponse({"error": "音频数据太短"})
@@ -53,14 +61,19 @@ async def asr_recognize(audio: UploadFile = File(...)):
         # 直接发送 PCM 数据（不做 WAV 转换，省去封装开销）
         result_text = await recognize_via_ws(api_key, pcm_data)
         t2 = time.time()
-        print(f"[ASR] 识别完成: '{result_text[:50]}...', 总耗时: {(t2-t0)*1000:.0f}ms")
+        log_business_event(
+            logger,
+            "asr_recognized",
+            size=len(pcm_data),
+            duration_ms=round((t2 - t0) * 1000),
+            text_length=len(result_text or ""),
+        )
 
         return JSONResponse({"text": result_text})
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return JSONResponse({"error": str(e)}, status_code=500)
+        log_business_event(logger, "asr_recognize_failed", level="error", error=str(e))
+        return JSONResponse({"error": "语音识别服务暂时不可用，请稍后重试"}, status_code=500)
 
 
 async def recognize_via_ws(api_key: str, pcm_data: bytes) -> str:
@@ -81,7 +94,7 @@ async def recognize_via_ws(api_key: str, pcm_data: bytes) -> str:
         ssl=ssl_context,
     ) as ws:
         t1 = time.time()
-        print(f"[ASR] WebSocket 连接: {(t1-t0)*1000:.0f}ms")
+        log_business_event(logger, "asr_ws_connected", task_id=task_id, duration_ms=round((t1 - t0) * 1000))
 
         # 发送 run-task（直接用 PCM 格式，省去 WAV 封装）
         run_msg = {
@@ -116,7 +129,7 @@ async def recognize_via_ws(api_key: str, pcm_data: bytes) -> str:
                 raise Exception(msg.get("header", {}).get("error_message", "任务启动失败"))
 
         t2 = time.time()
-        print(f"[ASR] 任务启动: {(t2-t1)*1000:.0f}ms")
+        log_business_event(logger, "asr_task_started", task_id=task_id, duration_ms=round((t2 - t1) * 1000))
 
         # 一次性大块发送音频（64KB 每块，无人为延迟）
         chunk_size = 64 * 1024
@@ -135,7 +148,13 @@ async def recognize_via_ws(api_key: str, pcm_data: bytes) -> str:
         await ws.send(json.dumps(finish_msg))
 
         t3 = time.time()
-        print(f"[ASR] 音频发送: {(t3-t2)*1000:.0f}ms")
+        log_business_event(
+            logger,
+            "asr_audio_sent",
+            task_id=task_id,
+            size=len(pcm_data),
+            duration_ms=round((t3 - t2) * 1000),
+        )
 
         # 收集识别结果
         sentences = []
@@ -159,7 +178,13 @@ async def recognize_via_ws(api_key: str, pcm_data: bytes) -> str:
                 break
 
         t4 = time.time()
-        print(f"[ASR] 结果等待: {(t4-t3)*1000:.0f}ms")
+        log_business_event(
+            logger,
+            "asr_result_waited",
+            task_id=task_id,
+            duration_ms=round((t4 - t3) * 1000),
+            sentence_count=len(sentences),
+        )
 
         return "".join(sentences)
 
@@ -171,6 +196,23 @@ async def recognize_via_ws(api_key: str, pcm_data: bytes) -> str:
 async def asr_stream(ws: WebSocket):
     """实时语音识别 WebSocket 端点"""
     await ws.accept()
+
+    auth_header = ws.headers.get("authorization", "")
+    token = ""
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    else:
+        token = ws.query_params.get("token", "")
+
+    payload = decode_access_token(token) if token else None
+    if not payload:
+        await ws.send_json({"type": "error", "message": "未登录，请先登录"})
+        await ws.close(code=1008)
+        return
+    if settings.DEPLOYMENT_MODE == "external" and payload.get("role") != "user":
+        await ws.send_json({"type": "error", "message": "接口不存在"})
+        await ws.close(code=1008)
+        return
 
     api_key = settings.AI_API_KEY
     if not api_key:
@@ -247,14 +289,14 @@ async def asr_stream(ws: WebSocket):
                         await ws.send_json({"type": "finished"})
                         break
                     elif event == "task-failed":
-                        err = msg.get("header", {}).get("error_message", "识别失败")
-                        await ws.send_json({"type": "error", "message": err})
+                        await ws.send_json({"type": "error", "message": "语音识别失败，请稍后重试"})
                         break
             except websockets.exceptions.ConnectionClosed:
                 pass
             except Exception as e:
+                log_business_event(logger, "asr_stream_relay_failed", level="error", error=str(e))
                 try:
-                    await ws.send_json({"type": "error", "message": str(e)})
+                    await ws.send_json({"type": "error", "message": "语音识别服务暂时不可用，请稍后重试"})
                 except Exception:
                     pass
 
@@ -297,8 +339,9 @@ async def asr_stream(ws: WebSocket):
                 pass
 
     except Exception as e:
+        log_business_event(logger, "asr_stream_failed", level="error", error=str(e))
         try:
-            await ws.send_json({"type": "error", "message": f"语音识别服务异常: {str(e)}"})
+            await ws.send_json({"type": "error", "message": "语音识别服务暂时不可用，请稍后重试"})
         except Exception:
             pass
     finally:

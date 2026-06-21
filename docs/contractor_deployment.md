@@ -452,6 +452,14 @@ tar czf uploads_$(date +%Y%m%d).tar.gz /opt/anti_pro/cursor_sh/backend/uploads/
 
 ## 8. SSL 证书配置
 
+当前生产环境使用宿主机 Caddy 自动申请和续期 Let's Encrypt 免费证书：
+
+- external: `www.uniquevisionx.com` -> Caddy -> `127.0.0.1:8080`
+- internal: `admin.uniquevisionx.com`, `contractor.uniquevisionx.com` -> Caddy -> `127.0.0.1:8080`
+
+> [!IMPORTANT]
+> Docker 前端只允许绑定 `127.0.0.1:8080:8080`。不要改回 `80:8080`，否则会抢占 Caddy 的 80 端口，导致 HTTPS 入口和自动续期失败。普通发布新代码/新镜像不需要重新申请证书，保持 `docker-compose.yml` 的端口配置即可。
+
 ```bash
 # 使用 Let's Encrypt 自动申请
 sudo bash scripts/deploy_system.sh ssl

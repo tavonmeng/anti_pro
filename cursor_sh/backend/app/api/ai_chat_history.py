@@ -5,22 +5,24 @@
 管理员可查看所有用户的完整聊天记录。
 """
 
-from fastapi import APIRouter, HTTPException, Request, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, exists
+from sqlalchemy import select, func, desc, exists, delete
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 
 from app.database import get_db
 from app.models.ai_chat import AIChatSession, AIChatMessage
 from app.models.user import User
 from app.schemas.response import ApiResponse
-from app.utils.security import decode_access_token
-from app.utils.dependencies import require_admin, AnyUser
+from app.utils.dependencies import get_current_user_for_public_deployment, require_internal_admin, AnyUser
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_iso, beijing_now
 
 router = APIRouter(prefix="/ai/chat-history", tags=["AI 聊天记录"])
+logger = get_module_logger("ai")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -43,20 +45,15 @@ class SyncSessionRequest(BaseModel):
     business_type: str = "ai_3d_custom"
     session_type: str = "requirement"
     messages: list[dict]               # [{"client_message_id": "...", "role": "user", "content": "..."}]
+    replace: bool = False              # True 时以后端消息完全替换为本次列表
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 辅助函数
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def _extract_user(request: Request) -> tuple[str, str]:
-    """从请求头提取 user_id 和 username"""
-    auth = request.headers.get("authorization", "")
-    if auth.startswith("Bearer "):
-        payload = decode_access_token(auth[7:])
-        if payload:
-            return payload.get("user_id", "anonymous"), payload.get("username", "")
-    return "anonymous", ""
+def _user_identity(current_user: AnyUser) -> tuple[str, str]:
+    return current_user.id, getattr(current_user, "username", "") or ""
 
 
 def _make_title(content: str) -> str:
@@ -72,6 +69,15 @@ def _refresh_session_owner(session: AIChatSession, user_id: str, username: str):
             session.user_id = user_id
         if username and (not session.username or session.username == "anonymous"):
             session.username = username
+
+
+def _ensure_session_owner(session: AIChatSession, user_id: str, username: str):
+    """Protect client-generated session IDs from cross-user reuse."""
+    current_user_id = user_id or "anonymous"
+    owner_id = session.user_id or "anonymous"
+    if owner_id != "anonymous" and owner_id != current_user_id:
+        raise HTTPException(status_code=403, detail="无权修改此会话")
+    _refresh_session_owner(session, user_id, username)
 
 
 def _message_pair(message: dict) -> tuple[str, str]:
@@ -109,11 +115,11 @@ def _message_client_id(message: dict) -> str:
 @router.post("/message")
 async def save_message(
     data: SaveMessageRequest,
-    request: Request,
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db),
 ):
     """保存单条消息（AI 对话完成后前端自动调用）"""
-    user_id, username = _extract_user(request)
+    user_id, username = _user_identity(current_user)
 
     try:
         # 查找或创建 session
@@ -134,7 +140,7 @@ async def save_message(
             )
             db.add(session)
         else:
-            _refresh_session_owner(session, user_id, username)
+            _ensure_session_owner(session, user_id, username)
             session.session_type = data.session_type or session.session_type
             session.business_type = data.business_type or session.business_type
 
@@ -155,8 +161,17 @@ async def save_message(
                 existing_msg.content = data.content
                 if data.metadata is not None:
                     existing_msg.metadata_json = data.metadata
-                session.updated_at = datetime.now(timezone.utc)
+                session.updated_at = beijing_now()
                 await db.commit()
+                log_business_event(
+                    logger,
+                    "ai_chat_message_updated",
+                    session_id=data.session_id,
+                    user_id=user_id,
+                    role=data.role,
+                    client_message_id=data.client_message_id,
+                    business_type=session.business_type,
+                )
                 return {"code": 200, "message": "ok"}
 
         # 保存消息
@@ -170,16 +185,46 @@ async def save_message(
         db.add(msg)
 
         session.message_count = (session.message_count or 0) + 1
-        session.updated_at = datetime.now(timezone.utc)
+        session.updated_at = beijing_now()
 
         try:
             await db.commit()
         except IntegrityError:
             await db.rollback()
+            log_business_event(
+                logger,
+                "ai_chat_message_duplicate_skipped",
+                level="debug",
+                session_id=data.session_id,
+                user_id=user_id,
+                role=data.role,
+                client_message_id=data.client_message_id,
+            )
+        else:
+            log_business_event(
+                logger,
+                "ai_chat_message_saved",
+                session_id=data.session_id,
+                user_id=user_id,
+                role=data.role,
+                client_message_id=data.client_message_id,
+                business_type=session.business_type,
+                message_count=session.message_count,
+            )
         return {"code": 200, "message": "ok"}
 
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"[ChatHistory] 保存消息失败: {e}")
+        log_business_event(
+            logger,
+            "ai_chat_history_save_failed",
+            level="warning",
+            session_id=getattr(data, "session_id", None),
+            role=getattr(data, "role", None),
+            business_type=getattr(data, "business_type", None),
+            error=str(e),
+        )
         # 不抛异常，不阻断聊天流程
         return {"code": 200, "message": "save skipped"}
 
@@ -187,11 +232,11 @@ async def save_message(
 @router.post("/sync")
 async def sync_session(
     data: SyncSessionRequest,
-    request: Request,
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db),
 ):
     """批量同步整个会话（前端关闭时或首次保存）"""
-    user_id, username = _extract_user(request)
+    user_id, username = _user_identity(current_user)
 
     try:
         # 检查是否已有这个 session
@@ -199,6 +244,20 @@ async def sync_session(
             select(AIChatSession).where(AIChatSession.id == data.session_id)
         )
         session = result.scalar_one_or_none()
+
+        if session:
+            _ensure_session_owner(session, user_id, username)
+
+        if data.replace and not data.messages:
+            if session:
+                await db.execute(
+                    delete(AIChatMessage).where(AIChatMessage.session_id == data.session_id)
+                )
+                await db.execute(
+                    delete(AIChatSession).where(AIChatSession.id == data.session_id)
+                )
+                await db.commit()
+            return {"code": 200, "message": "ok", "data": {"synced": 0}}
 
         if not session:
             first_user_msg = next(
@@ -216,7 +275,6 @@ async def sync_session(
             db.add(session)
             await db.flush()
         else:
-            _refresh_session_owner(session, user_id, username)
             session.session_type = data.session_type or session.session_type
             session.business_type = data.business_type or session.business_type
 
@@ -230,6 +288,13 @@ async def sync_session(
         incoming_with_ids = [m for m in data.messages if _message_client_id(m)]
         if incoming_with_ids and len(incoming_with_ids) == len(data.messages):
             message_ids = [_message_client_id(m) for m in data.messages]
+            if data.replace:
+                await db.execute(
+                    delete(AIChatMessage).where(
+                        AIChatMessage.session_id == data.session_id,
+                        ~AIChatMessage.client_message_id.in_(message_ids),
+                    )
+                )
             id_result = await db.execute(
                 select(AIChatMessage).where(
                     AIChatMessage.session_id == data.session_id,
@@ -249,6 +314,11 @@ async def sync_session(
             new_messages = [m for m in data.messages if _message_client_id(m) not in existing_ids]
         else:
             # 兼容旧客户端/旧 localStorage 记录：按已有前缀跳过。
+            if data.replace:
+                await db.execute(
+                    delete(AIChatMessage).where(AIChatMessage.session_id == data.session_id)
+                )
+                existing_pairs = []
             new_messages = _unsynced_messages(existing_pairs, data.messages)
 
         for m in new_messages:
@@ -261,11 +331,16 @@ async def sync_session(
             )
             db.add(msg)
 
-        session.message_count = len(existing_pairs) + len(new_messages)
-        session.updated_at = datetime.now(timezone.utc)
+        session.message_count = len(data.messages) if data.replace else len(existing_pairs) + len(new_messages)
+        session.updated_at = beijing_now()
 
         # 补充标题
-        if not session.title:
+        if data.replace:
+            first_user_msg = next(
+                (m["content"] for m in data.messages if m.get("role") == "user"), ""
+            )
+            session.title = _make_title(first_user_msg) if first_user_msg else None
+        elif not session.title:
             first_user_msg = next(
                 (m["content"] for m in data.messages if m.get("role") == "user"), ""
             )
@@ -276,23 +351,51 @@ async def sync_session(
             await db.commit()
         except IntegrityError:
             await db.rollback()
+            log_business_event(
+                logger,
+                "ai_chat_session_sync_duplicate_skipped",
+                level="debug",
+                session_id=data.session_id,
+                user_id=user_id,
+                business_type=data.business_type,
+            )
+        else:
+            log_business_event(
+                logger,
+                "ai_chat_session_synced",
+                session_id=data.session_id,
+                user_id=user_id,
+                business_type=session.business_type,
+                replace=data.replace,
+                incoming_message_count=len(data.messages),
+                synced_message_count=len(new_messages),
+                session_message_count=session.message_count,
+            )
         return {"code": 200, "message": "ok", "data": {"synced": len(new_messages)}}
 
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"[ChatHistory] 同步会话失败: {e}")
+        log_business_event(
+            logger,
+            "ai_chat_history_sync_failed",
+            level="warning",
+            session_id=getattr(data, "session_id", None),
+            business_type=getattr(data, "business_type", None),
+            message_count=len(getattr(data, "messages", []) or []),
+            error=str(e),
+        )
         return {"code": 200, "message": "sync skipped"}
 
 
 @router.get("/sessions")
 async def get_user_sessions(
-    request: Request,
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     limit: int = Query(5, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
 ):
     """获取当前用户的聊天会话列表（客户端默认最近5条）"""
-    user_id, _ = _extract_user(request)
-    if user_id == "anonymous":
-        return {"code": 200, "data": []}
+    user_id, _ = _user_identity(current_user)
 
     try:
         result = await db.execute(
@@ -311,24 +414,30 @@ async def get_user_sessions(
                 "sessionType": s.session_type,
                 "businessType": s.business_type,
                 "messageCount": s.message_count,
-                "createdAt": s.created_at.isoformat() if s.created_at else None,
-                "updatedAt": s.updated_at.isoformat() if s.updated_at else None,
+                "createdAt": beijing_iso(s.created_at),
+                "updatedAt": beijing_iso(s.updated_at),
             })
 
         return {"code": 200, "data": items}
     except Exception as e:
-        print(f"[ChatHistory] 获取会话列表失败: {e}")
+        log_business_event(
+            logger,
+            "ai_chat_history_sessions_failed",
+            level="warning",
+            user_id=user_id,
+            error=str(e),
+        )
         return {"code": 200, "data": []}
 
 
 @router.get("/sessions/{session_id}/messages")
 async def get_session_messages(
     session_id: str,
-    request: Request,
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db),
 ):
     """获取某个会话的所有消息"""
-    user_id, _ = _extract_user(request)
+    user_id, _ = _user_identity(current_user)
 
     try:
         # 验证权限：只能查自己的会话
@@ -338,7 +447,7 @@ async def get_session_messages(
         session = session_result.scalar_one_or_none()
         if not session:
             return {"code": 404, "data": [], "message": "会话不存在"}
-        if session.user_id != user_id and user_id != "admin":
+        if session.user_id != user_id:
             return {"code": 403, "data": [], "message": "无权查看"}
 
         result = await db.execute(
@@ -353,7 +462,7 @@ async def get_session_messages(
                 "client_message_id": m.client_message_id,
                 "role": m.role,
                 "content": m.content,
-                "timestamp": m.created_at.isoformat() if m.created_at else None,
+                "timestamp": beijing_iso(m.created_at),
                 "metadata": m.metadata_json,
             }
             for m in messages
@@ -361,7 +470,14 @@ async def get_session_messages(
 
         return {"code": 200, "data": items}
     except Exception as e:
-        print(f"[ChatHistory] 获取消息失败: {e}")
+        log_business_event(
+            logger,
+            "ai_chat_history_messages_failed",
+            level="warning",
+            user_id=user_id,
+            session_id=session_id,
+            error=str(e),
+        )
         return {"code": 200, "data": []}
 
 
@@ -375,7 +491,7 @@ async def admin_get_all_sessions(
     pageSize: int = Query(20, ge=1, le=100),
     user_id: Optional[str] = Query(None),
     keyword: Optional[str] = Query(None),
-    current_user: AnyUser = Depends(require_admin),
+    current_user: AnyUser = Depends(require_internal_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """管理员查看所有用户的聊天记录"""
@@ -435,19 +551,19 @@ async def admin_get_all_sessions(
                 "sessionType": s.session_type,
                 "businessType": s.business_type,
                 "messageCount": s.message_count,
-                "createdAt": s.created_at.isoformat() if s.created_at else None,
-                "updatedAt": s.updated_at.isoformat() if s.updated_at else None,
+                "createdAt": beijing_iso(s.created_at),
+                "updatedAt": beijing_iso(s.updated_at),
             })
 
         return ApiResponse(code=200, message="获取成功", data={"data": items, "total": total})
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.get("/admin/sessions/{session_id}/messages")
 async def admin_get_session_messages(
     session_id: str,
-    current_user: AnyUser = Depends(require_admin),
+    current_user: AnyUser = Depends(require_internal_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """管理员查看某个会话的完整消息"""
@@ -464,7 +580,7 @@ async def admin_get_session_messages(
                 "client_message_id": m.client_message_id,
                 "role": m.role,
                 "content": m.content,
-                "timestamp": m.created_at.isoformat() if m.created_at else None,
+                "timestamp": beijing_iso(m.created_at),
                 "metadata": m.metadata_json,
             }
             for m in messages
@@ -472,4 +588,4 @@ async def admin_get_session_messages(
 
         return ApiResponse(code=200, message="获取成功", data=items)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e

@@ -12,14 +12,7 @@
         <!-- 左侧：Logo + 口号 + 社交图标 -->
         <div class="footer-left">
           <div class="footer-logo">
-            <!-- Unique Vision Logo: 盾牌形图标 -->
-            <svg class="logo-icon" viewBox="0 0 32 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <!-- 盾牌外框 -->
-              <path d="M16 1L2 7V17C2 25.5 8 32 16 35C24 32 30 25.5 30 17V7L16 1Z" stroke="#111" stroke-width="2" fill="none"/>
-              <!-- 内部 U 形条纹 -->
-              <path d="M9 12V22C9 25.5 12 28 16 28C20 28 23 25.5 23 22V12" stroke="#111" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-              <line x1="16" y1="12" x2="16" y2="24" stroke="#111" stroke-width="2" stroke-linecap="round"/>
-            </svg>
+            <img class="logo-icon" src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
             <div class="logo-text">
               <span class="logo-line">Unique</span>
               <span class="logo-line">Vision</span>
@@ -41,7 +34,7 @@
               <img src="/landing/icon/Tiktok_icon.svg" alt="TikTok" class="social-img" />
             </a>
             <!-- 邮箱 -->
-            <a href="mailto:contact@uniquevision.cn" class="social-icon" aria-label="邮箱" title="邮箱">
+            <a href="mailto:support@uniquevisionx.com" class="social-icon" aria-label="邮箱" title="邮箱">
               <img src="/landing/icon/email-download-svgrepo-com.svg" alt="邮箱" class="social-img" />
             </a>
             <!-- 微信 -->
@@ -71,10 +64,12 @@
               业务合作
             </h5>
             <ul>
-              <li><a href="#">裸眼3D广告制作</a></li>
-              <li><a href="#">品牌视觉创意</a></li>
-              <li><a href="#">AI驱动内容生成</a></li>
-              <li><a href="#">数字媒体策划</a></li>
+              <li><a href="#intro">3D OOH数字内容资源库</a></li>
+              <li><a href="#intro">AI驱动3D OOH内容定制</a></li>
+              <li><a href="#intro">数字艺术与沉浸式视觉设计</a></li>
+              <li><a href="#intro">广告视觉与动态影像制作</a></li>
+              <li><a href="#intro">户外媒体后期制作服务</a></li>
+              <li><a href="#intro">广告投放分析与效果报告</a></li>
             </ul>
           </div>
           <div class="nav-col">
@@ -92,11 +87,10 @@
           <div class="nav-col">
             <h5 class="nav-title">
               <span class="nav-dot">■</span>
-              联系我们
+              邮件联系
             </h5>
             <ul>
-              <li><a href="#contact">项目联系</a></li>
-              <li><a href="#">地理位置</a></li>
+              <li><a href="mailto:support@uniquevisionx.com">support@uniquevisionx.com</a></li>
             </ul>
           </div>
         </nav>
@@ -110,7 +104,6 @@
       <div class="footer-bottom">
         <span class="copyright">© 2025 Unique Vision. All rights reserved.</span>
         <div class="footer-legal">
-          <a href="#" @click.prevent="$emit('open-experiment')">✨ 3D Lab</a>
           <a href="#">使用条款</a>
           <a href="#">隐私政策</a>
         </div>
@@ -166,9 +159,11 @@
 }
 
 .logo-icon {
-  width: 34px;
-  height: 38px;
+  width: 32px;
+  height: 48px;
+  display: block;
   flex-shrink: 0;
+  object-fit: contain;
 }
 
 .logo-text {

@@ -191,12 +191,7 @@ CREATE INDEX idx_notifications_is_read ON notifications(is_read);
 
 ### 1. 数据库迁移
 
-如果使用 `init_db()`，会自动创建 notifications 表。
-
-或手动运行迁移脚本：
-```bash
-python -m backend.migrations.add_notifications_table
-```
+生产环境通过 Alembic 管理 notifications 表结构；开发环境首次启动会自动创建当前模型中的表。
 
 ### 2. 启动后端
 ```bash
@@ -265,4 +260,3 @@ async def websocket_notifications(websocket: WebSocket, token: str):
 ✅ 性能优化到位，用户体验良好
 
 系统现在具备了完善的消息通知能力，用户和staff可以及时收到订单相关的各种通知，大大提升了系统的交互性和用户体验。
-

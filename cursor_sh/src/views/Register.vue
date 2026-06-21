@@ -6,6 +6,7 @@
     <div class="register-wrapper">
       <div>
         <div class="register-header">
+          <img class="auth-logo" src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
           <h1 class="register-title">Unique Vision 注册</h1>
         </div>
         
@@ -181,16 +182,19 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { User, Lock, Message, Right, Iphone, Key } from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/utils/api'
 import type { UserRole } from '@/types'
 import Captcha from '@/components/Captcha.vue'
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 const registerFormRef = ref<FormInstance>()
 const loading = ref(false)
 const smsSending = ref(false)
 const smsCooldown = ref(0)
+const inviteToken = computed(() => String(route.query.invite || route.query.user_invite || '').trim())
 let cooldownTimer: ReturnType<typeof setInterval> | null = null
 
 const captchaDialogVisible = ref(false)
@@ -252,6 +256,7 @@ watch(() => registerForm.password, (v) => { if (v) trackFirstInput('password') }
 onMounted(() => {
   behaviorData.pageLoadedAt = Date.now()
   document.addEventListener('keydown', handleGlobalKeyPress)
+  validateInviteEntry()
   // 给所有输入框绑定 focus 事件
   setTimeout(() => {
     const inputs = document.querySelectorAll('.register-form input')
@@ -260,6 +265,24 @@ onMounted(() => {
     })
   }, 200)
 })
+
+const validateInviteEntry = async () => {
+  if (!inviteToken.value) {
+    ElMessage.info('当前仍在内测阶段，仅支持受邀用户注册。请联系管理员获取邀请链接。')
+    router.replace('/')
+    return
+  }
+  try {
+    const data = await authApi.validateInvite(inviteToken.value)
+    if (!data?.valid) {
+      ElMessage.warning('邀请链接无效或已过期')
+      router.replace('/')
+    }
+  } catch (e: any) {
+    ElMessage.warning(e?.response?.data?.message || e?.message || '邀请链接无效或已过期')
+    router.replace('/')
+  }
+}
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleGlobalKeyPress)
@@ -398,13 +421,14 @@ const handleRegister = async () => {
     if (valid) {
       loading.value = true
       try {
-        const success = await authApi.register({
+        const session = await authApi.register({
           phone: registerForm.phone,
           sms_code: registerForm.smsCode,
           username: registerForm.username,
           email: registerForm.email,
           password: registerForm.password,
           role: registerForm.role,
+          invite_token: inviteToken.value,
           // 反注册机行为数据
           behavior: {
             page_loaded_at: behaviorData.pageLoadedAt,
@@ -421,10 +445,10 @@ const handleRegister = async () => {
           website: honeypot.value || undefined,
         })
         
-        if (success) {
-          ElMessage.success('注册成功！请登录')
-          router.push('/login')
-        }
+        authStore.setSession(session.token, session.user)
+        localStorage.setItem(`uv-user-onboarding-new-registration:${session.user.id}`, '1')
+        ElMessage.success('注册成功，已自动登录')
+        router.push('/user/workspace')
       } catch (error: any) {
         if (error?.message && error.message.includes('该手机号已注册')) {
           ElMessageBox.confirm(
@@ -491,6 +515,14 @@ const goToLogin = () => {
 .login-header, .admin-login-header, .register-header {
   text-align: center;
   margin-bottom: 32px;
+}
+
+.auth-logo {
+  width: 42px;
+  height: 72px;
+  display: block;
+  object-fit: contain;
+  margin: 0 auto 12px;
 }
 
 .login-title, .admin-title, .register-title {

@@ -1,24 +1,33 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { authApi } from '@/utils/api'
-import type { User, LoginRequest, UserRole } from '@/types'
+import type { User, LoginRequest } from '@/types'
 import { ElMessage } from 'element-plus'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem('token'))
   const userStr = localStorage.getItem('user')
   const user = ref<User | null>(userStr ? JSON.parse(userStr) : null)
+  const lastProfileRefreshAt = ref(0)
+  const PROFILE_REFRESH_INTERVAL = 30 * 60 * 1000
+
+  const persistUser = (nextUser: User) => {
+    user.value = nextUser
+    localStorage.setItem('user', JSON.stringify(nextUser))
+  }
+
+  const setSession = (nextToken: string, nextUser: User) => {
+    token.value = nextToken
+    lastProfileRefreshAt.value = Date.now()
+    localStorage.setItem('token', nextToken)
+    persistUser(nextUser)
+  }
 
   // 登录
   const login = async (loginData: LoginRequest, silent = false) => {
     try {
       const response = await authApi.login(loginData, silent)
-      token.value = response.token
-      user.value = response.user
-      
-      // 保存到localStorage
-      localStorage.setItem('token', response.token)
-      localStorage.setItem('user', JSON.stringify(response.user))
+      setSession(response.token, response.user)
       
       if (!silent) {
         ElMessage.success('登录成功')
@@ -42,7 +51,32 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = null
       localStorage.removeItem('token')
       localStorage.removeItem('user')
+      lastProfileRefreshAt.value = 0
       ElMessage.success('已退出登录')
+    }
+  }
+
+  // 刷新当前用户资料。用于更新头像签名 URL、手机号等会被缓存的资料。
+  const refreshCurrentUser = async (options: { force?: boolean } = {}) => {
+    if (!token.value) return null
+
+    const now = Date.now()
+    if (!options.force && lastProfileRefreshAt.value && now - lastProfileRefreshAt.value < PROFILE_REFRESH_INTERVAL) {
+      return user.value
+    }
+
+    try {
+      const latestUser = await authApi.getMe()
+      persistUser({ ...(user.value || {} as User), ...latestUser })
+      lastProfileRefreshAt.value = now
+      return user.value
+    } catch (error) {
+      token.value = null
+      user.value = null
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      lastProfileRefreshAt.value = 0
+      throw error
     }
   }
 
@@ -84,8 +118,10 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     token,
     user,
+    setSession,
     login,
     logout,
+    refreshCurrentUser,
     isAuthenticated,
     isAdmin,
     isUser,
@@ -95,4 +131,3 @@ export const useAuthStore = defineStore('auth', () => {
     isEnterprise
   }
 })
-

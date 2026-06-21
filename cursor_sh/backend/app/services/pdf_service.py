@@ -1,9 +1,9 @@
-"""PDF 生成服务 - 需求告知函 / 订单确认函"""
+"""PDF 生成服务 - 订单需求确认函 / 订单确认函"""
 
 import io
 import os
 import platform
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm, cm
@@ -11,10 +11,67 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    HRFlowable, KeepTogether
+    HRFlowable, KeepTogether, Image
 )
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_now, ensure_beijing
+
+
+logger = get_module_logger("order")
+
+
+def _get_pdf_logo_path() -> str:
+    """返回 PDF 可用的官方 logo 图片路径。"""
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "official-mark-black.png")
+
+
+def _draw_confirmation_watermark(canvas, doc):
+    """在确认函页面底层绘制左右两侧的低透明度品牌水印。"""
+    logo_path = _get_pdf_logo_path()
+    if not os.path.exists(logo_path):
+        return
+
+    # 避免在不支持透明度的 ReportLab 版本里画出过重的黑色背景。
+    if not hasattr(canvas, "setFillAlpha"):
+        return
+
+    page_width, page_height = A4
+    watermark_height = 340 * mm
+    watermark_width = watermark_height * (466 / 831)
+    watermark_y = (page_height - watermark_height) / 2
+    watermark_alpha = 0.045
+
+    def draw_logo(x: float, flip_vertical: bool = False):
+        canvas.saveState()
+        canvas.setFillAlpha(watermark_alpha)
+        canvas.setStrokeAlpha(watermark_alpha)
+        if flip_vertical:
+            canvas.translate(x, watermark_y + watermark_height)
+            canvas.scale(1, -1)
+            canvas.drawImage(
+                logo_path,
+                0,
+                0,
+                width=watermark_width,
+                height=watermark_height,
+                mask="auto",
+            )
+        else:
+            canvas.drawImage(
+                logo_path,
+                x,
+                watermark_y,
+                width=watermark_width,
+                height=watermark_height,
+                mask="auto",
+            )
+        canvas.restoreState()
+
+    draw_logo(-145 * mm, flip_vertical=True)
+    draw_logo(page_width - 45 * mm, flip_vertical=False)
 
 
 # ========== 中文字体注册 ==========
@@ -100,7 +157,7 @@ def _register_chinese_fonts():
     for path in candidates:
         if _try_register_ttfont(path, "Chinese"):
             _try_register_ttfont(path, "ChineseBold")
-            print(f"  📝 PDF 字体: {path}")
+            log_business_event(logger, "pdf_font_registered", font_type="ttf", font_path=path)
             return "ttf"
     
     # 第二层：通过 fc-list 动态查找（仅 Linux）
@@ -109,20 +166,20 @@ def _register_chinese_fonts():
         if fc_path:
             if _try_register_ttfont(fc_path, "Chinese"):
                 _try_register_ttfont(fc_path, "ChineseBold")
-                print(f"  📝 PDF 字体 (fc-list): {fc_path}")
+                log_business_event(logger, "pdf_font_registered", font_type="ttf", font_path=fc_path, source="fc-list")
                 return "ttf"
     
     # 第三层：使用 ReportLab 内置 CID 字体（不需要任何外部文件）
     try:
         from reportlab.pdfbase.cidfonts import UnicodeCIDFont
         pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light'))
-        print("  📝 PDF 字体: STSong-Light (CID 内置)")
+        log_business_event(logger, "pdf_font_registered", font_type="cid", font_name="STSong-Light")
         return "cid"
     except Exception:
         pass
     
     # 全部失败
-    print("  ⚠️  未找到中文字体，PDF 将无法正确显示中文")
+    log_business_event(logger, "pdf_font_missing", level="warning")
     return "none"
 
 
@@ -217,9 +274,9 @@ def _get_styles():
 # ========== 文本映射 ==========
 
 ORDER_TYPE_MAP = {
-    "video_purchase": "裸眼3D成片购买适配",
-    "ai_3d_custom": "AI裸眼3D内容定制",
-    "digital_art": "数字艺术内容定制",
+    "video_purchase": "3D OOH数字内容资源库",
+    "ai_3d_custom": "AI驱动3D OOH内容定制",
+    "digital_art": "数字艺术与沉浸式视觉设计",
 }
 
 STATUS_MAP = {
@@ -245,7 +302,7 @@ def _format_time(time_str: str) -> str:
         return "-"
     try:
         dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-        beijing = dt.astimezone(timezone(timedelta(hours=8)))
+        beijing = ensure_beijing(dt)
         return beijing.strftime("%Y年%m月%d日 %H:%M")
     except Exception:
         return time_str
@@ -423,8 +480,8 @@ class PDFService:
         # 根据订单类型生成标题
         title_map = {
             "ai_3d_custom": "户外大屏裸眼3D内容制作确认函",
-            "video_purchase": "裸眼3D成片购买适配确认函",
-            "digital_art": "数字艺术内容定制确认函",
+            "video_purchase": "3D OOH数字内容资源库确认函",
+            "digital_art": "数字艺术与沉浸式视觉设计确认函",
         }
         doc_title = title_map.get(order_type, "内容制作确认函")
         
@@ -434,10 +491,9 @@ class PDFService:
         
         # 计算关键日期
         try:
-            start_dt = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
-            start_dt = start_dt.astimezone(timezone(timedelta(hours=8)))
+            start_dt = ensure_beijing(datetime.fromisoformat(created_at_str.replace("Z", "+00:00")))
         except Exception:
-            start_dt = datetime.now(timezone(timedelta(hours=8)))
+            start_dt = beijing_now()
         
         start_date_str = start_dt.strftime("%Y年%m月%d日")
         
@@ -475,6 +531,13 @@ class PDFService:
         
         # ========== 开始构建 PDF ==========
         
+        logo_path = _get_pdf_logo_path()
+        if os.path.exists(logo_path):
+            logo = Image(logo_path, width=11 * mm, height=20 * mm)
+            logo.hAlign = "CENTER"
+            elements.append(logo)
+            elements.append(Spacer(1, 5))
+
         # ---- 标题 ----
         elements.append(Paragraph(doc_title, styles["DocTitle"]))
         elements.append(Paragraph(f"编号：{order_number}", styles["DocSubtitle"]))
@@ -492,7 +555,7 @@ class PDFService:
         
         # ---- 开场段 ----
         opening = (
-            f"&nbsp;&nbsp;&nbsp;&nbsp;贵司与我司（Unique Video科技有限公司）就"
+            f"&nbsp;&nbsp;&nbsp;&nbsp;贵司与我司（北京数艺光程数字科技有限责任公司）就"
         )
         # 根据订单类型拼接合作描述
         if order_type == "ai_3d_custom":
@@ -501,9 +564,9 @@ class PDFService:
             else:
                 opening += "户外大屏裸眼3D视频制作事宜，"
         elif order_type == "video_purchase":
-            opening += "裸眼3D成片购买适配事宜，"
+            opening += "3D OOH数字内容资源库事宜，"
         elif order_type == "digital_art":
-            opening += "数字艺术内容定制事宜，"
+            opening += "数字艺术与沉浸式视觉设计事宜，"
         else:
             opening += "内容制作事宜，"
         opening += "经过初步协商，双方达成如下合作："
@@ -621,7 +684,7 @@ class PDFService:
             styles["BodyCN"]
         ))
         elements.append(Paragraph(
-            "&nbsp;&nbsp;&nbsp;&nbsp;乙方：<b>Unique Video科技有限公司</b>",
+            "&nbsp;&nbsp;&nbsp;&nbsp;乙方：<b>北京数艺光程数字科技有限责任公司</b>",
             styles["BodyCN"]
         ))
         
@@ -643,7 +706,7 @@ class PDFService:
             "RightAlign", fontName=_FONT_BOLD, fontSize=10, leading=16,
             alignment=TA_RIGHT, textColor=colors.HexColor("#1a1c1c"),
         )
-        elements.append(Paragraph("Unique Video科技有限公司", right_style))
+        elements.append(Paragraph("北京数艺光程数字科技有限责任公司", right_style))
         elements.append(Paragraph(start_date_str, right_style))
         
         elements.append(Spacer(1, 20))
@@ -656,14 +719,18 @@ class PDFService:
             spaceAfter=8,
         ))
         
-        now_beijing = datetime.now(timezone(timedelta(hours=8)))
+        now_beijing = beijing_now()
         elements.append(Paragraph(
-            f"Unique Video科技有限公司 · 本文件由系统自动生成 · {now_beijing.strftime('%Y-%m-%d %H:%M')}",
+            f"北京数艺光程数字科技有限责任公司 · 本文件由系统自动生成 · {now_beijing.strftime('%Y-%m-%d %H:%M')}",
             styles["Footer"]
         ))
         
         # 构建 PDF
-        doc.build(elements)
+        doc.build(
+            elements,
+            onFirstPage=_draw_confirmation_watermark,
+            onLaterPages=_draw_confirmation_watermark,
+        )
         pdf_bytes = buffer.getvalue()
         buffer.close()
         return pdf_bytes
@@ -832,9 +899,9 @@ class PDFService:
         
         # ---- 页脚 ----
         elements.append(HRFlowable(width="100%", thickness=0.3, color=colors.HexColor("#d0d0d0"), spaceAfter=6))
-        now_beijing = datetime.now(timezone(timedelta(hours=8)))
+        now_beijing = beijing_now()
         elements.append(Paragraph(
-            f"Unique Video AI · 内部订单详情 · 导出时间：{now_beijing.strftime('%Y-%m-%d %H:%M')} · 仅供内部使用",
+            f"Unique Vision AI · 内部订单详情 · 导出时间：{now_beijing.strftime('%Y-%m-%d %H:%M')} · 仅供内部使用",
             styles["Footer"]
         ))
         

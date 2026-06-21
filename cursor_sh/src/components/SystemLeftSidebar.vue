@@ -2,37 +2,41 @@
   <div class="system-sidebar" :class="{ 'is-collapsed': uiStore.isSidebarCollapsed }">
     <div class="sidebar-header">
       <div class="logo">
-        <span class="logo-text">欢迎来到Unique Video<br>AI设计平台</span>
+        <img class="logo-mark" src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
+        <span class="logo-text">欢迎来到Unique Vision 平台</span>
       </div>
     </div>
     
 
     
     <div class="sidebar-content">
-      <div class="nav-section">
+      <div class="nav-section" data-onboarding-target="primary-sidebar-nav">
         <div 
           class="nav-item" 
           :class="{ active: activeMenu === 'workspace' }" 
+          data-onboarding-target="workspace-nav"
           @click="navigate('workspace')"
         >
           <el-icon><House /></el-icon>
-          <span v-if="!uiStore.isSidebarCollapsed">Home</span>
+          <span v-if="!uiStore.isSidebarCollapsed">工作台</span>
         </div>
         <div 
           class="nav-item" 
           :class="{ active: activeMenu === 'orders' }" 
+          data-onboarding-target="orders-nav"
           @click="navigate('orders')"
         >
           <el-icon><Grid /></el-icon>
-          <span v-if="!uiStore.isSidebarCollapsed">My Orders</span>
+          <span v-if="!uiStore.isSidebarCollapsed">我的订单</span>
         </div>
         <div 
           class="nav-item" 
           :class="{ active: activeMenu === 'drafts' }" 
+          data-onboarding-target="drafts-nav"
           @click="navigate('drafts')"
         >
           <el-icon><EditPen /></el-icon>
-          <span v-if="!uiStore.isSidebarCollapsed">Drafts</span>
+          <span v-if="!uiStore.isSidebarCollapsed">草稿箱</span>
           <el-badge v-if="draftCount > 0 && !uiStore.isSidebarCollapsed" :value="draftCount" :max="99" class="draft-nav-badge" />
         </div>
         
@@ -56,7 +60,7 @@
                   {{ getStatusText(order.status) }}
                 </div>
               </div>
-              <button class="card-action-btn" @click.stop="router.push(`/user/orders/${order.id}`)">View order</button>
+              <button class="card-action-btn" type="button" @click.stop="goToOrder(order)">查看订单</button>
             </div>
 
             <!-- Pagination dots over stack -->
@@ -75,9 +79,13 @@
     </div>
 
     <div class="sidebar-footer">
-      <div class="bottom-nav">
+      <div class="bottom-nav" data-onboarding-target="sidebar-footer-actions">
         <!-- 企业认证提示模块（已认证后消失） -->
-        <div class="auth-prompt-card" v-if="!uiStore.isSidebarCollapsed && authStore.user?.enterprise_status !== 'approved'">
+        <div
+          class="auth-prompt-card"
+          v-if="!uiStore.isSidebarCollapsed && authStore.user?.enterprise_status !== 'approved'"
+          data-onboarding-target="enterprise-auth-entry"
+        >
           <div class="auth-icon-wrap">
             <el-icon><Top /></el-icon>
           </div>
@@ -98,11 +106,11 @@
         <!-- 公告 -->
         <SystemAnnouncement :show-text="!uiStore.isSidebarCollapsed">
           <template #reference="{ hasUnread }">
-            <div class="nav-item">
+            <div class="nav-item" data-onboarding-target="announcement-nav">
               <el-icon class="announcement-icon-btn" :class="{ 'is-unread': hasUnread }">
                 <ChatDotRound />
               </el-icon>
-              <span v-if="!uiStore.isSidebarCollapsed" :class="{ 'text-unread': hasUnread }">Announcements</span>
+              <span v-if="!uiStore.isSidebarCollapsed" :class="{ 'text-unread': hasUnread }">公告</span>
             </div>
           </template>
         </SystemAnnouncement>
@@ -110,21 +118,21 @@
 
         <NotificationBell>
           <template #reference="{ unreadCount }">
-            <div class="nav-item">
+            <div class="nav-item" data-onboarding-target="notification-nav">
               <el-badge :value="unreadCount" :max="99" :hidden="!unreadCount || unreadCount === 0">
                 <el-icon><Bell /></el-icon>
               </el-badge>
-              <span v-if="!uiStore.isSidebarCollapsed">Notifications</span>
+              <span v-if="!uiStore.isSidebarCollapsed">通知</span>
             </div>
           </template>
         </NotificationBell>
-        <div class="nav-item" @click="showHelp">
+        <div class="nav-item" data-onboarding-target="help-nav" @click="showHelp">
           <el-icon><Help /></el-icon>
-          <span v-if="!uiStore.isSidebarCollapsed">Help</span>
+          <span v-if="!uiStore.isSidebarCollapsed">帮助与支持</span>
         </div>
-        <div class="nav-item" @click="navigate('profile')" style="margin-top: 8px;">
+        <div class="nav-item" data-onboarding-target="profile-nav" @click="navigate('profile')" style="margin-top: 8px;">
           <div class="avatar-wrap" style="width: 16px; display: flex; justify-content: center; align-items: center; position: relative;">
-            <el-avatar :size="24" class="user-avatar" src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png">{{ userInitial }}</el-avatar>
+            <el-avatar :size="24" class="user-avatar" :src="avatarUrl">{{ userInitial }}</el-avatar>
             <span v-if="authStore.isEnterprise()" class="enterprise-star">★</span>
           </div>
           <span v-if="!uiStore.isSidebarCollapsed">{{ authStore.user?.username || '用户' }}</span>
@@ -270,8 +278,25 @@ const getStackStyle = (order: any) => {
   }
 }
 
+const resetUserNavigationState = () => {
+  uiStore.setSecondarySidebar(false)
+  uiStore.toggleSidebar(false)
+  uiStore.setActiveModule('')
+  uiStore.setIsAiExpanded(false)
+}
+
+const goToOrder = async (order: any) => {
+  if (!order?.id) return
+  resetUserNavigationState()
+  await router.push(`/user/orders/${order.id}`)
+}
+
 const handleStackClick = (order: any) => {
   const vIndex = getVisualIndex(order);
+  if (vIndex === 0) {
+    void goToOrder(order)
+    return
+  }
   if (vIndex === 1 || vIndex === 2) {
     advanceToNext();
   }
@@ -294,9 +319,9 @@ const getStatusText = (status: string) => {
 const getOrderName = (order: any) => {
   if (order.title) return order.title
   const typeMap: Record<string, string> = {
-    'video_purchase': '裸眼3D成片购买',
-    'ai_3d_custom': 'AI裸眼3D定制',
-    'digital_art': '数字艺术定制'
+    'video_purchase': '3D OOH数字内容资源库',
+    'ai_3d_custom': 'AI驱动3D OOH内容定制',
+    'digital_art': '数字艺术与沉浸式视觉设计'
   }
   return typeMap[order.orderType] || order.id.slice(0, 8)
 }
@@ -305,6 +330,8 @@ const userInitial = computed(() => {
   const name = authStore.user?.username || 'U'
   return name.charAt(0).toUpperCase()
 })
+
+const avatarUrl = computed(() => authStore.user?.avatar || '')
 
 const activeMenu = computed(() => {
   const path = route.path
@@ -316,32 +343,39 @@ const activeMenu = computed(() => {
 })
 
 const navigate = async (name: string) => {
+  resetUserNavigationState()
   if (name === 'workspace') {
-    uiStore.setSecondarySidebar(false)
-    uiStore.toggleSidebar(false)
-    uiStore.setActiveModule('')
-    uiStore.setIsAiExpanded(false)
     await router.push('/user/workspace')
   }
-  else if (name === 'orders') router.push('/user/orders')
-  else if (name === 'drafts') router.push('/user/drafts')
-  else if (name === 'profile') router.push('/user/profile')
+  else if (name === 'orders') await router.push('/user/orders')
+  else if (name === 'drafts') await router.push('/user/drafts')
+  else if (name === 'profile') await router.push('/user/profile')
+}
+
+const openSystemGuide = () => {
+  ElMessageBox.close()
+  window.dispatchEvent(new CustomEvent('uv:start-user-onboarding'))
 }
 
 const showHelp = () => {
   ElMessageBox.alert(
-    '请您联系我们的设计专家<br>电话：400-888-8888<br>邮件：support@uniquevideo.com',
+    '请您联系我们的设计专家<br>电话：400-888-8888<br>邮件：support@uniquevisionx.com<br><br>对系统使用有疑问？点击 <button type="button" class="uv-guide-link">系统引导</button>。',
     '帮助与支持',
     {
       dangerouslyUseHTMLString: true,
       confirmButtonText: '确定'
     }
   )
+
+  window.setTimeout(() => {
+    const guideLink = document.querySelector<HTMLButtonElement>('.uv-guide-link')
+    guideLink?.addEventListener('click', openSystemGuide, { once: true })
+  }, 0)
 }
 
 const handleAuthClick = () => {
   // Enterprise authentication logic can be implemented here
-  router.push('/user/profile') // Navigate to profile or specific auth page
+  void navigate('profile') // Navigate to profile or specific auth page
 }
 
 const handleLogout = async () => {
@@ -383,7 +417,19 @@ const handleLogout = async () => {
 }
 
 .system-sidebar.is-collapsed .sidebar-header {
-  display: none; /* Hide header completely to pull icons up */
+  display: flex;
+  padding: 0;
+  margin-bottom: 24px;
+}
+
+.system-sidebar.is-collapsed .logo {
+  width: 100%;
+  gap: 0;
+}
+
+.system-sidebar.is-collapsed .logo-mark {
+  width: 26px;
+  height: 44px;
 }
 
 
@@ -407,6 +453,20 @@ const handleLogout = async () => {
   justify-content: center;
   align-items: center;
   text-align: center;
+}
+
+.logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo-mark {
+  width: 26px;
+  height: 44px;
+  display: block;
+  object-fit: contain;
 }
 
 .logo-text {
@@ -455,7 +515,7 @@ const handleLogout = async () => {
   padding: 0 16px;
   border-radius: 20px;
   cursor: pointer;
-  color: #414754;
+  color: var(--uv-ws-module-title, #414754);
   font-size: 13px;
   font-weight: 500;
   transition: all 0.2s ease;
@@ -468,19 +528,33 @@ const handleLogout = async () => {
 }
 
 .nav-item:hover {
-  background: rgba(234, 231, 231, 0.5); /* surface-container-high hover */
-  color: #1b1b1c;
+  background: var(--uv-ws-sidebar-hover-bg, rgba(234, 231, 231, 0.5));
+  color: var(--uv-ws-page-text, #1b1b1c);
+}
+
+:global(.uv-guide-link) {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--uv-ws-action-button-bg, #A0522D);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+:global(.uv-guide-link:hover) {
+  text-decoration: underline;
 }
 
 .nav-item.active {
-  background: #ffffff; /* Let the active pill pop via lowest container */
-  color: #0058bc; /* Primary */
+  background: var(--uv-ws-sidebar-active-bg, #ffffff);
+  color: var(--uv-ws-sidebar-active, #A0522D);
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(27, 27, 28, 0.02); /* Subtle shadow for active pill */
 }
 
 .nav-item.active .el-icon {
-  color: #0058bc; /* Primary color when active */
+  color: var(--uv-ws-sidebar-active, #A0522D);
 }
 
 .ongoing-projects-nav {
@@ -524,7 +598,7 @@ const handleLogout = async () => {
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(0,0,0,0.08); /* Distinct circular outline */
-  color: #0d99ff; /* Use primary blue inside the icon circle */
+  color: var(--uv-ws-action-button-bg, #A0522D);
   font-size: 16px;
 }
 
@@ -539,7 +613,7 @@ const handleLogout = async () => {
 .card-title {
   font-size: 12px;
   font-weight: 500;
-  color: #1a1c1c;
+  color: var(--uv-ws-page-text, #1a1c1c);
   width: 100%;
 }
 
@@ -549,20 +623,20 @@ const handleLogout = async () => {
   justify-content: center;
   gap: 6px;
   font-size: 11px;
-  color: #747474;
+  color: var(--uv-ws-muted-text, #747474);
 }
 
 .status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #0071e3; 
+  background: var(--uv-ws-action-button-bg, #A0522D);
 }
 
 .card-action-btn {
   width: 100%;
-  background: #0d99ff; /* Figma blue */
-  color: #ffffff;
+  background: var(--uv-ws-action-button-bg, #A0522D);
+  color: var(--uv-ws-action-button-text, #ffffff);
   border: none;
   padding: 6px 0; /* Flatter button */
   border-radius: 6px;
@@ -570,11 +644,15 @@ const handleLogout = async () => {
   font-weight: 600;
   cursor: pointer;
   margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
   transition: transform 0.15s ease, background 0.2s ease;
 }
 
 .card-action-btn:hover {
-  background: #0a8bed;
+  background: var(--uv-ws-action-button-hover, #8f4527);
   transform: scale(0.98);
 }
 
@@ -662,21 +740,24 @@ const handleLogout = async () => {
 
 .auth-text {
   font-size: 13px;
-  color: #1a1a1a;
+  color: var(--uv-ws-page-text, #1a1a1a);
   line-height: 1.4;
   margin-bottom: 16px;
 }
 
 .auth-btn {
   width: 100%;
-  background: #0d99ff; /* Bright blue */
-  color: #fff;
+  background: var(--uv-ws-action-button-bg, #A0522D);
+  color: var(--uv-ws-action-button-text, #fff);
   border: none;
   border-radius: 6px;
-  padding: 8px 0;
-  font-size: 13px;
-  font-weight: 500;
+  padding: 6px 0;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: opacity 0.2s;
 }
 
@@ -692,6 +773,8 @@ const handleLogout = async () => {
 :deep(.nav-item .el-badge__content.is-fixed) {
   top: 8px;
   right: 14px;
+  background-color: var(--uv-ws-notification-badge, #A0522D) !important;
+  border-color: var(--uv-ws-notification-badge, #A0522D) !important;
 }
 
 :deep(.nav-item .el-badge) {
@@ -703,26 +786,28 @@ const handleLogout = async () => {
 
 .draft-nav-badge {
   margin-left: auto;
-  :deep(.el-badge__content) {
-    font-size: 10px;
-    height: 16px;
-    line-height: 16px;
-    padding: 0 5px;
-    background: #0071e3;
-  }
+}
+
+.draft-nav-badge :deep(.el-badge__content) {
+  font-size: 10px;
+  height: 16px;
+  line-height: 16px;
+  padding: 0 5px;
+  background-color: var(--uv-ws-notification-badge, #A0522D) !important;
+  border-color: var(--uv-ws-notification-badge, #A0522D) !important;
 }
 
 .announcement-icon-btn {
   transition: all 0.3s ease;
   
   &.is-unread {
-    color: #f56c6c !important;
+    color: var(--uv-ws-unread-text, #A0522D) !important;
     animation: heartbeat 2s infinite;
   }
 }
 
 .text-unread {
-  color: #f56c6c;
+  color: var(--uv-ws-unread-text, #A0522D);
   font-weight: 500;
 }
 

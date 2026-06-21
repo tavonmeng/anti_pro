@@ -1,10 +1,10 @@
 """文件模型"""
 
 from sqlalchemy import Column, String, BigInteger, DateTime, Enum, ForeignKey
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import enum
 from app.database import Base
+from app.utils.timezone import beijing_now
 
 
 class FileType(str, enum.Enum):
@@ -25,11 +25,10 @@ class File(Base):
     size = Column(BigInteger, nullable=False)
     mime_type = Column(String(100), nullable=False)
     url = Column(String(500), nullable=False)
-    uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
+    uploaded_at = Column(DateTime(timezone=True), default=beijing_now)
     
     # 关系（使用 selectin 加载策略，兼容异步上下文）
     order = relationship("Order", back_populates="files", lazy="selectin")
     
     def __repr__(self):
         return f"<File(id={self.id}, name={self.name}, type={self.file_type})>"
-

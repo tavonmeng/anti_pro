@@ -11,7 +11,8 @@
     <div class="confirmation-letter">
       <!-- 正式信函头部 -->
       <div class="letter-header">
-        <div class="letter-stamp">需求告知函</div>
+        <img class="letter-logo" src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
+        <div class="letter-stamp">订单需求确认函</div>
         <div class="letter-number">编号：{{ orderNumber }}</div>
       </div>
 
@@ -21,7 +22,7 @@
       <div class="letter-greeting">
         <p>尊敬的客户：</p>
         <p class="greeting-body">
-          感谢您选择 <strong>Unique Video AI 设计平台</strong>。以下是您提交的需求确认摘要，
+          感谢您选择 <strong>北京数艺光程数字科技有限责任公司（Unique Vision AI）</strong>。以下是您提交的需求确认摘要，
           请您仔细核对并确认，确认后我们将立即进入制作流程。
         </p>
       </div>
@@ -228,9 +229,9 @@ const isFormValid = computed(() => {
 // --- 订单类型文本 ---
 const orderTypeText = computed(() => {
   const map: Record<OrderType, string> = {
-    video_purchase: '裸眼3D成片购买适配',
-    ai_3d_custom: 'AI裸眼3D内容定制',
-    digital_art: '数字艺术内容定制'
+    video_purchase: '3D OOH数字内容资源库',
+    ai_3d_custom: 'AI驱动3D OOH内容定制',
+    digital_art: '数字艺术与沉浸式视觉设计'
   }
   return map[props.orderType] || props.orderType
 })
@@ -249,15 +250,27 @@ const addWorkdays = (start: Date, days: number): Date => {
   const result = new Date(start)
   let added = 0
   while (added < days) {
-    result.setDate(result.getDate() + 1)
-    const dow = result.getDay()
+    result.setUTCDate(result.getUTCDate() + 1)
+    const dow = result.getUTCDay()
     if (dow !== 0 && dow !== 6) added++
   }
   return result
 }
 
+const getBeijingToday = (): Date => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date())
+  const pick = (type: string) => Number(parts.find(part => part.type === type)?.value)
+  return new Date(Date.UTC(pick('year'), pick('month') - 1, pick('day'), 12))
+}
+
 const formatDate = (date: Date): string => {
   return date.toLocaleDateString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -266,20 +279,20 @@ const formatDate = (date: Date): string => {
 }
 
 const startDate = computed(() => {
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrow = getBeijingToday()
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
   // 如果是周末，跳到周一
-  while (tomorrow.getDay() === 0 || tomorrow.getDay() === 6) {
-    tomorrow.setDate(tomorrow.getDate() + 1)
+  while (tomorrow.getUTCDay() === 0 || tomorrow.getUTCDay() === 6) {
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
   }
   return formatDate(tomorrow)
 })
 
 const endDate = computed(() => {
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  while (tomorrow.getDay() === 0 || tomorrow.getDay() === 6) {
-    tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrow = getBeijingToday()
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+  while (tomorrow.getUTCDay() === 0 || tomorrow.getUTCDay() === 6) {
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
   }
   return formatDate(addWorkdays(tomorrow, productionDays.value))
 })
@@ -313,7 +326,7 @@ const summaryItems = computed(() => {
       if (d.tech_delivery) items.push({ label: '技术需求', value: d.tech_delivery })
       if (d.budget) items.push({ label: '项目预算', value: d.budget })
       if (d.online_time) items.push({ label: '预计上刊时间', value: d.online_time })
-      if (d.scenePhotos?.length) items.push({ label: '现场实拍图', value: `${d.scenePhotos.length} 张` })
+      if (d.scenePhotos?.length) items.push({ label: '现场实拍图和其他文件', value: `${d.scenePhotos.length} 个文件` })
     } else {
       if (d.brand) items.push({ label: '品牌关键词', value: d.brand })
       if (d.target_group) items.push({ label: '目标受众', value: d.target_group })
@@ -324,7 +337,7 @@ const summaryItems = computed(() => {
       if (d.media_size) items.push({ label: '投放媒体尺寸', value: d.media_size })
       if (d.budget) items.push({ label: '制作预算', value: d.budget })
       if (d.online_time) items.push({ label: '预计上刊时间', value: d.online_time })
-      if (d.scenePhotos?.length) items.push({ label: '现场实拍图', value: `${d.scenePhotos.length} 张` })
+      if (d.scenePhotos?.length) items.push({ label: '现场实拍图和其他文件', value: `${d.scenePhotos.length} 个文件` })
     }
   } else if (props.orderType === 'digital_art') {
     const artMap: Record<string, string> = { abstract: '抽象', realistic: '写实', installation: '装置', dynamic: '动态艺术', custom: d.customDirection || '自定义' }
@@ -435,6 +448,14 @@ watch(visible, (val) => {
   margin-bottom: 24px;
 }
 
+.letter-logo {
+  width: 32px;
+  height: 56px;
+  display: block;
+  object-fit: contain;
+  margin: 0 auto 12px;
+}
+
 .letter-stamp {
   font-size: 28px;
   font-weight: 700;
@@ -452,7 +473,7 @@ watch(visible, (val) => {
     transform: translateX(-50%);
     width: 48px;
     height: 3px;
-    background: #0071e3;
+    background: #A0522D;
     border-radius: 2px;
   }
 }
@@ -499,7 +520,7 @@ watch(visible, (val) => {
   color: #1a1c1c;
   margin-bottom: 16px;
   padding-left: 12px;
-  border-left: 3px solid #0071e3;
+  border-left: 3px solid #A0522D;
 }
 
 // --- 需求摘要表格 ---
@@ -557,8 +578,8 @@ watch(visible, (val) => {
   flex-shrink: 0;
 
   &.start {
-    background: #0071e3;
-    box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.15);
+    background: #A0522D;
+    box-shadow: 0 0 0 4px rgba(160, 82, 45, 0.16);
   }
   &.end {
     background: #34c759;
@@ -569,7 +590,7 @@ watch(visible, (val) => {
 .timeline-line {
   width: 2px;
   height: 24px;
-  background: linear-gradient(to bottom, #0071e3, #34c759);
+  background: linear-gradient(to bottom, #A0522D, #34c759);
   margin-left: 5px;
   margin: 4px 0 4px 5px;
 }
@@ -600,7 +621,7 @@ watch(visible, (val) => {
   text-align: center;
 
   strong {
-    color: #0071e3;
+    color: #A0522D;
   }
 }
 
@@ -625,7 +646,7 @@ watch(visible, (val) => {
   }
 
   :deep(.el-input__wrapper:focus-within) {
-    box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.3) !important;
+    box-shadow: 0 0 0 2px rgba(160, 82, 45, 0.25) !important;
   }
 }
 

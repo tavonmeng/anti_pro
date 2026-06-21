@@ -4,6 +4,20 @@ import { notificationApi } from '@/utils/api'
 import type { Notification, NotificationList } from '@/types'
 import { ElMessage } from 'element-plus'
 
+const ENABLE_NOTIFICATION_DEBUG = import.meta.env.DEV || import.meta.env.VITE_DEBUG_LOGS === 'true'
+
+const debugLog = (...args: unknown[]) => {
+  if (ENABLE_NOTIFICATION_DEBUG) {
+    console.log(...args)
+  }
+}
+
+const debugWarn = (...args: unknown[]) => {
+  if (ENABLE_NOTIFICATION_DEBUG) {
+    console.warn(...args)
+  }
+}
+
 export const useNotificationStore = defineStore('notification', () => {
   // 状态
   const notifications = ref<Notification[]>([])
@@ -54,15 +68,15 @@ export const useNotificationStore = defineStore('notification', () => {
       
       // 本地计算用于验证（调试用）
       const localUnreadCount = notifications.value.filter(n => !n.isRead).length
-      console.log('API返回的未读数量:', count, '本地计算的未读数量:', localUnreadCount)
+      debugLog('API返回的未读数量:', count, '本地计算的未读数量:', localUnreadCount)
       
       // 如果两者不一致，记录警告（可能是数据同步问题）
       if (count !== localUnreadCount) {
-        console.warn('未读数量不一致！API返回:', count, '本地计算:', localUnreadCount)
+        debugWarn('未读数量不一致！API返回:', count, '本地计算:', localUnreadCount)
       }
       
       total.value = Number(resultAny.total) || 0
-      console.log('最终设置的未读数量:', unreadCount.value, '总数量:', total.value)
+      debugLog('最终设置的未读数量:', unreadCount.value, '总数量:', total.value)
     } catch (error: any) {
       console.error('获取消息列表失败:', error)
       ElMessage.error(error.message || '获取消息列表失败')
@@ -76,9 +90,9 @@ export const useNotificationStore = defineStore('notification', () => {
     try {
       const result = await notificationApi.getUnreadCount()
       const resultAny = result as any
-      console.log('API返回的完整数据:', JSON.stringify(result))
-      console.log('检查 unreadCount:', resultAny?.unreadCount)
-      console.log('检查 unread_count:', resultAny?.unread_count)
+      debugLog('API返回的完整数据:', JSON.stringify(result))
+      debugLog('检查 unreadCount:', resultAny?.unreadCount)
+      debugLog('检查 unread_count:', resultAny?.unread_count)
       
       // 处理不同的数据格式
       let count = 0
@@ -110,7 +124,7 @@ export const useNotificationStore = defineStore('notification', () => {
       }
       
       unreadCount.value = count
-      console.log('最终设置的未读数量:', count, '类型:', typeof count)
+      debugLog('最终设置的未读数量:', count, '类型:', typeof count)
     } catch (error: any) {
       console.error('获取未读消息数量失败:', error)
       console.error('错误详情:', error.response?.data || error.message)
@@ -221,4 +235,3 @@ export const useNotificationStore = defineStore('notification', () => {
     stopPolling
   }
 })
-

@@ -5,6 +5,7 @@
     <div class="login-wrapper">
       <div>
         <div class="login-header">
+          <img class="auth-logo" src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
           <h1 class="login-title">Unique Vision 系统</h1>
         </div>
 
@@ -444,7 +445,7 @@ function handleLoginSuccess() {
 }
 
 const goToRegister = () => {
-  router.push('/register')
+  ElMessage.info('当前仍在内测阶段，仅支持受邀用户注册。请联系管理员获取邀请链接。')
 }
 </script>
 
@@ -480,6 +481,14 @@ const goToRegister = () => {
 .login-header {
   text-align: center;
   margin-bottom: 24px;
+}
+
+.auth-logo {
+  width: 42px;
+  height: 72px;
+  display: block;
+  object-fit: contain;
+  margin: 0 auto 12px;
 }
 
 .login-title {

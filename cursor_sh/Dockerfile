@@ -4,9 +4,10 @@ FROM node:20-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 
-# 使用淘宝镜像 + 挂载缓存，依赖包只需下载一次
+# 优先使用国内镜像；网络抖动或镜像异常时回退到官方 registry
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --legacy-peer-deps --registry=https://registry.npmmirror.com
+    npm ci --legacy-peer-deps --registry=https://registry.npmmirror.com --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 \
+    || npm ci --legacy-peer-deps --registry=https://registry.npmjs.org --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 
 COPY . .
 
@@ -14,9 +15,11 @@ COPY . .
 ARG VITE_API_BASE_URL=/api
 ARG VITE_ENABLE_VOICE_INPUT=false
 ARG VITE_AGENT_MODE=media
+ARG VITE_DEPLOYMENT_MODE=all
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_ENABLE_VOICE_INPUT=$VITE_ENABLE_VOICE_INPUT
 ENV VITE_AGENT_MODE=$VITE_AGENT_MODE
+ENV VITE_DEPLOYMENT_MODE=$VITE_DEPLOYMENT_MODE
 
 # 挂载 Vite 编译缓存，增量构建飞快
 RUN --mount=type=cache,target=/app/node_modules/.vite \

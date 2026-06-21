@@ -1,10 +1,10 @@
 """订单模型"""
 
 from sqlalchemy import Column, String, Integer, DateTime, Enum, ForeignKey, JSON, UniqueConstraint
-from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import enum
 from app.database import Base
+from app.utils.timezone import beijing_now
 
 
 class OrderType(str, enum.Enum):
@@ -42,7 +42,7 @@ class OrderAssignee(Base):
     
     order_id = Column(String(50), ForeignKey("orders.id", ondelete="CASCADE"), primary_key=True)
     assignee_id = Column(String(50), primary_key=True)  # 引用 staff_members 表，不用 FK
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
     
     def __repr__(self):
         return f"<OrderAssignee(order_id={self.order_id}, assignee_id={self.assignee_id})>"
@@ -70,8 +70,8 @@ class Order(Base):
     design_plan = Column(JSON, nullable=True)
     
     # 时间戳
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
+    updated_at = Column(DateTime(timezone=True), default=beijing_now, onupdate=beijing_now)
     
     # 关系（保留文件和反馈的 ORM 关系，移除 user/assignee 的 ORM 关系）
     files = relationship("File", back_populates="order", cascade="all, delete-orphan", lazy="selectin")

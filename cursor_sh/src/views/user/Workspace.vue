@@ -10,12 +10,12 @@
           <div v-if="!uiStore.isAiExpanded && !uiStore.isSecondarySidebarVisible" class="overview-state">
             
             <!-- Hero Banner (AI 智能体) -->
-            <div class="hero-banner">
+            <div class="hero-banner" data-onboarding-target="ai-hero-entry">
               <h1 class="hero-title">Unique Vision AI智能体 | 咨询·需求·下单，一站式协助</h1>
               <div class="hero-input-area" @click="handleAiExpand(true)">
                 <input type="text" :placeholder="placeholderText" class="hero-input" readonly />
                 <div class="generate-btn">
-                  发送 <span class="sparkle">✨</span>
+                  发送 <span class="sparkle" aria-hidden="true"></span>
                 </div>
               </div>
             </div>
@@ -27,72 +27,40 @@
           <div class="section-header">
             <div class="section-titles">
               <h2 class="section-title">业务菜单</h2>
-              <p class="section-subtitle">高质量3D视频内容交付，让每一个户外屏都有优质的内容</p>
+              <p class="section-subtitle">平台服务体系</p>
             </div>
           </div>
           
           <!-- 服务入口卡片 -->
-          <div class="service-cards">
-            <!-- Card 1 -->
-            <div class="service-card" @click="triggerChoreography('video_purchase')">
+          <div class="service-cards" data-onboarding-target="business-service-list">
+            <div
+              v-for="service in platformServices"
+              :key="service.type"
+              class="service-card"
+              :data-onboarding-target="`business-service-card-${service.type}`"
+              role="button"
+              tabindex="0"
+              @click="triggerChoreography(service.type)"
+              @keydown.enter.self.prevent="triggerChoreography(service.type)"
+              @keydown.space.self.prevent="triggerChoreography(service.type)"
+            >
               <div class="card-image-wrapper">
-                <div class="card-img" style="background: linear-gradient(to bottom, #111, #333);">
-                  <!-- Placeholder Character -->
+                <div class="card-img" :style="{ background: service.gradient }">
+                  <img class="card-image" :src="service.image" :alt="service.title" />
                 </div>
-                <div class="overlay-badge premium" style="background: #0070eb; color: #fff;">PREMIUM 3D</div>
+                <div class="overlay-badge">{{ getServiceBadgeLabel(service.badge) }}</div>
               </div>
               <div class="card-body">
-                <h3 class="service-title">裸眼3D成片购买</h3>
+                <h3 class="service-title">{{ service.title }}</h3>
+                <p class="service-subtitle">{{ service.subtitle }}</p>
                 <p class="service-description">
-                  专业的裸眼3D视频内容库，根据您的屏幕参数精准适配，快速交付高质量成片。支持多种行业应用和视觉风格选择。
+                  {{ service.description }}
                 </p>
                 <div class="service-features">
-                  <span class="outline-tag">快速交付</span>
-                  <span class="outline-tag">专业适配</span>
-                  <span class="outline-tag">多种风格</span>
+                  <span v-for="feature in service.features" :key="feature" class="outline-tag">{{ feature }}</span>
                 </div>
                 <div class="card-footer">
-                  <span class="price-text">From $2,499</span>
-                  <el-icon class="arrow-right"><Right /></el-icon>
-                </div>
-              </div>
-            </div>
-
-            <!-- Card 2 -->
-            <div class="service-card" @click="triggerChoreography('ai_3d_custom')">
-              <div class="card-image-wrapper">
-                <div class="card-img" style="background: linear-gradient(to bottom, #001f3f, #004080);">
-                   <!-- Placeholder Typography -->
-                </div>
-                <div class="overlay-badge creative" style="background: #0070eb; color: #fff;">AI CREATIVE</div>
-              </div>
-              <div class="card-body">
-                <h3 class="service-title">AI裸眼3D内容定制</h3>
-                <p class="service-description">
-                  基于AI技术的定制化3D内容创作，从创意构思到成品落地的全流程服务。上传现场照片，描述您的想法，我们将AI技术转化为震撼的裸眼3D效果。
-                </p>
-                <div class="card-footer">
-                  <span class="price-text">Custom Quote</span>
-                  <el-icon class="arrow-right"><Right /></el-icon>
-                </div>
-              </div>
-            </div>
-
-            <!-- Card 3 -->
-            <div class="service-card" @click="triggerChoreography('digital_art')">
-              <div class="card-image-wrapper">
-                <div class="card-img" style="background: linear-gradient(to bottom, #4a0000, #ff1a1a);">
-                   <!-- Placeholder Abstract -->
-                </div>
-                <div class="overlay-badge art" style="background: #0070eb; color: #fff;">DIGITAL ART</div>
-              </div>
-              <div class="card-body">
-                <h3 class="service-title">数字艺术内容定制</h3>
-                <p class="service-description">
-                  专业数字艺术创作服务，涵盖抽象、写实、装置、动态艺术等多种风格。由资深艺术家团队倾力打造，3天内提供初稿预览。
-                </p>
-                <div class="card-footer">
-                  <span class="price-text">From $1,200</span>
+                  <span class="price-text">{{ service.footer }}</span>
                   <el-icon class="arrow-right"><Right /></el-icon>
                 </div>
               </div>
@@ -104,6 +72,43 @@
           <!-- Working Mode: AI Assistant Expanded View -->
           <div class="full-ai-container" v-else-if="uiStore.isAiExpanded">
             <AIChatAssistant @close="handleAiExpand(false)" @mode-change="handleModeChange" />
+          </div>
+
+          <!-- Service focus fallback while lazy-loaded business routes resolve -->
+          <div v-else class="service-focus-state">
+            <div v-if="activeService" class="service-focus-panel">
+              <div class="service-focus-media" :style="{ background: activeService.gradient }">
+                <img class="service-focus-image" :src="activeService.image" :alt="activeService.title" />
+                <div class="service-focus-badge">{{ getServiceBadgeLabel(activeService.badge) }}</div>
+              </div>
+              <div class="service-focus-copy">
+                <div class="section-label">SERVICE DETAIL</div>
+                <h2 class="service-focus-title">{{ activeService.title }}</h2>
+                <p class="service-focus-subtitle">{{ activeService.subtitle }}</p>
+                <p class="service-focus-description">{{ activeService.description }}</p>
+                <div class="service-focus-features">
+                  <span v-for="feature in activeService.features" :key="feature">{{ feature }}</span>
+                </div>
+                <div class="service-focus-actions">
+                  <el-button type="primary" @click="goToActiveService">
+                    {{ activeService.type === 'video_purchase' ? '查看资源库' : (activeService.orderable ? '填写需求' : '咨询服务') }}
+                    <el-icon class="action-icon"><Right /></el-icon>
+                  </el-button>
+                  <el-button @click="handleAiExpand(true)">AI 顾问</el-button>
+                </div>
+              </div>
+            </div>
+            <div v-else class="overview-state">
+              <div class="hero-banner" data-onboarding-target="ai-hero-entry">
+                <h1 class="hero-title">Unique Vision AI智能体 | 咨询·需求·下单，一站式协助</h1>
+                <div class="hero-input-area" @click="handleAiExpand(true)">
+                  <input type="text" :placeholder="placeholderText" class="hero-input" readonly />
+                  <div class="generate-btn">
+                    发送 <span class="sparkle" aria-hidden="true"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </transition>
 
@@ -117,12 +122,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, onUnmounted } from 'vue'
+import { computed, onMounted, ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { Right } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { useUiStore } from '@/stores/ui'
-import type { OrderType } from '@/types'
+import { getServiceBadgeLabel, getServiceByType, platformServices, type ServiceType } from '@/data/platformServices'
 import AIChatAssistant from '@/components/AIChatAssistant.vue'
 import StyleInspirationSidebar from '@/components/StyleInspirationSidebar.vue'
 import { logger } from '@/utils/logger'
@@ -133,6 +139,7 @@ const uiStore = useUiStore()
 
 const aiSelectedMode = ref<string | null>(null)
 const showInspiration = ref(true)
+const activeService = computed(() => getServiceByType(uiStore.activeModule))
 
 const promptTexts = [
   "我想做一个关于蒙牛品牌推广的3D视频，主题是...",
@@ -228,14 +235,30 @@ const handleModeChange = (mode: string) => {
   logger.logAction('Workspace', 'switch_ai_mode', { mode })
 }
 
-const triggerChoreography = (targetType: OrderType | string | null) => {
-  // B2B direct routing layout shift: instantly navigate and apply system states
+const getServiceTargetPath = (targetType: ServiceType) => {
+  return targetType === 'video_purchase'
+    ? '/user/video-marketplace'
+    : `/user/create-order/${targetType}`
+}
+
+const goToActiveService = async () => {
+  const type = activeService.value?.type
+  if (!type) return
+  await triggerChoreography(type)
+}
+
+const triggerChoreography = async (targetType: ServiceType | null) => {
   if (targetType) {
     logger.logAction('Workspace', 'click_service_card', { targetType })
-    if (targetType === 'video_purchase') {
-      router.push('/user/video-marketplace')
-    } else {
-      router.push(`/user/create-order/${targetType}`)
+    uiStore.setIsAiExpanded(false)
+    uiStore.setSecondarySidebar(true)
+    uiStore.toggleSidebar(true)
+    uiStore.setActiveModule(targetType)
+    try {
+      await router.push(getServiceTargetPath(targetType))
+    } catch (error) {
+      console.error('业务模块页面加载失败:', error)
+      ElMessage.error('业务模块页面加载失败，请稍后重试')
     }
   } else {
     handleAiExpand(true)
@@ -254,7 +277,8 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 }
 
 .overview-state {
-  padding: 32px 24px 24px 24px;
+  --overview-top-space: clamp(32px, 3.2vh, 48px);
+  padding: var(--overview-top-space) 24px 24px 24px;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -285,13 +309,13 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   background: transparent;
   width: 100%;
   font-size: 16px;
-  color: #1b1b1c;
+  color: var(--uv-ws-page-text, #1b1b1c);
   outline: none;
   font-family: inherit;
 }
 
 .search-input::placeholder {
-  color: #a0a4ae;
+  color: var(--uv-ws-ai-agent-placeholder, #a0a4ae);
 }
 
 .workspace-layout {
@@ -361,7 +385,7 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   font-feature-settings: "kern" 1;
   font-size: 26px;
   font-weight: 500;
-  color: #000000;
+  color: var(--uv-ws-page-text, #000000);
   letter-spacing: -0.26px;
 }
 
@@ -371,7 +395,7 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 
 /* Hero Banner */
 .hero-banner {
-  background: #f0f5fc;
+  background: var(--uv-ws-ai-agent-bg, #E9D5BD);
   border-radius: 16px;
   padding: 32px 40px;
   margin-bottom: 24px;
@@ -392,13 +416,13 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 .hero-title {
   font-size: 24px;
   font-weight: 500;
-  color: #1b1b1c;
+  color: var(--uv-ws-ai-agent-title, #1b1b1c);
   margin: 0 0 24px 0;
   letter-spacing: -0.01em;
 }
 
 .hero-input-area {
-  background: #ffffff;
+  background: var(--uv-ws-ai-agent-input-bg, #ffffff);
   border-radius: 9999px;
   display: flex;
   align-items: center;
@@ -419,19 +443,19 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   background: transparent;
   flex: 1;
   font-size: 15px;
-  color: #1b1b1c;
+  color: var(--uv-ws-ai-agent-input-text, #1b1b1c);
   outline: none;
   font-family: inherit;
   cursor: pointer;
 }
 
 .hero-input::placeholder {
-  color: #a0a4ae;
+  color: var(--uv-ws-ai-agent-placeholder, #a0a4ae);
 }
 
 .generate-btn {
-  background: #0d99ff; /* Matched to Figma primary blue (View orders color) */
-  color: #fff;
+  background: var(--uv-ws-send-button-bg, #666666);
+  color: var(--uv-ws-send-button-text, #fff);
   font-weight: 500;
   padding: 8px 16px;
   border-radius: 9999px;
@@ -443,14 +467,24 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 }
 
 .generate-btn:hover {
-  background: #0a8bed;
+  background: var(--uv-ws-send-button-hover, #555555);
   transform: scale(0.98);
+}
+
+.sparkle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--uv-ws-send-dot, #000000);
+  display: inline-block;
+  flex-shrink: 0;
 }
 
 .service-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 288px), 288px));
   gap: 20px;
+  justify-content: start;
   margin-bottom: 24px;
 }
 
@@ -462,6 +496,8 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   flex-direction: column;
   box-shadow: none;
   gap: 12px;
+  width: 288px;
+  max-width: 100%;
 }
 
 .card-image-wrapper {
@@ -470,12 +506,12 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   position: relative;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--uv-ws-service-image-border, rgba(0, 0, 0, 0.08));
   transition: border-color 0.2s ease;
 }
 
 .service-card:hover .card-image-wrapper {
-  border-color: rgba(0, 0, 0, 0.25);
+  border-color: var(--uv-ws-service-image-hover-border, rgba(0, 0, 0, 0.25));
 }
 
 .card-img {
@@ -483,18 +519,31 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
   height: 100%;
 }
 
+.card-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .overlay-badge {
   position: absolute;
   bottom: 8px;
   left: 8px;
+  right: 8px;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #fff;
-  background: #0070eb;
+  color: var(--uv-ws-service-badge-text, #fff);
+  background: var(--uv-ws-service-badge-bg, #000000);
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-body {
@@ -507,13 +556,21 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 .service-title {
   font-size: 16px;
   font-weight: 500;
-  color: #1b1b1c;
+  color: var(--uv-ws-service-title, #1b1b1c);
   margin: 0 0 6px 0;
+}
+
+.service-subtitle {
+  color: var(--uv-ws-service-subtitle, #414754);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  margin: 0 0 8px 0;
 }
 
 .service-description {
   font-size: 12px;
-  color: #646a78;
+  color: var(--uv-ws-service-intro, #646a78);
   line-height: 1.4;
   margin: 0 0 12px 0;
   flex: 1;
@@ -527,11 +584,11 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 }
 
 .outline-tag {
-  border: 1px solid #c1c6d6;
+  border: 1px solid var(--uv-ws-service-tag-border, #c1c6d6);
   border-radius: 4px;
   padding: 2px 6px;
   font-size: 10px;
-  color: #414754;
+  color: var(--uv-ws-service-tag-text, #414754);
 }
 
 .card-footer {
@@ -544,12 +601,124 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 .price-text {
   font-weight: 500;
   font-size: 13px;
-  color: #0058bc;
+  color: var(--uv-ws-service-footer, #A0522D);
 }
 
 .arrow-right {
-  color: #414754;
+  color: var(--uv-ws-service-arrow, #414754);
   font-size: 18px;
+}
+
+.service-focus-state {
+  height: 100%;
+  padding: 32px 40px;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.service-focus-panel {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+  max-width: 1080px;
+}
+
+.service-focus-media {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.service-focus-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.service-focus-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  max-width: calc(100% - 24px);
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: #000;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-focus-copy {
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.section-label {
+  font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: #747474;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 16px;
+}
+
+.service-focus-title {
+  margin: 0 0 8px;
+  color: var(--uv-ws-service-title, #1b1b1c);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.service-focus-subtitle {
+  margin: 0 0 18px;
+  color: var(--uv-ws-service-subtitle, #414754);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.service-focus-description {
+  margin: 0 0 20px;
+  max-width: 680px;
+  color: var(--uv-ws-service-intro, #646a78);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.service-focus-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 28px;
+}
+
+.service-focus-features span {
+  border: 1px solid var(--uv-ws-service-tag-border, #c1c6d6);
+  border-radius: 4px;
+  padding: 5px 9px;
+  font-size: 12px;
+  color: var(--uv-ws-service-tag-text, #414754);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.service-focus-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.action-icon {
+  margin-left: 4px;
 }
 
 .fade-enter-active,
@@ -582,7 +751,7 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 .section-title {
   font-size: 18px;
   font-weight: 500;
-  color: #1b1b1c;
+  color: var(--uv-ws-business-title, #1b1b1c);
   margin: 0;
   letter-spacing: -0.01em;
 }
@@ -590,14 +759,29 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 .section-subtitle {
   margin: 0;
   font-size: 12px;
-  color: #646a78;
+  color: var(--uv-ws-business-subtitle, #646a78);
   transition: opacity 0.4s ease;
+}
+
+@media (max-width: 900px) {
+  .service-focus-state {
+    padding: 24px;
+  }
+
+  .service-focus-panel {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .service-focus-title {
+    font-size: 24px;
+  }
 }
 
 .figma-divider {
   width: 100%;
   height: 1px;
-  background-color: #e5e5e5;
+  background-color: var(--uv-ws-divider, #e5e5e5);
   margin: 24px 0 32px 0;
 }
 
@@ -606,23 +790,14 @@ const triggerChoreography = (targetType: OrderType | string | null) => {
 /* Tier 2: FHD / QHD / high-res monitors (1920px+) */
 @media screen and (min-width: 1920px) {
   .overview-state {
-    padding: 0 32px 24px 32px;
-  }
-  .card-image-wrapper {
-    height: 180px;
+    padding: var(--overview-top-space) 32px 24px 32px;
   }
 }
 
 /* Tier 3: 4K at 150% scale = 2560px CSS pixels */
 @media screen and (min-width: 2560px) {
   .overview-state {
-    padding: 0 48px 32px 48px;
-  }
-  .card-image-wrapper {
-    height: 200px;
-  }
-  .service-cards {
-    gap: 24px;
+    padding: var(--overview-top-space) 48px 32px 48px;
   }
 }
 </style>

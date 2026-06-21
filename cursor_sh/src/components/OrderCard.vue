@@ -1,5 +1,13 @@
 <template>
-  <el-card class="order-card" shadow="hover">
+  <el-card
+    class="order-card"
+    shadow="hover"
+    role="button"
+    tabindex="0"
+    @click="emitView"
+    @keydown.enter.self.prevent="emitView"
+    @keydown.space.self.prevent="emitView"
+  >
     <div class="order-header">
       <div class="order-info">
         <div class="order-number">{{ order.orderNumber }}</div>
@@ -41,7 +49,7 @@
           {{ formatTime(order.createdAt) }}
         </span>
       </div>
-      <el-button type="primary" text @click="$emit('view', order)">
+      <el-button type="primary" text class="view-detail-btn" @click.stop="emitView">
         查看详情
         <el-icon><ArrowRight /></el-icon>
       </el-button>
@@ -53,6 +61,7 @@
 import { computed } from 'vue'
 import { User, Avatar, Clock, ArrowRight } from '@element-plus/icons-vue'
 import OrderStatusBadge from './OrderStatusBadge.vue'
+import { formatServerTime } from '@/utils/time'
 import type { Order, VideoPurchaseOrder, DigitalArtOrder } from '@/types'
 
 interface Props {
@@ -61,14 +70,18 @@ interface Props {
 
 const props = defineProps<Props>()
 
-defineEmits<{
+const emit = defineEmits<{
   view: [order: Order]
 }>()
 
+const emitView = () => {
+  emit('view', props.order)
+}
+
 const orderTypeMap: Record<string, string> = {
-  video_purchase: '裸眼3D成片购买',
-  ai_3d_custom: 'AI裸眼3D定制',
-  digital_art: '数字艺术定制'
+  video_purchase: '3D OOH数字内容资源库',
+  ai_3d_custom: 'AI驱动3D OOH内容定制',
+  digital_art: '数字艺术与沉浸式视觉设计'
 }
 
 const orderTypeText = computed(() => orderTypeMap[props.order.orderType] || props.order.orderType)
@@ -121,20 +134,14 @@ const getArtDirectionText = (order: Order) => {
 }
 
 const formatTime = (timeString: string) => {
-  const date = new Date(timeString)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return formatServerTime(timeString)
 }
 </script>
 
 <style lang="scss" scoped>
 .order-card {
   border-radius: 12px;
+  cursor: pointer;
   transition: all 0.3s ease;
   
   &:hover {
@@ -194,6 +201,15 @@ const formatTime = (timeString: string) => {
   border-top: 1px solid #E8E8ED;
 }
 
+.view-detail-btn {
+  color: var(--uv-ws-action-button-bg, #A0522D) !important;
+
+  &:hover,
+  &:focus {
+    color: var(--uv-ws-action-button-hover, #8F4527) !important;
+  }
+}
+
 .order-meta {
   display: flex;
   flex-wrap: wrap;
@@ -212,4 +228,3 @@ const formatTime = (timeString: string) => {
   }
 }
 </style>
-

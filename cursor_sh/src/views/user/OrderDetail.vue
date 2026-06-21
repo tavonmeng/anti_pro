@@ -101,7 +101,7 @@
               <p><strong>品牌禁忌内容：</strong></p>
               <p class="description-text">{{ order.prohibited_content || '-' }}</p>
             </template>
-            <p v-if="order.scenePhotos && order.scenePhotos.length"><strong>现场实拍图：</strong>{{ order.scenePhotos.length }}张</p>
+            <p v-if="order.scenePhotos && order.scenePhotos.length"><strong>现场实拍图和其他文件：</strong>{{ order.scenePhotos.length }}个文件</p>
           </div>
           <div v-else-if="order.orderType === 'digital_art'">
             <p><strong>艺术方向：</strong>{{ getArtDirectionText() }}</p>
@@ -158,11 +158,16 @@
         </div>
         
         <!-- 已推送的交付物 -->
-        <div v-if="order.publishedDeliverables && order.publishedDeliverables.length > 0" class="deliverables-section">
+        <div v-if="publishedDeliverablesList.length > 0" class="deliverables-section">
           <h3>交付物</h3>
-          <div v-for="dlv in order.publishedDeliverables" :key="dlv.id" class="deliverable-card">
+          <div
+            v-for="(dlv, dlvIndex) in publishedDeliverablesList"
+            :key="dlv.id"
+            class="deliverable-card"
+            :class="{ 'is-alt': dlvIndex % 2 === 1 }"
+          >
             <div class="dlv-header">
-              <el-tag type="success" size="small">{{ dlv.stageName }}</el-tag>
+              <el-tag type="success" size="small" class="dlv-stage-tag">{{ dlv.stageName }}</el-tag>
               <span class="dlv-version">V{{ dlv.version }}</span>
               <span class="dlv-time" v-if="dlv.publishedAt">{{ formatTime(dlv.publishedAt) }}</span>
             </div>
@@ -174,9 +179,14 @@
             </div>
             <div v-if="dlv.files && dlv.files.length > 0" class="dlv-files">
               <div v-for="(file, fi) in dlv.files" :key="fi" class="file-item">
-                <a :href="file.url" target="_blank" class="file-link">
+                <a
+                  :href="fileUrl(file)"
+                  target="_blank"
+                  class="file-link"
+                  @click.prevent="openFilePreview(file)"
+                >
                   <el-icon><VideoPlay /></el-icon>
-                  <span>{{ file.name || '交付文件' }}</span>
+                  <span>{{ file.name || file.filename || file.originalName || '交付文件' }}</span>
                   <span class="file-size" v-if="file.size">{{ formatFileSize(file.size) }}</span>
                 </a>
               </div>
@@ -196,7 +206,13 @@
               <el-button size="small" type="success" plain @click="openDeliverableFeedback(dlv.id, 'approval')">
                 确认通过
               </el-button>
-              <el-button size="small" type="warning" plain @click="openDeliverableFeedback(dlv.id, 'revision')">
+              <el-button
+                size="small"
+                type="warning"
+                plain
+                class="dlv-revision-button"
+                @click="openDeliverableFeedback(dlv.id, 'revision')"
+              >
                 需要修改
               </el-button>
             </div>
@@ -211,7 +227,7 @@
             :loading="downloadingPdf"
             @click="handleDownloadPdf"
           >
-            下载需求告知函
+            下载订单需求确认函
           </el-button>
           <el-button
             v-if="order.status === 'draft'"
@@ -228,15 +244,16 @@
             提交订单
           </el-button>
           <el-button
-            v-if="order.status === 'preview_ready' || order.status === 'final_preview'"
+            v-if="showOrderLevelFeedbackActions"
             type="success"
             @click="handleApprove"
           >
             确认通过
           </el-button>
           <el-button
-            v-if="order.status === 'preview_ready' || order.status === 'final_preview'"
+            v-if="showOrderLevelFeedbackActions"
             type="warning"
+            class="revision-action-button"
             @click="handleRevision"
           >
             需要修改
@@ -245,7 +262,7 @@
       </el-card>
     </div>
     
-    <!-- 需求告知函确认弹窗 -->
+    <!-- 订单需求确认函确认弹窗 -->
     <OrderConfirmationDialog
       v-if="order && showConfirmation"
       v-model="showConfirmation"
@@ -260,7 +277,7 @@
     <el-dialog v-model="feedbackDialogVisible" :title="feedbackType === 'approval' ? '确认通过' : '提交修改意见'" width="500px">
       <el-form :model="feedbackForm" label-width="80px">
         <el-form-item v-if="feedbackTargetDeliverableId" label="针对">
-          <el-tag type="success" size="small">交付物</el-tag>
+          <el-tag type="success" size="small" class="deliverable-target-tag">交付物</el-tag>
         </el-form-item>
         <el-form-item label="反馈内容">
           <el-input
@@ -276,6 +293,7 @@
         <el-button type="primary" @click="submitFeedback" :loading="submitting">提交</el-button>
       </template>
     </el-dialog>
+    <FilePreviewDialog v-model="filePreviewVisible" :file="previewingFile" />
   </div>
 </template>
 
@@ -286,9 +304,12 @@ import { ArrowLeft, VideoPlay, Download } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
 import { orderApi } from '@/utils/api'
+import request from '@/utils/request'
 import { ensureEnterpriseApproved } from '@/utils/enterpriseGuard'
+import { formatServerTime, parseServerTime } from '@/utils/time'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
+import FilePreviewDialog from '@/components/FilePreviewDialog.vue'
 import { ElMessage } from 'element-plus'
 import type { Order, VideoPurchaseOrder, DigitalArtOrder, TimelineItem, OrderStatus } from '@/types'
 
@@ -304,6 +325,8 @@ const feedbackType = ref<'approval' | 'revision'>('approval')
 const submitting = ref(false)
 const showConfirmation = ref(false)
 const downloadingPdf = ref(false)
+const filePreviewVisible = ref(false)
+const previewingFile = ref<Record<string, any> | null>(null)
 
 const feedbackForm = ref({
   content: ''
@@ -325,9 +348,9 @@ const openDeliverableFeedback = (deliverableId: string, type: 'approval' | 'revi
 }
 
 const orderTypeMap: Record<string, string> = {
-  video_purchase: '裸眼3D成片购买适配',
-  ai_3d_custom: 'AI裸眼3D内容定制',
-  digital_art: '数字艺术内容定制'
+  video_purchase: '3D OOH数字内容资源库',
+  ai_3d_custom: 'AI驱动3D OOH内容定制',
+  digital_art: '数字艺术与沉浸式视觉设计'
 }
 
 const orderTypeText = computed(() => {
@@ -340,6 +363,57 @@ const userVisibleStatus = computed<OrderStatus>(() => {
   const s = order.value.status as OrderStatus
   return (s === 'pending_review' || s === 'review_rejected') ? 'in_production' : s
 })
+
+const deliverableSortTime = (deliverable: any) => {
+  return parseServerTime(deliverable?.publishedAt || deliverable?.createdAt)?.getTime() || 0
+}
+
+const publishedDeliverablesList = computed(() => {
+  return [...((order.value as any)?.publishedDeliverables || [])].sort(
+    (a, b) => deliverableSortTime(b) - deliverableSortTime(a)
+  )
+})
+
+const showOrderLevelFeedbackActions = computed(() =>
+  ['preview_ready', 'final_preview'].includes(String(order.value?.status || ''))
+  && publishedDeliverablesList.value.length === 0
+)
+
+const fileUrl = (file: any) => file?.url || file?.file_url || file?.fileUrl || file?.href || ''
+const fileObjectKey = (file: any) => file?.object_key || file?.objectKey || ''
+
+const refreshSignedFileUrl = async (file: any) => {
+  const objectKey = fileObjectKey(file)
+  if (!objectKey) return fileUrl(file)
+
+  try {
+    const result: any = await request.get('/upload/sign-url', {
+      params: { key: objectKey },
+      silent: true,
+    })
+    const freshUrl = result?.url || fileUrl(file)
+    if (freshUrl) {
+      file.url = freshUrl
+      file.file_url = freshUrl
+    }
+    if (result?.object_key) {
+      file.object_key = result.object_key
+    }
+    return freshUrl
+  } catch (error) {
+    return fileUrl(file)
+  }
+}
+
+const openFilePreview = async (file: any) => {
+  const url = await refreshSignedFileUrl(file)
+  if (!url) {
+    ElMessage.warning('文件地址为空，无法预览')
+    return
+  }
+  previewingFile.value = { ...file, url, file_url: url }
+  filePreviewVisible.value = true
+}
 // 合并预览历史和反馈记录，按时间排序
 const timelineItems = computed<TimelineItem[]>(() => {
   if (!order.value) return []
@@ -364,8 +438,8 @@ const timelineItems = computed<TimelineItem[]>(() => {
   
   // 按时间排序（从早到晚）
   return items.sort((a, b) => {
-    const timeA = new Date(a.data.createdAt).getTime()
-    const timeB = new Date(b.data.createdAt).getTime()
+    const timeA = parseServerTime(a.data.createdAt)?.getTime() || 0
+    const timeB = parseServerTime(b.data.createdAt)?.getTime() || 0
     return timeA - timeB
   })
 })
@@ -424,26 +498,7 @@ const getArtDirectionText = () => {
 }
 
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  // 解析时间字符串（支持带时区和不带时区的格式）
-  const date = new Date(timeString)
-  
-  // 检查日期是否有效
-  if (isNaN(date.getTime())) {
-    return timeString
-  }
-  
-  // 使用北京时间（UTC+8）格式化时间
-  // 将 UTC 时间转换为北京时间显示
-  return date.toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
+  return formatServerTime(timeString)
 }
 
 const formatFileSize = (bytes: number): string => {
@@ -652,7 +707,7 @@ const goBack = () => {
       display: flex;
       align-items: center;
       gap: 8px;
-      color: #007AFF;
+      color: var(--uv-ws-action-button-bg, #A0522D);
       text-decoration: none;
       flex: 1;
       
@@ -670,8 +725,8 @@ const goBack = () => {
   .preview-note-content {
     margin-top: 12px;
     padding: 12px;
-    background: #F0F9FF;
-    border-left: 3px solid #007AFF;
+    background: var(--uv-ws-module-active-bg, #F3E7E1);
+    border-left: 3px solid var(--uv-ws-action-button-bg, #A0522D);
     border-radius: 4px;
     
     .note-text {
@@ -692,7 +747,7 @@ const goBack = () => {
 }
 
 .preview-card {
-  border-left: 3px solid #007AFF;
+  border-left: 3px solid var(--uv-ws-action-button-bg, #A0522D);
 }
 
 .feedback-card {
@@ -719,11 +774,15 @@ const goBack = () => {
 
 .deliverable-card {
   border: 1px solid #E5E5EA;
-  border-left: 3px solid #34C759;
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 12px;
-  background: #FAFAFA;
+  background: #FFFFFF;
+
+  &.is-alt {
+    background: #F6F7F9;
+    border-color: #D9DDE4;
+  }
   
   .dlv-header {
     display: flex;
@@ -755,8 +814,8 @@ const goBack = () => {
   
   .dlv-note {
     padding: 10px 12px;
-    background: #F0F9FF;
-    border-left: 3px solid #007AFF;
+    background: var(--uv-ws-module-active-bg, #F3E7E1);
+    border-left: 3px solid var(--uv-ws-action-button-bg, #A0522D);
     border-radius: 4px;
     margin-bottom: 10px;
   }
@@ -765,7 +824,37 @@ const goBack = () => {
     display: flex;
     flex-direction: column;
     gap: 8px;
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #F5F5F7;
+      border-radius: 8px;
+    }
+
+    .file-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--uv-ws-action-button-bg, #A0522D);
+      text-decoration: none;
+      flex: 1;
+
+      &:hover {
+        color: var(--uv-ws-action-button-hover, #8F4527);
+        text-decoration: underline;
+      }
+    }
   }
+}
+
+.dlv-stage-tag,
+.deliverable-target-tag {
+  --el-tag-bg-color: var(--uv-ws-module-active-bg, #F3E7E1);
+  --el-tag-border-color: var(--uv-ws-action-button-bg, #A0522D);
+  --el-tag-text-color: var(--uv-ws-action-button-bg, #A0522D);
 }
 
 .dlv-feedback-list {
@@ -804,5 +893,28 @@ const goBack = () => {
   margin-top: 10px;
   display: flex;
   gap: 8px;
+}
+
+.revision-action-button {
+  --el-button-bg-color: #8F4527;
+  --el-button-border-color: #8F4527;
+  --el-button-text-color: #FFFFFF;
+  --el-button-hover-bg-color: #7A3921;
+  --el-button-hover-border-color: #7A3921;
+  --el-button-hover-text-color: #FFFFFF;
+  --el-button-active-bg-color: #6D311D;
+  --el-button-active-border-color: #6D311D;
+}
+
+.dlv-revision-button {
+  --el-button-bg-color: rgba(143, 69, 39, 0.08);
+  --el-button-border-color: #8F4527;
+  --el-button-text-color: #8F4527;
+  --el-button-hover-bg-color: #8F4527;
+  --el-button-hover-border-color: #8F4527;
+  --el-button-hover-text-color: #FFFFFF;
+  --el-button-active-bg-color: #7A3921;
+  --el-button-active-border-color: #7A3921;
+  --el-button-active-text-color: #FFFFFF;
 }
 </style>

@@ -78,9 +78,9 @@ onUnmounted(() => {
   height: 58px;
   display: flex;
   align-items: center;
-  background: #d8ff36;
-  color: #050505;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.16);
+  background: #A0522D;
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
   transform: translateY(0);
   transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
   cursor: pointer;
@@ -117,10 +117,10 @@ onUnmounted(() => {
   border-radius: 8px;
   overflow: hidden;
   background:
-    linear-gradient(135deg, rgba(5, 5, 5, 0.92) 0%, rgba(5, 5, 5, 0.92) 50%, transparent 50%),
-    rgba(5, 5, 5, 0.18);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.92) 50%, transparent 50%),
+    rgba(255, 255, 255, 0.18);
   flex: 0 0 auto;
-  box-shadow: inset 0 0 0 1px rgba(5, 5, 5, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
 }
 
 .bar-media img {
@@ -157,7 +157,7 @@ onUnmounted(() => {
   padding: 0;
   border: 0;
   background: transparent;
-  color: rgba(5, 5, 5, 0.72);
+  color: rgba(255, 255, 255, 0.76);
   font-size: 12px;
   line-height: 1.1;
   font-weight: 700;
@@ -169,7 +169,7 @@ onUnmounted(() => {
 }
 
 .bar-action:hover {
-  color: #050505;
+  color: #fff;
 }
 
 .bar-action-icon {

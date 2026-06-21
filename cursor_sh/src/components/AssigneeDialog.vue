@@ -191,7 +191,7 @@ const handleConfirm = () => {
   border-radius: 4px;
   
   &:focus-within {
-    border-color: #409eff;
+    border-color: #A0522D;
   }
 }
 
@@ -245,4 +245,3 @@ const handleConfirm = () => {
   }
 }
 </style>
-

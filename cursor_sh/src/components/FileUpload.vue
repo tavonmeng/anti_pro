@@ -28,7 +28,13 @@
       <h4>已上传文件</h4>
       <div class="file-list">
         <div v-for="file in uploadedFiles" :key="file.id" class="file-item">
-          <el-icon class="file-icon"><Document /></el-icon>
+          <img
+            v-if="isPreviewableImage(file)"
+            class="file-thumb"
+            :src="getPreviewSrc(file)"
+            :alt="file.name"
+          />
+          <el-icon v-else class="file-icon"><Document /></el-icon>
           <div class="file-info">
             <div class="file-name">{{ file.name }}</div>
             <div class="file-meta">{{ formatFileSize(file.size) }} · {{ formatTime(file.uploadTime) }}</div>
@@ -50,6 +56,7 @@
 import { ref, watch } from 'vue'
 import { ElMessage, type UploadFile, type UploadInstance, type UploadUserFile } from 'element-plus'
 import { UploadFilled, Document, Delete } from '@element-plus/icons-vue'
+import { formatServerTime } from '@/utils/time'
 import type { UploadedFile } from '@/types'
 
 interface Props {
@@ -75,47 +82,65 @@ const uploadRef = ref<UploadInstance>()
 const fileList = ref<UploadUserFile[]>([])
 const uploadedFiles = ref<UploadedFile[]>(props.modelValue || [])
 
+const createUploadFileId = () => {
+  const random = Math.random().toString(36).slice(2, 10)
+  return `file-${Date.now()}-${random}`
+}
+
 watch(() => props.modelValue, (newVal) => {
   uploadedFiles.value = newVal || []
 })
 
-// 模拟文件上传到localStorage
-const simulateUpload = (file: File): Promise<UploadedFile> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const uploadedFile: UploadedFile = {
-        id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        uploadTime: new Date().toISOString(),
-        url: `mock://files/${file.name}` // 模拟URL
-      }
-      
-      // 保存文件元数据到localStorage
-      const existingFiles = JSON.parse(localStorage.getItem('mockFiles') || '[]')
-      existingFiles.push(uploadedFile)
-      localStorage.setItem('mockFiles', JSON.stringify(existingFiles))
-      
-      resolve(uploadedFile)
-    }, 300) // 模拟上传延迟
+const uploadSelectedFile = async (file: File): Promise<UploadedFile> => {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const headers: Record<string, string> = {}
+  const token = localStorage.getItem('token')
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  const response = await fetch('/api/upload/file', {
+    method: 'POST',
+    headers,
+    body: formData
   })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok || payload?.code !== 200) {
+    throw new Error(payload?.detail || payload?.message || '上传失败')
+  }
+
+  const data = payload.data || {}
+  const isImage = isImageFile(data.filename || file.name, data.mime_type || file.type)
+  return {
+    id: data.id || createUploadFileId(),
+    name: data.filename || file.name,
+    size: data.size ?? file.size,
+    type: data.mime_type || file.type,
+    isImage,
+    uploadTime: data.uploadedAt || new Date().toISOString(),
+    url: data.url,
+    file_url: data.url,
+    object_key: data.object_key || ''
+  }
 }
 
-const handleFileChange = async (uploadFile: UploadFile) => {
-  if (uploadFile.raw) {
+const handleFileChange = async (changedFile: UploadFile) => {
+  if (changedFile.raw) {
     try {
-      const uploaded = await simulateUpload(uploadFile.raw)
+      const uploaded = await uploadSelectedFile(changedFile.raw)
       uploadedFiles.value.push(uploaded)
       emit('update:modelValue', uploadedFiles.value)
-      ElMessage.success(`${uploadFile.name} 上传成功`)
+      ElMessage.success(`${changedFile.name} 上传成功`)
       
       // 清空上传列表
       if (uploadRef.value) {
         uploadRef.value.clearFiles()
       }
     } catch (error) {
-      ElMessage.error(`${uploadFile.name} 上传失败`)
+      const message = error instanceof Error ? error.message : ''
+      ElMessage.error(message ? `${changedFile.name} 上传失败（${message}）` : `${changedFile.name} 上传失败`)
     }
   }
 }
@@ -126,22 +151,34 @@ const handleRemove = (uploadFile: UploadFile) => {
 }
 
 const removeUploadedFile = (fileId: string) => {
+  const removedFile = uploadedFiles.value.find(f => f.id === fileId)
+  if (removedFile?.previewUrl?.startsWith('blob:')) {
+    URL.revokeObjectURL(removedFile.previewUrl)
+  }
   uploadedFiles.value = uploadedFiles.value.filter(f => f.id !== fileId)
   emit('update:modelValue', uploadedFiles.value)
-  
-  // 从localStorage中移除
-  const existingFiles = JSON.parse(localStorage.getItem('mockFiles') || '[]')
-  const updatedFiles = existingFiles.filter((f: UploadedFile) => f.id !== fileId)
-  localStorage.setItem('mockFiles', JSON.stringify(updatedFiles))
   
   ElMessage.success('文件已删除')
 }
 
+const isImageFile = (name = '', type = '') => {
+  return type.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(name)
+}
+
+const getPreviewSrc = (file: UploadedFile) => {
+  const src = file.previewUrl || file.file_url || file.url || ''
+  return src
+}
+
+const isPreviewableImage = (file: UploadedFile) => {
+  return isImageFile(file.name, file.type) && !!getPreviewSrc(file)
+}
+
 const beforeUpload = (rawFile: File) => {
   // 可以在这里添加文件大小限制等验证
-  const maxSize = 50 * 1024 * 1024 // 50MB
+  const maxSize = 200 * 1024 * 1024 // 200MB
   if (rawFile.size > maxSize) {
-    ElMessage.error('文件大小不能超过 50MB')
+    ElMessage.error('文件大小不能超过 200MB')
     return false
   }
   return true
@@ -160,14 +197,7 @@ const formatFileSize = (bytes: number): string => {
 }
 
 const formatTime = (timeString: string): string => {
-  const date = new Date(timeString)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return formatServerTime(timeString)
 }
 </script>
 
@@ -209,7 +239,17 @@ const formatTime = (timeString: string): string => {
 
 .file-icon {
   font-size: 24px;
-  color: #667eea;
+  color: var(--uv-ws-action-button-bg, #A0522D);
+  flex-shrink: 0;
+}
+
+.file-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
 }
 
@@ -245,14 +285,14 @@ const formatTime = (timeString: string): string => {
   transition: all 0.3s ease;
   
   &:hover {
-    border-color: #667eea;
-    background: #FAFAFC;
+    border-color: var(--uv-ws-action-button-bg, #A0522D);
+    background: var(--uv-ws-module-active-bg, #F3E7E1);
   }
 }
 
 :deep(.el-icon--upload) {
   font-size: 48px;
-  color: #667eea;
+  color: var(--uv-ws-action-button-bg, #A0522D);
   margin-bottom: 16px;
 }
 
@@ -261,7 +301,7 @@ const formatTime = (timeString: string): string => {
   color: #1D1D1F;
   
   em {
-    color: #667eea;
+    color: var(--uv-ws-action-button-bg, #A0522D);
     font-style: normal;
   }
 }
@@ -272,4 +312,3 @@ const formatTime = (timeString: string): string => {
   margin-top: 8px;
 }
 </style>
-

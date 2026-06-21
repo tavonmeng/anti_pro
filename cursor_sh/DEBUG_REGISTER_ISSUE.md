@@ -14,7 +14,7 @@
 # 检查后端服务
 curl http://localhost:8000/health
 
-# 应该返回: {"status":"ok","app":"AI设计任务管理系统"}
+# 应该返回: {"status":"ok","app":"Unique Vision AI"}
 ```
 
 如果无法连接，启动后端服务：

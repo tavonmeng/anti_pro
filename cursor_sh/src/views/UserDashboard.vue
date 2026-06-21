@@ -9,6 +9,7 @@
         </transition>
       </router-view>
     </div>
+    <UserOnboardingGuide />
   </div>
 </template>
 
@@ -17,6 +18,7 @@ import { watch } from 'vue'
 import { useRoute } from 'vue-router'
 import SystemLeftSidebar from '@/components/SystemLeftSidebar.vue'
 import SecondaryBusinessSidebar from '@/components/SecondaryBusinessSidebar.vue'
+import UserOnboardingGuide from '@/components/UserOnboardingGuide.vue'
 import { useUiStore } from '@/stores/ui'
 
 const route = useRoute()
@@ -27,17 +29,17 @@ watch(() => route.path, (newPath) => {
     newPath.includes('/create-order') || 
     newPath.includes('/video-marketplace')
   ) {
+    uiStore.setIsAiExpanded(false)
     uiStore.setSecondarySidebar(true)
     uiStore.toggleSidebar(true) // Squish primary sidebar
     
     if (newPath.includes('/video-marketplace')) {
       uiStore.setActiveModule('video_purchase')
-    } else if (newPath.includes('/create-order/ai_3d_custom')) {
-      uiStore.setActiveModule('ai_3d_custom')
-    } else if (newPath.includes('/create-order/digital_art')) {
-      uiStore.setActiveModule('digital_art')
+    } else if (newPath.includes('/create-order/')) {
+      uiStore.setActiveModule(String(route.params.type || ''))
     }
   } else if (!newPath.includes('/workspace')) {
+    uiStore.setIsAiExpanded(false)
     uiStore.setSecondarySidebar(false)
     uiStore.toggleSidebar(false)
     uiStore.setActiveModule('')
@@ -78,4 +80,3 @@ watch(() => route.path, (newPath) => {
   transform: translateY(-10px);
 }
 </style>
-

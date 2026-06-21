@@ -37,7 +37,7 @@ fetch('/api/health')
   });
 ```
 
-**期望结果**: 应该返回 `{status: "ok", app: "AI设计任务管理系统"}`
+**期望结果**: 应该返回 `{status: "ok", app: "Unique Vision AI"}`
 
 ### 4. 测试注册接口
 

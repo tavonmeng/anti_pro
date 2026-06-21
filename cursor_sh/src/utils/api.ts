@@ -119,6 +119,11 @@ export interface HomepageBarConfig {
 }
 
 export const authApi = {
+  // 获取当前登录用户资料
+  async getMe(): Promise<User> {
+    return request.get('/auth/me', { silent: true })
+  },
+
   // 登录
   async login(data: LoginRequest, silent = false): Promise<LoginResponse> {
     if (ENABLE_MOCK) {
@@ -165,20 +170,32 @@ export const authApi = {
   },
   
   // 注册
-  async register(data: RegisterRequest): Promise<boolean> {
+  async register(data: RegisterRequest): Promise<LoginResponse> {
     if (ENABLE_MOCK) {
       try {
-        await request.post('/auth/register', data)
-        return true
+        return await request.post('/auth/register', data)
       } catch (error) {
         console.log('使用模拟注册功能')
         await mockRegister(data)
-        return true
+        return {
+          token: `mock-token-${Date.now()}`,
+          user: {
+            id: `user-${Date.now()}`,
+            username: data.username,
+            role: data.role,
+            email: data.email,
+            phone: data.phone,
+          },
+        }
       }
     } else {
-      await request.post('/auth/register', data)
-      return true
+      return request.post('/auth/register', data)
     }
+  },
+
+  // 验证普通用户邀请链接
+  async validateInvite(token: string): Promise<any> {
+    return request.get(`/auth/validate-invite/${token}`, { silent: true })
   },
   
   // 发送短信验证码
@@ -426,6 +443,18 @@ export const userApi = {
       return Promise.resolve({ success: true })
     }
     return request.put('/auth/profile', data)
+  },
+
+  // 企业认证通过后更新头像
+  updateAvatar(formData: FormData): Promise<any> {
+    return request.post('/auth/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+
+  // 修改手机号：旧手机号验证码 + 新手机号
+  changePhone(data: { new_phone: string; old_phone_code: string }): Promise<any> {
+    return request.post('/auth/change-phone', data)
   }
 }
 
@@ -752,7 +781,7 @@ export const orderApi = {
     }
   },
   
-  // 下载需求告知函 PDF
+  // 下载订单需求确认函 PDF
   async downloadConfirmationPdf(orderId: string): Promise<void> {
     const token = localStorage.getItem('token')
     const response = await fetch(`/api/orders/${orderId}/pdf/confirmation`, {
@@ -768,7 +797,10 @@ export const orderApi = {
     const a = document.createElement('a')
     a.href = url
     const disposition = response.headers.get('Content-Disposition')
-    const filename = disposition?.match(/filename="(.+)"/)?.[1] || `confirmation_${orderId}.pdf`
+    const utf8Filename = disposition?.match(/filename\*=UTF-8''([^;]+)/)?.[1]
+    const filename = utf8Filename
+      ? decodeURIComponent(utf8Filename)
+      : disposition?.match(/filename="(.+)"/)?.[1] || `confirmation_${orderId}.pdf`
     a.download = filename
     document.body.appendChild(a)
     a.click()
@@ -1252,7 +1284,7 @@ export const chatHistoryApi = {
     session_type?: string
     metadata?: any
   }): Promise<any> {
-    return request.post('/ai/chat-history/message', data)
+    return request.post('/ai/chat-history/message', data, { silent: true })
   },
 
   // 批量同步整个会话
@@ -1260,9 +1292,10 @@ export const chatHistoryApi = {
     session_id: string
     business_type?: string
     session_type?: string
-    messages: Array<{ client_message_id?: string; role: string; content: string; timestamp?: string }>
+    messages: Array<{ client_message_id?: string; role: string; content: string; timestamp?: string; metadata?: Record<string, any> }>
+    replace?: boolean
   }): Promise<any> {
-    return request.post('/ai/chat-history/sync', data)
+    return request.post('/ai/chat-history/sync', data, { silent: true })
   },
 
   // 获取用户的会话列表
@@ -1288,5 +1321,25 @@ export const chatHistoryApi = {
   // 管理员：获取某个会话的消息
   async adminGetSessionMessages(sessionId: string): Promise<any> {
     return request.get(`/ai/chat-history/admin/sessions/${sessionId}/messages`)
+  },
+}
+
+// ========== 转人工客户 API ==========
+export const humanHandoffApi = {
+  async list(params: {
+    page?: number
+    pageSize?: number
+    status?: string
+    keyword?: string
+  } = {}): Promise<any> {
+    return request.get('/human-handoffs', { params })
+  },
+
+  async detail(id: string): Promise<any> {
+    return request.get(`/human-handoffs/${id}`)
+  },
+
+  async updateStatus(id: string, status: 'pending' | 'followed'): Promise<any> {
+    return request.put(`/human-handoffs/${id}/status`, { status })
   },
 }

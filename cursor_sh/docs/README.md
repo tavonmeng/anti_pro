@@ -1,6 +1,6 @@
-# AI设计任务管理系统 - 文档中心
+# Unique Vision AI - 文档中心
 
-欢迎查看 AI设计任务管理系统的完整文档。本文档中心包含产品、技术和部署的全方位指南。
+欢迎查看 Unique Vision AI的完整文档。本文档中心包含产品、技术和部署的全方位指南。
 
 ---
 
@@ -302,7 +302,7 @@ cursor_sh/
 如果你发现文档中的错误或有改进建议，请通过以下方式反馈：
 
 - **提交 Issue**: https://github.com/your-repo/issues
-- **邮件联系**: docs@example.com
+- **邮件联系**: support@uniquevisionx.com
 - **在线讨论**: https://discuss.your-domain.com
 
 ---
@@ -352,4 +352,3 @@ cursor_sh/
 _文档版本: v1.0.0_  
 _最后更新: 2025-11-05_  
 _维护团队: 开发组 + 产品组 + 运维组_
-

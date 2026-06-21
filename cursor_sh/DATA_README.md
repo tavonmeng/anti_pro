@@ -481,8 +481,8 @@ mysql -h NEW_RDS_HOST -u USER -p NEW_DB_NAME < anti_pro.sql
 
 Last verified environment:
 
-- External server: `47.114.118.52`
-- Internal server: `116.62.88.121`
+- External server: `8.141.111.94`
+- Internal server: `101.201.58.68`
 - Main DB: Aliyun RDS MySQL, database `unique_video_test`
 - Audit DB: Aliyun RDS MySQL, database `unique_video_audit`
 - OSS: enabled, bucket `uv-test`, endpoint `oss-cn-hangzhou.aliyuncs.com`
@@ -566,7 +566,7 @@ Run on each old ECS. These commands print only storage-related config and avoid 
 External:
 
 ```bash
-ssh root@47.114.118.52 '
+ssh root@8.141.111.94 '
 cd /root/service/anti_pro/cursor_sh/backend
 printf "ENV_STORAGE_KEYS:\n"
 awk -F= '"'"'
@@ -583,7 +583,7 @@ find . -maxdepth 2 \( -name "*.db" -o -name "uploads" -o -name "logs" \) -print 
 Internal:
 
 ```bash
-ssh -i /path/to/ssh.pem root@116.62.88.121 '
+ssh -i /path/to/ssh.pem root@101.201.58.68 '
 cd /root/service/anti_pro/cursor_sh/backend
 printf "ENV_STORAGE_KEYS:\n"
 awk -F= '"'"'
@@ -860,7 +860,7 @@ curl -sS http://127.0.0.1/api/health || curl -sS http://127.0.0.1:8080/api/healt
 Expected:
 
 ```json
-{"status":"ok","app":"AI设计任务管理系统"}
+{"status":"ok","app":"Unique Vision AI"}
 ```
 
 ### 10. Confirm New RDS Row Counts
@@ -994,28 +994,13 @@ For a clean rollback window, avoid allowing writes on both old and new systems a
 
 ### SQLite to MySQL/RDS migration
 
-There is an existing script:
+The old partial SQLite-to-RDS helper script has been removed. It covered only an
+early subset of tables and was not safe for full-system migration.
 
-```bash
-cd backend
-python scripts/migrate_to_rds.py
-```
+For a full SQLite to MySQL migration, use one of:
 
-However, this script currently migrates only an early subset of tables:
-
-- `users`
-- `orders`
-- `order_assignees`
-- `files`
-- `feedbacks`
-- `notifications`
-
-It does not cover newer tables such as admins, staff, contractors, workflow, deliverables, AI chat, user memory, announcements, security events, and audit logs. Do not use it for full-system migration unless it is updated first.
-
-For a full SQLite to MySQL migration, prefer one of:
-
-- update `scripts/migrate_to_rds.py` to include all current tables in dependency order;
-- use a tested SQLite-to-MySQL migration tool and then verify row counts table by table;
+- a tested SQLite-to-MySQL migration tool and then verify row counts table by table;
+- a purpose-built migration script reviewed against every current model/table;
 - keep SQLite and use the full-directory migration method above.
 
 ### Minimal backup set

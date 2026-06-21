@@ -12,7 +12,12 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from app.config import settings
 from app.services.ai_client import post_chat_completion
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_now_iso
 
+
+logger = get_module_logger("ai")
 
 # 子页面关键词 — 用于从首页内链中筛选有价值的页面
 _PAGE_KEYWORDS = [
@@ -54,7 +59,7 @@ async def search_company_website(company_name: str, max_retries: int = 3) -> str
         验证通过的官网 URL 或 None
     """
     if not settings.AI_API_KEY:
-        print("[CrawlService] 未配置 AI_API_KEY，跳过 LLM 推测")
+        log_business_event(logger, "crawl_website_search_skipped", level="warning", company_name=company_name, reason="missing_ai_api_key")
         return None
 
     # 公司名简化（去掉后缀）
@@ -68,28 +73,36 @@ async def search_company_website(company_name: str, max_retries: int = 3) -> str
     feedback_history = []  # 记录每一轮的反馈
 
     for attempt in range(1, max_retries + 1):
-        print(f"[CrawlService] 第 {attempt} 轮推测 ({company_name})")
+        log_business_event(logger, "crawl_website_guess_started", company_name=company_name, attempt=attempt)
 
         # 1. LLM 推测 URL
         guessed_urls = await _llm_guess_url(company_name, feedback_history)
         if not guessed_urls:
-            print(f"[CrawlService] LLM 未能推测出 URL")
+            log_business_event(logger, "crawl_website_guess_empty", level="warning", company_name=company_name, attempt=attempt)
             feedback_history.append("LLM 无法推测出任何 URL，请尝试更多可能的域名变体")
             continue
 
         # 2. 逐个验证
         for url in guessed_urls:
-            print(f"[CrawlService]   验证: {url}")
+            log_business_event(logger, "crawl_website_verify_started", company_name=company_name, attempt=attempt, url=url)
             is_valid, reason = await _verify_website(url, company_name, company_short)
 
             if is_valid:
-                print(f"[CrawlService] ✅ 验证通过: {url}")
+                log_business_event(logger, "crawl_website_verified", company_name=company_name, attempt=attempt, url=url)
                 return url
             else:
-                print(f"[CrawlService]   ❌ 验证失败: {reason}")
+                log_business_event(
+                    logger,
+                    "crawl_website_verify_failed",
+                    level="warning",
+                    company_name=company_name,
+                    attempt=attempt,
+                    url=url,
+                    reason=reason,
+                )
                 feedback_history.append(f"URL {url} 验证失败 — {reason}")
 
-    print(f"[CrawlService] {max_retries} 轮推测均未找到 {company_name} 的官网")
+    log_business_event(logger, "crawl_website_not_found", level="warning", company_name=company_name, max_retries=max_retries)
     return None
 
 
@@ -148,7 +161,7 @@ async def _llm_guess_url(company_name: str, feedback_history: list[str]) -> list
             return [u for u in urls if isinstance(u, str) and u.startswith("http")][:3]
         return []
     except Exception as e:
-        print(f"[CrawlService] LLM 推测失败: {e}")
+        log_business_event(logger, "crawl_website_guess_failed", level="warning", company_name=company_name, error=str(e))
         return []
 
 
@@ -196,7 +209,8 @@ async def _verify_website(url: str, company_name: str, company_short: str) -> tu
     except httpx.TimeoutException:
         return False, "连接超时，网站可能无法访问"
     except Exception as e:
-        return False, f"请求异常: {str(e)[:50]}"
+        log_business_event(logger, "crawl_homepage_request_failed", level="warning", url=url, error=str(e))
+        return False, "请求异常，网站暂时无法访问"
 
     # 2. 解析 HTML
     soup = BeautifulSoup(html, "html.parser")
@@ -365,7 +379,7 @@ async def extract_company_info(raw_text: str) -> dict:
 
         return json.loads(content.strip())
     except Exception as e:
-        print(f"[CrawlService] LLM 提取失败: {e}")
+        log_business_event(logger, "crawl_extract_failed", level="warning", text_length=len(raw_text or ""), error=str(e))
         return {}
 
 
@@ -389,7 +403,7 @@ async def crawl_and_extract(company_name: str) -> dict:
     # Step 1: LLM 推测 + 验证循环
     website_url = await search_company_website(company_name)
     if not website_url:
-        print(f"[CrawlService] 未找到 {company_name} 的官网")
+        log_business_event(logger, "crawl_company_not_found", level="warning", company_name=company_name)
         return {
             "company_info": {
                 "name": company_name,
@@ -399,10 +413,17 @@ async def crawl_and_extract(company_name: str) -> dict:
         }
 
     # Step 2: 深度爬取
-    print(f"[CrawlService] 开始爬取: {website_url}")
+    log_business_event(logger, "crawl_started", company_name=company_name, website_url=website_url)
     raw_text = await crawl_website(website_url)
     if not raw_text or len(raw_text) < 100:
-        print(f"[CrawlService] 爬取内容过少: {len(raw_text)} 字符")
+        log_business_event(
+            logger,
+            "crawl_empty",
+            level="warning",
+            company_name=company_name,
+            website_url=website_url,
+            text_length=len(raw_text or ""),
+        )
         return {
             "company_info": {
                 "name": company_name,
@@ -415,19 +436,26 @@ async def crawl_and_extract(company_name: str) -> dict:
     # Step 3: LLM 提取结构化信息
     extracted = await extract_company_info(raw_text)
 
-    from datetime import datetime
-
     company_info = {
         "name": company_name,
         "website": website_url,
         "description": extracted.get("description", ""),
         "advantages": extracted.get("advantages", []),
         "past_cases": extracted.get("past_cases", []),
-        "crawled_at": datetime.now().isoformat(),
+        "crawled_at": beijing_now_iso(),
         "crawl_status": "success",
     }
 
     screen_resources = extracted.get("screens", [])
+    log_business_event(
+        logger,
+        "crawl_completed",
+        company_name=company_name,
+        website_url=website_url,
+        text_length=len(raw_text or ""),
+        screen_count=len(screen_resources or []),
+        past_case_count=len(company_info.get("past_cases") or []),
+    )
 
     return {
         "company_info": company_info,
@@ -474,7 +502,7 @@ async def _crawl_single_page(url: str) -> tuple[str, list[str]]:
         return text, internal_links
 
     except Exception as e:
-        print(f"[CrawlService] 爬取 {url} 失败: {e}")
+        log_business_event(logger, "crawl_page_failed", level="warning", url=url, error=str(e))
         return "", []
 
 

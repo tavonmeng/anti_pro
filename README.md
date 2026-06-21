@@ -1,4 +1,4 @@
-# Unique Video AI — 全栈系统
+# Unique Vision AI — 全栈系统
 
 裸眼3D视觉内容与数字艺术创意技术服务平台，包含官网、业务管理系统（订单/AI 助手/企业认证）和后端 API。
 
@@ -24,6 +24,23 @@ anti_pro/
 ---
 
 ## 🐳 Docker 部署（推荐）
+
+### 四服务器发布流程（测试 → 线上）
+
+正式发布建议使用 `ops/deploy.config` + `scripts/release.sh`：
+
+```bash
+# 第一次先复制模板并填入四台服务器信息
+cp ops/deploy.config.example ops/deploy.config
+
+# 先发布两台测试服务器
+bash scripts/release.sh staging
+
+# 测试通过后再发布两台线上服务器
+CONFIRM_PRODUCTION=production bash scripts/release.sh production
+```
+
+每台服务器的真实 `.env` 文件只放服务器本地，不入库。生产和测试环境都应使用 RDS、OSS、强密钥；迁移只在每个环境标记 `run_migrations=yes` 的一台服务器上执行一次。
 
 ### 前置条件
 

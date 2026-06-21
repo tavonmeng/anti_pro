@@ -8,7 +8,12 @@
   >
     <!-- 左：Logo 区域 -->
     <div class="header-logo" @click="scrollToTop">
-      <span class="logo-icon">🛡️</span>
+      <img
+        class="logo-icon"
+        :class="{ 'is-inverted': !isLightMode }"
+        src="/landing/logo/official-mark-black.svg"
+        alt="Unique Vision"
+      />
       <span class="logo-text">Unique Vision</span>
     </div>
 
@@ -107,7 +112,6 @@ const emit = defineEmits(['logoClick', 'menuClick', 'openLogin', 'openRegister']
 // ─── 菜单项 ──────────────────────────────────────────────────
 const menuItems = [
   { id: 'intro',    label: '业务介绍' },
-  { id: 'cases',    label: '著作案例' },
   { id: 'contact',  label: '联系我们' },
 ]
 
@@ -289,8 +293,15 @@ onUnmounted(() => {
 }
 
 .logo-icon {
-  font-size: 20px;
-  line-height: 1;
+  width: 24px;
+  height: 38px;
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.logo-icon.is-inverted {
+  filter: invert(1);
 }
 
 .logo-text {
@@ -342,9 +353,9 @@ onUnmounted(() => {
   transition: width 0.45s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* 展开时：容纳 3 个导航文本，给予每个项约 100px-110px 空间 */
+/* 展开时：容纳导航文本，给予每个项约 100px-110px 空间 */
 .menu-text-wrapper.is-expanded {
-  width: 320px; 
+  width: 220px; 
 }
 
 /* 收起但有滚动标签时：足够容纳 "商业综合体视觉" 等较长标签 */

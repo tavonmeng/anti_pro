@@ -13,7 +13,7 @@
     <div class="scroll-container" ref="scrollContainerRef">
       <!-- Intro -->
       <section class="section-intro">
-        <h1>Unique Video 案例展示</h1>
+        <h1>Unique Vision 案例展示</h1>
         <p>Scroll to explore</p>
       </section>
 

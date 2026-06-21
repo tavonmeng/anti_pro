@@ -20,7 +20,11 @@
         v-for="order in draftOrders"
         :key="order.id"
         class="draft-card"
+        role="button"
+        tabindex="0"
         @click="viewDraft(order)"
+        @keydown.enter.self.prevent="viewDraft(order)"
+        @keydown.space.self.prevent="viewDraft(order)"
       >
         <div class="draft-card-header">
           <div class="draft-type">
@@ -49,7 +53,7 @@
       </div>
     </div>
     
-    <!-- 需求告知函确认弹窗 -->
+    <!-- 订单需求确认函确认弹窗 -->
     <OrderConfirmationDialog
       v-if="selectedOrder"
       v-model="showConfirmation"
@@ -71,6 +75,7 @@ import { useOrderStore } from '@/stores/order'
 import { useUiStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { ensureEnterpriseApproved } from '@/utils/enterpriseGuard'
+import { formatServerMonthDayTime } from '@/utils/time'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 import type { Order } from '@/types'
 
@@ -83,9 +88,9 @@ const showConfirmation = ref(false)
 const selectedOrder = ref<Order | null>(null)
 
 const orderTypeMap: Record<string, string> = {
-  video_purchase: '裸眼3D成片购买适配',
-  ai_3d_custom: 'AI裸眼3D内容定制',
-  digital_art: '数字艺术内容定制'
+  video_purchase: '3D OOH数字内容资源库',
+  ai_3d_custom: 'AI驱动3D OOH内容定制',
+  digital_art: '数字艺术与沉浸式视觉设计'
 }
 
 const draftOrders = computed(() => {
@@ -101,25 +106,26 @@ onActivated(() => {
 })
 
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  const date = new Date(timeString)
-  if (isNaN(date.getTime())) return timeString
-  return date.toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
+  return formatServerMonthDayTime(timeString)
 }
 
-const viewDraft = (order: Order) => {
-  router.push(`/user/orders/${order.id}`)
+const resetNavigationLayout = () => {
+  uiStore.setSecondarySidebar(false)
+  uiStore.toggleSidebar(false)
+  uiStore.setActiveModule('')
+  uiStore.setIsAiExpanded(false)
 }
 
-const handleEdit = (order: Order) => {
-  router.push(`/user/edit-order/${order.id}`)
+const viewDraft = async (order: Order) => {
+  if (!order.id) return
+  resetNavigationLayout()
+  await router.push(`/user/orders/${order.id}`)
+}
+
+const handleEdit = async (order: Order) => {
+  if (!order.id) return
+  resetNavigationLayout()
+  await router.push(`/user/edit-order/${order.id}`)
 }
 
 const handleSubmit = async (order: Order) => {
@@ -250,8 +256,8 @@ const goToWorkspace = () => {
   gap: 14px;
 
   &:hover {
-    border-color: rgba(0, 113, 227, 0.3);
-    box-shadow: 0 4px 16px rgba(0, 113, 227, 0.08);
+    border-color: var(--uv-ws-action-button-bg, #A0522D);
+    box-shadow: 0 4px 16px rgba(160, 82, 45, 0.12);
     transform: translateY(-1px);
   }
 }
@@ -270,7 +276,7 @@ const goToWorkspace = () => {
 
 .type-icon {
   font-size: 16px;
-  color: #0071e3;
+  color: #A0522D;
 }
 
 .type-text {
@@ -299,5 +305,7 @@ const goToWorkspace = () => {
   gap: 8px;
   padding-top: 12px;
   border-top: 1px solid rgba(0, 0, 0, 0.04);
+  position: relative;
+  z-index: 1;
 }
 </style>

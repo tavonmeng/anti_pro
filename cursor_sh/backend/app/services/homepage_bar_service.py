@@ -16,12 +16,15 @@ class HomepageBarService:
     @staticmethod
     def _with_fresh_urls(bar: HomepageBar) -> HomepageBar:
         if settings.OSS_ENABLED:
+            from app.services.oss_service import get_signed_url, maybe_sign_url
             if bar.pdf_object_key:
-                from app.services.oss_service import get_signed_url
                 bar.pdf_url = get_signed_url(bar.pdf_object_key, settings.OSS_SIGNED_URL_EXPIRES)
+            elif bar.pdf_url:
+                bar.pdf_url = maybe_sign_url(bar.pdf_url, settings.OSS_SIGNED_URL_EXPIRES)
             if bar.image_object_key:
-                from app.services.oss_service import get_signed_url
                 bar.image_url = get_signed_url(bar.image_object_key, settings.OSS_SIGNED_URL_EXPIRES)
+            elif bar.image_url:
+                bar.image_url = maybe_sign_url(bar.image_url, settings.OSS_SIGNED_URL_EXPIRES)
         return bar
 
     @staticmethod
@@ -47,7 +50,7 @@ class HomepageBarService:
     async def get_public(db: AsyncSession) -> HomepageBar | None:
         result = await db.execute(select(HomepageBar).where(HomepageBar.id == DEFAULT_BAR_ID))
         bar = result.scalar_one_or_none()
-        if not bar or not bar.is_active or not bar.pdf_url:
+        if not bar or not bar.is_active or not (bar.pdf_url or bar.pdf_object_key):
             return None
         return HomepageBarService._with_fresh_urls(bar)
 

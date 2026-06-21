@@ -1,23 +1,40 @@
-【Unique Video AI 公司业务介绍】
+PLATFORM SERVICES｜平台服务体系
 
-我们是一家领先的裸眼3D视觉内容和数字艺术创意技术公司。
+一、3D OOH数字内容资源库
+- Ready-to-Deploy 3D DOOH Assets：即用型裸眼3D数字内容资产
+- Screen-Adaptive Content Packages：多屏适配内容方案
+- Global Landmark Screen Formats：全球地标大屏内容规格适配
 
-一、裸眼3D成片购买适配
-- 提供上百款精选裸眼3D视频模板
-- 适配各种LED大屏尺寸（如户外地标屏、商场内屏等）
-- 交付周期：5个工作日
-- 适合快速部署、预算有限的客户
+二、AI驱动3D OOH内容定制
+- AI-Based Creative Development：AI创意内容开发
+- Site-Specific 3D Screen Adaptation：场景化裸眼3D空间适配
+- Real-World Playback Simulation：真实环境播放模拟
+- End-to-End DOOH Content Production：一站式DOOH内容制作
 
-二、AI裸眼3D内容定制
-- 利用AI技术 + 专业3D团队为品牌量身定制裸眼3D内容
-- 涵盖：品牌广告、产品发布、节日营销、地标展示等场景
-- 交付周期：15个工作日
-- 过往案例：知名运动品牌地铁站裸眼3D广告、某汽车品牌新车发布裸眼3D秀等
+三、数字艺术与沉浸式视觉设计
+- Art Direction & Visual Design：艺术指导与视觉设计
+- Virtual Installation Art：虚拟装置艺术
+- Immersive Spatial Visuals：沉浸式空间视觉
+- Experimental Digital Art Content：实验性数字艺术内容
 
-三、数字艺术内容定制
-- 数字艺术装置、沉浸式互动体验、创意视觉内容
-- 适合展览、发布会、品牌快闪活动等
-- 交付周期：7个工作日
+四、广告视觉与动态影像制作
+- Static Advertising Visuals：平面广告视觉设计
+- TVC Production：TVC广告影片制作
+- FOOH Campaign Content：FOOH数字传播内容
+- VJ Visual Performance Content：VJ视觉演出内容
+- Motion Graphic Design：动态视觉设计
 
-【价格参考】
-成片购买：万元级 | AI定制：十万级起 | 数字艺术：根据项目复杂度报价
+五、户外媒体后期制作服务
+- High-End Retouching：高端精修图像处理
+- Cinematic Video Finishing：电影级视频精修
+- CGI Enhancement：CGI视觉增强
+- Commercial Photography & Filming：商业摄影与视频拍摄
+- Drone Cinematography：航拍影像制作
+
+六、广告投放分析与效果报告
+- DOOH Campaign Analytics：DOOH广告投放数据分析
+- Audience Performance Reports：受众效果分析报告
+- Visual Impact Assessment：视觉传播效果评估
+- Downloadable Data Reports：可下载数据报告系统
+
+当前可在线创建订单的业务为：3D OOH数字内容资源库、AI驱动3D OOH内容定制、数字艺术与沉浸式视觉设计。其他业务可通过AI顾问或人工顾问进一步梳理需求后安排对接。

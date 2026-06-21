@@ -5,28 +5,20 @@
       <!-- Stitch Header -->
       <header class="stitch-header">
         <div class="header-left">
-          <h2 class="font-headline">AI智能体帮你理清思路</h2>
+          <h2 class="font-headline">Unique Vision 智能体为您服务</h2>
         </div>
         
         <!-- Fused Search Bar -->
         <div class="header-center">
           <div class="header-search">
             <el-icon class="search-icon"><Search /></el-icon>
-            <input type="text" v-model="searchQuery" placeholder="搜索当前聊天与历史记录..." class="search-input" @input="onSearchInput" />
+            <input type="text" v-model="searchQuery" placeholder="搜索当前聊天..." class="search-input" @input="onSearchInput" />
           </div>
         </div>
 
         <div class="header-right">
-          <button
-            class="icon-toggle history-btn"
-            :class="{ active: showHistory }"
-            title="历史聊天"
-            @click="toggleHistory"
-          >
-            <el-icon><Clock /></el-icon>
-          </button>
-          <button class="icon-toggle" title="Help"><el-icon><QuestionFilled /></el-icon></button>
-          <button class="new-session-btn" @click="startNewSession">New Session</button>
+          <button class="icon-toggle" title="帮助"><el-icon><QuestionFilled /></el-icon></button>
+          <button class="new-session-btn" @click="startNewSession">新建会话</button>
           <button class="icon-toggle collapse-btn" @click="collapse"><el-icon><Close /></el-icon></button>
         </div>
       </header>
@@ -35,62 +27,10 @@
 
       <div class="chat-content" ref="chatContentRef">
         <div class="messages-container" ref="messagesContainer">
-          <!-- 历史聊天记录（内联下压式，保存多条，无卡片底色） -->
-          <transition name="collapse-history">
-            <div v-if="showHistory" class="history-inline">
-              <div v-if="!displayedHistories || displayedHistories.length === 0" class="history-empty">
-                <el-icon><Clock /></el-icon>
-                <span>{{ searchQuery ? '未找到相关历史记录' : '暂无历史记录' }}</span>
-              </div>
-              <template v-else>
-                <div v-for="(history, hIndex) in displayedHistories" :key="history.id || hIndex" class="history-session-item">
-                  <div class="history-header">
-                    <div class="history-title-group">
-                      <el-icon class="history-icon"><Clock /></el-icon>
-                      <span class="history-time">{{ history.savedAt }} 的对话记录</span>
-                    </div>
-                  </div>
-                  
-                  <div class="history-preview-chat">
-                    <div
-                      v-for="(msg, i) in (expandedHistories[history.id] ? history.messages : history.messages.slice(0, 3))"
-                      :key="i"
-                      :class="['preview-msg', msg.role]"
-                    >
-                      <div class="preview-avatar">{{ msg.role === 'user' ? 'U' : 'AI' }}</div>
-                      <div class="preview-bubble">{{ (!expandedHistories[history.id] && msg.content.length > 80) ? msg.content.slice(0, 80) + '...' : msg.content }}</div>
-                    </div>
-                    <div v-if="history.messages.length > 3" class="history-more-indicator" @click="toggleExpandHistory(history.id)">
-                      <template v-if="!expandedHistories[history.id]">
-                        <div class="more-dots">
-                          <span></span><span></span><span></span>
-                        </div>
-                        <span class="more-text">点击展开剩余 {{ history.messages.length - 3 }} 条</span>
-                      </template>
-                      <template v-else>
-                        <el-icon class="collapse-icon"><ArrowUp /></el-icon>
-                        <span class="more-text">收起内容</span>
-                      </template>
-                    </div>
-                  </div>
-                  
-                  <div class="history-actions-bottom-right">
-                    <button class="history-clear-btn-icon" @click="deleteHistory(history.id)" title="删除记录">
-                      <el-icon><Delete /></el-icon>
-                    </button>
-                    <button class="stitch-primary-btn history-restore-btn-new" @click="restoreHistory(history)">接着上回聊</button>
-                  </div>
-                  
-                  <div class="session-divider" v-if="hIndex < savedHistories.length - 1"></div>
-                </div>
-              </template>
-              <div class="history-master-divider" v-if="displayedHistories && displayedHistories.length > 0"></div>
-            </div>
-          </transition>
           <!-- Welcome + Quick Actions -->
           <div v-if="!selectedMode" class="welcome-section message assistant">
             <div class="assistant-wrapper">
-              <div class="assistant-tag"><span class="engine-name">Catalyst Engine</span> <span class="pro-badge">PRO</span></div>
+              <div class="assistant-tag"><span class="engine-name">智能引擎</span> <span class="pro-badge">专业版</span></div>
               <div class="message-bubble glass-ai welcome-bubble">
                 <p class="welcome-text">
                   {{ welcomeTitleText }}<span v-if="!showWelcomeOptions && welcomeTitleText.length < welcomeTitleFull.length" class="typing-cursor">|</span>
@@ -112,7 +52,7 @@
                       </div>
                       <div class="option-card stitch-card" @click="selectMode('business_intro')">
                         <span class="opt-text">了解业务</span>
-                        <span class="opt-desc">服务体系与过往案例</span>
+                        <span class="opt-desc">服务体系与咨询顾问</span>
                       </div>
                     </div>
                     <p class="welcome-hint">也可以直接在下方输入您的问题</p>
@@ -129,23 +69,89 @@
               <div class="user-message-container">
                 <div class="user-content-row">
                   <div class="user-col">
-                    <span class="user-tag">You</span>
-                    <div class="message-bubble user-bubble" v-html="highlightSearch(msg.content)"></div>
-                    <span class="msg-time" v-if="msg.timestamp">{{ msg.timestamp }}</span>
+                    <span class="user-tag">你</span>
+                    <div v-if="isInlineEditingMessage(msg)" class="inline-message-edit">
+                      <textarea
+                        :ref="setInlineEditTextareaRef"
+                        v-model="inlineEditText"
+                        class="inline-message-edit-textarea"
+                        placeholder="编辑这条消息..."
+                        rows="1"
+                        @input="adjustInlineEditHeight"
+                        @keydown.enter="handleInlineEditEnter($event, msg)"
+                        @compositionstart="isComposing = true"
+                        @compositionend="isComposing = false"
+                      ></textarea>
+                      <div class="inline-message-edit-actions">
+                        <button class="inline-edit-btn secondary" @click.stop="cancelInlineEdit">取消</button>
+                        <button class="inline-edit-btn primary" @click.stop="submitInlineEdit(msg)">发送</button>
+                      </div>
+                    </div>
+                    <div
+                      v-else-if="displayUserMessageText(msg.content)"
+                      class="message-bubble user-bubble"
+                      v-html="highlightSearch(displayUserMessageText(msg.content))"
+                    ></div>
+                    <div v-if="!isInlineEditingMessage(msg) && msg.attachments?.length" class="message-attachment-grid">
+                      <div
+                        v-for="file in msg.attachments"
+                        :key="file.objectKey || file.url || file.name"
+                        class="message-attachment-preview"
+                        :title="file.name"
+                      >
+                        <img
+                          v-if="file.isImage && file.url && !file.previewFailed"
+                          :src="file.url"
+                          class="message-attachment-thumb"
+                          @error="markPreviewFailed(file)"
+                        />
+                        <div v-else class="message-file-preview">
+                          <el-icon><PictureRounded /></el-icon>
+                          <span>{{ getFileExtension(file.name) }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-if="canModifyLastUserMessage(msg) && !isInlineEditingMessage(msg)" class="user-message-actions">
+                      <button class="msg-action-btn" @click.stop="startInlineEdit(msg)">编辑</button>
+                      <button class="msg-action-btn danger" @click.stop="revokeLastUserMessage(msg)">撤回</button>
+                    </div>
+                    <span class="msg-time" v-if="!isInlineEditingMessage(msg) && msg.timestamp">{{ msg.timestamp }}</span>
                   </div>
-                  <div class="user-avatar">t</div>
+                  <div class="user-avatar" :class="{ 'has-image': !!currentUserAvatar }">
+                    <img v-if="currentUserAvatar" :src="currentUserAvatar" :alt="currentUserName" />
+                    <span v-else>{{ currentUserInitial }}</span>
+                  </div>
                 </div>
               </div>
             </template>
 
             <template v-else>
               <div class="assistant-wrapper">
-                <div class="assistant-tag"><span class="engine-name">Catalyst Engine</span></div>
+                <div class="assistant-tag"><span class="engine-name">智能引擎</span></div>
                 <div class="message-bubble glass-ai">
-                  <div v-if="index > 0 && msg.role === 'assistant' && !msg.isPurchasePrompt" class="reasoning-mock">
-                    <span class="reasoning-text">Reasoning <el-icon><Right /></el-icon></span>
+                  <p v-if="msg.isThinkingStatus" class="bubble-text thinking-status">
+                    <span class="thinking-status-text">{{ displayContent(msg.content) }}</span>
+                    <span class="thinking-ellipsis thinking-status-dots" aria-hidden="true">
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                    </span>
+                  </p>
+                  <div v-else-if="isPendingAssistantMessage(msg, index)" class="typing">
+                    <span>智能体思考中</span>
+                    <span class="thinking-ellipsis" aria-hidden="true">
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                      <span>.</span>
+                    </span>
                   </div>
-                  <p class="bubble-text" v-html="highlightSearch(displayContent(msg.content))"></p>
+                  <p v-else class="bubble-text" v-html="highlightSearch(displayContent(msg.content))"></p>
                   <!-- Special button for 'purchase' mode in the AI msg -->
                   <div v-if="msg.isPurchasePrompt" class="message-actions">
                     <el-button class="stitch-primary-btn" @click="goToBrowse('video_purchase')">
@@ -160,8 +166,8 @@
                     </div>
                     <template v-else-if="inlineFormData">
                       <p class="form-intro">以下各项均可直接修改，也可通过对话补充调整：</p>
-                      <div class="inline-form">
-                        <div class="form-field" v-for="field in formFields" :key="field.key">
+	                      <div class="inline-form">
+	                        <div class="form-field" v-for="field in formFields" :key="field.key">
                           <label class="field-label">{{ field.label }}</label>
                           <input
                             v-if="!field.multiline"
@@ -176,10 +182,32 @@
                             v-model="inlineFormData[field.key]"
                             :placeholder="field.placeholder"
                             rows="2"
-                          ></textarea>
+	                          ></textarea>
+	                        </div>
+	                      </div>
+                      <div v-if="submittedFiles.length > 0" class="form-attachment-preview">
+                        <div class="form-attachment-label">已上传素材</div>
+                        <div class="form-attachment-list">
+                          <div
+                            v-for="file in submittedFiles"
+                            :key="file.objectKey || file.url || file.name"
+                            class="form-attachment-item"
+                            :title="file.name"
+                          >
+                            <img
+                              v-if="file.isImage && file.url && !file.previewFailed"
+                              :src="file.url"
+                              class="form-attachment-thumb"
+                              @error="markPreviewFailed(file)"
+                            />
+                            <div v-else class="form-file-thumb">
+                              <el-icon><PictureRounded /></el-icon>
+                            </div>
+                            <span class="form-attachment-name">{{ file.name }}</span>
+                          </div>
                         </div>
                       </div>
-                      <div class="inline-form-actions">
+	                      <div class="inline-form-actions">
                         <button class="comp-btn comp-btn-ghost" @click="handleContinueEditing(msg)">继续对话补充</button>
                         <button class="comp-btn comp-btn-primary" @click="handleSubmitOrder">确认无误，提交订单</button>
                       </div>
@@ -226,37 +254,13 @@
                       </div>
                     </div>
                   </div>
-                  <!-- 案例视频卡片 -->
-                  <div v-if="msg.isCaseList && msg.cases" class="inline-form-section">
-                    <div class="case-video-cards">
-                      <div v-for="c in msg.cases" :key="c.id" class="case-card">
-                        <div class="case-card-video" v-if="c.video_url">
-                          <video
-                            :src="c.video_url"
-                            controls
-                            preload="metadata"
-                            :poster="c.thumbnail_url || ''"
-                            class="case-video-player"
-                          ></video>
-                        </div>
-                        <div class="case-card-info">
-                          <div class="case-title">{{ c.title }}</div>
-                          <div class="case-desc">{{ c.description }}</div>
-                          <div class="case-meta">
-                            <span class="case-tag">{{ getTypeText(c.category) }}</span>
-                            <span class="case-duration" v-if="c.duration">{{ c.duration }}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                   <!-- 引导下单按钮 -->
                   <div v-if="msg.isGuideToOrder" class="guide-order-section">
                     <div class="guide-order-label">您可以选择感兴趣的业务板块开始需求梳理：</div>
                     <div class="guide-btns">
-                      <button class="comp-btn comp-btn-primary" @click="switchToOrderCreate('ai_3d_custom')">AI裸眼3D内容定制</button>
-                      <button class="comp-btn comp-btn-outline" @click="switchToOrderCreate('video_purchase')">裸眼3D成片购买适配</button>
-                      <button class="comp-btn comp-btn-outline" @click="switchToOrderCreate('digital_art')">数字艺术内容定制</button>
+                      <button class="comp-btn comp-btn-primary" @click="switchToOrderCreate('ai_3d_custom')">AI驱动3D OOH内容定制</button>
+                      <button class="comp-btn comp-btn-outline" @click="switchToOrderCreate('video_purchase')">3D OOH数字内容资源库</button>
+                      <button class="comp-btn comp-btn-outline" @click="switchToOrderCreate('digital_art')">数字艺术与沉浸式视觉设计</button>
                     </div>
                     <div class="guide-btns" style="margin-top: 6px;">
                       <button class="comp-btn comp-btn-ghost" @click="goToBrowse('ai_3d_custom')">或手动填写表单</button>
@@ -270,96 +274,115 @@
           
           <div v-if="isLoading" class="message assistant">
             <div class="assistant-wrapper">
-               <div class="assistant-tag"><span class="engine-name">Catalyst Engine</span></div>
-               <div class="message-bubble glass-ai typing">正在思考中...</div>
+               <div class="assistant-tag"><span class="engine-name">智能引擎</span></div>
+               <div class="message-bubble glass-ai typing">
+                 <span>智能体思考中</span>
+                 <span class="thinking-ellipsis" aria-hidden="true">
+                   <span>.</span>
+                   <span>.</span>
+                   <span>.</span>
+                   <span>.</span>
+                   <span>.</span>
+                   <span>.</span>
+                 </span>
+               </div>
             </div>
-          </div>
-          <div v-if="isTyping && !isLoading" class="typing-cursor-indicator">
-            <span class="cursor-blink">▍</span>
           </div>
         </div>
       </div>
 
       <!-- Input Area — Stitch Style Pill -->
       <div class="input-area-container">
-        <div class="input-area pill-style" :class="{ 'is-voice-recording': isRecording || isTranscribing }">
+        <div
+          class="input-area pill-style"
+          data-onboarding-target="ai-chat-input"
+          :class="{ 'is-voice-recording': isRecording || isTranscribing }"
+        >
           <template v-if="!isRecording && !isTranscribing">
-            <!-- Left icons mock -->
-            <div class="left-tools">
-              <el-icon class="tool-icon" @click="triggerGenericFileUpload" title="上传参考文件（PDF、Word、压缩包等）"><CirclePlusFilled /></el-icon>
-              <el-icon class="tool-icon" @click="triggerFileUpload" title="上传现场实拍图或参考文件"><PictureRounded /></el-icon>
-              <input
-                type="file"
-                ref="fileInputRef"
-                multiple
-                accept="image/*,.pdf,.doc,.docx,.zip"
-                style="display: none;"
-                @change="handleFileSelected"
-              />
-              <input
-                type="file"
-                ref="genericFileInputRef"
-                multiple
-                accept=".pdf,.doc,.docx,.zip,.rar,.ppt,.pptx,.xls,.xlsx,.txt,.mp4,.mov,.avi"
-                style="display: none;"
-                @change="handleFileSelected"
-              />
-            </div>
             <!-- 已上传文件预览条 -->
             <div v-if="uploadedFiles.length > 0" class="uploaded-files-strip">
               <div v-for="(file, idx) in uploadedFiles" :key="idx" class="uploaded-file-chip">
-                <img v-if="file.isImage" :src="file.url" class="file-thumb" />
+                <img
+                  v-if="file.isImage && file.url && !file.previewFailed"
+                  :src="file.url"
+                  class="file-thumb"
+                  @error="markPreviewFailed(file)"
+                />
                 <el-icon v-else class="file-icon-placeholder"><PictureRounded /></el-icon>
                 <span class="file-name">{{ file.name }}</span>
                 <span class="file-status">待发送</span>
                 <span class="file-remove" @click="removeUploadedFile(idx)">&times;</span>
               </div>
-              <span class="upload-more-hint">可继续上传更多文件或图片，完成后点击 Send</span>
+              <span class="upload-more-hint">可继续上传更多文件或图片，完成后点击发送</span>
             </div>
 
-          <textarea
-            ref="textareaRef"
-            v-model="inputMsg"
-            placeholder="描述您的需求，或直接输入问题..."
-            class="chat-native-textarea"
-            @input="adjustTextareaHeight"
-            @keydown.enter="handleEnterKey"
-            @compositionstart="isComposing = true"
-            @compositionend="isComposing = false"
-            :disabled="isLoading || isTyping || isRecording"
-            @focus="handleInputFocus"
-            rows="1"
-          ></textarea>
-          
-          <!-- Right tools & send -->
-          <div class="right-tools">
-            <!-- 语音输入按钮 -->
-            <button
-              v-if="ENABLE_VOICE_INPUT"
-              class="voice-btn"
-              :class="{ recording: isRecording }"
-              @click="toggleVoiceInput"
-              :title="isRecording ? '停止录音' : '语音输入'"
-            >
-              <span v-if="isRecording" class="rec-pulse"></span>
-              <svg v-if="!isRecording" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5z"/>
-                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-              </svg>
-              <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <rect x="6" y="6" width="12" height="12" rx="2"/>
-              </svg>
-            </button>
+            <div class="composer-main-row">
+              <!-- Left icons mock -->
+              <div class="left-tools">
+                <el-icon class="tool-icon" @click="triggerGenericFileUpload" title="上传参考文件（PDF、Word、压缩包等）"><CirclePlusFilled /></el-icon>
+                <el-icon class="tool-icon" @click="triggerFileUpload" title="上传现场实拍图或参考文件"><PictureRounded /></el-icon>
+                <input
+                  type="file"
+                  ref="fileInputRef"
+                  multiple
+                  :accept="supportingFileAccept"
+                  style="display: none;"
+                  @change="handleFileSelected"
+                />
+                <input
+                  type="file"
+                  ref="genericFileInputRef"
+                  multiple
+                  :accept="supportingFileAccept"
+                  style="display: none;"
+                  @change="handleFileSelected"
+                />
+              </div>
 
-            <button
-              class="stitch-send-btn"
-              :class="{ disabled: isLoading || isTyping || isUploadingFiles || (!inputMsg.trim() && uploadedFiles.length === 0) }"
-              @click="sendMessage"
-            >
-              <span>Send</span>
-              <el-icon><Top /></el-icon>
-            </button>
-          </div>
+              <textarea
+                ref="textareaRef"
+                v-model="inputMsg"
+                placeholder="描述您的需求，或直接输入问题..."
+                class="chat-native-textarea"
+                @input="adjustTextareaHeight"
+                @keydown.enter="handleEnterKey"
+                @compositionstart="isComposing = true"
+                @compositionend="isComposing = false"
+                :disabled="isLoading || isTyping || isRecording"
+                @focus="handleInputFocus"
+                rows="1"
+              ></textarea>
+              
+              <!-- Right tools & send -->
+              <div class="right-tools">
+                <!-- 语音输入按钮 -->
+                <button
+                  v-if="ENABLE_VOICE_INPUT"
+                  class="voice-btn"
+                  :class="{ recording: isRecording }"
+                  @click="toggleVoiceInput"
+                  :title="isRecording ? '停止录音' : '语音输入'"
+                >
+                  <span v-if="isRecording" class="rec-pulse"></span>
+                  <svg v-if="!isRecording" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <rect x="6" y="6" width="12" height="12" rx="2"/>
+                  </svg>
+                </button>
+
+                <button
+                  class="stitch-send-btn"
+                  :class="{ disabled: isLoading || isTyping || isUploadingFiles || (!inputMsg.trim() && uploadedFiles.length === 0) }"
+                  @click="sendMessage"
+                >
+                  <span>发送</span>
+                  <el-icon><Top /></el-icon>
+                </button>
+              </div>
+            </div>
           </template>
 
           <template v-else>
@@ -403,24 +426,37 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
-import { useRouter, onBeforeRouteLeave } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Clock, Delete, ArrowUp, Loading, Plus, Check } from '@element-plus/icons-vue'
+import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Loading, Plus, Check } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
+import { useUiStore } from '@/stores/ui'
 import { logger } from '@/utils/logger'
-import { chatHistoryApi } from '@/utils/api'
+import { chatHistoryApi, orderApi } from '@/utils/api'
+import {
+  createAiChatSessionFromRemote,
+  deleteAiChatSession,
+  loadAiChatSessions,
+  makeAiChatSessionTitle,
+  upsertAiChatSession,
+  type AiChatRemoteSession,
+  type AiChatSavedSession,
+} from '@/utils/aiChatSessions'
 import { getLatestEnterpriseStatus } from '@/utils/enterpriseGuard'
+import { formatServerMonthDayTime, formatServerShortTime } from '@/utils/time'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 
 // 语音输入开关，通过 .env 文件配置
 const ENABLE_VOICE_INPUT = import.meta.env.VITE_ENABLE_VOICE_INPUT === 'true'
-import type { OrderType } from '@/types'
+import type { OrderStatus, OrderType } from '@/types'
 
 const emit = defineEmits(['close', 'mode-change'])
 const router = useRouter()
+const route = useRoute()
 const orderStore = useOrderStore()
 const authStore = useAuthStore()
+const uiStore = useUiStore()
 
 const searchQuery = ref('')
 
@@ -667,12 +703,7 @@ const drawWaveform = () => {
 
 
 
-const onSearchInput = () => {
-  if (searchQuery.value && !showHistory.value) {
-    showHistory.value = true
-    loadSavedHistory()
-  }
-}
+const onSearchInput = () => {}
 
 // auth header helper
 const getAuthHeaders = () => {
@@ -687,7 +718,7 @@ const getAuthHeaders = () => {
 const agentMode = import.meta.env.VITE_AGENT_MODE || 'media'
 const isMediaMode = agentMode === 'media'
 
-const welcomeTitleFull = '您好，我是 Unique Video AI 的项目顾问。'
+const welcomeTitleFull = '您好，我是 Unique Vision AI 的项目顾问。'
 const welcomeDescFull = isMediaMode
   ? '我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多媒体方客户提供过高品质的裸眼3D视觉内容解决方案。'
   : '我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多一线品牌提供过高品质视觉解决方案。'
@@ -728,17 +759,58 @@ const draftSavedOrderId = ref<string | null>(null)
 const showConfirmation = ref(false)
 const confirmOrderNumber = ref('')
 const confirmOrderType = ref<OrderType>('ai_3d_custom')
+const orderSubmitCompleted = ref(false)
+
+type ConversationStateSnapshot = {
+  agentKey?: string
+  agentLabel?: string
+  sessionType?: string
+  agentMode?: string
+  selectedMode: string | null
+  businessType: string
+  inlineFormData: Record<string, string> | null
+  draftSavedOrderId: string | null
+  showConfirmation: boolean
+  confirmOrderNumber: string
+  confirmOrderType: OrderType
+  submittedFilesLength?: number
+  submittedFiles?: UploadedFile[]
+  uploadedFiles?: UploadedFile[]
+  inputMsg?: string
+  orderSubmitCompleted: boolean
+  routeFullPath: string
+}
+
+const clonePlain = <T,>(value: T): T => JSON.parse(JSON.stringify(value))
 
 // ===== 文件上传相关 =====
 type UploadedFile = {
+  id?: string
   name: string
   url: string
   isImage: boolean
+  previewFailed?: boolean
   size: number
   type: string
   uploadTime: string
   objectKey?: string
 }
+
+const createUploadedFileId = () => {
+  const random = Math.random().toString(36).slice(2, 10)
+  return `file-${Date.now()}-${random}`
+}
+
+const toOrderFileUpload = (file: UploadedFile, index: number) => ({
+  id: file.id || `upload_${Date.now()}_${index}`,
+  name: file.name,
+  size: file.size || 0,
+  type: file.type || 'application/octet-stream',
+  uploadTime: file.uploadTime || new Date().toISOString(),
+  url: file.url,
+  file_url: file.url,
+  object_key: file.objectKey || ''
+})
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const genericFileInputRef = ref<HTMLInputElement | null>(null)
@@ -746,6 +818,23 @@ const uploadedFiles = ref<UploadedFile[]>([])
 const submittedFiles = ref<UploadedFile[]>([])
 const isUploadingFiles = ref(false)
 const failedUploadNames = ref<string[]>([])
+const supportingFileAccept = [
+  'image/*',
+  '.pdf',
+  '.ppt',
+  '.pptx',
+  '.key',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+  '.zip',
+  '.rar',
+  '.7z',
+  '.mp4',
+  '.mov',
+  '.avi',
+].join(',')
 
 const triggerFileUpload = () => {
   fileInputRef.value?.click()
@@ -778,6 +867,7 @@ const handleFileSelected = async (e: Event) => {
         const data = await res.json()
         const isImage = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.name)
         uploadedFiles.value.push({
+          id: data.id || createUploadedFileId(),
           name: file.name,
           url: data.url || data.file_url || '',
           isImage,
@@ -788,8 +878,15 @@ const handleFileSelected = async (e: Event) => {
         })
         uploadedNames.push(file.name)
       } else {
+        let message = ''
+        try {
+          const errorData = await res.json()
+          message = errorData?.detail || errorData?.message || ''
+        } catch {
+          message = await res.text().catch(() => '')
+        }
         failedNames.push(file.name)
-        ElMessage.error(`上传失败: ${file.name}`)
+        ElMessage.error(message ? `上传失败: ${file.name}（${message}）` : `上传失败: ${file.name}`)
       }
     } catch (err) {
       failedNames.push(file.name)
@@ -815,6 +912,10 @@ const removeUploadedFile = (index: number) => {
   uploadedFiles.value.splice(index, 1)
 }
 
+const markPreviewFailed = (file: UploadedFile) => {
+  file.previewFailed = true
+}
+
 const buildFileSummaryText = (files: UploadedFile[]) => {
   if (files.length === 0) return ''
   const names = files.map(file => file.name).join('、')
@@ -825,6 +926,47 @@ const buildFileSummaryText = (files: UploadedFile[]) => {
 
 const buildUserMessageContent = (text: string, files: UploadedFile[]) => {
   return [text, buildFileSummaryText(files)].filter(Boolean).join('\n')
+}
+
+const HUMAN_HANDOFF_MARKER = '【转人工】'
+const HUMAN_HANDOFF_FALLBACK_REPLY = '已识别到您希望转人工，但当前系统未能完成草稿保存和管理员通知。请稍后重试。'
+
+const isHumanHandoffRequest = (text: string = '') => {
+  const normalized = text.toLowerCase().replace(/\s+/g, '')
+  if (!normalized) return false
+  const negativePatterns = [
+    '不需要人工', '不用人工', '无需人工', '不要人工', '别转人工',
+    '不转人工', '暂不转人工', '先不转人工', '不是要人工', '不是找人工',
+    '不是转人工', '不用真人', '不需要真人',
+  ]
+  if (negativePatterns.some(pattern => normalized.includes(pattern))) return false
+  const handoffText = normalized.replace(/人工智能/g, '')
+  const explicitPatterns = [
+    '转人工', '接人工', '切人工', '换人工', '找人工', '人工客服',
+    '人工服务', '人工顾问', '人工接待', '真人客服', '真人顾问',
+    '真人服务', '找真人', '联系人工', '联系顾问', '联系销售',
+    '客服介入', '销售联系', '顾问联系', '人工',
+  ]
+  if (explicitPatterns.some(pattern => handoffText.includes(pattern))) return true
+  const noAiPatterns = [
+    '不想用ai', '不使用ai', '不用ai', '不要ai', '别用ai',
+    '不想用智能体', '不使用智能体', '不用智能体', '不要智能体', '别用智能体',
+    '不想和机器人聊', '不跟机器人聊', '不要机器人', '不用机器人',
+    '不想和agent聊', '不用agent', '不要agent',
+  ]
+  return noAiPatterns.some(pattern => normalized.includes(pattern))
+}
+
+const displayUserMessageText = (text: string = '') => {
+  return text
+    .replace(/\n?\[已上传文件: [^\]]+\]/g, '')
+    .replace(/\n?\[已上传 \d+ 个文件: [^\]]+\]/g, '')
+    .trim()
+}
+
+const getFileExtension = (name: string = '') => {
+  const ext = name.split('.').pop()
+  return ext && ext !== name ? ext.slice(0, 5).toUpperCase() : 'FILE'
 }
 
 // 表单字段定义
@@ -855,12 +997,13 @@ const _mediaFormFields = [
   { key: 'tech_delivery', label: '技术需求', placeholder: '分辨率、格式、帧率、色彩空间等', multiline: false },
   { key: 'content_review', label: '素材审核规范 & 周期', placeholder: '审核要求、周期、规避内容等', multiline: true },
   { key: 'timing_number', label: '投放时长 & 数量', placeholder: '选填，几支内容、每支多少秒', multiline: false },
-  { key: 'budget', label: '项目制作预算', placeholder: '选填，预算范围', multiline: false },
+  { key: 'budget', label: '项目制作预算', placeholder: '选填，预算范围或待定', multiline: false },
   { key: 'online_time', label: '预计上刊时间', placeholder: '以最迟提交报审时间为准', multiline: false },
   { key: 'project_name', label: '项目名称', placeholder: '系统将根据点位、屏幕和核心概念自动生成，可修改', multiline: false },
   { key: 'media_positioning', label: '媒体定位 & 品牌调性', placeholder: '选填，适配的品牌类型', multiline: false },
   { key: 'special_requirements', label: '其他特殊合作要求', placeholder: '选填，特殊定制效果等', multiline: true },
   { key: 'site_photos', label: '现场实拍图', placeholder: '选填，通过左侧上传按钮上传', multiline: false },
+  { key: 'remarks', label: '备注', placeholder: '其他无法归入以上字段的补充说明', multiline: true },
 ]
 
 const formFields = isMediaMode ? _mediaFormFields : _brandFormFields
@@ -877,6 +1020,9 @@ const session_id = ref(createSessionId())
 const createMessageId = (role: string) => `${session_id.value}_${role}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 const chatContentRef = ref<any>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const inlineEditTextareaRef = ref<HTMLTextAreaElement | null>(null)
+const inlineEditingKey = ref('')
+const inlineEditText = ref('')
 const isComposing = ref(false) // 中文输入法组合输入状态
 
 const adjustTextareaHeight = () => {
@@ -884,6 +1030,17 @@ const adjustTextareaHeight = () => {
   if (!ta) return
   ta.style.height = 'auto'
   ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
+}
+
+const adjustInlineEditHeight = () => {
+  const ta = inlineEditTextareaRef.value
+  if (!ta) return
+  ta.style.height = 'auto'
+  ta.style.height = Math.min(ta.scrollHeight, 220) + 'px'
+}
+
+const setInlineEditTextareaRef = (el: Element | null) => {
+  inlineEditTextareaRef.value = el as HTMLTextAreaElement | null
 }
 
 /** 处理 Enter 键：IME 组合输入期间不发送消息 */
@@ -945,29 +1102,32 @@ const collapse = () => {
 }
 
 const startNewSession = () => {
-  // 如果当前已有对话，保存并将顶部历史面板展开，形成"旧对话被折叠顶上去"的视觉效果
-  if (messages.value.length > 0) {
-    saveCurrentToHistory()
-    loadSavedHistory()
-    showHistory.value = true
-  } else {
-    // 如果当前已经是空白对话，说明用户是单纯想退出历史面板，直接关闭即可
-    showHistory.value = false
-  }
-  
+  saveCurrentToHistory({ force: true })
+  clearInlineEdit()
   messages.value = []
   selectedMode.value = null
+  businessType.value = 'ai_3d_custom'
+  inlineFormData.value = null
+  draftSavedOrderId.value = null
+  showConfirmation.value = false
+  confirmOrderNumber.value = ''
+  confirmOrderType.value = 'ai_3d_custom'
+  orderSubmitCompleted.value = false
+  uploadedFiles.value = []
+  submittedFiles.value = []
+  inputMsg.value = ''
   session_id.value = createSessionId()
+  uiStore.setActiveAIChatSession(session_id.value)
   playWelcomeAnimation()
 }
 
 // --- 历史聊天记录 ---
 // 使用用户 ID 隔离存储，防止不同用户看到彼此的聊天记录
-const getHistoryKey = () => {
-  const userId = authStore.user?.id || 'anonymous'
-  return `ai_chat_session_${userId}`
-}
-const showHistory = ref(false)
+const getCurrentUserId = () => authStore.user?.id || 'anonymous'
+
+const currentUserName = computed(() => authStore.user?.username || '用户')
+const currentUserAvatar = computed(() => authStore.user?.avatar || '')
+const currentUserInitial = computed(() => currentUserName.value.charAt(0).toUpperCase())
 
 const displayedMessages = computed(() => {
   if (!searchQuery.value.trim()) return messages.value
@@ -975,54 +1135,92 @@ const displayedMessages = computed(() => {
   return messages.value.filter(m => {
     // 包含文本，或者是有卡片内容的特殊气泡
     if (m.content && m.content.toLowerCase().includes(q)) return true
-    if (m.isOrderList || m.isCaseList || m.isGuideToOrder || m.isPurchasePrompt || m.isCompletePrompt) return true
+    if (m.isOrderList || m.isGuideToOrder || m.isPurchasePrompt || m.isCompletePrompt || m.isHumanHandoff) return true
     return false
   })
 })
 
-interface SavedSession {
-  id: string
-  messages: any[]
-  mode: string | null
-  savedAt: string
+type SavedSession = AiChatSavedSession
+
+const agentRegistry: Record<string, { label: string; sessionType: string; selectedMode: string | null; businessType?: string }> = {
+  general: { label: '通用问答', sessionType: 'general', selectedMode: null },
+  business_intro: { label: '业务介绍', sessionType: 'business_intro', selectedMode: 'business_intro' },
+  case_intro: { label: '咨询顾问', sessionType: 'business_intro', selectedMode: 'business_intro' },
+  order_query: { label: '订单查询', sessionType: 'order_query', selectedMode: 'order_query' },
+  requirement_ai_3d_custom: { label: 'AI驱动3D OOH内容定制', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'ai_3d_custom' },
+  requirement_video_purchase: { label: '3D OOH数字内容资源库', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'video_purchase' },
+  requirement_digital_art: { label: '数字艺术与沉浸式视觉设计', sessionType: 'requirement', selectedMode: 'order_create', businessType: 'digital_art' },
 }
 
 const savedHistories = ref<SavedSession[]>([])
-const expandedHistories = ref<Record<string, boolean>>({})
-const getSessionSortValue = (id: string) => Number(String(id).split('_')[0]) || 0
 
-const displayedHistories = computed(() => {
-  if (!searchQuery.value.trim()) return savedHistories.value
-  const q = searchQuery.value.toLowerCase()
-  return savedHistories.value.filter(session => {
-    return session.messages.some(m => m.content && m.content.toLowerCase().includes(q))
+const ensureMessageClientIds = (items: any[] = messages.value) => {
+  items.forEach((m: any) => {
+    if ((m?.role === 'user' || m?.role === 'assistant') && !m.client_message_id) {
+      m.client_message_id = createMessageId(m.role)
+    }
   })
-})
+}
 
-const toggleExpandHistory = (id: string) => {
-  expandedHistories.value[id] = !expandedHistories.value[id]
+const getCurrentAgentKey = () => {
+  if (selectedMode.value === 'order_create') {
+    return `requirement_${businessType.value || 'ai_3d_custom'}`
+  }
+  if (selectedMode.value === 'order_query') return 'order_query'
+  if (selectedMode.value === 'business_intro') {
+    return 'business_intro'
+  }
+  return 'general'
+}
+
+const getAgentMeta = (agentKey = getCurrentAgentKey()) => {
+  return agentRegistry[agentKey] || {
+    label: agentKey,
+    sessionType: 'general',
+    selectedMode: null,
+  }
 }
 
 const loadSavedHistory = () => {
+  savedHistories.value = loadAiChatSessions(getCurrentUserId())
+}
+
+const loadBackendHistoryById = async (id: string): Promise<SavedSession | null> => {
+  if (!localStorage.getItem('token')) return null
   try {
-    const raw = localStorage.getItem(getHistoryKey())
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      let parsedArr = Array.isArray(parsed) ? parsed : [parsed]
-      // 按照 ID（时间戳）升序排列，最新的记录在最下方（靠近输入框）
-      parsedArr.sort((a, b) => getSessionSortValue(a.id) - getSessionSortValue(b.id))
-      savedHistories.value = parsedArr
-    }
-  } catch {
-    savedHistories.value = []
+    const [summaries, remoteMessages] = await Promise.all([
+      chatHistoryApi.getSessions(50).catch(() => []),
+      chatHistoryApi.getSessionMessages(id),
+    ])
+    const summary = Array.isArray(summaries)
+      ? summaries.find((item: AiChatRemoteSession) => item.id === id)
+      : null
+    const session = createAiChatSessionFromRemote(
+      summary || { id, sessionType: 'general', businessType: 'ai_3d_custom' },
+      Array.isArray(remoteMessages) ? remoteMessages : [],
+    )
+    if (session.messages.length === 0) return null
+    savedHistories.value = upsertAiChatSession(getCurrentUserId(), session)
+    return session
+  } catch (error) {
+    console.warn('[ChatHistory] 从后端恢复历史失败:', error)
+    return null
   }
 }
 
 onMounted(() => {
   playWelcomeAnimation()
   loadSavedHistory()
+  uiStore.setActiveAIChatSession(session_id.value)
+  if (uiStore.pendingAIChatSessionId) {
+    void restoreHistoryById(uiStore.pendingAIChatSessionId)
+  }
   // 监听浏览器关闭/刷新事件，确保保存聊天记录
   window.addEventListener('beforeunload', _handleBeforeUnload)
+})
+
+watch(() => uiStore.pendingAIChatSessionId, (sessionId) => {
+  if (sessionId) void restoreHistoryById(sessionId)
 })
 
 // ── 自动保存聊天记录：确保任何退出方式都会保存 ──
@@ -1047,58 +1245,54 @@ onBeforeRouteLeave(() => {
 
 let _lastSaveTimestamp = 0
 
-const saveCurrentToHistory = () => {
-  if (messages.value.length === 0) return
-  
+const hasCurrentSessionContent = () => {
+  return messages.value.length > 0
+    || Boolean(inputMsg.value.trim())
+    || uploadedFiles.value.length > 0
+    || submittedFiles.value.length > 0
+    || Boolean(inlineFormData.value)
+}
+
+const saveCurrentToHistory = (options: { force?: boolean; syncBackend?: boolean } = {}) => {
+  if (!hasCurrentSessionContent()) return
+  ensureMessageClientIds()
+
   // 防抖：同一秒内不重复保存（避免 collapse + onBeforeUnmount 双重触发）
   const now = Date.now()
-  if (now - _lastSaveTimestamp < 1000) return
+  if (!options.force && now - _lastSaveTimestamp < 1000) return
   _lastSaveTimestamp = now
+
+  const agentKey = getCurrentAgentKey()
+  const agentMeta = getAgentMeta(agentKey)
   
   const session: SavedSession = {
     id: session_id.value,
-    messages: [...messages.value],
+    title: makeAiChatSessionTitle(messages.value),
+    messages: clonePlain(messages.value),
     mode: selectedMode.value,
-    savedAt: new Date().toLocaleString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    })
+    agentKey,
+    agentLabel: agentMeta.label,
+    sessionType: agentMeta.sessionType,
+    businessType: businessType.value,
+    agentMode,
+    routeFullPath: route.fullPath,
+    stateSnapshot: captureConversationState(),
+    updatedAt: now,
+    savedAt: formatServerMonthDayTime(new Date().toISOString(), '')
   }
 
-  let histories: SavedSession[] = []
-  try {
-    const raw = localStorage.getItem(getHistoryKey())
-    if (raw) {
-       const parsed = JSON.parse(raw)
-       histories = Array.isArray(parsed) ? parsed : [parsed]
-    }
-  } catch(e) {}
-  
-  const existingIndex = histories.findIndex(h => h.id === session.id)
-  if (existingIndex >= 0) {
-    histories[existingIndex] = session
-  } else {
-    histories.push(session)
-  }
-  // 按时间升序排序（最新的在最下方，靠近输入框）
-  histories.sort((a, b) => getSessionSortValue(a.id) - getSessionSortValue(b.id))
-  
-  // 如果超过 5 条，保留最新的 5 条
-  if (histories.length > 5) histories = histories.slice(-5)
-  
-  localStorage.setItem(getHistoryKey(), JSON.stringify(histories))
-  savedHistories.value = histories
+  savedHistories.value = upsertAiChatSession(getCurrentUserId(), session)
+  uiStore.setActiveAIChatSession(session.id)
+  uiStore.markAIChatHistoryChanged()
 
   // 同步到后端数据库（静默，不阻断前端流程）
-  _syncToBackend(session)
+  if (options.syncBackend !== false) {
+    _syncToBackend(session)
+  }
 }
 
 /** 将会话同步到后端数据库（异步静默） */
-const _syncToBackend = async (session: SavedSession) => {
+const _syncToBackend = async (session: SavedSession, replace = false) => {
   try {
     const token = localStorage.getItem('token')
     if (!token) return // 未登录不同步
@@ -1110,14 +1304,16 @@ const _syncToBackend = async (session: SavedSession) => {
       role: m.role,
       content: m.content,
       timestamp: m.timestamp || '',
+      metadata: m.attachments?.length ? { attachments: m.attachments } : undefined,
     }))
-    if (msgs.length === 0) return
+    if (msgs.length === 0 && !replace) return
 
     await chatHistoryApi.syncSession({
       session_id: session.id || session_id.value,
-      business_type: businessType.value,
-      session_type: 'requirement',
+      business_type: session.businessType || businessType.value,
+      session_type: session.sessionType || 'requirement',
       messages: msgs,
+      replace,
     })
   } catch (e) {
     // 静默失败，不阻断用户体验
@@ -1129,18 +1325,19 @@ let _lastBackendSyncSignature = ''
 
 /** 将当前会话按稳定 session_id 同步到后端，供管理员实时查看。 */
 const syncCurrentConversationToBackend = async () => {
+  ensureMessageClientIds()
   const session: SavedSession = {
     id: session_id.value,
-    messages: [...messages.value],
+    messages: clonePlain(messages.value),
     mode: selectedMode.value,
-    savedAt: new Date().toLocaleString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    })
+    agentKey: getCurrentAgentKey(),
+    agentLabel: getAgentMeta().label,
+    sessionType: getAgentMeta().sessionType,
+    businessType: businessType.value,
+    agentMode,
+    routeFullPath: route.fullPath,
+    stateSnapshot: captureConversationState(),
+    savedAt: formatServerMonthDayTime(new Date().toISOString(), '')
   }
 
   const msgs = session.messages.filter((m: any) =>
@@ -1148,44 +1345,293 @@ const syncCurrentConversationToBackend = async () => {
   )
   if (msgs.length === 0) return
 
-  const lastMsg = msgs[msgs.length - 1]
-  const signature = `${session.id}:${msgs.length}:${lastMsg.role}:${lastMsg.content}`
+  const signature = JSON.stringify({
+    id: session.id,
+    messages: msgs.map((m: any) => ({
+      id: m.client_message_id || '',
+      role: m.role,
+      content: m.content,
+    })),
+  })
   if (signature === _lastBackendSyncSignature) return
   _lastBackendSyncSignature = signature
 
+  saveCurrentToHistory({ force: true, syncBackend: false })
   await _syncToBackend(session)
 }
 
-const toggleHistory = () => {
-  showHistory.value = !showHistory.value
-  if (showHistory.value) {
-    loadSavedHistory()
+const buildCurrentSavedSession = (): SavedSession => {
+  ensureMessageClientIds()
+  return {
+    id: session_id.value,
+    title: makeAiChatSessionTitle(messages.value),
+    messages: clonePlain(messages.value),
+    mode: selectedMode.value,
+    agentKey: getCurrentAgentKey(),
+    agentLabel: getAgentMeta().label,
+    sessionType: getAgentMeta().sessionType,
+    businessType: businessType.value,
+    agentMode,
+    routeFullPath: route.fullPath,
+    stateSnapshot: captureConversationState(),
+    updatedAt: Date.now(),
+    savedAt: formatServerMonthDayTime(new Date().toISOString(), '')
   }
 }
 
-const restoreHistory = (history: SavedSession) => {
-  messages.value = [...history.messages]
-  selectedMode.value = history.mode
-  if (selectedMode.value) {
-    emit('mode-change', selectedMode.value)
+const removeCurrentSessionFromLocalHistory = () => {
+  savedHistories.value = deleteAiChatSession(getCurrentUserId(), session_id.value)
+  uiStore.markAIChatHistoryChanged()
+}
+
+const syncConversationReplace = async () => {
+  _lastBackendSyncSignature = ''
+  const session = buildCurrentSavedSession()
+  if (messages.value.length === 0) {
+    removeCurrentSessionFromLocalHistory()
+  } else {
+    _lastSaveTimestamp = 0
+    saveCurrentToHistory({ force: true })
   }
-  showHistory.value = false
+  await _syncToBackend(session, true)
+}
+
+const getLastUserMessage = () => {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    const msg = messages.value[i]
+    if (msg.role === 'user' && !msg.isContextCarryOver) {
+      return msg
+    }
+  }
+  return null
+}
+
+const hasUploadedFileSummary = (msg: any) => {
+  return /\[已上传/.test(msg?.content || '')
+}
+
+const getMessageEditKey = (msg: any) => {
+  return msg?.client_message_id || `${msg?.timestamp || ''}:${msg?.content || ''}`
+}
+
+const isInlineEditingMessage = (msg: any) => {
+  return Boolean(inlineEditingKey.value && inlineEditingKey.value === getMessageEditKey(msg))
+}
+
+const clearInlineEdit = () => {
+  inlineEditingKey.value = ''
+  inlineEditText.value = ''
+  inlineEditTextareaRef.value = null
+  isComposing.value = false
+}
+
+const captureConversationState = (): ConversationStateSnapshot => ({
+  agentKey: getCurrentAgentKey(),
+  agentLabel: getAgentMeta().label,
+  sessionType: getAgentMeta().sessionType,
+  agentMode,
+  selectedMode: selectedMode.value,
+  businessType: businessType.value,
+  inlineFormData: inlineFormData.value ? clonePlain(inlineFormData.value) : null,
+  draftSavedOrderId: draftSavedOrderId.value,
+  showConfirmation: showConfirmation.value,
+  confirmOrderNumber: confirmOrderNumber.value,
+  confirmOrderType: confirmOrderType.value,
+  submittedFilesLength: submittedFiles.value.length,
+  submittedFiles: clonePlain(submittedFiles.value),
+  uploadedFiles: clonePlain(uploadedFiles.value),
+  inputMsg: inputMsg.value,
+  orderSubmitCompleted: orderSubmitCompleted.value,
+  routeFullPath: route.fullPath,
+})
+
+const cancelGeneratedDraftIfNeeded = async (snapshot?: ConversationStateSnapshot) => {
+  const currentDraftId = draftSavedOrderId.value
+  if (!currentDraftId || currentDraftId === snapshot?.draftSavedOrderId) return
+  try {
+    await orderApi.updateOrderStatus(currentDraftId, 'cancelled' as OrderStatus)
+  } catch (e) {
+    console.warn('[AIChat] 自动草稿取消失败:', e)
+  }
+}
+
+const restoreConversationState = async (snapshot?: ConversationStateSnapshot) => {
+  clearInlineEdit()
+  await cancelGeneratedDraftIfNeeded(snapshot)
+  selectedMode.value = snapshot?.selectedMode ?? null
+  businessType.value = snapshot?.businessType || 'ai_3d_custom'
+  inlineFormData.value = snapshot?.inlineFormData ? clonePlain(snapshot.inlineFormData) : null
+  draftSavedOrderId.value = snapshot?.draftSavedOrderId ?? null
+  showConfirmation.value = snapshot?.showConfirmation ?? false
+  confirmOrderNumber.value = snapshot?.confirmOrderNumber || ''
+  confirmOrderType.value = snapshot?.confirmOrderType || 'ai_3d_custom'
+  orderSubmitCompleted.value = snapshot?.orderSubmitCompleted ?? false
+  submittedFiles.value = snapshot?.submittedFiles
+    ? clonePlain(snapshot.submittedFiles)
+    : submittedFiles.value.slice(0, snapshot?.submittedFilesLength ?? submittedFiles.value.length)
+  uploadedFiles.value = snapshot?.uploadedFiles ? clonePlain(snapshot.uploadedFiles) : []
+  inputMsg.value = snapshot?.inputMsg || ''
+  emit('mode-change', selectedMode.value)
+}
+
+const restoreSavedSessionState = async (session: SavedSession) => {
+  clearInlineEdit()
+  const snapshot = session.stateSnapshot as ConversationStateSnapshot | undefined
+  const agentKey = session.agentKey || snapshot?.agentKey || 'general'
+  const agentMeta = getAgentMeta(agentKey)
+
+  selectedMode.value = snapshot?.selectedMode ?? session.mode ?? agentMeta.selectedMode
+  businessType.value = snapshot?.businessType || session.businessType || agentMeta.businessType || 'ai_3d_custom'
+  inlineFormData.value = snapshot?.inlineFormData ? clonePlain(snapshot.inlineFormData) : null
+  draftSavedOrderId.value = snapshot?.draftSavedOrderId ?? null
+  showConfirmation.value = snapshot?.showConfirmation ?? false
+  confirmOrderNumber.value = snapshot?.confirmOrderNumber || ''
+  confirmOrderType.value = snapshot?.confirmOrderType || (businessType.value as OrderType) || 'ai_3d_custom'
+  orderSubmitCompleted.value = snapshot?.orderSubmitCompleted ?? false
+  submittedFiles.value = snapshot?.submittedFiles ? clonePlain(snapshot.submittedFiles) : []
+  uploadedFiles.value = snapshot?.uploadedFiles ? clonePlain(snapshot.uploadedFiles) : []
+  inputMsg.value = snapshot?.inputMsg || ''
+
+  isLoading.value = false
+  isTyping.value = false
+  extractLoading.value = false
+  isUploadingFiles.value = false
+  failedUploadNames.value = []
+  emit('mode-change', selectedMode.value)
+  await nextTick()
+  adjustTextareaHeight()
+}
+
+const canModifyLastUserMessage = (msg: any) => {
+  if (!msg || msg.role !== 'user') return false
+  if (!msg.stateBeforeSend) return false
+  const snapshot = msg.stateBeforeSend as ConversationStateSnapshot
+  if (snapshot.routeFullPath && snapshot.routeFullPath !== route.fullPath) return false
+  if (orderSubmitCompleted.value) return false
+  if (isLoading.value || isTyping.value || extractLoading.value || isUploadingFiles.value || showConfirmation.value) return false
+  if (hasUploadedFileSummary(msg)) return false
+  return getLastUserMessage() === msg
+}
+
+const truncateFromMessage = async (msg: any) => {
+  const idx = messages.value.findIndex(m => m === msg)
+  if (idx < 0) return false
+  const snapshot = msg.stateBeforeSend as ConversationStateSnapshot | undefined
+  messages.value = messages.value.slice(0, idx)
+  await restoreConversationState(snapshot)
+  return true
+}
+
+const editLastUserMessage = async (msg: any) => {
+  await startInlineEdit(msg)
+}
+
+const startInlineEdit = async (msg: any) => {
+  if (hasUploadedFileSummary(msg)) {
+    ElMessage.warning('包含上传文件的消息暂不支持编辑')
+    return
+  }
+  if (!canModifyLastUserMessage(msg)) return
+  inlineEditingKey.value = getMessageEditKey(msg)
+  inlineEditText.value = displayUserMessageText(msg.content || '')
+  await nextTick()
+  adjustInlineEditHeight()
+  const ta = inlineEditTextareaRef.value
+  if (ta) {
+    ta.focus()
+    const end = ta.value.length
+    ta.setSelectionRange(end, end)
+  }
+}
+
+const cancelInlineEdit = () => {
+  clearInlineEdit()
+}
+
+const submitInlineEdit = async (msg: any) => {
+  if (!isInlineEditingMessage(msg)) return
+  if (!canModifyLastUserMessage(msg)) {
+    clearInlineEdit()
+    return
+  }
+
+  const editedText = inlineEditText.value.trim()
+  if (!editedText) {
+    ElMessage.warning('编辑内容不能为空')
+    await nextTick()
+    inlineEditTextareaRef.value?.focus()
+    return
+  }
+
+  if (editedText === displayUserMessageText(msg.content || '').trim()) {
+    clearInlineEdit()
+    return
+  }
+
+  if (!(await truncateFromMessage(msg))) return
+  clearInlineEdit()
+  await syncConversationReplace()
+  inputMsg.value = editedText
+  await nextTick()
+  await sendMessage()
+}
+
+const handleInlineEditEnter = (e: KeyboardEvent, msg: any) => {
+  if (e.shiftKey) return
+  if (e.isComposing || isComposing.value) return
+  e.preventDefault()
+  submitInlineEdit(msg)
+}
+
+const revokeLastUserMessage = async (msg: any) => {
+  if (hasUploadedFileSummary(msg)) {
+    ElMessage.warning('包含上传文件的消息暂不支持撤回')
+    return
+  }
+  if (!canModifyLastUserMessage(msg)) return
+  if (!(await truncateFromMessage(msg))) return
+  clearInlineEdit()
+  inputMsg.value = ''
+  await syncConversationReplace()
+  ElMessage.success('已撤回最后一条消息')
+}
+
+const restoreHistoryById = async (id: string) => {
+  if (!id) return
+  if (id === session_id.value) {
+    uiStore.clearPendingAIChatSession()
+    uiStore.setActiveAIChatSession(id)
+    return
+  }
+
+  saveCurrentToHistory({ force: true })
+  loadSavedHistory()
+  let history = savedHistories.value.find(session => session.id === id)
+  if (!history) {
+    history = await loadBackendHistoryById(id) || undefined
+  }
+  if (!history) {
+    uiStore.clearPendingAIChatSession()
+    return
+  }
+
+  session_id.value = history.id
+  messages.value = clonePlain(history.messages || [])
+  await restoreSavedSessionState(history)
+  uiStore.setActiveAIChatSession(history.id)
+  uiStore.clearPendingAIChatSession()
   scrollToBottom(true) // 恢复历史时瞬间到底，不要用平滑动画，否则容易卡在最上面
-}
-
-const deleteHistory = (id: string) => {
-  const index = savedHistories.value.findIndex(h => h.id === id)
-  if (index === -1) return
-  savedHistories.value.splice(index, 1)
-  localStorage.setItem(getHistoryKey(), JSON.stringify(savedHistories.value))
-  if (savedHistories.value.length === 0) {
-    showHistory.value = false
-  }
 }
 
 const displayContent = (text: string) => {
   if (!text) return ''
   return text.replace(/【推荐案例:case_\w+】/g, '').replace(/【引导下单(?::[^】]+)?】/g, '').trim()
+}
+
+const isPendingAssistantMessage = (msg: any, index: number) => {
+  if (!msg || msg.role !== 'assistant') return false
+  if ((msg.content || '').trim()) return false
+  return isTyping.value && index === displayedMessages.value.length - 1
 }
 
 // 高亮搜索关键词
@@ -1252,6 +1698,7 @@ const typewriterEffect = (fullText: string, onComplete?: () => void | Promise<vo
       
       ;(async () => {
         if (onComplete) await onComplete()
+        saveCurrentToHistory({ force: true, syncBackend: false })
         await syncCurrentConversationToBackend()
       })()
     }
@@ -1264,8 +1711,7 @@ watch(() => messages.value.length, scrollToBottom)
 watch(() => isLoading.value, scrollToBottom)
 
 const getCurrentTime = () => {
-  const now = new Date()
-  return now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  return formatServerShortTime(new Date().toISOString())
 }
 
 // ===== 订单展示辅助函数 =====
@@ -1282,45 +1728,14 @@ const getStatusText = (status: string) => {
 
 const getTypeText = (type: string) => {
   const map: Record<string, string> = {
-    video_purchase: '裸眼3D成片购买适配',
-    ai_3d_custom: 'AI裸眼3D内容定制',
-    digital_art: '数字艺术内容定制'
+    video_purchase: '3D OOH数字内容资源库',
+    ai_3d_custom: 'AI驱动3D OOH内容定制',
+    digital_art: '数字艺术与沉浸式视觉设计',
+    motion_content: '广告视觉与动态影像制作',
+    media_post_production: '户外媒体后期制作服务',
+    campaign_analytics: '广告投放分析与效果报告'
   }
   return map[type] || type
-}
-
-// 从用户文字中检测下单意图，返回对应的 businessType 或 null
-const _detectBusinessTypeFromText = (text: string): string | null => {
-  const lower = text.toLowerCase()
-
-  // 必须有下单意愿信号词
-  const intentWords = [
-    '想做', '想定制', '想下单', '要做', '要定制', '开始', '下单',
-    '定制', '做一个', '做个', '需要', '想要', '来一个', '搞一个',
-    '试试', '选', '就这个', '就选', '可以开始',
-  ]
-  const hasIntent = intentWords.some(w => lower.includes(w))
-
-  // 即使没有明确意愿词，直接说业务名称也算（如"AI裸眼3D内容定制"）
-  const directNames: Record<string, string> = {
-    'ai裸眼3d内容定制': 'ai_3d_custom',
-    '裸眼3d成片购买适配': 'video_purchase',
-    '数字艺术内容定制': 'digital_art',
-    '裸眼3d内容定制': 'ai_3d_custom',
-    '成片购买适配': 'video_purchase',
-  }
-  for (const [name, type] of Object.entries(directNames)) {
-    if (lower.includes(name)) return type
-  }
-
-  if (!hasIntent) return null
-
-  // 业务类型关键词匹配
-  if (/裸眼3d|裸眼3D|3d定制|3D定制|3d内容|3D内容|裸眼.*定制/.test(text)) return 'ai_3d_custom'
-  if (/成片|购买|模板|现成|成品|买/.test(text)) return 'video_purchase'
-  if (/数字艺术|数字.*艺术|沉浸|互动|装置|投影/.test(text)) return 'digital_art'
-
-  return null
 }
 
 const getOrderStep = (status: string) => {
@@ -1357,52 +1772,117 @@ const getProgressWidth = (status: string) => {
 }
 
 const formatOrderDate = (dateStr: string) => {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return formatServerMonthDayTime(dateStr, '')
 }
 
-// 从业务介绍切换到下单 Agent
-const switchToOrderCreate = (type: string = 'ai_3d_custom', requirementSummary: string = '') => {
+const activateOrderCreateFromGuide = (type: string = 'ai_3d_custom', requirementSummary: string = '') => {
   businessType.value = type
   selectedMode.value = 'order_create'
   emit('mode-change', 'order_create')
 
-  const typeLabels: Record<string, string> = {
-    ai_3d_custom: 'AI裸眼3D内容定制',
-    video_purchase: '裸眼3D成片购买适配',
-    digital_art: '数字艺术内容定制',
-  }
-  const label = typeLabels[type] || typeLabels.ai_3d_custom
-
-  let openingMsg = ''
   if (requirementSummary) {
-    // 有需求摘要：带上客户已描述的信息
-    openingMsg = `好的，根据您的描述，我为您匹配的是「${label}」服务。\n\n您已提到的需求：${requirementSummary}\n\n让我来帮您进一步完善剩余信息。`
-    // 将摘要信息也作为一条用户消息插入，让需求收集 agent 知道上下文
     messages.value.push({
       role: 'user',
       content: `[用户在业务咨询时描述的需求：${requirementSummary}]`,
       timestamp: getCurrentTime(),
-      isContextCarryOver: true  // 标记为上下文携带，不是用户真正输入
+      isContextCarryOver: true
     })
-  } else {
-    const openings: Record<string, string> = {
-      ai_3d_custom: isMediaMode
-        ? `好的，我来协助您完成这次项目的需求梳理。\n\n我们大致会从基础信息、创意方向、技术与交付三个环节来聊。我先了解一下整体想法，后面再逐步补齐点位、屏幕规格和交付要求；暂时不确定的内容也可以先跳过。\n\n您可以先说说这次大概想做什么内容，或者希望这块屏达到什么效果。`
-        : `好的，我们进入${label}的需求梳理环节。\n\n我们先从基础信息开始：这次项目是哪个品牌或产品？`,
-      video_purchase: `好的，我们进入${label}的需求梳理环节。\n\n首先想确认一下：您的品牌名称是什么？这样我们可以在成片上做对应的品牌元素适配。`,
-      digital_art: `好的，我们进入${label}的需求梳理环节。\n\n首先想了解一下：这次项目的品牌或活动名称是什么？`,
+  }
+}
+
+// 从业务介绍切换到下单 Agent。可见话术统一由后端 /ai/start 输出。
+const switchToOrderCreate = async (type: string = 'ai_3d_custom') => {
+  activateOrderCreateFromGuide(type)
+  isLoading.value = true
+  try {
+    const params = new URLSearchParams({
+      session_id: session_id.value,
+      business_type: type,
+    })
+    const response = await fetch(`/ai/start?${params.toString()}`, {
+      headers: getAuthHeaders()
+    })
+    if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
+      throw new Error('API not available')
     }
-    openingMsg = openings[type] || openings.ai_3d_custom
+    const result = await response.json()
+    if (result.reply) typewriterEffect(result.reply)
+  } catch (e) {
+    typewriterEffect('已进入需求梳理流程。我会从基础信息、创意方向、技术与交付几方面帮助您梳理。您可以先简单说说，这次大概想做什么样的内容？')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const isLikelyOrderCreateRequest = (text: string) => {
+  const normalized = (text || '').replace(/\s+/g, '')
+  if (!normalized) return false
+  const hasOrderQueryContext = /(查询|查看|进度|状态|历史|下过|已下|之前|下单后|订单)/.test(normalized)
+
+  const directCreatePatterns = [
+    /想下单|我要下单|要下单|帮我下单|开始下单|咨询下单/,
+    /创建需求|提交需求|需求单|创建订单|提交订单/,
+  ]
+  if (directCreatePatterns.some(pattern => pattern.test(normalized))) return true
+
+  if (hasOrderQueryContext) return false
+
+  const broadCreatePatterns = [
+    /想做|要做|做一个|做个|需要做|想要做|可以开始/,
+    /定制|想定制|要定制/,
+    /我要买|想买|购买|买一个|买个|买套|成片|模板|现成|成品/,
+  ]
+  if (broadCreatePatterns.some(pattern => pattern.test(normalized))) return true
+
+  return /下单/.test(normalized)
+}
+
+const isLikelyBusinessIntroRequest = (text: string) => {
+  const normalized = (text || '').replace(/\s+/g, '')
+  if (!normalized) return false
+  if (/(订单|进度|状态|查询|查看|历史|下过|已下)/.test(normalized)) return false
+  return /了解|介绍|业务|案例|服务|你们做什么|什么公司|你们公司/.test(normalized)
+}
+
+const classifyMessageRoute = async (message: string) => {
+  try {
+    const response = await fetch('/ai/classify', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ message })
+    })
+    if (!response.ok) return null
+    return await response.json()
+  } catch (e) {
+    return null
+  }
+}
+
+const rerouteFromOrderQueryIfNeeded = async (messageContent: string, userMessageId: string) => {
+  if (selectedMode.value !== 'order_query') return false
+
+  const shouldCreateOrder = isLikelyOrderCreateRequest(messageContent)
+  const shouldIntroduceBusiness = !shouldCreateOrder && isLikelyBusinessIntroRequest(messageContent)
+  if (!shouldCreateOrder && !shouldIntroduceBusiness) return false
+
+  isLoading.value = true
+  const classified = await classifyMessageRoute(messageContent)
+  if (classified?.business_type) businessType.value = classified.business_type
+
+  if (shouldCreateOrder) {
+    businessType.value = classified?.business_type || businessType.value || 'ai_3d_custom'
+    selectedMode.value = 'order_create'
+    emit('mode-change', 'order_create')
+    logger.logAction('AI', 'order_query_rerouted', { intent: 'order_create', businessType: businessType.value, sessionId: session_id.value })
+    await handleCustomAiChat(messageContent, userMessageId)
+    return true
   }
 
-  messages.value.push({
-    role: 'assistant',
-    content: openingMsg,
-    timestamp: getCurrentTime()
-  })
-  scrollToBottom()
+  selectedMode.value = 'business_intro'
+  emit('mode-change', 'business_intro')
+  logger.logAction('AI', 'order_query_rerouted', { intent: 'business_intro', sessionId: session_id.value })
+  await handleBusinessIntro(messageContent)
+  return true
 }
 
 const selectMode = async (mode: string) => {
@@ -1422,7 +1902,7 @@ const selectMode = async (mode: string) => {
       const result = await response.json()
       if (result.reply) typewriterEffect(result.reply)
     } catch (e) {
-      const fallback = '您好，我是 Unique Video AI 的项目顾问。\n\n请描述您的项目需求，包括品牌名称、内容方向、预算和时间节点等关键信息。我将协助您完成完整的需求梳理。\n\n**首先，请告知您的项目背景。**'
+      const fallback = '您好，我是 Unique Vision AI 的项目顾问。\n\n我可以协助您梳理项目需求、确认关键制作信息，并在信息完整后生成需求单。\n\n请先简单介绍这次项目的背景、投放场景或内容方向。'
       typewriterEffect(fallback)
     } finally {
       isLoading.value = false
@@ -1466,10 +1946,10 @@ const selectMode = async (mode: string) => {
       })
       if (!response.ok) throw new Error('intro failed')
       const data = await response.json()
-      const cleanMsg = (data.message || '').replace('【引导下单】', '').trim()
+      const cleanMsg = (data.message || '').replace(/【引导下单(?::[^】]+)?】/g, '').trim()
       typewriterEffect(cleanMsg)
     } catch (e) {
-      const fallback = 'Unique Video AI 提供三大核心业务板块：\n\n**裸眼3D成片购买适配** — 上百款精选模板，5个工作日交付\n**AI裸眼3D内容定制** — 品牌专属定制，15个工作日交付\n**数字艺术内容定制** — 沉浸式互动体验，7个工作日交付\n\n如需了解某个板块的详细信息或过往案例，请直接告知。'
+      const fallback = 'Unique Vision AI 提供六大平台服务：\n\n**3D OOH数字内容资源库**\nReady-to-Deploy 3D DOOH Assets：即用型裸眼3D数字内容资产\nScreen-Adaptive Content Packages：多屏适配内容方案\nGlobal Landmark Screen Formats：全球地标大屏内容规格适配\n\n**AI驱动3D OOH内容定制**\nAI-Based Creative Development：AI创意内容开发\nSite-Specific 3D Screen Adaptation：场景化裸眼3D空间适配\nReal-World Playback Simulation：真实环境播放模拟\nEnd-to-End DOOH Content Production：一站式DOOH内容制作\n\n**数字艺术与沉浸式视觉设计**\nArt Direction & Visual Design：艺术指导与视觉设计\nVirtual Installation Art：虚拟装置艺术\nImmersive Spatial Visuals：沉浸式空间视觉\nExperimental Digital Art Content：实验性数字艺术内容\n\n**广告视觉与动态影像制作**\nStatic Advertising Visuals：平面广告视觉设计\nTVC Production：TVC广告影片制作\nFOOH Campaign Content：FOOH数字传播内容\nVJ Visual Performance Content：VJ视觉演出内容\nMotion Graphic Design：动态视觉设计\n\n**户外媒体后期制作服务**\nHigh-End Retouching：高端精修图像处理\nCinematic Video Finishing：电影级视频精修\nCGI Enhancement：CGI视觉增强\nCommercial Photography & Filming：商业摄影与视频拍摄\nDrone Cinematography：航拍影像制作\n\n**广告投放分析与效果报告**\nDOOH Campaign Analytics：DOOH广告投放数据分析\nAudience Performance Reports：受众效果分析报告\nVisual Impact Assessment：视觉传播效果评估\nDownloadable Data Reports：可下载数据报告系统\n\n如需了解某个板块的详细信息，或需要项目资料支持，我可以为您衔接咨询顾问。'
       typewriterEffect(fallback)
     } finally {
       isLoading.value = false
@@ -1487,6 +1967,12 @@ const goToBrowse = (type: string) => {
 
 const sendMessage = async () => {
   if (isLoading.value || isTyping.value) return
+  if (inlineEditingKey.value) {
+    ElMessage.warning('请先完成或取消当前消息编辑')
+    await nextTick()
+    inlineEditTextareaRef.value?.focus()
+    return
+  }
   if (isUploadingFiles.value) {
     ElMessage.warning('文件仍在上传中，请稍候再发送')
     return
@@ -1504,13 +1990,22 @@ const sendMessage = async () => {
   }
 
   const messageContent = buildUserMessageContent(userText, pendingFiles)
+  const stateBeforeSend = captureConversationState()
   const userMessageId = createMessageId('user')
-  messages.value.push({ client_message_id: userMessageId, role: 'user', content: messageContent, timestamp: getCurrentTime() })
+  messages.value.push({
+    client_message_id: userMessageId,
+    role: 'user',
+    content: messageContent,
+    timestamp: getCurrentTime(),
+    attachments: pendingFiles.length ? pendingFiles : undefined,
+    stateBeforeSend,
+  })
   inputMsg.value = ''
   if (pendingFiles.length > 0) {
     submittedFiles.value.push(...pendingFiles)
     uploadedFiles.value = []
   }
+  saveCurrentToHistory({ force: true, syncBackend: false })
   logger.logAction('AI', 'send_message', { mode: selectedMode.value, textLength: userText.length, fileCount: pendingFiles.length })
   
   if (textareaRef.value) {
@@ -1527,7 +2022,8 @@ const sendMessage = async () => {
         body: JSON.stringify({ message: messageContent })
       })
       if (classifyRes.ok) {
-        const { intent } = await classifyRes.json()
+        const { intent, business_type } = await classifyRes.json()
+        if (business_type) businessType.value = business_type
         selectedMode.value = intent
         emit('mode-change', intent)
       } else {
@@ -1550,27 +2046,26 @@ const sendMessage = async () => {
   }
   
   // 根据当前意图路由到对应 handler
-  // 跨模式拦截：任何模式下用户问案例，都走 business_intro（它有真实案例库）
-  const _caseKeywords = ['案例', '作品', '看看你们做过', '之前做过', '过往项目', '成功案例', '看看案例', '展示一下']
-  if (_caseKeywords.some(kw => messageContent.includes(kw))) {
-    // 标记用户的案例请求消息，避免污染需求收集上下文
-    const lastUserMsg = messages.value[messages.value.length - 1]
-    if (lastUserMsg && lastUserMsg.role === 'user') lastUserMsg.isCaseDetour = true
-    await handleBusinessIntro(messageContent, true)
-  } else if (selectedMode.value === 'order_create') {
+
+  if (isHumanHandoffRequest(messageContent)) {
+    selectedMode.value = 'order_create'
+    emit('mode-change', 'order_create')
+    await handleCustomAiChat(messageContent, userMessageId)
+    return
+  }
+
+  if (await rerouteFromOrderQueryIfNeeded(messageContent, userMessageId)) {
+    return
+  }
+
+  if (selectedMode.value === 'order_create') {
     await handleCustomAiChat(messageContent, userMessageId)
   } else if (selectedMode.value === 'order_query') {
     await handleOrderQuery(messageContent)
   } else if (selectedMode.value === 'business_intro') {
-    // 检测用户是否通过文字表达了下单意图，自动切换到对应业务的需求收集
-    const detectedType = _detectBusinessTypeFromText(messageContent)
-    if (detectedType) {
-      switchToOrderCreate(detectedType)
-    } else {
-      await handleBusinessIntro(messageContent)
-    }
+    await handleBusinessIntro(messageContent)
   } else {
-    await handleGeneral(messageContent)
+    await handleGeneral(messageContent, userMessageId)
   }
 }
 
@@ -1614,7 +2109,7 @@ const goToOrderDetail = (orderId: string) => {
 }
 
 // ===== 业务介绍 handler =====
-const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = false) => {
+const handleBusinessIntro = async (userText: string) => {
   isLoading.value = true
   try {
     const historyMsgs = messages.value
@@ -1627,46 +2122,28 @@ const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = fal
     })
     if (!response.ok) throw new Error('intro failed')
     const data = await response.json()
+    if (data.business_type) businessType.value = data.business_type
     const replyContent = data.message || ''
     // 显示时清洗掉内部标记
-    const cleanMsg = replyContent.replace(/【推荐案例:case_\w+】/g, '').replace('【引导下单】', '').trim()
-    const cases = data.cases || []
+    const cleanMsg = replyContent.replace(/【推荐案例:case_\w+】/g, '').replace(/【引导下单(?::[^】]+)?】/g, '').trim()
     
     typewriterEffect(cleanMsg, () => {
-      // 打字结束后，用原始内容（含案例标记）覆盖 content
-      // 这样下一轮历史发给 LLM 时，它能看到之前推荐过哪些案例
       const lastMsg = messages.value[messages.value.length - 1]
       if (lastMsg && lastMsg.role === 'assistant') {
         lastMsg.content = replyContent
-      }
-      // 标记案例回复，避免污染需求收集上下文
-      if (isCaseDetour) {
-        const lastAssistantMsg = messages.value[messages.value.length - 1]
-        if (lastAssistantMsg && lastAssistantMsg.role === 'assistant') lastAssistantMsg.isCaseDetour = true
-      }
-      // 如果有案例数据，附加到当前消息上（与订单卡片同理）
-      if (cases.length > 0) {
-        const lastMsg = messages.value[messages.value.length - 1]
-        if (lastMsg && lastMsg.role === 'assistant') {
-          lastMsg.isCaseList = true
-          lastMsg.cases = cases
-        }
-        scrollToBottom()
       }
       // 如果 AI 建议引导下单
       const guide = data.guide || {}
       if (guide.should_guide) {
         if (guide.business_type && guide.requirement_summary) {
-          // 有明确业务类型和需求摘要：直接跳转并携带上下文
-          switchToOrderCreate(guide.business_type, guide.requirement_summary)
+          // 后端已经输出了可见引导语，前端只切换状态并携带隐藏上下文。
+          activateOrderCreateFromGuide(guide.business_type, guide.requirement_summary)
         } else {
-          // 没有明确业务类型：展示三个快速入口供用户选择
-          messages.value.push({
-            role: 'assistant',
-            content: '如您已有初步的项目构想，可以进入需求梳理流程，由我协助您完成订单创建。',
-            isGuideToOrder: true,
-            timestamp: getCurrentTime()
-          })
+          // 后端已经输出了可见引导语，前端只把业务选择按钮挂到同一条消息上。
+          const lastGuideMsg = messages.value[messages.value.length - 1]
+          if (lastGuideMsg && lastGuideMsg.role === 'assistant') {
+            lastGuideMsg.isGuideToOrder = true
+          }
           scrollToBottom()
         }
       }
@@ -1680,7 +2157,35 @@ const handleBusinessIntro = async (userText: string, isCaseDetour: boolean = fal
 }
 
 // ===== 通用问答 handler =====
-const handleGeneral = async (userText: string) => {
+const routeByBackendIntent = async (data: any, userText: string, userMessageId?: string) => {
+  const intent = data?.intent
+  const routedBusinessType = data?.business_type
+  if (intent === 'order_create') {
+    businessType.value = routedBusinessType || businessType.value || 'ai_3d_custom'
+    selectedMode.value = 'order_create'
+    emit('mode-change', 'order_create')
+    logger.logAction('AI', 'backend_route_detected', { intent, businessType: businessType.value, sessionId: session_id.value })
+    await handleCustomAiChat(userText, userMessageId)
+    return true
+  }
+  if (intent === 'order_query') {
+    selectedMode.value = 'order_query'
+    emit('mode-change', 'order_query')
+    logger.logAction('AI', 'backend_route_detected', { intent, sessionId: session_id.value })
+    await handleOrderQuery(userText)
+    return true
+  }
+  if (intent === 'business_intro') {
+    selectedMode.value = 'business_intro'
+    emit('mode-change', 'business_intro')
+    logger.logAction('AI', 'backend_route_detected', { intent, sessionId: session_id.value })
+    await handleBusinessIntro(userText)
+    return true
+  }
+  return false
+}
+
+const handleGeneral = async (userText: string, userMessageId?: string) => {
   isLoading.value = true
   try {
     const historyMsgs = messages.value
@@ -1693,136 +2198,272 @@ const handleGeneral = async (userText: string) => {
     })
     if (!response.ok) throw new Error('general failed')
     const data = await response.json()
+    if (await routeByBackendIntent(data, userText, userMessageId)) return
     typewriterEffect(data.message || '感谢您的提问！')
   } catch (e) {
-    const fallback = '我是 Unique Video AI 的项目顾问。\n\n我可以协助您咨询下单、查看订单或了解我们的业务。请问您需要哪方面的支持？'
+    const fallback = '我是 Unique Vision AI 的项目顾问。\n\n我可以协助您梳理项目需求、查询订单进展，或介绍平台服务体系。请问您需要哪方面的支持？'
     typewriterEffect(fallback)
   } finally {
     isLoading.value = false
   }
 }
 
+const cleanRequirementReply = (text: string = '') => {
+  const controlMarkers = ['【需求收集完成】', HUMAN_HANDOFF_MARKER]
+  let cleaned = text
+  for (const marker of controlMarkers) {
+    cleaned = cleaned.replace(new RegExp(marker, 'g'), '')
+  }
+  for (const marker of controlMarkers) {
+    for (let i = 1; i < marker.length; i += 1) {
+      const prefix = marker.slice(0, i)
+      if (cleaned.endsWith(prefix)) {
+        cleaned = cleaned.slice(0, -prefix.length)
+        break
+      }
+    }
+  }
+  return cleaned.trim()
+}
+
+const findAssistantMessage = (assistantMessageId?: string) => {
+  if (assistantMessageId) {
+    const byId = messages.value.find(m => m.client_message_id === assistantMessageId)
+    if (byId && byId.role === 'assistant') return byId
+  }
+  const lastMsg = messages.value[messages.value.length - 1]
+  return lastMsg && lastMsg.role === 'assistant' ? lastMsg : null
+}
+
+const applyCustomAiChatFinalState = async (data: any, replyContent: string, assistantMessageId?: string) => {
+  const isHumanHandoff = Boolean(data?.handoff) || replyContent.includes(HUMAN_HANDOFF_MARKER)
+  const userMsgCount = messages.value.filter(m => m.role === 'user').length
+  const shouldComplete = !isHumanHandoff && replyContent.includes('【需求收集完成】') && userMsgCount >= 3
+  const assistantMsg = findAssistantMessage(assistantMessageId)
+
+  if (assistantMsg) {
+    assistantMsg.content = cleanRequirementReply(replyContent)
+  }
+
+  if (isHumanHandoff) {
+    if (assistantMsg) {
+      assistantMsg.isHumanHandoff = true
+      assistantMsg.formHidden = true
+    }
+    if (data?.draft_order_id) {
+      draftSavedOrderId.value = data.draft_order_id
+      await orderStore.fetchOrders()
+    }
+    return
+  }
+
+  if (shouldComplete) {
+    if (assistantMsg) {
+      assistantMsg.isCompletePrompt = true
+    }
+    await autoExtractAndSaveDraft()
+  }
+}
+
+const buildRequirementChatPayload = (userText: string, userMessageId?: string, assistantMessageId?: string) => {
+  const historyMessages = messages.value.slice(0, messages.value.length - 1)
+  const formattedHistory = historyMessages
+    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .map(m => ({ role: m.role, content: m.content }))
+
+  return {
+    session_id: session_id.value,
+    message: userText,
+    history: formattedHistory,
+    business_type: businessType.value,
+    user_message_id: userMessageId,
+    assistant_message_id: assistantMessageId
+  }
+}
+
+const handleCustomAiChatJson = async (userText: string, userMessageId?: string, assistantMessageId?: string) => {
+  const response = await fetch('/ai/chat', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(buildRequirementChatPayload(userText, userMessageId, assistantMessageId))
+  })
+
+  if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
+    throw new Error('API not available, fallback to user-visible error')
+  }
+
+  const data = await response.json()
+  const replyContent = data.message || data.answer || '处理成功'
+  typewriterEffect(cleanRequirementReply(replyContent), async () => {
+    await applyCustomAiChatFinalState(data, replyContent, assistantMessageId)
+  }, assistantMessageId)
+}
+
+const handleCustomAiChatStream = async (userText: string, userMessageId?: string, assistantMessageId?: string) => {
+  const response = await fetch('/ai/chat/stream', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(buildRequirementChatPayload(userText, userMessageId, assistantMessageId))
+  })
+
+  if (!response.ok || response.headers.get('content-type')?.includes('text/html') || !response.body) {
+    throw new Error('stream API not available')
+  }
+
+  const msgIndex = messages.value.length
+  messages.value.push({
+    client_message_id: assistantMessageId || createMessageId('assistant'),
+    role: 'assistant',
+    content: '',
+    timestamp: getCurrentTime()
+  })
+  isLoading.value = false
+  isTyping.value = true
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let rawReply = ''
+  let sawDelta = false
+  let sawThinking = false
+  let finalReceived = false
+
+  const dispatchEvent = async (block: string) => {
+    if (!block.trim()) return
+    let eventName = 'message'
+    const dataLines: string[] = []
+    for (const line of block.split(/\r?\n/)) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim()
+      if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart())
+    }
+    if (dataLines.length === 0) return
+    const data = JSON.parse(dataLines.join('\n'))
+
+    if (eventName === 'delta') {
+      const chunk = data.content || ''
+      if (!chunk) return
+      rawReply += chunk
+      sawDelta = true
+      const msg = messages.value[msgIndex]
+      if (msg && msg.role === 'assistant') {
+        msg.isThinkingStatus = false
+        msg.content = cleanRequirementReply(rawReply)
+      }
+      scrollToBottom()
+      return
+    }
+
+    if (eventName === 'thinking') {
+      if (sawDelta) return
+      sawThinking = true
+      const msg = messages.value[msgIndex]
+      if (msg && msg.role === 'assistant') {
+        msg.isThinkingStatus = true
+        msg.content = data.label || '正在梳理设计与策划思路，可能需要稍长时间'
+      }
+      scrollToBottom()
+      return
+    }
+
+    if (eventName === 'final') {
+      const replyContent = data.message || rawReply
+      const msg = messages.value[msgIndex]
+      if (msg && msg.role === 'assistant') {
+        msg.isThinkingStatus = false
+        msg.content = cleanRequirementReply(replyContent)
+      }
+      await applyCustomAiChatFinalState(data, replyContent, assistantMessageId)
+      finalReceived = true
+      return
+    }
+
+    if (eventName === 'error') {
+      throw new Error(data.detail || 'stream failed')
+    }
+  }
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const blocks = buffer.split(/\n\n/)
+      buffer = blocks.pop() || ''
+      for (const block of blocks) {
+        await dispatchEvent(block)
+      }
+    }
+    buffer += decoder.decode()
+    if (buffer.trim()) {
+      await dispatchEvent(buffer)
+    }
+    if (!finalReceived) {
+      throw new Error('stream ended before final event')
+    }
+    isTyping.value = false
+    scrollToBottom()
+    nextTick(() => textareaRef.value?.focus())
+    saveCurrentToHistory({ force: true, syncBackend: false })
+    await syncCurrentConversationToBackend()
+    return true
+  } catch (error) {
+    isTyping.value = false
+    isLoading.value = false
+    logger.logAction('AI', 'chat_stream_failed', { mode: selectedMode.value, businessType: businessType.value, sessionId: session_id.value })
+    if (!sawDelta) {
+      const msg = messages.value[msgIndex]
+      if (msg && msg.role === 'assistant' && (!msg.content || sawThinking)) {
+        messages.value.splice(msgIndex, 1)
+      }
+      return false
+    }
+    const msg = messages.value[msgIndex]
+    if (msg && msg.role === 'assistant') {
+      msg.content = `${cleanRequirementReply(rawReply)}\n\n模型响应中断，请重新发送上一条内容，我会继续从当前上下文往下梳理。`.trim()
+    }
+    saveCurrentToHistory({ force: true, syncBackend: false })
+    await syncCurrentConversationToBackend()
+    return true
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
   isLoading.value = true
+  const assistantMessageId = createMessageId('assistant')
   try {
-    // 提取所有除当前这句（即最后一条）以外的历史记录
-    // 过滤掉案例浏览的消息，避免污染需求收集上下文
-    const historyMessages = messages.value.slice(0, messages.value.length - 1);
-    const formattedHistory = historyMessages
-      .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.isCaseDetour)
-      .map(m => ({ role: m.role, content: m.content }));
-
-    const assistantMessageId = createMessageId('assistant')
-    const response = await fetch('/ai/chat', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ 
-        session_id: session_id.value, 
-        message: userText,
-        history: formattedHistory,
-        business_type: businessType.value,
-        user_message_id: userMessageId,
-        assistant_message_id: assistantMessageId
-      })
-    })
-    
-    // 如果线上环境 Nginx 把请求拦截并回退给了 index.html 导致没报错而是 200 OK，我们需要手动抛出异常去触发降级
-    if (!response.ok || (response.headers.get('content-type') && response.headers.get('content-type')?.includes('text/html'))) {
-      throw new Error('API not available, fallback to mock')
-    }
-
-    const data = await response.json()
-    const replyContent = data.message || data.answer || '处理成功';
-    const cleanContent = replyContent.replace('【需求收集完成】', '').trim();
-    
-    // 前端兜底：至少3轮用户对话才允许触发完成
-    const userMsgCount = messages.value.filter(m => m.role === 'user').length;
-    const shouldComplete = replyContent.includes('【需求收集完成】') && userMsgCount >= 3;
-    
-    typewriterEffect(cleanContent, async () => {
-      if (shouldComplete) {
-        const lastMsg = messages.value[messages.value.length - 1]
-        if (lastMsg && lastMsg.role === 'assistant') {
-          lastMsg.isCompletePrompt = true
-        }
-        await autoExtractAndSaveDraft()
+    try {
+      const streamHandled = await handleCustomAiChatStream(userText, userMessageId, assistantMessageId)
+      if (streamHandled) {
+        return
       }
-    }, assistantMessageId)
+    } catch (streamError) {
+      logger.logAction('AI', 'chat_stream_unavailable', { mode: selectedMode.value, businessType: businessType.value, sessionId: session_id.value })
+    }
+    isLoading.value = true
+    await handleCustomAiChatJson(userText, userMessageId, assistantMessageId)
 
   } catch (error) {
-    // 降级兜底：前端 Mock 模拟对话收集需求（按一轮一个问题推进）
-    const userMsgCount = messages.value.filter(m => m.role === 'user').length;
-    
-    const mockReplies: Record<number, string> = isMediaMode ? {
-      1: '收到。接下来补一下基础信息：这块屏位于哪个城市和具体位置？',
-      2: '了解。这个媒体的基本情况如何？比如位置特点、日均客流或主要目标客群。',
-      3: '明白。这个媒体主要面向什么样的受众或场景？',
-      4: '清楚了。观众主要从哪个方向观看？有没有比较理想的观看点？',
-      5: '在视觉方向上，您期望什么样的艺术风格？比如未来科技、自然生态、城市文化或抽象艺术。',
-      6: '屏幕的分辨率和物理尺寸是多少？',
-      7: '预计什么时候需要上刊？',
-      8: '关于项目预算这块，目前有一个大致的范围吗？这样我可以帮您匹配更合适的制作方案。',
-      9: '核心需求信息已基本收集完毕。最后，如果您有现场实拍图、屏幕照片或其他参考素材，可以通过输入框左侧的上传按钮直接上传；如果暂时没有，我们就可以整理信息了。',
-    } : {
-      1: '好的，产品很有意思。为了让最终视觉效果更匹配，您期望这支视频想要打动哪类年轻受众呢？（比如在校学生、或者职场新人等）',
-      2: '明白。在视觉呈现上，您大概有什么特定的风格倾向吗？（比如赛博朋克、极简风，或者写实拟真都可以）',
-      3: '非常清晰。接下来想了解一下，您准备把这支内容具体投放在哪个城市或站点呢？',
-      4: '最后一个项目信息：您期望这支内容什么时候上线？',
-      5: '关于制作预算，目前有一个大致范围吗？这样我可以帮您推荐更合适的方案。',
-      6: '核心需求信息已基本收集完毕。最后，如果您有现场实拍图、屏幕照片或其他参考素材，可以通过输入框左侧的上传按钮直接上传；如果暂时没有，我们就可以整理信息了。',
-    }
-    
-    setTimeout(() => {
-      if (mockReplies[userMsgCount]) {
-        messages.value.push({ 
-          role: 'assistant', 
-          content: mockReplies[userMsgCount], 
-          timestamp: getCurrentTime() 
-        })
-        void syncCurrentConversationToBackend()
-      } else {
-        const summaryMsg = '需求信息收集完毕，正在为您生成项目评估...'
-        messages.value.push({ 
-          role: 'assistant', 
-          content: summaryMsg, 
-          timestamp: getCurrentTime(),
-          isCompletePrompt: true
-        })
-        // mock 数据填充表单
-        if (isMediaMode) {
-          inlineFormData.value = {
-            project_name: '示例媒体项目 (Mock)',
-            resource_background: '',
-            audience_scene: '',
-            city_location: '成都春熙路',
-            viewing_path: '',
-            art_direction: '未来科技',
-            theme_concept: '',
-            media_specs: '',
-            tech_delivery: '',
-            content_review: '',
-            budget: '60万',
-            online_time: '2026年6月',
-            special_requirements: ''
-          }
-        } else {
-          inlineFormData.value = {
-            brand: '示例品牌 (Mock)',
-            target_group: '年轻群体',
-            content: '裸眼3D视觉创意内容',
-            city: '北京',
-            budget: '10万以上',
-            online_time: '2026年6月',
-            background: '',
-            style: '科技感设计',
-            media_size: '',
-            technology: ''
-          }
+    if (isHumanHandoffRequest(userText)) {
+      typewriterEffect(HUMAN_HANDOFF_FALLBACK_REPLY, () => {
+        const lastMsg = messages.value[messages.value.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant') {
+          lastMsg.isHumanHandoff = true
+          lastMsg.formHidden = true
         }
-        void syncCurrentConversationToBackend()
-      }
-      isLoading.value = false
-    }, 1000)
+      })
+      return
+    }
+
+    logger.logAction('AI', 'chat_request_failed', { mode: selectedMode.value, businessType: businessType.value, sessionId: session_id.value })
+    messages.value.push({
+      role: 'assistant',
+      content: '模型响应超时或暂时不可用，这条需求还没有成功记录。请稍后重新发送上一条内容，我会继续从当前上下文往下梳理。',
+      timestamp: getCurrentTime()
+    })
+    void syncCurrentConversationToBackend()
+    isLoading.value = false
   }
 }
 
@@ -1847,9 +2488,15 @@ const autoExtractAndSaveDraft = async () => {
     } catch (e) {
       console.error('extract failed:', e)
     }
-    if (Object.keys(extracted).length === 0) {
-      const brandMatch = messages.value.find(m => m.role === 'user')?.content.slice(0, 15) || '';
-      extracted = { brand: brandMatch, target_group: '', content: '', city: '', budget: '', online_time: '', background: '', style: '', media_size: '', technology: '' }
+    const hasExtractedValue = Object.values(extracted).some(v => String(v || '').trim())
+    if (!hasExtractedValue) {
+      messages.value.push({
+        role: 'assistant',
+        content: '需求整理暂时失败，未生成草稿。请稍后点击继续对话补充或重新发送上一条信息，我会重新整理。',
+        timestamp: getCurrentTime()
+      })
+      void syncCurrentConversationToBackend()
+      return
     }
     for (const field of formFields) {
       if (!extracted[field.key]) extracted[field.key] = ''
@@ -1898,15 +2545,7 @@ const autoExtractAndSaveDraft = async () => {
     try {
       const orderType = businessType.value
       // 构造 scenePhotos 数组（后端需要 FileUpload 格式的对象数组）
-      const scenePhotos = submittedFiles.value.map((f, idx) => ({
-        id: `upload_${Date.now()}_${idx}`,
-        name: f.name,
-        size: f.size || 0,
-        type: f.type || 'application/octet-stream',
-        uploadTime: f.uploadTime || new Date().toISOString(),
-        url: f.url,
-        object_key: f.objectKey || ''
-      }))
+      const scenePhotos = submittedFiles.value.map(toOrderFileUpload)
       const newOrder = await orderStore.createOrder({ orderType, ...extracted, scenePhotos }, true)
       draftSavedOrderId.value = newOrder.id
     } catch (e) {
@@ -1948,15 +2587,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   showConfirmation.value = false
   try {
     // 构造 scenePhotos 数组（后端需要 FileUpload 格式的对象数组）
-    const scenePhotos = submittedFiles.value.map((f, idx) => ({
-      id: `upload_${Date.now()}_${idx}`,
-      name: f.name,
-      size: f.size || 0,
-      type: f.type || 'application/octet-stream',
-      uploadTime: f.uploadTime || new Date().toISOString(),
-      url: f.url,
-      object_key: f.objectKey || ''
-    }))
+    const scenePhotos = submittedFiles.value.map(toOrderFileUpload)
     if (draftSavedOrderId.value) {
       await orderStore.updateOrder(draftSavedOrderId.value, {
         orderType: confirmOrderType.value,
@@ -1976,6 +2607,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
       content: '🎉 订单已正式提交成功！我们的团队会尽快开始处理。您可以在"我的订单"中查看进度。',
       timestamp: getCurrentTime()
     })
+    orderSubmitCompleted.value = true
     scrollToBottom()
     saveCurrentToHistory()
   } catch (e) {
@@ -1994,22 +2626,6 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   border-radius: 2px;
   padding: 0 2px;
 }
-/* 打字机光标动画 */
-.typing-cursor-indicator {
-  display: inline-block;
-  margin-left: 4px;
-  margin-top: -8px;
-}
-.cursor-blink {
-  animation: blink-cursor 0.8s step-end infinite;
-  color: #0071e3;
-  font-size: 16px;
-  font-weight: 600;
-}
-@keyframes blink-cursor {
-  50% { opacity: 0; }
-}
-
 /* \u9700\u6c42\u6536\u96c6\u5b8c\u6210\u540e\u7684\u5185\u8054\u64cd\u4f5c\u6309\u94ae */
 .completion-actions {
   margin-top: 16px;
@@ -2052,20 +2668,20 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 .comp-btn-outline {
   background: transparent;
-  border: 1px solid #0071e3;
-  color: #0071e3;
+  border: 1px solid var(--uv-ws-ai-chat-accent, #A0522D);
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
 }
 .comp-btn-outline:hover {
-  background: rgba(0, 113, 227, 0.06);
+  background: var(--uv-ws-module-active-bg, rgba(160, 82, 45, 0.08));
 }
 .comp-btn-primary {
-  background: #0d99ff;
-  border: 1px solid #0d99ff;
+  background: var(--uv-ws-ai-chat-button-bg, #A0522D);
+  border: 1px solid var(--uv-ws-ai-chat-button-bg, #A0522D);
   color: #fff;
 }
 .comp-btn-primary:hover {
-  background: #0a8bed;
-  border-color: #0a8bed;
+  background: var(--uv-ws-ai-chat-button-hover, #8F4527);
+  border-color: var(--uv-ws-ai-chat-button-hover, #8F4527);
 }
 
 /* === Main Layout === */
@@ -2291,7 +2907,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .preview-msg.assistant .preview-avatar {
-  background: linear-gradient(135deg, #0d99ff, #0a8bed);
+  background: var(--uv-ws-ai-chat-accent, #A0522D);
   color: #fff;
   border: none;
 }
@@ -2372,8 +2988,8 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .history-btn.active {
-  color: #0d99ff;
-  background: rgba(13, 153, 255, 0.08);
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
+  background: var(--uv-ws-module-active-bg, rgba(160, 82, 45, 0.08));
   border-radius: 8px;
 }
 
@@ -2407,7 +3023,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .new-session-btn {
-  background: #0d99ff; /* Figma primary blue */
+  background: var(--uv-ws-ai-chat-button-bg, #A0522D);
   color: #ffffff;
   padding: 6px 14px;
   border-radius: 9999px;
@@ -2422,7 +3038,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .new-session-btn:hover {
-  background: #0a8bed; /* Slightly darker vivid blue */
+  background: var(--uv-ws-ai-chat-button-hover, #8F4527);
   transform: scale(0.98);
 }
 
@@ -2507,6 +3123,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  position: relative;
 }
 
 .assistant-wrapper {
@@ -2524,6 +3141,156 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   letter-spacing: 0.05em;
 }
 
+.user-message-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  min-height: 18px;
+  opacity: 0;
+  transform: translateY(-2px);
+  pointer-events: none;
+  transition: opacity 0.18s ease 0.22s, transform 0.18s ease 0.22s;
+}
+
+.user-col:hover .user-message-actions,
+.user-col:focus-within .user-message-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.msg-action-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #7c828c;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 0;
+  cursor: pointer;
+}
+
+.msg-action-btn:hover {
+  color: #1a1c1c;
+}
+
+.msg-action-btn.danger:hover {
+  color: #b42318;
+}
+
+.inline-message-edit {
+  width: min(520px, 72vw);
+  min-width: 280px;
+  max-width: 100%;
+  background: #ffffff;
+  border: 1px solid #d8dde6;
+  border-radius: 12px 12px 0 12px;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.08);
+  padding: 10px;
+}
+
+.inline-message-edit-textarea {
+  width: 100%;
+  min-height: 72px;
+  max-height: 220px;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #1a1c1c;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.inline-message-edit-textarea::placeholder {
+  color: #9aa0a6;
+}
+
+.inline-message-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.inline-edit-btn {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  height: 28px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.inline-edit-btn.secondary {
+  background: #f6f7f8;
+  border-color: #e5e7eb;
+  color: #3f4652;
+}
+
+.inline-edit-btn.secondary:hover {
+  background: #eef0f3;
+}
+
+.inline-edit-btn.primary {
+  background: var(--uv-ws-send-button-bg, #666666);
+  color: #ffffff;
+}
+
+.inline-edit-btn.primary:hover {
+  background: var(--uv-ws-send-button-hover, #555555);
+}
+
+.message-attachment-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 280px;
+  margin-top: 6px;
+}
+
+.message-attachment-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+}
+
+.message-attachment-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.message-file-preview {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #5f6368;
+  font-size: 10px;
+  font-weight: 600;
+  background: #f6f7f8;
+}
+
 .ai-time {
   padding-left: 4px; /* Align slightly inwards matching the bubble */
 }
@@ -2535,7 +3302,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .user-avatar {
-  background: #65a30d; 
+  background: var(--uv-ws-ai-chat-accent, #A0522D);
   color: #fff;
   width: 32px;
   height: 32px;
@@ -2547,6 +3314,18 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   font-weight: 500;
   flex-shrink: 0;
   margin-top: 24px;
+  overflow: hidden;
+}
+
+.user-avatar.has-image {
+  background: #ffffff;
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .assistant-wrapper {
@@ -2683,6 +3462,72 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .typing {
   color: rgba(0, 0, 0, 0.4);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.thinking-ellipsis {
+  display: inline-flex;
+  width: 3em;
+  margin-left: 1px;
+}
+
+.thinking-ellipsis span {
+  opacity: 0;
+  animation: thinking-dot-reveal 1.4s steps(1, end) infinite;
+}
+
+.thinking-ellipsis span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.thinking-ellipsis span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+.thinking-ellipsis span:nth-child(4) {
+  animation-delay: 0.48s;
+}
+
+.thinking-ellipsis span:nth-child(5) {
+  animation-delay: 0.64s;
+}
+
+.thinking-ellipsis span:nth-child(6) {
+  animation-delay: 0.8s;
+}
+
+@keyframes thinking-dot-reveal {
+  0%, 72%, 100% { opacity: 0; }
+  12%, 60% { opacity: 1; }
+}
+
+.thinking-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.thinking-status-text {
+  color: rgba(0, 0, 0, 0.42);
+  animation: thinking-text-pulse 1.8s ease-in-out infinite;
+}
+
+.thinking-status-dots {
+  color: rgba(0, 0, 0, 0.42);
+}
+
+@keyframes thinking-text-pulse {
+  0%, 100% {
+    color: rgba(0, 0, 0, 0.34);
+  }
+  45% {
+    color: rgba(0, 0, 0, 0.72);
+  }
+  70% {
+    color: rgba(60, 60, 60, 0.52);
+  }
 }
 
 /* Stitch Input Bar styling */
@@ -2694,24 +3539,25 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .input-area.pill-style {
   background: #f3f3f4; /* surface-container-low */
-  border-radius: 9999px; /* Absolute pill */
-  padding: 4px 6px 4px 16px;
+  border-radius: 22px;
+  padding: 6px;
   border: 2px solid transparent; 
   display: flex;
-  flex-direction: row;
-  align-items: flex-end; /* vertically align tools with bottom of expanding textarea */
-  transition: all 0.2s ease;
-  min-height: 40px; 
+  flex-direction: column;
+  align-items: stretch;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  min-height: 44px; 
   width: 100%;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   box-sizing: border-box;
-  gap: 12px;
+  gap: 6px;
 }
 
 .input-area.pill-style.is-voice-recording {
   background: #ffffff;
   border-color: #e5e5ea;
+  flex-direction: row;
   align-items: center; /* keep waveform visualizer centered */
   padding: 4px 16px;
 }
@@ -2720,22 +3566,34 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   border-color: rgba(0,0,0,0.08); /* ringing effect */
 }
 
+.composer-main-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
 .chat-native-textarea {
   border: none;
   background: transparent;
-  flex: 1;
+  width: 100%;
+  min-width: 0;
   font-family: inherit;
   font-size: 13px;
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: #1a1c1c;
   outline: none;
   resize: none; 
   min-height: 20px;
+  max-height: 160px;
   height: auto;
   line-height: 1.5;
-  padding: 5px 0; 
-  overflow-y: hidden;
+  padding: 6px 0; 
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .chat-native-textarea::placeholder {
@@ -2744,15 +3602,23 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .left-tools {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
   color: #a0a4ae;
-  padding-bottom: 6px; /* Offset to center with 1 line of text */
+  min-height: 32px;
+  padding: 0 0 0 4px;
+  flex-shrink: 0;
 }
 
 .tool-icon {
   font-size: 20px;
   cursor: pointer;
   transition: color 0.2s;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .tool-icon:hover {
@@ -2765,8 +3631,9 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 4px 0;
+  padding: 4px 6px 2px;
   max-width: 100%;
+  min-width: 0;
 }
 
 .uploaded-file-chip {
@@ -2791,7 +3658,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .file-icon-placeholder {
   font-size: 18px;
-  color: #0d99ff;
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
 }
 
 .file-name {
@@ -2803,7 +3670,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .file-status {
   flex: 0 0 auto;
-  color: #0d99ff;
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
   font-size: 11px;
 }
 
@@ -2828,16 +3695,19 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .file-remove:hover {
-  color: #f56c6c;
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
 }
 
 .right-tools {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  min-height: 32px;
+  flex-shrink: 0;
 }
 
 .stitch-send-btn {
-  background: #0d99ff; /* Same as new session btn */
+  background: var(--uv-ws-send-button-bg, #666666);
   color: #fff;
   border: none;
   height: 32px; /* Super slim button to allow pill to shrink */
@@ -2853,6 +3723,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.15em;
+  white-space: nowrap;
 }
 
 .stitch-send-btn .el-icon {
@@ -2860,7 +3731,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .stitch-send-btn:hover {
-  background: #0a8bed;
+  background: var(--uv-ws-send-button-hover, #555555);
   transform: scale(0.98);
 }
 
@@ -2930,7 +3801,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #0d99ff;
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
   font-size: 13px;
   padding: 12px 0;
 }
@@ -2981,8 +3852,8 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .field-input:focus, .field-textarea:focus {
-  border-color: #0d99ff;
-  box-shadow: 0 0 0 2px rgba(13, 153, 255, 0.1);
+  border-color: var(--uv-ws-ai-chat-accent, #A0522D);
+  box-shadow: 0 0 0 2px rgba(160, 82, 45, 0.12);
 }
 
 .field-input::placeholder, .field-textarea::placeholder {
@@ -3000,6 +3871,65 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   gap: 8px;
   margin-top: 16px;
   justify-content: flex-end;
+}
+
+.form-attachment-preview {
+  margin-top: 12px;
+}
+
+.form-attachment-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #86868b;
+  margin-bottom: 6px;
+}
+
+.form-attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.form-attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 180px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.form-attachment-thumb,
+.form-file-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  flex: 0 0 auto;
+}
+
+.form-attachment-thumb {
+  object-fit: cover;
+  display: block;
+}
+
+.form-file-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
+  background: var(--uv-ws-module-active-bg, rgba(160, 82, 45, 0.08));
+}
+
+.form-attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #555;
 }
 
 .auto-draft-notice {
@@ -3089,7 +4019,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 .status-draft { background: #f0f0f5; color: #86868b; }
 .status-pending_assign { background: #fff3e0; color: #e65100; }
 .status-pending_contract { background: #fff8e1; color: #f57f17; }
-.status-in_production { background: #e3f2fd; color: #1565c0; }
+.status-in_production { background: var(--uv-ws-module-active-bg, #F3E7E1); color: var(--uv-ws-action-button-bg, #A0522D); }
 .status-pending_review { background: #fce4ec; color: #c62828; }
 .status-preview_ready { background: #e8f5e9; color: #2e7d32; }
 .status-completed { background: #e8f5e9; color: #1b5e20; }
@@ -3118,7 +4048,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   top: 7px;
   left: 12.5%;
   height: 2px;
-  background: #3b82f6;
+  background: var(--uv-ws-action-button-bg, #A0522D);
   z-index: 1;
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
 }
@@ -3168,7 +4098,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .step-active .step-dot {
-  border-color: #3b82f6;
+  border-color: var(--uv-ws-action-button-bg, #A0522D);
   background: #fff;
 }
 .step-active .step-dot::after {
@@ -3180,10 +4110,10 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #3b82f6;
+  background: var(--uv-ws-action-button-bg, #A0522D);
 }
 .step-active .step-label {
-  color: #3b82f6;
+  color: var(--uv-ws-action-button-bg, #A0522D);
 }
 
 .step-warning .step-dot {
@@ -3269,12 +4199,12 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .view-detail-link {
   font-size: 12px;
-  color: #1565c0;
+  color: var(--uv-ws-action-button-bg, #A0522D);
   font-weight: 500;
 }
 
 .order-card-inline:hover .view-detail-link {
-  color: #0d47a1;
+  color: var(--uv-ws-action-button-hover, #8F4527);
 }
 
 .status-revision_needed { background: #fff3e0; color: #e65100; }
@@ -3313,81 +4243,9 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   transition: all 0.2s;
 }
 .comp-btn-outline:hover {
-  border-color: #4f46e5;
-  color: #4f46e5;
-  background: rgba(79, 70, 229, 0.04);
-}
-
-/* ===== 案例视频卡片 ===== */
-.case-video-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.case-card {
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 12px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.7);
-  transition: box-shadow 0.2s, transform 0.15s;
-}
-
-.case-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
-}
-
-.case-card-video {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: #0a0a0a;
-  position: relative;
-}
-
-.case-video-player {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.case-card-info {
-  padding: 10px 14px 12px;
-}
-
-.case-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1a1c1c;
-  margin-bottom: 4px;
-}
-
-.case-desc {
-  font-size: 12px;
-  color: #555;
-  line-height: 1.5;
-  margin-bottom: 8px;
-}
-
-.case-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.case-tag {
-  font-size: 10px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: #e3f2fd;
-  color: #1565c0;
-  font-weight: 500;
-}
-
-.case-duration {
-  font-size: 11px;
-  color: #86868b;
+  border-color: var(--uv-ws-action-button-bg, #A0522D);
+  color: var(--uv-ws-action-button-bg, #A0522D);
+  background: var(--uv-ws-module-active-bg, #F3E7E1);
 }
 
 /* ========== 语音输入样式 ========== */

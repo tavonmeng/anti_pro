@@ -617,7 +617,6 @@ echo -e "${CYAN}── 访问方式 ──${NC}"
 if [ "$USE_DOMAIN" = true ]; then
     echo "  用户端:     http://$DOMAIN"
     echo "  管理后台:   http://$DOMAIN/admin/login"
-    echo "  API 文档:   http://$DOMAIN/api/docs"
 else
     [ -n "$PUBLIC_IP" ] && echo "  公网访问:   http://$PUBLIC_IP"
     [ -n "$LOCAL_IP" ]  && echo "  内网访问:   http://$LOCAL_IP"

@@ -51,14 +51,14 @@ fetch('/api/health', { method: 'GET' })
   .catch(console.error)
 ```
 
-应该返回：`{status: "ok", app: "AI设计任务管理系统"}`
+应该返回：`{status: "ok", app: "Unique Vision AI"}`
 
 ### 直接测试后端
 ```bash
 curl http://localhost:8000/api/health
 ```
 
-应该返回：`{"status":"ok","app":"AI设计任务管理系统"}`
+应该返回：`{"status":"ok","app":"Unique Vision AI"}`
 
 ---
 

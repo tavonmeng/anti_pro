@@ -28,11 +28,11 @@ def validate_file_type(mime_type: str) -> bool:
 
 def generate_order_number() -> str:
     """生成订单编号"""
-    from datetime import datetime
     import random
     import string
+    from app.utils.timezone import beijing_now
     
-    date = datetime.now().strftime("%Y%m%d")
+    date = beijing_now().strftime("%Y%m%d")
     random_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
     
     return f"ORD-{date}-{random_code}"
@@ -40,13 +40,12 @@ def generate_order_number() -> str:
 
 def generate_id(prefix: str = "") -> str:
     """生成唯一 ID"""
-    from datetime import datetime
     import random
+    from app.utils.timezone import beijing_now
     
-    timestamp = int(datetime.now().timestamp() * 1000)
+    timestamp = int(beijing_now().timestamp() * 1000)
     random_suffix = random.randint(1000, 9999)
     
     if prefix:
         return f"{prefix}-{timestamp}{random_suffix}"
     return f"{timestamp}{random_suffix}"
-

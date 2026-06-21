@@ -22,8 +22,8 @@
 
       <div class="action-container">
         <div class="contact-card">
-          <a href="mailto:mlm3344521@163.com" class="email-link">
-            mlm3344521@163.com
+          <a href="mailto:support@uniquevisionx.com" class="email-link">
+            support@uniquevisionx.com
           </a>
         </div>
         <div class="contact-card ai-card">

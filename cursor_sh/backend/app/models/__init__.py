@@ -5,6 +5,7 @@ from app.models.admin import Admin
 from app.models.staff_member import StaffMember
 from app.models.contractor import Contractor
 from app.models.contractor_invitation import ContractorInvitation
+from app.models.user_invitation import UserInvitation
 from app.models.contractor_assignment import ContractorAssignment, AssignmentStatus
 from app.models.contractor_deliverable import ContractorDeliverable, DeliverableStatus
 from app.models.workflow import WorkflowStageConfig
@@ -14,15 +15,19 @@ from app.models.feedback import Feedback
 from app.models.notification import Notification
 from app.models.announcement import Announcement
 from app.models.security_event import SecurityEvent, SecurityEventType
+from app.models.sms_verification import SmsVerificationCode
 from app.models.user_memory import UserMemory
 from app.models.ai_chat import AIChatSession, AIChatMessage
+from app.models.human_handoff import HumanHandoff
 from app.models.homepage_bar import HomepageBar
+from app.models.customer_document import CustomerDocument, CustomerDocumentExtraction
 
 __all__ = [
     "User", "UserRole",
     "Admin",
     "StaffMember",
     "Contractor", "ContractorInvitation",
+    "UserInvitation",
     "ContractorAssignment", "AssignmentStatus",
     "ContractorDeliverable", "DeliverableStatus",
     "WorkflowStageConfig",
@@ -30,7 +35,9 @@ __all__ = [
     "File", "Feedback", "Notification",
     "Announcement",
     "SecurityEvent", "SecurityEventType",
+    "SmsVerificationCode",
     "UserMemory",
-    "AIChatSession", "AIChatMessage",
+    "AIChatSession", "AIChatMessage", "HumanHandoff",
     "HomepageBar",
+    "CustomerDocument", "CustomerDocumentExtraction",
 ]

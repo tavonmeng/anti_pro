@@ -11,7 +11,7 @@ from app.schemas.feedback import FeedbackResponse
 # ========== 订单创建请求 ==========
 
 class VideoPurchaseOrderCreate(BaseModel):
-    """裸眼3D成片购买订单创建"""
+    """3D OOH数字内容资源库订单创建"""
     orderType: str = Field(default="video_purchase")
     industryType: str
     customIndustry: Optional[str] = None
@@ -25,7 +25,7 @@ class VideoPurchaseOrderCreate(BaseModel):
 
 
 class AI3DCustomOrderCreate(BaseModel):
-    """AI裸眼3D定制订单创建（兼容品牌方 & 媒体方字段）"""
+    """AI驱动3D OOH内容定制订单创建（兼容品牌方 & 媒体方字段）"""
     orderType: str = Field(default="ai_3d_custom")
     # ── 品牌方字段 ──
     brand: Optional[str] = None
@@ -91,7 +91,7 @@ class BaseOrderResponse(BaseModel):
 
 
 class VideoPurchaseOrderResponse(BaseOrderResponse):
-    """裸眼3D成片购买订单响应"""
+    """3D OOH数字内容资源库订单响应"""
     industryType: str
     customIndustry: Optional[str] = None
     visualStyle: str
@@ -104,7 +104,7 @@ class VideoPurchaseOrderResponse(BaseOrderResponse):
 
 
 class AI3DCustomOrderResponse(BaseOrderResponse):
-    """AI裸眼3D定制订单响应（兼容品牌方 & 媒体方字段）"""
+    """AI驱动3D OOH内容定制订单响应（兼容品牌方 & 媒体方字段）"""
     # ── 品牌方字段 ──
     brand: Optional[str] = None
     background: Optional[str] = None

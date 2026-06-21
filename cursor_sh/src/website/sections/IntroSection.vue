@@ -5,11 +5,16 @@
       
       <!-- 1. 全屏动态背景和改变的服务介绍 -->
       <div class="full-screen-slides">
-        <!-- Slide 0 -->
-        <div class="slide first" ref="slide0">
+        <div
+          v-for="(service, index) in platformServices"
+          :key="service.title"
+          class="slide"
+          :class="{ first: index === 0 }"
+          :ref="el => setSlideRef(el, index)"
+        >
           <div class="outer">
             <div class="inner">
-              <div class="bg slide-bg-1">
+              <div class="bg" :class="service.bgClass">
                 <!-- 内部对齐网格，与静态层完全吻合 -->
                 <div class="slide-grid">
                   <div class="container">
@@ -17,63 +22,11 @@
                     <div class="right-content relative-box">
                       <div class="service-block">
                         <div class="service-header">
-                          <h3 class="service-title section-heading">裸眼3D成片配订</h3>
+                          <h3 class="service-title section-heading">{{ service.title }}</h3>
                         </div>
                         <p class="service-desc section-heading">
-                          为每一块屏幕，适配引爆媒体的裸眼3D内容<br/>
-                          快速、高效、低成本获取高质量成片。
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Slide 1 -->
-        <div class="slide second" ref="slide1">
-          <div class="outer">
-            <div class="inner">
-              <div class="bg slide-bg-2">
-                <div class="slide-grid">
-                  <div class="container">
-                    <div class="left-empty"></div>
-                    <div class="right-content relative-box">
-                      <div class="service-block">
-                        <div class="service-header">
-                          <h3 class="service-title section-heading">AI裸眼3D自主化定制</h3>
-                        </div>
-                        <p class="service-desc section-heading">
-                          从创意到上屏，一站式AI制片<br/>
-                          自研AI专业内容打造模型，大幅缩短制作周期。
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Slide 2 -->
-        <div class="slide third" ref="slide2">
-          <div class="outer">
-            <div class="inner">
-              <div class="bg slide-bg-3">
-                <div class="slide-grid">
-                  <div class="container">
-                    <div class="left-empty"></div>
-                    <div class="right-content relative-box">
-                      <div class="service-block">
-                        <div class="service-header">
-                          <h3 class="service-title section-heading">泛商业数字艺术打造</h3>
-                        </div>
-                        <p class="service-desc section-heading">
-                          你的屏幕，需要新的艺术<br/>
-                          为商业空间打造独一无二的沉浸式视觉体验。
+                          {{ service.line1 }}<br/>
+                          {{ service.line2 }}
                         </p>
                       </div>
                     </div>
@@ -90,7 +43,7 @@
         <div class="container">
           <div class="left-content static-left" ref="leftContentRef">
             <h2 class="main-heading">
-              这是一个<br>
+              我们是<br>
               <span class="desc-highlight">idea+AI驱动的</span><br>
               3D OOH内容平台
             </h2>
@@ -132,9 +85,50 @@ gsap.registerPlugin(ScrollTrigger)
 
 const sectionRef = ref(null)
 const wrapperRef = ref(null)
-const slide0 = ref(null)
-const slide1 = ref(null)
-const slide2 = ref(null)
+const slideRefs = ref([])
+
+const platformServices = [
+  {
+    title: '3D OOH数字内容资源库',
+    line1: '即用型裸眼3D数字内容资产',
+    line2: '多屏适配内容方案 / 全球地标大屏内容规格适配',
+    bgClass: 'slide-bg-1'
+  },
+  {
+    title: 'AI驱动3D OOH内容定制',
+    line1: 'AI创意内容开发 / 场景化裸眼3D空间适配',
+    line2: '真实环境播放模拟 / 一站式DOOH内容制作',
+    bgClass: 'slide-bg-2'
+  },
+  {
+    title: '数字艺术与沉浸式视觉设计',
+    line1: '艺术指导与视觉设计 / 虚拟装置艺术',
+    line2: '沉浸式空间视觉 / 实验性数字艺术内容',
+    bgClass: 'slide-bg-3'
+  },
+  {
+    title: '广告视觉与动态影像制作',
+    line1: '平面广告视觉设计 / TVC广告影片制作 / FOOH数字传播内容',
+    line2: 'VJ视觉演出内容 / 动态视觉设计',
+    bgClass: 'slide-bg-4'
+  },
+  {
+    title: '户外媒体后期制作服务',
+    line1: '高端精修图像处理 / 电影级视频精修 / CGI视觉增强',
+    line2: '商业摄影与视频拍摄 / 航拍影像制作',
+    bgClass: 'slide-bg-5'
+  },
+  {
+    title: '广告投放分析与效果报告',
+    line1: 'DOOH广告投放数据分析 / 受众效果分析报告',
+    line2: '视觉传播效果评估 / 可下载数据报告系统',
+    bgClass: 'slide-bg-6'
+  }
+]
+
+const setSlideRef = (el, index) => {
+  if (el) slideRefs.value[index] = el
+}
 
 let ctx
 let splitContext = []
@@ -151,8 +145,11 @@ onMounted(() => {
     const staticLines = sectionRef.value.querySelectorAll('.static-overlay-layer .line')
     gsap.set(staticLines, { yPercent: 120, autoAlpha: 0 })
 
+    const slides = slideRefs.value.filter(Boolean)
+    const firstSlide = slides[0]
+
     // 第一张背景幻灯片放大并变暗作为入场初态
-    gsap.set(slide0.value, { scale: 1.1, autoAlpha: 0 })
+    gsap.set(firstSlide, { scale: 1.1, autoAlpha: 0 })
     gsap.set(wrapperRef.value, { autoAlpha: 1 }) // 不再隐藏整个外壳，而是隐藏内部元素
 
     // ---- 1. 入场淡入遮罩动效：当从 Hero 滑动到 Intro 时触发 ----
@@ -165,7 +162,7 @@ onMounted(() => {
     })
 
     // 第一张背景柔和浮现收缩
-    entranceTl.to(slide0.value, {
+    entranceTl.to(firstSlide, {
       scale: 1,
       autoAlpha: 1,
       duration: 1.8,
@@ -182,8 +179,6 @@ onMounted(() => {
     }, 0.2) // 在背景开始出现后立刻跟进文字拨开
     
     // ---- 2. 幻灯片 GSAP Observer 切换逻辑 ----
-    const slides = [slide0.value, slide1.value, slide2.value]
-    
     // 修复 HMR 热重载下全局选取导致幽灵 DOM 冲突的严重 Bug
     const headings = gsap.utils.toArray(sectionRef.value.querySelectorAll('.section-heading'))
     headings.forEach(heading => {
@@ -194,7 +189,7 @@ onMounted(() => {
       scrollTrigger: {
         trigger: sectionRef.value,
         start: 'top top',
-        end: '+=150%',
+        end: `+=${slides.length * 70}%`,
         pin: true,
         scrub: 0.5,
         snap: {
@@ -329,17 +324,32 @@ onUnmounted(() => {
 /* 加深纯黑渐变：左侧95%纯黑以彻底保护静态白字，中部拉平，右侧微露 20% 原图光芒 */
 .slide-bg-1 {
   background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.2) 100%), 
-                    url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop');
+                    url('/service-images/2.jpg');
 }
 
 .slide-bg-2 {
   background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.3) 100%), 
-                    url('https://images.unsplash.com/photo-1634152962476-4b8a00e1915c?q=80&w=2121&auto=format&fit=crop');
+                    url('/service-images/1.jpg');
 }
 
 .slide-bg-3 {
   background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.4) 100%), 
-                    url('https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2100&auto=format&fit=crop');
+                    url('/service-images/3.jpg');
+}
+
+.slide-bg-4 {
+  background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.34) 100%),
+                    url('/service-images/4.jpg');
+}
+
+.slide-bg-5 {
+  background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.36) 100%),
+                    url('/service-images/5.jpg');
+}
+
+.slide-bg-6 {
+  background-image: linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.36) 100%),
+                    url('/service-images/6.jpg');
 }
 
 /* 幻灯片内的网格布局区域计算（和静态层完美重合） */

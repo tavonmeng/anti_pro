@@ -11,6 +11,7 @@ from app.models.workflow import WorkflowStageConfig
 from app.schemas.response import ApiResponse
 from app.utils.dependencies import get_current_user, require_admin, AnyUser
 from app.utils.validators import generate_id
+from app.utils.timezone import beijing_iso
 
 router = APIRouter(prefix="/workflow-config", tags=["工作流配置"])
 
@@ -59,8 +60,8 @@ async def get_workflow_stages(
                 "displayOrder": s.display_order,
                 "reviewItems": s.review_items or [],
                 "isActive": s.is_active,
-                "createdAt": s.created_at.isoformat() if s.created_at else None,
-                "updatedAt": s.updated_at.isoformat() if s.updated_at else None,
+                "createdAt": beijing_iso(s.created_at),
+                "updatedAt": beijing_iso(s.updated_at),
             }
             for s in stages
         ]
@@ -69,7 +70,7 @@ async def get_workflow_stages(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("")
@@ -111,7 +112,7 @@ async def create_workflow_stage(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.put("/{stage_id}")
@@ -154,7 +155,7 @@ async def update_workflow_stage(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.delete("/{stage_id}")
@@ -180,7 +181,7 @@ async def delete_workflow_stage(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("/reorder")
@@ -203,4 +204,4 @@ async def reorder_workflow_stages(
         
         return ApiResponse(code=200, message="排序更新成功", data=None)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e

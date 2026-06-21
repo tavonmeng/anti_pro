@@ -2,12 +2,20 @@
 
 import aiosmtplib
 import ssl
+from email.header import Header
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
+from email.utils import formataddr
 from typing import List, Optional, Dict
 
 from app.config import settings
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+from app.utils.retry import retry_async
+
+
+logger = get_module_logger("notification")
 
 
 class EmailService:
@@ -26,13 +34,22 @@ class EmailService:
         attachments 格式: [{"filename": "xxx.pdf", "content": b"..."}]
         """
         if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-            print(f"邮件服务未配置，跳过发送邮件: {subject}")
-            return
+            log_business_event(
+                logger,
+                "email_send_skipped",
+                level="warning",
+                subject=subject,
+                to_emails=to_emails,
+                reason="smtp_not_configured",
+            )
+            return False
         
+        from_email = settings.SMTP_FROM or settings.SMTP_USER
+
         # 创建邮件
         message = MIMEMultipart("mixed")
-        message["Subject"] = subject
-        message["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM}>"
+        message["Subject"] = Header(subject, "utf-8")
+        message["From"] = formataddr((str(Header(settings.SMTP_FROM_NAME, "utf-8")), from_email))
         message["To"] = ", ".join(to_emails)
         
         # 邮件正文 (alternative 容器放置 text 和 html)
@@ -62,27 +79,55 @@ class EmailService:
             tls_context.check_hostname = False
             tls_context.verify_mode = ssl.CERT_NONE
 
-            # 发送邮件
-            result = await aiosmtplib.send(
-                message,
-                hostname=settings.SMTP_HOST,
-                port=settings.SMTP_PORT,
-                username=settings.SMTP_USER,
-                password=settings.SMTP_PASSWORD,
-                use_tls=True,
-                tls_context=tls_context
+            async def _send_once():
+                return await aiosmtplib.send(
+                    message,
+                    hostname=settings.SMTP_HOST,
+                    port=settings.SMTP_PORT,
+                    username=settings.SMTP_USER,
+                    password=settings.SMTP_PASSWORD,
+                    use_tls=True,
+                    tls_context=tls_context,
+                    timeout=settings.SMTP_TIMEOUT,
+                )
+
+            await retry_async(
+                _send_once,
+                logger=logger,
+                event="email_send_provider_call",
+                attempts=settings.EMAIL_RETRY_ATTEMPTS,
+                fields={
+                    "subject": subject,
+                    "to_emails": to_emails,
+                    "attachment_count": len(attachments or []),
+                },
             )
-            print(f"邮件发送成功: {subject} -> {to_emails}")
+            log_business_event(
+                logger,
+                "email_sent",
+                subject=subject,
+                to_emails=to_emails,
+                attachment_count=len(attachments or []),
+            )
             return True
         except Exception as e:
-            print(f"邮件发送失败: {e}")
+            log_business_event(
+                logger,
+                "email_send_failed",
+                level="error",
+                subject=subject,
+                to_emails=to_emails,
+                attachment_count=len(attachments or []),
+                error=str(e),
+            )
+            return False
     
     @staticmethod
     async def send_order_confirmation(
         user_email: str,
         order_number: str,
         pdf_bytes: bytes
-    ):
+    ) -> bool:
         """发送订单确认通知，含需求确认函 PDF"""
         subject = f"需求已确认 - 订单 {order_number} 将进入制作流程"
         
@@ -98,12 +143,12 @@ class EmailService:
                 <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 20px 0;">
                     <p style="margin: 0; color: #27ae60; font-weight: bold;">✅ 订单即将进入排期并开始制作！</p>
                 </div>
-                <p>为方便您的留档与核对，我们随信附上了本次订单的<strong>《需求告知函》PDF文件</strong>（见附件），里面包含了所有的需求细节及预计制作周期。</p>
+                <p>为方便您的留档与核对，我们随信附上了本次订单的<strong>《订单需求确认函》PDF文件</strong>（见附件），里面包含了所有的需求细节及预计制作周期。</p>
                 <p>在制作过程中如果您有任何问题，可以随时登录系统查看订单进度状态。</p>
                 <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
                 <p style="color: #7f8c8d; font-size: 12px;">
                     此邮件由系统自动发送，请勿回复。<br>
-                    AI设计任务管理系统
+                    Unique Vision AI
                 </p>
             </div>
         </body>
@@ -118,20 +163,20 @@ class EmailService:
         您的订单 {order_number} 的需求内容我们已收到并确认。
         ✅ 订单即将进入排期并开始制作！
         
-        为方便您的留档与核对，我们随信附上了本次订单的《需求告知函》PDF文件（见附件），里面包含了所有的需求细节及预计制作周期。
+        为方便您的留档与核对，我们随信附上了本次订单的《订单需求确认函》PDF文件（见附件），里面包含了所有的需求细节及预计制作周期。
         
         在制作过程中如果您有任何问题，可以随时登录系统查看订单进度状态。
         
         此邮件由系统自动发送，请勿回复。
-        AI设计任务管理系统
+        Unique Vision AI
         """
         
         attachments = [{
-            "filename": f"订单需求告知函_{order_number}.pdf",
+            "filename": f"订单需求确认函_{order_number}.pdf",
             "content": pdf_bytes
         }]
         
-        await EmailService.send_email(
+        return await EmailService.send_email(
             [user_email], 
             subject, 
             html_content, 
@@ -145,7 +190,7 @@ class EmailService:
         order_number: str,
         old_status: str,
         new_status: str
-    ):
+    ) -> bool:
         """发送订单状态变更通知"""
         status_names = {
             "pending_assign": "待分配",
@@ -185,7 +230,7 @@ class EmailService:
                 <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
                 <p style="color: #7f8c8d; font-size: 12px;">
                     此邮件由系统自动发送，请勿回复。<br>
-                    AI设计任务管理系统
+                    Unique Vision AI
                 </p>
             </div>
         </body>
@@ -204,17 +249,17 @@ class EmailService:
         请登录系统查看详情。
         
         此邮件由系统自动发送，请勿回复。
-        AI设计任务管理系统
+        Unique Vision AI
         """
         
-        await EmailService.send_email([user_email], subject, html_content, text_content)
+        return await EmailService.send_email([user_email], subject, html_content, text_content)
     
     @staticmethod
     async def send_preview_ready_notification(
         user_email: str,
         order_number: str,
         preview_type: str = "初稿"
-    ):
+    ) -> bool:
         """发送预览文件就绪通知"""
         subject = f"{preview_type}预览已就绪 - {order_number}"
         
@@ -233,14 +278,14 @@ class EmailService:
                 <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
                 <p style="color: #7f8c8d; font-size: 12px;">
                     此邮件由系统自动发送，请勿回复。<br>
-                    AI设计任务管理系统
+                    Unique Vision AI
                 </p>
             </div>
         </body>
         </html>
         """
         
-        await EmailService.send_email([user_email], subject, html_content)
+        return await EmailService.send_email([user_email], subject, html_content)
 
     @staticmethod
     async def send_assignment_notification(
@@ -279,7 +324,7 @@ class EmailService:
                 <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
                 <p style="color: #7f8c8d; font-size: 12px;">
                     此邮件由系统自动发送，请勿回复。<br>
-                    AI设计任务管理系统
+                    Unique Vision AI
                 </p>
             </div>
         </body>
@@ -287,8 +332,14 @@ class EmailService:
         """
         
         try:
-            await EmailService.send_email([contractor_email], subject, html_content)
-            return True
+            return await EmailService.send_email([contractor_email], subject, html_content)
         except Exception as e:
-            print(f"派单通知邮件发送失败: {e}")
+            log_business_event(
+                logger,
+                "assignment_email_send_failed",
+                level="error",
+                order_number=order_number,
+                contractor_email=contractor_email,
+                error=str(e),
+            )
             return False

@@ -1,75 +1,84 @@
 <template>
   <div class="secondary-sidebar">
-    <div class="secondary-header">
-      <h3>业务菜单</h3>
-    </div>
-    <div class="module-list">
+    <div class="module-list top-module-list">
       <!-- AI Agent Entry (Banner Style) -->
-      <div class="ai-agent-banner" :class="{ active: uiStore.isAiExpanded }" @click="goToService('ai_agent')">
-        <h4 class="ai-banner-title">✨您的7×24小时AI创意合伙人</h4>
+      <div
+        class="ai-agent-banner"
+        :class="{ active: uiStore.isAiExpanded }"
+        data-onboarding-target="secondary-ai-agent-entry"
+        role="button"
+        tabindex="0"
+        @click="goToService('ai_agent')"
+        @keydown.enter.self.prevent="goToService('ai_agent')"
+        @keydown.space.self.prevent="goToService('ai_agent')"
+      >
+        <h4 class="ai-banner-title">您的7×24小时AI创意合伙人</h4>
         <div class="ai-banner-input-mock">
           <span class="ai-mock-placeholder">有什么想法...</span>
-          <div class="ai-mock-btn">发送 ✨</div>
+          <div class="ai-mock-btn">发送 <span class="ai-mock-dot" aria-hidden="true"></span></div>
         </div>
       </div>
     </div>
+
+    <template v-if="recentSessions.length > 0">
+      <div class="figma-full-divider compact-divider"></div>
+      <div class="module-list recent-module-list">
+        <div class="recent-chat-section">
+          <div class="recent-chat-header">
+            <span>最近对话</span>
+            <button v-if="recentSessions.length > 4" class="recent-chat-toggle" @click.stop="showAllChats = !showAllChats">
+              {{ showAllChats ? '收起' : '更多' }}
+            </button>
+          </div>
+          <button
+            v-for="session in visibleRecentSessions"
+            :key="session.id"
+            class="recent-chat-item"
+            :class="{ 'is-active': session.id === uiStore.activeAIChatSessionId }"
+            @click.stop="openChatSession(session.id)"
+          >
+            <span class="recent-chat-title">{{ session.title || '新的对话' }}</span>
+            <span class="recent-chat-meta">{{ session.agentLabel || 'AI 对话' }}</span>
+          </button>
+        </div>
+      </div>
+    </template>
 
     <!-- 贯穿首尾的无空隙分割线 -->
     <div class="figma-full-divider"></div>
 
-    <div class="module-list" style="margin-top: 16px;">
-
-      <div 
+    <div class="module-list service-module-list" data-onboarding-target="secondary-business-list">
+      <div
+        v-for="service in platformServices"
+        :key="service.type"
         class="module-group"
-        :class="{ active: currentModule === 'video_purchase' }"
+        :data-onboarding-target="`secondary-business-${service.type}`"
+        :class="{ active: currentModule === service.type }"
       >
-        <div class="module-pill" :class="{ 'is-active': currentModule === 'video_purchase' }" @click="goToService('video_purchase')">
-          <span class="module-name">裸眼3D成片购买</span>
-          <el-icon class="expand-icon" :class="{ rotated: currentModule === 'video_purchase', 'is-active-icon': currentModule === 'video_purchase' }"><ArrowDown /></el-icon>
+        <div
+          class="module-pill"
+          :class="{ 'is-active': currentModule === service.type }"
+          role="button"
+          tabindex="0"
+          @click="goToService(service.type)"
+          @keydown.enter.self.prevent="goToService(service.type)"
+          @keydown.space.self.prevent="goToService(service.type)"
+        >
+          <span class="module-name">{{ service.title }}</span>
+          <el-icon class="expand-icon" :class="{ rotated: currentModule === service.type, 'is-active-icon': currentModule === service.type }"><ArrowDown /></el-icon>
         </div>
-        <div class="module-intro" v-show="currentModule === 'video_purchase'">
-          <div class="intro-image" style="background: linear-gradient(to bottom right, #111, #333);">
-            <div class="badge">Premium 3D</div>
+        <div class="module-intro" v-show="currentModule === service.type">
+          <div class="intro-image" :style="{ background: service.gradient }">
+            <img class="intro-img" :src="service.image" :alt="service.title" />
+            <div class="badge">{{ getServiceBadgeLabel(service.badge) }}</div>
           </div>
+          <div class="intro-subtitle">{{ service.subtitle }}</div>
           <p class="intro-desc">
-            专业的裸眼3D视频内容库。海量高质量成片，基于您屏幕参数快速二次适配，最快48小时极速交付。
+            {{ service.description }}
           </p>
-        </div>
-      </div>
-
-      <div 
-        class="module-group"
-        :class="{ active: currentModule === 'ai_3d_custom' }"
-      >
-        <div class="module-pill" :class="{ 'is-active': currentModule === 'ai_3d_custom' }" @click="goToService('ai_3d_custom')">
-          <span class="module-name">AI裸眼3D内容定制</span>
-          <el-icon class="expand-icon" :class="{ rotated: currentModule === 'ai_3d_custom', 'is-active-icon': currentModule === 'ai_3d_custom' }"><ArrowDown /></el-icon>
-        </div>
-        <div class="module-intro" v-show="currentModule === 'ai_3d_custom'">
-          <div class="intro-image" style="background: linear-gradient(to bottom right, #001f3f, #004080);">
-            <div class="badge creative">AI Creative</div>
+          <div class="intro-tags">
+            <span v-for="feature in service.features" :key="feature">{{ feature }}</span>
           </div>
-          <p class="intro-desc">
-            基于前沿AI技术的定制化3D内容创作。提供创意文字即可生成震撼视觉，将灵感快速转化为高品质展出作品。
-          </p>
-        </div>
-      </div>
-
-      <div 
-        class="module-group"
-        :class="{ active: currentModule === 'digital_art' }"
-      >
-        <div class="module-pill" :class="{ 'is-active': currentModule === 'digital_art' }" @click="goToService('digital_art')">
-          <span class="module-name">数字艺术内容定制</span>
-          <el-icon class="expand-icon" :class="{ rotated: currentModule === 'digital_art', 'is-active-icon': currentModule === 'digital_art' }"><ArrowDown /></el-icon>
-        </div>
-        <div class="module-intro" v-show="currentModule === 'digital_art'">
-          <div class="intro-image" style="background: linear-gradient(to bottom right, #4a0000, #ff1a1a);">
-            <div class="badge art">Digital Art</div>
-          </div>
-          <p class="intro-desc">
-            专属资深艺术家团队人工精雕。涵盖抽象、写实等定制艺术流派，为您定制独一无二的线下屏幕地标数字艺术品。
-          </p>
         </div>
       </div>
     </div>
@@ -77,30 +86,132 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useUiStore } from '@/stores/ui'
-import { ArrowDown, Right } from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
+import { ArrowDown } from '@element-plus/icons-vue'
 import { logger } from '@/utils/logger'
+import { chatHistoryApi } from '@/utils/api'
+import {
+  AI_CHAT_HISTORY_EVENT,
+  createAiChatSessionFromRemote,
+  getSessionSortValue,
+  loadAiChatSessions,
+  saveAiChatSessions,
+  type AiChatSavedSession,
+  type AiChatRemoteSession,
+} from '@/utils/aiChatSessions'
+import { getServiceBadgeLabel, platformServices, type ServiceType } from '@/data/platformServices'
 
 const router = useRouter()
 const uiStore = useUiStore()
+const authStore = useAuthStore()
 
 const currentModule = computed(() => uiStore.activeModule)
+const recentSessions = ref<AiChatSavedSession[]>([])
+const showAllChats = ref(false)
 
-const goToService = async (type: string) => {
+const visibleRecentSessions = computed(() => {
+  return showAllChats.value ? recentSessions.value : recentSessions.value.slice(0, 4)
+})
+
+const mergeRemoteSessions = (localSessions: AiChatSavedSession[], remoteSessions: AiChatSavedSession[]) => {
+  const byId = new Map<string, AiChatSavedSession>()
+  localSessions.forEach(session => byId.set(session.id, session))
+
+  remoteSessions.forEach(remote => {
+    const local = byId.get(remote.id)
+    if (!local) {
+      byId.set(remote.id, remote)
+      return
+    }
+
+    const localUpdated = getSessionSortValue(local)
+    const remoteUpdated = getSessionSortValue(remote)
+    byId.set(remote.id, remoteUpdated >= localUpdated
+      ? { ...local, ...remote, stateSnapshot: local.stateSnapshot || remote.stateSnapshot }
+      : local
+    )
+  })
+
+  return [...byId.values()].sort((a, b) => getSessionSortValue(b) - getSessionSortValue(a))
+}
+
+const fetchRemoteRecentSessions = async () => {
+  if (!localStorage.getItem('token')) return []
+  const summaries = await chatHistoryApi.getSessions(30) as AiChatRemoteSession[]
+  if (!Array.isArray(summaries) || summaries.length === 0) return []
+
+  const sessions = await Promise.all(summaries.map(async summary => {
+    try {
+      const messages = await chatHistoryApi.getSessionMessages(summary.id)
+      return createAiChatSessionFromRemote(summary, Array.isArray(messages) ? messages : [])
+    } catch (error) {
+      console.warn('[ChatHistory] 拉取历史消息失败:', summary.id, error)
+      return createAiChatSessionFromRemote(summary, [])
+    }
+  }))
+  return sessions.filter(session => session.messages.length > 0)
+}
+
+const loadRecentSessions = async () => {
+  const userId = authStore.user?.id || 'anonymous'
+  const localSessions = loadAiChatSessions(userId)
+  recentSessions.value = localSessions
+
+  try {
+    const remoteSessions = await fetchRemoteRecentSessions()
+    if (remoteSessions.length === 0) return
+    const merged = mergeRemoteSessions(localSessions, remoteSessions).slice(0, 30)
+    recentSessions.value = saveAiChatSessions(userId, merged, false)
+  } catch (error) {
+    console.warn('[ChatHistory] 拉取后端历史失败:', error)
+  }
+}
+
+const openChatSession = async (sessionId: string) => {
+  uiStore.requestAIChatSessionRestore(sessionId)
+  await router.push('/user/workspace')
+}
+
+onMounted(() => {
+  loadRecentSessions()
+  window.addEventListener(AI_CHAT_HISTORY_EVENT, loadRecentSessions)
+})
+
+onUnmounted(() => {
+  window.removeEventListener(AI_CHAT_HISTORY_EVENT, loadRecentSessions)
+})
+
+watch(() => uiStore.aiChatHistoryVersion, loadRecentSessions)
+watch(() => authStore.user?.id, loadRecentSessions)
+
+const goToService = async (type: ServiceType | 'ai_agent') => {
   logger.logAction('Workspace', 'sidebar_navigate', { target: type })
   if (type === 'ai_agent') {
     uiStore.setIsAiExpanded(true)
-    uiStore.setSecondarySidebar(false)
+    uiStore.setSecondarySidebar(true)
+    uiStore.toggleSidebar(true)
+    uiStore.setActiveModule('ai_agent')
     await router.push('/user/workspace')
     return
   }
 
-  if (type === 'video_purchase') {
-    await router.push('/user/video-marketplace')
-  } else {
-    await router.push(`/user/create-order/${type}`)
+  uiStore.setIsAiExpanded(false)
+  uiStore.setSecondarySidebar(true)
+  uiStore.toggleSidebar(true)
+  uiStore.setActiveModule(type)
+  const targetPath = type === 'video_purchase'
+    ? '/user/video-marketplace'
+    : `/user/create-order/${type}`
+
+  try {
+    await router.push(targetPath)
+  } catch (error) {
+    console.error('业务模块页面加载失败:', error)
+    ElMessage.error('业务模块页面加载失败，请稍后重试')
   }
 }
 </script>
@@ -131,19 +242,6 @@ const goToService = async (type: string) => {
   }
 }
 
-.secondary-header {
-  padding: 0 16px;
-  margin-bottom: 24px;
-}
-
-.secondary-header h3 {
-  font-size: 14px;
-  font-weight: 500;
-  color: #1b1b1c;
-  margin: 0;
-  letter-spacing: 0.5px;
-}
-
 .module-list {
   display: flex;
   flex-direction: column;
@@ -158,6 +256,10 @@ const goToService = async (type: string) => {
   opacity: 0.08; /* Strict black and white system */
   margin: 12px 0 0 0;
   flex-shrink: 0;
+}
+
+.compact-divider {
+  margin-top: 8px;
 }
 
 /* AI Agent Banner Style */
@@ -189,6 +291,7 @@ const goToService = async (type: string) => {
   color: #1b1b1c;
   margin: 0 0 12px 0;
   letter-spacing: -0.01em;
+  text-align: center;
 }
 
 .ai-banner-input-mock {
@@ -210,12 +313,12 @@ const goToService = async (type: string) => {
 
 .ai-mock-placeholder {
   font-size: 12px;
-  color: #a0a4ae;
+  color: var(--uv-ws-ai-agent-placeholder, #a0a4ae);
 }
 
 .ai-mock-btn {
-  background: #f3f3f4; /* Softer background */
-  color: #1b1b1c;
+  background: var(--uv-ws-send-button-bg, #666666);
+  color: var(--uv-ws-send-button-text, #1b1b1c);
   font-weight: 500;
   padding: 0 12px;
   height: 28px;
@@ -224,6 +327,108 @@ const goToService = async (type: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 5px;
+}
+
+.ai-mock-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--uv-ws-send-dot, #000000);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.recent-chat-section {
+  margin: 8px 4px 0;
+  padding: 0 0 4px;
+}
+
+.service-module-list {
+  margin-top: 16px;
+}
+
+.recent-chat-header {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--uv-ws-muted-text, #7a808a);
+  font-weight: 500;
+}
+
+.recent-chat-toggle {
+  border: none;
+  background: transparent;
+  color: var(--uv-ws-module-active-mark, #A0522D);
+  font-size: 11px;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.recent-chat-toggle:hover {
+  background: var(--uv-ws-module-active-bg, rgba(160, 82, 45, 0.08));
+}
+
+.recent-chat-item {
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  padding: 7px 8px 7px 10px;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  position: relative;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.recent-chat-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 2px;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.recent-chat-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.recent-chat-item.is-active {
+  background: var(--uv-ws-module-active-bg, rgba(160, 82, 45, 0.12));
+}
+
+.recent-chat-item.is-active::before {
+  background: var(--uv-ws-module-active-mark, #A0522D);
+}
+
+.recent-chat-title {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--uv-ws-page-text, #25282d);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.recent-chat-meta {
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--uv-ws-muted-text, #8a9099);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .module-group {
@@ -240,7 +445,7 @@ const goToService = async (type: string) => {
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
-  color: #414754;
+  color: var(--uv-ws-module-title, #414754);
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
@@ -251,12 +456,12 @@ const goToService = async (type: string) => {
 
 .module-pill:hover {
   background: rgba(0, 0, 0, 0.04);
-  color: #1b1b1c;
+  color: var(--uv-ws-page-text, #1b1b1c);
 }
 
 .module-pill.is-active {
-  background: #e5f4ff; /* Figma active item light blue */
-  color: #1a1c1c; /* Text stays dark/black as in Figma */
+  background: var(--uv-ws-module-active-bg, rgba(160, 82, 45, 0.12));
+  color: var(--uv-ws-page-text, #1a1c1c);
   font-weight: 500;
   margin-bottom: 8px; /* space before intro drops down */
 }
@@ -268,7 +473,7 @@ const goToService = async (type: string) => {
 }
 
 .expand-icon.is-active-icon {
-  color: #0d99ff; /* The icon takes the Figma primary blue to pop */
+  color: var(--uv-ws-module-active-mark, #A0522D);
 }
 
 .expand-icon.rotated {
@@ -302,25 +507,61 @@ const goToService = async (type: string) => {
   padding: 8px;
 }
 
+.intro-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .intro-image .badge {
-  background: rgba(0, 112, 235, 0.9);
-  color: #fff;
+  position: relative;
+  z-index: 1;
+  background: var(--uv-ws-service-badge-bg, #000000);
+  color: var(--uv-ws-service-badge-text, #fff);
   font-size: 10px;
   font-weight: 500;
   padding: 4px 8px;
   border-radius: 4px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.intro-image .badge.creative { background: rgba(0, 112, 235, 0.9); }
-.intro-image .badge.art { background: rgba(0, 112, 235, 0.9); }
+.intro-image .badge.creative { background: var(--uv-ws-service-badge-bg, #000000); }
+.intro-image .badge.art { background: var(--uv-ws-service-badge-bg, #000000); }
+
+.intro-subtitle {
+  color: var(--uv-ws-module-intro-title, #1f2329);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
 
 .intro-desc {
   margin: 0;
   font-size: 12px;
-  color: #6c707d;
+  color: var(--uv-ws-module-intro-text, #6c707d);
   line-height: 1.6;
+}
+
+.intro-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.intro-tags span {
+  border: 1px solid var(--uv-ws-service-tag-border, rgba(0, 0, 0, 0.12));
+  border-radius: 4px;
+  color: var(--uv-ws-service-tag-text, #414754);
+  font-size: 10px;
+  line-height: 1;
+  padding: 4px 6px;
 }
 
 </style>

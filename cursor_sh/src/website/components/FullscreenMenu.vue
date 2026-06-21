@@ -9,7 +9,6 @@
       <nav class="menu-nav">
         <a href="#hero" @click="handleLinkClick($event, 'hero')">首页</a>
         <a href="#intro" @click="handleLinkClick($event, 'intro')">产品介绍</a>
-        <a href="#cases" @click="handleLinkClick($event, 'cases')">案例作品</a>
         <a href="#about" @click="handleLinkClick($event, 'about')">关于我们</a>
         <a href="#business" @click="handleLinkClick($event, 'business')">业务合作</a>
         <a href="#contact" @click="handleLinkClick($event, 'contact')">联系我们</a>

@@ -11,7 +11,7 @@
     <!-- Flat divider instead of card wrapper -->
     <div class="header-divider"></div>
 
-    <div class="form-surface" v-loading="loading">
+    <div class="form-surface" data-onboarding-target="order-form-surface" v-loading="loading">
       <VideoPurchaseForm
         v-if="orderType === 'video_purchase'"
         :order="isEditMode ? (order || undefined) : undefined"
@@ -33,13 +33,40 @@
         @save-draft="handleSaveDraft"
         @cancel="goBack"
       />
+      <div v-else class="service-inquiry">
+        <div class="service-visual" :style="{ background: activeService?.gradient || fallbackGradient }">
+          <img
+            v-if="activeService?.image"
+            class="service-visual-img"
+            :src="activeService.image"
+            :alt="activeService.title"
+          />
+          <span>{{ activeService ? getServiceBadgeLabel(activeService.badge) : 'Platform Service' }}</span>
+        </div>
+        <div class="service-copy">
+          <h2>{{ activeService?.title || '平台服务咨询' }}</h2>
+          <p class="service-kicker">{{ activeService?.subtitle || 'Platform Services' }}</p>
+          <p class="service-desc">{{ activeService?.description || '请通过AI顾问提交您的项目需求，我们会根据业务类型安排后续对接。' }}</p>
+          <p class="service-support">
+            该业务暂未开放线上下单支持，如需咨询或定制服务，请发送邮件至
+            <a href="mailto:support@uniquevisionx.com">support@uniquevisionx.com</a>
+            ，我们的顾问会尽快与您联系。
+          </p>
+          <div class="service-tags" v-if="activeService?.features.length">
+            <span v-for="feature in activeService.features" :key="feature">{{ feature }}</span>
+          </div>
+          <div class="service-actions">
+            <el-button @click="goBack">返回主页</el-button>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- 需求告知函确认弹窗 -->
+    <!-- 订单需求确认函确认弹窗 -->
     <OrderConfirmationDialog
       v-model="showConfirmation"
       :order-number="pendingOrderNumber"
-      :order-type="orderType"
+      :order-type="confirmOrderType"
       :form-data="pendingFormData"
       @confirm="handleConfirmOrder"
       @cancel="showConfirmation = false"
@@ -60,7 +87,7 @@
         <h2 class="success-title">需求已确认提交</h2>
         <p class="success-desc">
           您的订单已成功提交，我们的团队将尽快为您安排制作。<br/>
-          您可以下载本次需求告知函留档。
+          您可以下载本次订单需求确认函留档。
         </p>
         <div class="success-actions">
           <el-button
@@ -69,7 +96,7 @@
             :loading="downloadingPdf"
             @click="handleDownloadPdf"
           >
-            下载需求告知函 PDF
+            下载订单需求确认函 PDF
           </el-button>
           <el-button @click="goToOrders">
             查看我的订单
@@ -89,6 +116,8 @@ import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
 import { orderApi } from '@/utils/api'
 import { getLatestEnterpriseStatus, showEnterpriseAuthPrompt } from '@/utils/enterpriseGuard'
+import { getServiceBadgeLabel, getServiceByType, isOrderableServiceType } from '@/data/platformServices'
+import { useUiStore } from '@/stores/ui'
 import VideoPurchaseForm from '@/components/VideoPurchaseForm.vue'
 import AI3DCustomForm from '@/components/AI3DCustomForm.vue'
 import DigitalArtForm from '@/components/DigitalArtForm.vue'
@@ -99,6 +128,7 @@ const router = useRouter()
 const route = useRoute()
 const orderStore = useOrderStore()
 const authStore = useAuthStore()
+const uiStore = useUiStore()
 
 const isEditMode = computed(() => route.name === 'EditOrder')
 const orderId = computed(() => isEditMode.value ? route.params.id as string : null)
@@ -106,13 +136,18 @@ const orderType = computed(() => {
   if (isEditMode.value && order.value) {
     return order.value.orderType
   }
-  return route.params.type as OrderType
+  return route.params.type as string
 })
+const activeService = computed(() => getServiceByType(orderType.value))
+const confirmOrderType = computed<OrderType>(() => {
+  return isOrderableServiceType(orderType.value) ? orderType.value : 'ai_3d_custom'
+})
+const fallbackGradient = 'linear-gradient(135deg, #1f2329 0%, #5b677a 100%)'
 
 const order = ref<Order | null>(null)
 const loading = ref(false)
 
-// 需求告知函确认弹窗状态
+// 订单需求确认函确认弹窗状态
 const showConfirmation = ref(false)
 const pendingFormData = ref<Record<string, any>>({})
 const pendingOrderNumber = ref('')
@@ -137,20 +172,24 @@ const pageTitle = computed(() => {
     return '修改订单'
   }
   const titles: Record<OrderType, string> = {
-    video_purchase: '裸眼3D成片购买适配',
-    ai_3d_custom: 'AI裸眼3D内容定制',
-    digital_art: '数字艺术内容定制'
+    video_purchase: getServiceByType('video_purchase')?.title || '3D OOH数字内容资源库',
+    ai_3d_custom: getServiceByType('ai_3d_custom')?.title || 'AI驱动3D OOH内容定制',
+    digital_art: getServiceByType('digital_art')?.title || '数字艺术与沉浸式视觉设计'
   }
-  return titles[orderType.value] || '创建订单'
+  return isOrderableServiceType(orderType.value)
+    ? titles[orderType.value]
+    : activeService.value?.title || '平台服务咨询'
 })
 
 const pageSubtitle = computed(() => {
   const subtitles: Record<OrderType, string> = {
-    video_purchase: '填写屏幕参数，获取适配的专业裸眼3D视频内容',
-    ai_3d_custom: '基于AI技术的定制化3D内容创作，15个工作日交付',
-    digital_art: '专业数字艺术创作服务，3天内提供初稿'
+    video_purchase: getServiceByType('video_purchase')?.subtitle || '即用型裸眼3D数字内容资产',
+    ai_3d_custom: getServiceByType('ai_3d_custom')?.subtitle || 'AI创意内容开发',
+    digital_art: getServiceByType('digital_art')?.subtitle || '艺术指导与视觉设计'
   }
-  return subtitles[orderType.value] || ''
+  return isOrderableServiceType(orderType.value)
+    ? subtitles[orderType.value]
+    : activeService.value?.subtitle || ''
 })
 
 onMounted(async () => {
@@ -174,8 +213,13 @@ onMounted(async () => {
   }
 })
 
-// 用户点击"确认提交" → 检查企业认证 → 弹出需求告知函
+// 用户点击"确认提交" → 检查企业认证 → 弹出订单需求确认函
 const handleSubmit = async (formData: any) => {
+  if (!isOrderableServiceType(orderType.value)) {
+    goBack()
+    return
+  }
+
   // 检查企业认证状态
   const enterpriseStatus = await getLatestEnterpriseStatus(authStore)
   if (enterpriseStatus !== 'approved') {
@@ -210,7 +254,7 @@ const handleSubmit = async (formData: any) => {
   showConfirmation.value = true
 }
 
-// 用户确认需求告知函后，正式创建或更新订单
+// 用户确认订单需求确认函后，正式创建或更新订单
 const handleConfirmOrder = async (confirmData: { email: string; phone: string }) => {
   try {
     const finalData = {
@@ -261,6 +305,11 @@ const goToOrders = () => {
 }
 
 const handleSaveDraft = async (formData: any) => {
+  if (!isOrderableServiceType(orderType.value)) {
+    goBack()
+    return
+  }
+
   try {
     if (isEditMode.value && orderId.value) {
       await orderStore.updateOrder(orderId.value, {
@@ -281,6 +330,10 @@ const handleSaveDraft = async (formData: any) => {
 }
 
 const goBack = () => {
+  uiStore.setIsAiExpanded(false)
+  uiStore.setSecondarySidebar(false)
+  uiStore.toggleSidebar(false)
+  uiStore.setActiveModule('')
   router.push('/user/workspace')
 }
 </script>
@@ -339,6 +392,102 @@ const goBack = () => {
   border: none;
   box-shadow: none;
   border-radius: 0;
+}
+
+.service-inquiry {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) 1fr;
+  gap: 32px;
+  align-items: stretch;
+}
+
+.service-visual {
+  min-height: 260px;
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.service-visual-img {
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  display: block;
+  object-fit: cover;
+}
+
+.service-visual span {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  background: var(--uv-ws-service-badge-bg, #000000);
+  border-radius: 4px;
+  color: var(--uv-ws-service-badge-text, #fff);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  padding: 5px 9px;
+  text-transform: uppercase;
+}
+
+.service-copy h2 {
+  color: var(--uv-ws-service-title, #1a1c1c);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px 0;
+}
+
+.service-kicker {
+  color: var(--uv-ws-service-subtitle, #414754);
+  font-size: 13px;
+  font-weight: 500;
+  margin: 0 0 16px 0;
+}
+
+.service-desc {
+  color: var(--uv-ws-service-intro, #646a78);
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 0 0 14px 0;
+}
+
+.service-support {
+  color: var(--uv-ws-muted-text, #414754);
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 0 0 20px 0;
+}
+
+.service-support a {
+  color: var(--uv-ws-action-button-bg, #A0522D);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.service-support a:hover {
+  text-decoration: underline;
+}
+
+.service-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 28px;
+}
+
+.service-tags span {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+  color: #414754;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.service-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 /* 成功弹窗样式 */

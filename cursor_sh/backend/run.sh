@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# AI设计任务管理系统 - 快速启动脚本
+# Unique Vision AI - 快速启动脚本
 
-echo "🚀 AI设计任务管理系统 - 后端服务启动脚本"
+echo "🚀 Unique Vision AI - 后端服务启动脚本"
 echo "========================================"
 
 # Python 版本配置

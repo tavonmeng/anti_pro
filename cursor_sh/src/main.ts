@@ -10,6 +10,12 @@ import App from './App.vue'
 import router from './router'
 import './styles/main.scss'
 
+try {
+  window.localStorage.removeItem('uv_workspace_theme_debug')
+} catch (error) {
+  // Ignore storage access restrictions; the debug theme has been removed.
+}
+
 const app = createApp(App)
 const pinia = createPinia()
 
@@ -25,4 +31,3 @@ app.use(ElementPlus, {
 })
 
 app.mount('#app')
-

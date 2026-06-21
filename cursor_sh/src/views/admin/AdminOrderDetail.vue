@@ -41,7 +41,7 @@
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="confirmation">需求告知函</el-dropdown-item>
+                <el-dropdown-item command="confirmation">订单需求确认函</el-dropdown-item>
                 <el-dropdown-item command="detail">订单详情报告</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -199,15 +199,26 @@
               <p class="description-text">{{ order.content || '-' }}</p>
               <p><strong>品牌禁忌内容：</strong></p>
               <p class="description-text">{{ order.prohibited_content || '-' }}</p>
+              <p v-if="order.special_requirements"><strong>其他特殊合作要求：</strong></p>
+              <p v-if="order.special_requirements" class="description-text">{{ order.special_requirements }}</p>
+              <p v-if="order.remarks"><strong>备注：</strong></p>
+              <p v-if="order.remarks" class="description-text">{{ order.remarks }}</p>
             </template>
             <div v-if="order.scenePhotos && order.scenePhotos.length > 0">
-              <p><strong>现场实拍图（{{ order.scenePhotos.length }}张）：</strong></p>
+              <p><strong>现场实拍图和其他文件（{{ order.scenePhotos.length }}个）：</strong></p>
               <div class="file-list">
-                <div v-for="file in order.scenePhotos" :key="file.id" class="file-item">
-                  <el-icon><Picture /></el-icon>
-                  <span>{{ file.name }}</span>
+                <button
+                  v-for="(file, fileIndex) in order.scenePhotos"
+                  :key="fileKey(file, fileIndex)"
+                  type="button"
+                  class="file-item file-action"
+                  @click="openFilePreview(file)"
+                >
+                  <el-icon><component :is="isPreviewImage(file) ? Picture : DocumentIcon" /></el-icon>
+                  <span>{{ fileName(file) }}</span>
                   <span class="file-size">{{ formatFileSize(file.size) }}</span>
-                </div>
+                  <span class="file-open-text">{{ isPreviewImage(file) ? '预览' : '下载' }}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -218,11 +229,18 @@
             <div v-if="order.materials.length > 0">
               <p><strong>相关材料（{{ order.materials.length }}个文件）：</strong></p>
               <div class="file-list">
-                <div v-for="file in order.materials" :key="file.id" class="file-item">
-                  <el-icon><Document /></el-icon>
-                  <span>{{ file.name }}</span>
+                <button
+                  v-for="(file, fileIndex) in order.materials"
+                  :key="fileKey(file, fileIndex)"
+                  type="button"
+                  class="file-item file-action"
+                  @click="openFilePreview(file)"
+                >
+                  <el-icon><component :is="isPreviewImage(file) ? Picture : DocumentIcon" /></el-icon>
+                  <span>{{ fileName(file) }}</span>
                   <span class="file-size">{{ formatFileSize(file.size) }}</span>
-                </div>
+                  <span class="file-open-text">{{ isPreviewImage(file) ? '预览' : '下载' }}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -251,10 +269,10 @@
                   <span class="preview-history-user">{{ history.createdByName }}</span>
                 </div>
                 <div class="preview-files">
-                  <div v-for="file in history.files" :key="file.id" class="file-item">
-                    <a :href="file.url" target="_blank" class="file-link">
+                  <div v-for="(file, fileIndex) in history.files" :key="fileKey(file, fileIndex)" class="file-item">
+                    <a :href="fileUrl(file)" target="_blank" class="file-link" @click.prevent="openFilePreview(file)">
                       <el-icon><VideoPlay /></el-icon>
-                      <span>{{ file.name }}</span>
+                      <span>{{ fileName(file) }}</span>
                       <span class="file-size">{{ formatFileSize(file.size) }}</span>
                     </a>
                   </div>
@@ -288,12 +306,18 @@
         <div v-if="hasPreviewFiles" class="preview-section">
           <h3>预览文件</h3>
           <div class="file-list">
-            <div v-for="file in order.previewFiles" :key="file.id" class="file-item preview-file">
+            <button
+              v-for="(file, fileIndex) in order.previewFiles"
+              :key="fileKey(file, fileIndex)"
+              type="button"
+              class="file-item file-action preview-file"
+              @click="openFilePreview(file)"
+            >
               <el-icon><VideoPlay /></el-icon>
-              <span>{{ file.name }}</span>
+              <span>{{ fileName(file) }}</span>
               <span class="file-size">{{ formatFileSize(file.size) }}</span>
               <span class="file-time">{{ formatTime(file.uploadTime) }}</span>
-            </div>
+            </button>
           </div>
         </div>
         
@@ -405,7 +429,12 @@
             <!-- 交付物 -->
             <div v-if="assignment.deliverables && assignment.deliverables.length > 0" class="ca-deliverables">
               <h4>交付物</h4>
-              <div v-for="d in assignment.deliverables" :key="d.id" class="ca-deliverable-item">
+              <div
+                v-for="(d, dlvIndex) in sortedDeliverables(assignment.deliverables)"
+                :key="d.id"
+                class="ca-deliverable-item"
+                :class="{ 'is-alt': dlvIndex % 2 === 1 }"
+              >
                 <div class="ca-dlv-header">
                   <div style="display: flex; align-items: center; gap: 8px;">
                     <span>{{ d.stageName }} V{{ d.version }}</span>
@@ -415,8 +444,15 @@
                   <span v-if="d.createdAt" style="font-size: 12px; color: #86868B;">{{ formatTime(d.createdAt) }}</span>
                 </div>
                 <div v-if="d.files && d.files.length" class="ca-dlv-files">
-                  <a v-for="f in d.files" :key="f.url" :href="f.url" target="_blank" class="ca-dlv-file">
-                    {{ f.name || f.filename }}
+                  <a
+                    v-for="(f, fileIndex) in d.files"
+                    :key="fileKey(f, fileIndex)"
+                    :href="fileUrl(f)"
+                    target="_blank"
+                    class="ca-dlv-file"
+                    @click.prevent="openFilePreview(f)"
+                  >
+                    {{ f.name || f.filename || f.originalName || '交付文件' }}
                   </a>
                 </div>
                 <p v-if="d.description" class="ca-dlv-desc">{{ d.description }}</p>
@@ -513,15 +549,10 @@
             <div style="display: flex; align-items: center; gap: 8px;">
               <el-icon><User /></el-icon>
               <h3 style="margin: 0;">客户画像</h3>
-              <el-tag v-if="memoryData?.company_info?.crawl_status === 'success'" type="success" size="small">已分析</el-tag>
-              <el-tag v-else-if="memoryData?.company_info?.crawl_status === 'pending'" type="warning" size="small">分析中</el-tag>
-              <el-tag v-else-if="memoryData?.company_info?.crawl_status === 'failed'" type="danger" size="small">分析失败</el-tag>
-              <el-tag v-else type="info" size="small">未分析</el-tag>
+              <el-tag v-if="hasMemoryProfile" type="success" size="small">已建档</el-tag>
+              <el-tag v-else type="info" size="small">未建档</el-tag>
             </div>
             <div style="display: flex; gap: 8px;">
-              <el-button size="small" @click="handleTriggerCrawl" :loading="crawlLoading">
-                {{ memoryData?.company_info?.crawl_status === 'success' ? '重新分析' : '分析官网' }}
-              </el-button>
               <el-button size="small" @click="showMemory = !showMemory">
                 {{ showMemory ? '收起' : '展开' }}
               </el-button>
@@ -545,7 +576,7 @@
               <el-descriptions-item label="核心优势" v-if="memoryData.company_info.advantages?.length">
                 <el-tag v-for="adv in memoryData.company_info.advantages" :key="adv" size="small" style="margin-right: 4px;">{{ adv }}</el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="分析时间">{{ memoryData.company_info.crawled_at || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="更新时间">{{ memoryData.company_info.document_updated_at || memoryData.company_info.crawled_at || '-' }}</el-descriptions-item>
             </el-descriptions>
           </div>
 
@@ -554,11 +585,15 @@
             <h4>屏幕资源（{{ memoryData.screen_resources.length }} 块）</h4>
             <el-table :data="memoryData.screen_resources" size="small" border stripe>
               <el-table-column prop="city" label="城市" width="80" />
-              <el-table-column prop="location" label="位置" min-width="120" />
-              <el-table-column prop="type" label="类型" width="120" />
-              <el-table-column prop="size" label="尺寸" width="80" />
-              <el-table-column prop="resolution" label="分辨率" width="100" />
-              <el-table-column prop="daily_traffic" label="日均客流" width="100" />
+              <el-table-column label="屏幕/点位" min-width="160" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.name || row.location || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="参数摘要" min-width="180" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.specs || [row.type, row.size, row.resolution].filter(Boolean).join('，') || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="备注" min-width="220" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.notes || [row.daily_traffic && `日均客流${row.daily_traffic}`, row.viewing_path && `观看动线${row.viewing_path}`, row.highlights].filter(Boolean).join('；') || '-' }}</template>
+              </el-table-column>
             </el-table>
           </div>
 
@@ -619,7 +654,7 @@
 
           <!-- 空状态 -->
           <div v-if="!memoryData?.company_info?.description && !memoryData?.screen_resources?.length && !memoryData?.past_projects?.length" style="text-align: center; padding: 20px; color: #999;">
-            暂无画像数据。点击「分析官网」可自动爬取客户公司信息。
+            暂无画像数据。可在客户画像管理中上传客户资料后写入 Memory。
           </div>
         </div>
       </el-card>
@@ -785,6 +820,7 @@
         </el-button>
       </template>
     </el-dialog>
+    <FilePreviewDialog v-model="filePreviewVisible" :file="previewingFile" />
   </div>
 </template>
 
@@ -796,9 +832,11 @@ import { ElMessageBox, ElMessage } from 'element-plus'
 import { useOrderStore } from '@/stores/order'
 import { orderApi, authApi, contractorAdminApi } from '@/utils/api'
 import request from '@/utils/request'
+import { formatServerTime, parseServerTime } from '@/utils/time'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import AssigneeDialog from '@/components/AssigneeDialog.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
+import FilePreviewDialog from '@/components/FilePreviewDialog.vue'
 import type { Order, OrderStatus, VideoPurchaseOrder, DigitalArtOrder, UploadedFile } from '@/types'
 
 const router = useRouter()
@@ -828,11 +866,39 @@ const stageDeadlines = ref<Record<string, string>>({})
 // 交付物评论状态
 const dlvCommentInputs = ref<Record<string, string>>({})
 const commentingDlvId = ref<string | null>(null)
+const filePreviewVisible = ref(false)
+const previewingFile = ref<Record<string, any> | null>(null)
 
 // 获取某个交付物关联的客户反馈
 const getDeliverableFeedbacks = (deliverableId: string) => {
   if (!order.value || !order.value.feedbacks) return []
   return order.value.feedbacks.filter((fb: any) => fb.deliverableId === deliverableId)
+}
+
+const deliverableSortTime = (deliverable: any) => {
+  return parseServerTime(deliverable?.publishedAt || deliverable?.createdAt || deliverable?.adminReviewedAt)?.getTime() || 0
+}
+
+const sortedDeliverables = (deliverables: any[] = []) => {
+  return [...deliverables].sort((a, b) => deliverableSortTime(b) - deliverableSortTime(a))
+}
+
+const fileUrl = (file: any) => file?.url || file?.previewUrl || file?.file_url || file?.fileUrl || file?.href || ''
+const fileName = (file: any) => file?.name || file?.filename || file?.fileName || file?.originalName || file?.original_filename || '文件'
+const fileKey = (file: any, index = 0) =>
+  file?.id || fileUrl(file) || file?.object_key || file?.filename || file?.name || index
+const isPreviewImage = (file: any) => {
+  const mime = String(file?.type || file?.mimeType || file?.mime_type || file?.content_type || '').toLowerCase()
+  return mime.startsWith('image/') || isImage(fileName(file)) || isImage(fileUrl(file).split('?')[0])
+}
+
+const openFilePreview = (file: any) => {
+  if (!fileUrl(file)) {
+    ElMessage.warning('文件地址为空，无法预览')
+    return
+  }
+  previewingFile.value = file
+  filePreviewVisible.value = true
 }
 
 // 管理员给交付物添加评论（Contractor 可见）
@@ -882,8 +948,19 @@ const uploadHeaders = computed(() => {
 const memoryData = ref<any>(null)
 const showMemory = ref(false)
 const agentNotes = ref('')
-const crawlLoading = ref(false)
 const notesLoading = ref(false)
+
+const hasMemoryProfile = computed(() => {
+  const data = memoryData.value || {}
+  const ci = data.company_info || {}
+  return Boolean(
+    ci.description ||
+    ci.past_cases?.length ||
+    data.screen_resources?.length ||
+    data.past_projects?.length ||
+    data.agent_notes
+  )
+})
 
 // 判断偏好是否有实质内容（排除内部时间戳字段）
 const hasPreferences = computed(() => {
@@ -895,17 +972,7 @@ const hasPreferences = computed(() => {
 
 // ISO 时间格式化为简短显示
 const formatShortTime = (iso: string | undefined) => {
-  if (!iso) return '-'
-  try {
-    const d = new Date(iso)
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    const hour = String(d.getHours()).padStart(2, '0')
-    const min = String(d.getMinutes()).padStart(2, '0')
-    return `${d.getFullYear()}-${month}-${day} ${hour}:${min}`
-  } catch {
-    return iso.slice(0, 16).replace('T', ' ')
-  }
+  return formatServerTime(iso || undefined)
 }
 
 const contractForm = ref({
@@ -921,9 +988,9 @@ const cancelForm = ref({
 })
 
 const orderTypeMap: Record<string, string> = {
-  video_purchase: '裸眼3D成片购买适配',
-  ai_3d_custom: 'AI裸眼3D内容定制',
-  digital_art: '数字艺术内容定制'
+  video_purchase: '3D OOH数字内容资源库',
+  ai_3d_custom: 'AI驱动3D OOH内容定制',
+  digital_art: '数字艺术与沉浸式视觉设计'
 }
 
 const orderTypeText = computed(() => {
@@ -941,7 +1008,7 @@ const hasPreviewFiles = computed(() => {
 const previewHistoryList = computed(() => {
   if (!order.value?.previewHistory) return []
   return [...order.value.previewHistory].sort((a, b) => {
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    return (parseServerTime(b.createdAt)?.getTime() || 0) - (parseServerTime(a.createdAt)?.getTime() || 0)
   })
 })
 
@@ -1059,7 +1126,7 @@ const loadContractorData = async (orderId: string) => {
     for (const assignment of assignments) {
       try {
         const dlvRes: any = await contractorAdminApi.getAssignmentDeliverables(assignment.id)
-        assignment.deliverables = Array.isArray(dlvRes) ? dlvRes : (dlvRes?.data || [])
+        assignment.deliverables = sortedDeliverables(Array.isArray(dlvRes) ? dlvRes : (dlvRes?.data || []))
       } catch {
         assignment.deliverables = []
       }
@@ -1182,45 +1249,12 @@ const loadMemory = async (userId: string) => {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     if (resp.ok) {
-      memoryData.value = await resp.json()
+      const payload = await resp.json()
+      memoryData.value = payload?.data || payload
       agentNotes.value = memoryData.value?.agent_notes || ''
     }
   } catch (e) {
     console.error('Memory 加载失败:', e)
-  }
-}
-
-const handleTriggerCrawl = async () => {
-  if (!order.value?.userId) return
-  // 使用 memory 返回的 user_company，或发送空字符串让后端自动获取
-  const companyName = memoryData.value?.user_company || ''
-  crawlLoading.value = true
-  try {
-    const token = localStorage.getItem('token')
-    const resp = await fetch(`/api/admin/memory/${order.value.userId}/crawl`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ company_name: companyName })
-    })
-    if (resp.ok) {
-      ElMessage.success('已触发官网分析，请稍后刷新查看结果')
-      // 5 秒后自动刷新 memory
-      setTimeout(async () => {
-        if (order.value?.userId) {
-          await loadMemory(order.value.userId)
-        }
-        crawlLoading.value = false
-      }, 8000)
-    } else {
-      ElMessage.error('触发分析失败')
-      crawlLoading.value = false
-    }
-  } catch (e) {
-    ElMessage.error('触发分析失败')
-    crawlLoading.value = false
   }
 }
 
@@ -1297,20 +1331,7 @@ const getArtDirectionText = () => {
 }
 
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  const date = new Date(timeString)
-  if (isNaN(date.getTime())) {
-    return timeString
-  }
-  return date.toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
+  return formatServerTime(timeString)
 }
 
 const formatFileSize = (bytes: number): string => {
@@ -1698,6 +1719,25 @@ const handleAdminCancel = async () => {
   }
 }
 
+.file-action {
+  width: 100%;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+
+  &:hover {
+    background: #EEF2FF;
+  }
+}
+
+.file-open-text {
+  margin-left: auto;
+  color: #409EFF !important;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .file-link {
   display: flex;
   align-items: center;
@@ -1767,10 +1807,23 @@ const handleAdminCancel = async () => {
 .ca-deliverable-item {
   background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 8px;
   border: 1px solid #E5E7EB;
+  &.is-alt {
+    background: #F6F7F9;
+    border-color: #D9DDE4;
+  }
 }
 .ca-dlv-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: 500; }
 .ca-dlv-files { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-.ca-dlv-file { font-size: 13px; color: #409eff; text-decoration: none; &:hover { text-decoration: underline; } }
+.ca-dlv-file {
+  font-size: 13px;
+  color: var(--uv-ws-action-button-bg, #A0522D);
+  text-decoration: none;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: rgba(160, 82, 45, 0.08);
+  cursor: pointer;
+  &:hover { text-decoration: underline; background: rgba(160, 82, 45, 0.14); }
+}
 .ca-dlv-desc { font-size: 13px; color: #515154; margin: 0 0 8px; }
 .ca-dlv-actions { display: flex; gap: 8px; }
 .ca-dlv-note { font-size: 13px; color: #E6A23C; margin-top: 8px; line-height: 1.5; }
@@ -1913,5 +1966,210 @@ const handleAdminCancel = async () => {
 .ca-dlv-comment-input {
   margin-top: 10px;
 }
-</style>
 
+@media (max-width: 768px) {
+  .admin-order-detail-page {
+    padding: 12px;
+  }
+
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .page-header > .el-button,
+  .header-actions > .el-button,
+  .header-actions :deep(.el-dropdown),
+  .header-actions :deep(.el-dropdown .el-button) {
+    width: 100%;
+  }
+
+  .header-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .detail-card {
+    border-radius: 8px;
+
+    :deep(.el-card__body) {
+      padding: 12px;
+    }
+
+    :deep(.el-card__header) {
+      padding: 12px;
+    }
+
+    .card-header,
+    .header-right {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .header-right > .el-button,
+    .header-right :deep(.el-dropdown),
+    .header-right :deep(.el-dropdown .el-button) {
+      width: 100%;
+    }
+
+    .order-number {
+      font-size: 18px;
+      line-height: 1.3;
+      word-break: break-word;
+    }
+  }
+
+  .order-progress {
+    margin-bottom: 16px !important;
+    padding: 12px 8px !important;
+    overflow-x: auto;
+  }
+
+  .order-progress :deep(.el-steps) {
+    min-width: 680px;
+  }
+
+  :deep(.el-descriptions__table) {
+    table-layout: fixed;
+  }
+
+  :deep(.el-descriptions__label),
+  :deep(.el-descriptions__content) {
+    display: block;
+    width: 100% !important;
+    box-sizing: border-box;
+    word-break: break-word;
+  }
+
+  :deep(.el-descriptions__label) {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+
+  :deep(.el-row) {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  :deep(.el-col) {
+    max-width: 100%;
+    flex: 0 0 100%;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .order-specific-info,
+  .preview-section,
+  .preview-history-section,
+  .feedback-section,
+  .contractor-section,
+  .design-plan-section {
+    margin-top: 22px;
+
+    h3 {
+      font-size: 16px;
+      margin-bottom: 12px;
+    }
+  }
+
+  .description-text {
+    padding: 10px;
+    overflow-wrap: anywhere;
+  }
+
+  .preview-history-header,
+  .feedback-header,
+  .ca-header,
+  .ca-dlv-header,
+  .dp-header,
+  .dp-footer,
+  .schedule-stage-picker,
+  .ai-schedule-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .review-actions,
+  .ca-dlv-actions,
+  .dp-footer-btns {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .review-actions :deep(.el-button-group),
+  .review-actions :deep(.el-button-group .el-button),
+  .ca-actions .el-button,
+  .ca-dlv-actions .el-button,
+  .dp-footer-btns .el-button,
+  .dp-upload :deep(.el-button) {
+    width: 100%;
+  }
+
+  .file-item,
+  .file-link,
+  .dp-file-item,
+  .ca-dlv-fb-item,
+  .ca-admin-comment-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .file-open-text,
+  .file-size,
+  .file-time,
+  .ca-fb-meta,
+  .ca-comment-meta {
+    margin-left: 0;
+    white-space: normal;
+  }
+
+  .dp-card,
+  .contractor-assignment-card,
+  .ca-deliverable-item,
+  .workflow-schedule {
+    padding: 12px;
+    border-radius: 8px;
+  }
+
+  .dp-file-name,
+  .ca-dlv-file {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .schedule-stage-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .schedule-stage-picker :deep(.el-date-editor),
+  .ai-schedule-item :deep(.el-date-editor) {
+    width: 100% !important;
+  }
+
+  .memory-card {
+    :deep(.el-card__body) {
+      overflow-x: hidden;
+    }
+  }
+
+  .memory-section {
+    margin-bottom: 18px;
+    overflow-x: auto;
+  }
+
+  .memory-section :deep(.el-table) {
+    min-width: 640px;
+  }
+
+  .memory-section :deep(.el-textarea__inner) {
+    min-height: 92px;
+  }
+}
+</style>

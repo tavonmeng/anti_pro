@@ -89,9 +89,9 @@
         <el-form-item label="订单类型">
           <el-select v-model="filters.orderType" placeholder="全部类型" clearable style="width: 180px" @change="handleFilter">
             <el-option label="全部" value="" />
-            <el-option label="裸眼3D成片购买" value="video_purchase" />
-            <el-option label="AI裸眼3D定制" value="ai_3d_custom" />
-            <el-option label="数字艺术定制" value="digital_art" />
+            <el-option label="3D OOH数字内容资源库" value="video_purchase" />
+            <el-option label="AI驱动3D OOH内容定制" value="ai_3d_custom" />
+            <el-option label="数字艺术与沉浸式视觉设计" value="digital_art" />
           </el-select>
         </el-form-item>
         
@@ -185,6 +185,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Refresh, Document, Loading, View, CircleCheck, CircleClose, ChatLineSquare } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
+import { formatServerTime } from '@/utils/time'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
 import type { Order, OrderType, OrderStatus, UploadedFile } from '@/types'
@@ -227,9 +228,9 @@ const handleFilter = () => {
 }
 
 const orderTypeMap: Record<OrderType, string> = {
-  video_purchase: '裸眼3D成片购买',
-  ai_3d_custom: 'AI裸眼3D定制',
-  digital_art: '数字艺术定制'
+  video_purchase: '3D OOH数字内容资源库',
+  ai_3d_custom: 'AI驱动3D OOH内容定制',
+  digital_art: '数字艺术与沉浸式视觉设计'
 }
 
 const getOrderTypeText = (type: OrderType) => {
@@ -237,20 +238,7 @@ const getOrderTypeText = (type: OrderType) => {
 }
 
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  const date = new Date(timeString)
-  if (isNaN(date.getTime())) {
-    return timeString
-  }
-  return date.toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
+  return formatServerTime(timeString)
 }
 
 const handleUploadPreview = (order: Order) => {
@@ -464,5 +452,4 @@ const viewDetail = (order: Order) => {
   font-weight: 600;
 }
 </style>
-
 

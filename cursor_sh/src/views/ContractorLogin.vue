@@ -76,9 +76,6 @@
             <el-icon><InfoFilled /></el-icon>
             使用邀请链接注册后可通过手机号登录
           </p>
-          <p class="back-link">
-            <el-link @click="goToAdminLogin">← 管理员登录</el-link>
-          </p>
         </div>
       </div>
     </div>
@@ -86,8 +83,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Iphone, Message, Warning, InfoFilled, Suitcase } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -95,6 +92,7 @@ import type { UserRole } from '@/types'
 import request from '@/utils/request'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const loginFormRef = ref<FormInstance>()
 const loading = ref(false)
@@ -105,6 +103,13 @@ const loginForm = reactive({
   phone: '',
   sms_code: '',
   role: 'contractor' as UserRole,
+})
+
+onMounted(() => {
+  const phone = route.query.phone
+  if (typeof phone === 'string' && /^1[3-9]\d{9}$/.test(phone)) {
+    loginForm.phone = phone
+  }
 })
 
 const loginRules: FormRules = {
@@ -153,9 +158,6 @@ const handleLogin = async () => {
   })
 }
 
-const goToAdminLogin = () => {
-  router.push('/admin/login')
-}
 </script>
 
 <style lang="scss" scoped>

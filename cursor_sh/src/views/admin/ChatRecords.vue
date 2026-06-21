@@ -8,6 +8,7 @@
     <!-- 搜索栏 -->
     <div class="search-bar">
       <el-input
+        class="search-input"
         v-model="searchKeyword"
         placeholder="搜索用户名、公司、手机号或对话内容..."
         clearable
@@ -24,6 +25,7 @@
 
     <!-- 会话列表 -->
     <el-table
+      class="desktop-session-table"
       :data="sessions"
       v-loading="loading"
       stripe
@@ -73,6 +75,37 @@
       </el-table-column>
     </el-table>
 
+    <div class="mobile-session-list" v-loading="loading">
+      <button
+        v-for="row in sessions"
+        :key="row.id"
+        class="mobile-session-item"
+        type="button"
+        @click="openSession(row)"
+      >
+        <span class="mobile-session-top">
+          <span class="mobile-user">
+            <el-avatar :size="30" style="background: #409EFF; flex-shrink: 0">
+              {{ (row.username || '?')[0] }}
+            </el-avatar>
+            <span>
+              <strong>{{ row.username || row.userId }}</strong>
+              <small>{{ row.company || row.phone || '未填写客户信息' }}</small>
+            </span>
+          </span>
+          <el-tag type="info" size="small">{{ row.messageCount }} 条</el-tag>
+        </span>
+        <span class="mobile-session-title">{{ row.title || '（无标题）' }}</span>
+        <span class="mobile-session-bottom">
+          <el-tag :type="bizTypeTag(row.businessType)" size="small">
+            {{ bizTypeLabel(row.businessType) }}
+          </el-tag>
+          <span>{{ formatTime(row.updatedAt) }}</span>
+        </span>
+      </button>
+      <el-empty v-if="!loading && sessions.length === 0" description="暂无聊天记录" :image-size="90" />
+    </div>
+
     <!-- 分页 -->
     <div class="pagination-wrapper" v-if="total > pageSize">
       <el-pagination
@@ -86,6 +119,7 @@
 
     <!-- 对话详情弹窗 -->
     <el-drawer
+      class="chat-record-drawer"
       v-model="drawerVisible"
       :title="`对话详情 — ${activeSession?.company || activeSession?.username || ''}`"
       size="600px"
@@ -121,6 +155,7 @@
 import { ref, onMounted } from 'vue'
 import { Search, Loading } from '@element-plus/icons-vue'
 import { chatHistoryApi } from '@/utils/api'
+import { formatServerMonthDayTime } from '@/utils/time'
 
 const sessions = ref<any[]>([])
 const loading = ref(false)
@@ -168,14 +203,7 @@ const openSession = async (row: any) => {
 }
 
 const formatTime = (ts: string) => {
-  if (!ts) return '-'
-  try {
-    return new Date(ts).toLocaleString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit',
-    })
-  } catch { return ts }
+  return formatServerMonthDayTime(ts)
 }
 
 const bizTypeLabel = (t: string) => {
@@ -268,6 +296,10 @@ onMounted(() => {
   margin-top: 16px;
 }
 
+.mobile-session-list {
+  display: none;
+}
+
 /* Drawer chat */
 .loading-center {
   display: flex;
@@ -332,5 +364,176 @@ onMounted(() => {
   text-align: center;
   padding: 40px 0;
   color: #C0C4CC;
+}
+
+@media (max-width: 768px) {
+  .chat-records-page {
+    padding: 12px;
+    max-width: none;
+  }
+
+  .page-header h2 {
+    font-size: 18px;
+    line-height: 1.35;
+  }
+
+  .page-desc {
+    margin-bottom: 12px;
+  }
+
+  .search-bar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .search-input {
+    width: 100% !important;
+  }
+
+  .search-bar .el-button {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .desktop-session-table {
+    display: none;
+  }
+
+  .mobile-session-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 120px;
+    margin-top: 14px;
+  }
+
+  .mobile-session-item {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ebeef5;
+    border-radius: 8px;
+    background: #fff;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .mobile-session-top,
+  .mobile-session-bottom,
+  .mobile-user {
+    display: flex;
+    align-items: center;
+  }
+
+  .mobile-session-top,
+  .mobile-session-bottom {
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .mobile-user {
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .mobile-user span {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.35;
+  }
+
+  .mobile-user strong,
+  .mobile-session-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-user strong {
+    font-size: 14px;
+    color: #303133;
+  }
+
+  .mobile-user small,
+  .mobile-session-bottom span {
+    color: #909399;
+    font-size: 12px;
+  }
+
+  .mobile-session-title {
+    display: block;
+    color: #303133;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .pagination-wrapper {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .pagination-wrapper :deep(.el-pagination) {
+    white-space: nowrap;
+  }
+
+  :deep(.chat-record-drawer.el-drawer.rtl),
+  :deep(.chat-record-drawer .el-drawer.rtl) {
+    width: 100% !important;
+  }
+
+  :deep(.chat-record-drawer .el-drawer__header) {
+    margin-bottom: 8px;
+    padding: 14px 14px 8px;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  :deep(.chat-record-drawer .el-drawer__title) {
+    min-width: 0;
+    font-size: 15px;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  :deep(.chat-record-drawer .el-drawer__body) {
+    padding: 0 10px 12px;
+    overflow-x: hidden;
+  }
+
+  .chat-messages {
+    gap: 12px;
+    padding: 4px;
+  }
+
+  .chat-bubble {
+    max-width: 96%;
+    padding: 10px 12px;
+    border-radius: 8px;
+  }
+
+  .bubble-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .bubble-content {
+    font-size: 13px;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+  }
+
+  .bubble-content :deep(a),
+  .bubble-content :deep(code),
+  .bubble-content :deep(pre) {
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
 }
 </style>

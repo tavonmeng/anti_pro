@@ -9,7 +9,11 @@ from app.models.admin import Admin
 from app.models.staff_member import StaffMember
 from app.models.contractor import Contractor
 from app.models.contractor_invitation import ContractorInvitation
+from app.models.customer_document import CustomerDocument, CustomerDocumentExtraction
 from app.models.security_event import SecurityEvent, SecurityEventType
+from app.models.user_invitation import UserInvitation
+from app.models.user_memory import UserMemory
+from app.config import settings
 from app.schemas.auth import (
     LoginRequest, RegisterRequest, LoginResponse, 
     ChangePasswordRequest, ResetPasswordRequest
@@ -18,6 +22,51 @@ from app.schemas.user import UserResponse
 from app.utils.security import verify_password, get_password_hash, create_access_token
 from app.utils.validators import generate_id
 from app.services.sms_service import verify_sms_code
+from app.services.oss_service import maybe_sign_url
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+
+
+logger = get_module_logger("auth")
+
+
+def _role_value(role) -> str:
+    return role.value if hasattr(role, "value") else str(role)
+
+
+def _ensure_role_allowed_for_deployment(role: UserRole) -> None:
+    """Keep external customer auth and internal actor auth on separate deployments."""
+    role_value = _role_value(role)
+    deploy_mode = (settings.DEPLOYMENT_MODE or "").strip().lower()
+    if deploy_mode == "external" and role_value != UserRole.USER.value:
+        log_business_event(
+            logger,
+            "internal_role_auth_blocked_on_external",
+            level="warning",
+            role=role_value,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="接口不存在",
+        )
+    if deploy_mode == "internal" and role_value == UserRole.USER.value:
+        log_business_event(
+            logger,
+            "user_role_auth_blocked_on_internal",
+            level="warning",
+            role=role_value,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="接口不存在",
+        )
+
+
+def _password_reset_models():
+    deploy_mode = (settings.DEPLOYMENT_MODE or "").strip().lower()
+    if deploy_mode == "external":
+        return [User]
+    return [User, Admin, StaffMember, Contractor]
 
 
 def _get_model_for_role(role: UserRole):
@@ -32,6 +81,96 @@ def _get_model_for_role(role: UserRole):
         return User
 
 
+def _normalize_invite_token(token: str | None) -> str:
+    return (token or "").strip()
+
+
+async def _get_valid_user_invitation(
+    db: AsyncSession,
+    invite_token: str | None,
+    *,
+    required: bool,
+) -> UserInvitation | None:
+    """Return a usable user invitation or raise an HTTP error."""
+    from app.utils.timezone import beijing_now, ensure_beijing
+
+    token = _normalize_invite_token(invite_token)
+    if not token:
+        if required:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="当前内测阶段仅支持邀请注册，请联系管理员获取邀请链接",
+            )
+        return None
+
+    result = await db.execute(select(UserInvitation).where(UserInvitation.token == token))
+    invitation = result.scalar_one_or_none()
+    if not invitation:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邀请链接无效")
+    if invitation.is_used:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邀请链接已被使用")
+
+    expires_at = ensure_beijing(invitation.expires_at)
+    if expires_at and expires_at < beijing_now():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邀请链接已过期")
+
+    return invitation
+
+
+async def validate_user_invitation(db: AsyncSession, invite_token: str) -> dict:
+    """Public validation payload for the website registration modal."""
+    invitation = await _get_valid_user_invitation(db, invite_token, required=True)
+    return {
+        "valid": True,
+        "companyName": invitation.company_name,
+        "memoryUserId": invitation.memory_user_id,
+        "note": invitation.note,
+        "expiresAt": invitation.expires_at,
+    }
+
+
+async def _bind_invitation_memory(db: AsyncSession, invitation: UserInvitation, user: User) -> None:
+    """Move a selected Memory and its imported documents to the newly registered user."""
+    if not invitation.memory_user_id:
+        return
+    source_memory_user_id = invitation.memory_user_id
+
+    result = await db.execute(
+        select(UserMemory).where(UserMemory.user_id == source_memory_user_id)
+    )
+    selected_memory = result.scalar_one_or_none()
+    if not selected_memory:
+        return
+
+    target_result = await db.execute(
+        select(UserMemory).where(UserMemory.user_id == user.id)
+    )
+    target_memory = target_result.scalar_one_or_none()
+    if target_memory and target_memory.id != selected_memory.id:
+        await db.delete(target_memory)
+        await db.flush()
+
+    company_info = dict(selected_memory.company_info or {})
+    company_info.pop("is_prospect", None)
+    if invitation.company_name:
+        company_info["name"] = invitation.company_name
+    selected_memory.company_info = company_info
+    selected_memory.user_id = user.id
+
+    docs_result = await db.execute(
+        select(CustomerDocument).where(CustomerDocument.user_id == source_memory_user_id)
+    )
+    for document in docs_result.scalars().all():
+        document.user_id = user.id
+
+    extractions_result = await db.execute(
+        select(CustomerDocumentExtraction).where(CustomerDocumentExtraction.user_id == source_memory_user_id)
+    )
+    for extraction in extractions_result.scalars().all():
+        extraction.user_id = user.id
+    invitation.memory_user_id = user.id
+
+
 async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
     """
     用户登录（支持三种角色，各查各的表）
@@ -40,6 +179,7 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
     1. 手机号 + 密码
     2. 手机号 + 短信验证码
     """
+    _ensure_role_allowed_for_deployment(login_data.role)
     Model = _get_model_for_role(login_data.role)
     
     if not login_data.phone:
@@ -53,16 +193,40 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
         select(Model).where(Model.phone == login_data.phone)
     )
     user = result.scalar_one_or_none()
+
+    if login_data.role == UserRole.ADMIN and not login_data.sms_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="管理员仅支持验证码登录"
+        )
     
     if login_data.sms_code:
         # ---- 手机号 + 验证码登录 ----
         if not user:
+            log_business_event(
+                logger,
+                "login_failed",
+                role=login_data.role,
+                phone=login_data.phone,
+                method="sms",
+                reason="user_not_found",
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="尚未注册或角色不匹配"
             )
         is_valid = await verify_sms_code(login_data.phone, login_data.sms_code)
         if not is_valid:
+            log_business_event(
+                logger,
+                "login_failed",
+                user_id=user.id,
+                username=user.username,
+                role=login_data.role,
+                phone=login_data.phone,
+                method="sms",
+                reason="invalid_sms_code",
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="验证码错误或已过期"
@@ -70,6 +234,14 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
     elif login_data.password:
         # ---- 手机号 + 密码登录 ----
         if not user or not verify_password(login_data.password, user.password_hash):
+            log_business_event(
+                logger,
+                "login_failed",
+                role=login_data.role,
+                phone=login_data.phone,
+                method="password",
+                reason="invalid_credentials",
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="手机号或密码错误"
@@ -81,6 +253,16 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
         )
     
     if not user.is_active:
+        log_business_event(
+            logger,
+            "login_failed",
+            user_id=user.id,
+            username=user.username,
+            role=login_data.role,
+            phone=login_data.phone,
+            method="sms" if login_data.sms_code else "password",
+            reason="inactive",
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="用户已被禁用"
@@ -96,6 +278,15 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
         "role": role_value
     }
     token = create_access_token(token_data)
+    log_business_event(
+        logger,
+        "login_success",
+        user_id=user.id,
+        username=user.username,
+        role=role_value,
+        phone=login_data.phone,
+        method="sms" if login_data.sms_code else "password",
+    )
     
     # 构造统一响应
     user_response = UserResponse(
@@ -105,7 +296,7 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
         email=getattr(user, 'email', None),
         phone=getattr(user, 'phone', None),
         real_name=getattr(user, 'real_name', None),
-        avatar=getattr(user, 'avatar', None),
+        avatar=maybe_sign_url(getattr(user, 'avatar', None) or "", expires=7 * 24 * 3600),
         is_active=user.is_active,
         enterprise_status=(lambda e: e.value if hasattr(e, 'value') else str(e or 'none').lower())(getattr(user, 'enterprise_status', None) or 'none'),
         enterprise_name=getattr(user, 'enterprise_name', None),
@@ -122,6 +313,18 @@ async def register(db: AsyncSession, register_data: RegisterRequest, client_ip: 
     注册只允许 user 角色。admin 和 staff 由管理员后台创建。
     包含反注册机行为分析 + 安全事件审计。
     """
+    if (settings.DEPLOYMENT_MODE or "").strip().lower() == "internal":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="接口不存在",
+        )
+
+    invitation = await _get_valid_user_invitation(
+        db,
+        register_data.invite_token,
+        required=not settings.ALLOW_OPEN_USER_REGISTRATION,
+    )
+
     # 构建行为数据快照（用于写入安全事件表）
     behavior = register_data.behavior
     behavior_snapshot = behavior.model_dump() if behavior else None
@@ -148,14 +351,29 @@ async def register(db: AsyncSession, register_data: RegisterRequest, client_ip: 
             db.add(event)
             await db.flush()  # 写入但不单独 commit，跟随主事务
         except Exception as e:
-            print(f"[SecurityEvent] 写入失败: {e}")
+            log_business_event(
+                logger,
+                "security_event_write_failed",
+                level="warning",
+                event_type=event_type,
+                user_id=user_id,
+                phone=register_data.phone,
+                error=str(e),
+            )
     
     try:
         # ========== 反注册机检测 ==========
         
         # 0a. 蜜罐字段检查（前端隐藏，正常用户不会填写）
         if register_data.website:
-            print(f"[AntiBot] 蜜罐触发 IP={client_ip} phone={register_data.phone}")
+            log_business_event(
+                logger,
+                "register_bot_blocked",
+                phone=register_data.phone,
+                username=register_data.username,
+                client_ip=client_ip,
+                reason="honeypot_filled",
+            )
             await _log_event(SecurityEventType.REGISTER_BOT_BLOCKED, block_reason="honeypot_filled")
             await db.commit()
             raise HTTPException(
@@ -185,9 +403,25 @@ async def register(db: AsyncSession, register_data: RegisterRequest, client_ip: 
                 await db.commit()
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="操作异常，请重新注册")
             
-            print(f"[AntiBot] 行为正常: 耗时={total_time_sec:.1f}s 按键={behavior.key_press_count} 聚焦={behavior.field_focus_count} IP={client_ip}")
+            log_business_event(
+                logger,
+                "register_behavior_checked",
+                phone=register_data.phone,
+                username=register_data.username,
+                client_ip=client_ip,
+                total_duration_sec=round(total_time_sec, 1),
+                key_press_count=behavior.key_press_count,
+                field_focus_count=behavior.field_focus_count,
+            )
         else:
-            print(f"[AntiBot] 警告: 无行为数据 IP={client_ip} phone={register_data.phone}")
+            log_business_event(
+                logger,
+                "register_behavior_missing",
+                level="warning",
+                phone=register_data.phone,
+                username=register_data.username,
+                client_ip=client_ip,
+            )
         
         # ========== 正常注册流程 ==========
         
@@ -228,29 +462,76 @@ async def register(db: AsyncSession, register_data: RegisterRequest, client_ip: 
             phone=register_data.phone,
             password_hash=get_password_hash(register_data.password),
             role=UserRole.USER,
+            company=invitation.company_name if invitation and invitation.company_name else None,
             is_active=True,
             register_ip=client_ip[:50] if client_ip else None,
             register_user_agent=user_agent[:500] if user_agent else None,
         )
         
         db.add(new_user)
+
+        if invitation:
+            await _bind_invitation_memory(db, invitation, new_user)
+            invitation.is_used = True
+            invitation.used_by = new_user.id
         
         # 6. 记录注册成功事件
         await _log_event(SecurityEventType.REGISTER_SUCCESS, user_id=new_user.id)
         
         await db.commit()
         await db.refresh(new_user)
+
+        token_data = {
+            "user_id": new_user.id,
+            "username": new_user.username,
+            "role": UserRole.USER.value,
+        }
+        token = create_access_token(token_data)
+        user_response = UserResponse(
+            id=new_user.id,
+            username=new_user.username,
+            role=UserRole.USER,
+            email=new_user.email,
+            phone=new_user.phone,
+            real_name=new_user.real_name,
+            avatar=maybe_sign_url(getattr(new_user, "avatar", None) or "", expires=7 * 24 * 3600),
+            is_active=new_user.is_active,
+            enterprise_status=(
+                new_user.enterprise_status.value
+                if hasattr(new_user.enterprise_status, "value")
+                else str(new_user.enterprise_status or "none").lower()
+            ),
+            enterprise_name=new_user.enterprise_name,
+            enterprise_reject_reason=new_user.enterprise_reject_reason,
+            created_at=new_user.created_at,
+        )
+        log_business_event(
+            logger,
+            "register_success",
+            user_id=new_user.id,
+            username=new_user.username,
+            phone=new_user.phone,
+            email=new_user.email,
+            client_ip=client_ip,
+            invitation_id=invitation.id if invitation else None,
+        )
         
-        return {"success": True}
+        return {"success": True, "token": token, "user": user_response.model_dump()}
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        error_detail = f"{str(e)}\n{traceback.format_exc()}"
-        print(f"注册服务错误: {error_detail}")
+        log_business_event(
+            logger,
+            "register_failed",
+            level="error",
+            phone=register_data.phone,
+            username=register_data.username,
+            client_ip=client_ip,
+            error=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"注册失败: {str(e)}"
+            detail="注册失败，请稍后重试"
         )
 
 
@@ -264,9 +545,10 @@ async def reset_password(db: AsyncSession, data: ResetPasswordRequest) -> dict:
             detail="验证码错误或已过期"
         )
     
-    # 2. 在四张表中查找用户
+    # 2. 在用户表中查找。External 部署只允许普通客户找回密码；
+    #    内部角色只能在 internal/all 部署入口操作。
     user = None
-    for Model in [User, Admin, StaffMember, Contractor]:
+    for Model in _password_reset_models():
         result = await db.execute(
             select(Model).where(Model.phone == data.phone)
         )
@@ -285,7 +567,14 @@ async def reset_password(db: AsyncSession, data: ResetPasswordRequest) -> dict:
     await db.commit()
     await db.refresh(user)
     
-    print(f"✅ 用户 {user.username} (手机号 {data.phone[:3]}****{data.phone[7:]}) 密码重置成功")
+    log_business_event(
+        logger,
+        "password_reset",
+        user_id=user.id,
+        username=user.username,
+        role=getattr(user, "role", ""),
+        phone=data.phone,
+    )
     return {"success": True, "message": "密码重置成功"}
 
 
@@ -324,7 +613,7 @@ async def register_contractor(db: AsyncSession, register_data: dict) -> dict:
             - specialty: 专业方向（选填）
             - expertise: 擅长领域（选填）
     """
-    from datetime import datetime, timezone
+    from app.utils.timezone import beijing_now, ensure_beijing
     
     try:
         # 1. 验证邀请 token
@@ -354,8 +643,9 @@ async def register_contractor(db: AsyncSession, register_data: dict) -> dict:
                 detail="邀请链接已被使用"
             )
         
-        now = datetime.now(timezone.utc)
-        if invitation.expires_at and invitation.expires_at.replace(tzinfo=timezone.utc) < now:
+        now = beijing_now()
+        expires_at = ensure_beijing(invitation.expires_at)
+        if expires_at and expires_at < now:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="邀请链接已过期"
@@ -435,16 +725,30 @@ async def register_contractor(db: AsyncSession, register_data: dict) -> dict:
         
         await db.commit()
         await db.refresh(new_contractor)
+        log_business_event(
+            logger,
+            "contractor_register_success",
+            contractor_id=new_contractor.id,
+            username=new_contractor.username,
+            phone=new_contractor.phone,
+            email=new_contractor.email,
+            invitation_id=invitation.id,
+        )
         
         return {"success": True, "contractor_id": new_contractor.id}
     
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        error_detail = f"{str(e)}\n{traceback.format_exc()}"
-        print(f"承包商注册错误: {error_detail}")
+        log_business_event(
+            logger,
+            "contractor_register_failed",
+            level="error",
+            phone=register_data.get("phone"),
+            invite_token=register_data.get("invite_token"),
+            error=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"注册失败: {str(e)}"
+            detail="注册失败，请稍后重试"
         )

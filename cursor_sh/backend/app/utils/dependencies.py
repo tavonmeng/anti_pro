@@ -7,6 +7,7 @@ from sqlalchemy import select
 from typing import Union
 
 from app.database import get_db
+from app.config import settings
 from app.models.user import User, UserRole
 from app.models.admin import Admin
 from app.models.staff_member import StaffMember
@@ -30,6 +31,11 @@ def _get_model_for_role(role_str: str):
         return Contractor
     else:
         return User
+
+
+def _role_value(user: AnyUser) -> str:
+    role = user.role
+    return role.value if hasattr(role, 'value') else role
 
 
 async def get_current_user(
@@ -78,8 +84,7 @@ async def require_admin(
     current_user: AnyUser = Depends(get_current_user)
 ) -> Admin:
     """要求管理员权限"""
-    role = current_user.role
-    role_value = role.value if hasattr(role, 'value') else role
+    role_value = _role_value(current_user)
     if role_value != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -92,8 +97,7 @@ async def require_admin_or_staff(
     current_user: AnyUser = Depends(get_current_user)
 ) -> AnyUser:
     """要求管理员或负责人权限"""
-    role = current_user.role
-    role_value = role.value if hasattr(role, 'value') else role
+    role_value = _role_value(current_user)
     if role_value not in ["admin", "staff"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -106,8 +110,7 @@ async def require_contractor(
     current_user: AnyUser = Depends(get_current_user)
 ) -> Contractor:
     """要求承包商权限"""
-    role = current_user.role
-    role_value = role.value if hasattr(role, 'value') else role
+    role_value = _role_value(current_user)
     if role_value != "contractor":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -120,11 +123,48 @@ async def require_internal_user(
     current_user: AnyUser = Depends(get_current_user)
 ) -> AnyUser:
     """要求内部用户权限（管理员/设计师/承包商）"""
-    role = current_user.role
-    role_value = role.value if hasattr(role, 'value') else role
+    role_value = _role_value(current_user)
     if role_value not in ["admin", "staff", "contractor"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="权限不足，仅内部用户可执行此操作"
         )
+    return current_user
+
+
+def _raise_internal_only():
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="接口不存在"
+    )
+
+
+async def require_internal_deployment() -> None:
+    """仅允许内部/全量部署访问后台管理能力。"""
+    if settings.DEPLOYMENT_MODE == "external":
+        _raise_internal_only()
+
+
+async def get_current_user_for_public_deployment(
+    current_user: AnyUser = Depends(get_current_user)
+) -> AnyUser:
+    """external 部署只允许普通客户身份访问共享用户接口。"""
+    if settings.DEPLOYMENT_MODE == "external" and _role_value(current_user) != "user":
+        _raise_internal_only()
+    return current_user
+
+
+async def require_internal_admin(
+    current_user: Admin = Depends(require_admin)
+) -> Admin:
+    """要求管理员权限，并且不能从 external 部署访问。"""
+    await require_internal_deployment()
+    return current_user
+
+
+async def require_internal_admin_or_staff(
+    current_user: AnyUser = Depends(require_admin_or_staff)
+) -> AnyUser:
+    """要求管理员/负责人权限，并且不能从 external 部署访问。"""
+    await require_internal_deployment()
     return current_user

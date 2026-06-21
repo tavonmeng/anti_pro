@@ -12,8 +12,12 @@ from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_client import post_chat_completion
 from app.utils.security import decode_access_token
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_now, ensure_beijing
 
 order_router = APIRouter()
+logger = get_module_logger("ai")
 
 
 # ───────────────────────────────────────────────────────
@@ -38,9 +42,9 @@ _STATUS_MAP = {
 }
 
 _TYPE_MAP = {
-    "video_purchase": "裸眼3D成片购买适配",
-    "ai_3d_custom": "AI裸眼3D内容定制",
-    "digital_art": "数字艺术内容定制"
+    "video_purchase": "3D OOH数字内容资源库",
+    "ai_3d_custom": "AI驱动3D OOH内容定制",
+    "digital_art": "数字艺术与沉浸式视觉设计"
 }
 
 # 状态关键词 → 状态值的双向映射
@@ -231,7 +235,7 @@ def _filter_orders_by_time(user_msg: str, orders: list) -> list:
     
     示例：'上个月的订单'、'最近一周下的单'、'这个月的'
     """
-    now = datetime.now()
+    now = beijing_now()
     start_date = None
 
     if "上个月" in user_msg:
@@ -269,7 +273,7 @@ def _filter_orders_by_time(user_msg: str, orders: list) -> list:
         if not created:
             continue
         try:
-            order_date = datetime.fromisoformat(created.replace("Z", "+00:00")).replace(tzinfo=None)
+            order_date = ensure_beijing(datetime.fromisoformat(created.replace("Z", "+00:00")))
             if start_date <= order_date < end_date:
                 matched.append(o)
         except (ValueError, TypeError):
@@ -417,7 +421,13 @@ async def _llm_understand_query(user_msg: str, history: list, orders_summary: st
         import json as _json
         return _json.loads(raw)
     except Exception as e:
-        print(f"LLM 订单意图分析失败: {e}")
+        log_business_event(
+            logger,
+            "ai_order_intent_failed",
+            level="warning",
+            history_count=len(history or []),
+            error=str(e),
+        )
     return None
 
 
@@ -474,7 +484,13 @@ async def ai_query_orders(request: QueryOrdersRequest, raw_request: Request):
 
                 orders_data = (active + drafts)[:10]
     except Exception as e:
-        print(f"查询订单失败: {e}")
+        log_business_event(
+            logger,
+            "ai_order_query_failed",
+            level="error",
+            user_id=user_id,
+            error=str(e),
+        )
         return {"message": "非常抱歉，查询订单时遇到了问题，请稍后再试。", "orders": []}
 
     if not orders_data:

@@ -1,8 +1,8 @@
 """Homepage marketing bar configuration."""
 
 from sqlalchemy import Boolean, Column, DateTime, String
-from sqlalchemy.sql import func
 from app.database import Base
+from app.utils.timezone import beijing_now
 
 
 class HomepageBar(Base):
@@ -20,8 +20,8 @@ class HomepageBar(Base):
     image_object_key = Column(String(500), nullable=True)
     is_active = Column(Boolean, default=False, nullable=False)
     created_by = Column(String(50), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
+    updated_at = Column(DateTime(timezone=True), default=beijing_now, onupdate=beijing_now)
 
     def __repr__(self):
         return f"<HomepageBar(id={self.id}, active={self.is_active})>"

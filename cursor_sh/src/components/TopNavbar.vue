@@ -2,11 +2,8 @@
   <div class="top-navbar">
     <div class="nav-left">
       <div class="logo">
-        <svg viewBox="0 0 100 100" class="logo-svg">
-          <circle cx="50" cy="50" r="45" fill="none" stroke="#1D1D1F" stroke-width="2" />
-          <path d="M 30 50 L 45 65 L 70 35" fill="none" stroke="#1D1D1F" stroke-width="3" />
-        </svg>
-        <span class="logo-text">AI设计任务管理系统</span>
+        <img class="logo-svg" src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
+        <span class="logo-text">Unique Vision AI</span>
       </div>
       <el-menu
         :default-active="activeMenu"
@@ -29,7 +26,7 @@
       
       <el-dropdown trigger="click" @command="handleCommand">
         <div class="user-profile">
-          <el-avatar :size="36" class="user-avatar">{{ userInitial }}</el-avatar>
+          <el-avatar :size="36" class="user-avatar" :src="avatarUrl">{{ userInitial }}</el-avatar>
           <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
           <el-icon class="dropdown-icon"><CaretBottom /></el-icon>
         </div>
@@ -64,6 +61,8 @@ const userInitial = computed(() => {
   const name = authStore.user?.username || 'U'
   return name.charAt(0).toUpperCase()
 })
+
+const avatarUrl = computed(() => authStore.user?.avatar || '')
 
 const activeMenu = computed(() => {
   const path = route.path
@@ -118,8 +117,11 @@ const handleCommand = async (command: string) => {
   margin-right: 48px;
   
   .logo-svg {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 38px;
+    display: block;
+    flex-shrink: 0;
+    object-fit: contain;
   }
   
   .logo-text {
@@ -146,7 +148,7 @@ const handleCommand = async (command: string) => {
     border-bottom: none;
     
     &.is-active {
-      color: #0058bc; /* Primary */
+      color: var(--uv-ws-sidebar-active, #A0522D);
       background: transparent;
       font-weight: 600;
       position: relative;
@@ -159,7 +161,7 @@ const handleCommand = async (command: string) => {
         right: 20px;
         height: 3px;
         border-radius: 9999px;
-        background: #0058bc;
+        background: var(--uv-ws-sidebar-active, #A0522D);
       }
     }
     
@@ -203,7 +205,7 @@ const handleCommand = async (command: string) => {
 }
 
 .user-avatar {
-  background: #0058bc; /* Primary */
+  background: var(--uv-ws-sidebar-active, #A0522D);
   color: #ffffff;
   font-weight: 600;
   font-size: 16px;

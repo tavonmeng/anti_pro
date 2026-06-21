@@ -22,12 +22,12 @@
 
       <div class="action-container">
         <div class="contact-card">
-          <a href="mailto:mlm3344521@163.com" class="email-link">
-            mlm3344521@163.com
+          <a href="mailto:support@uniquevisionx.com" class="email-link">
+            support@uniquevisionx.com
           </a>
         </div>
         <div class="contact-card ai-card">
-          <a href="/user/workspace" class="email-link">
+          <a href="/user/workspace" class="email-link" @click.prevent="emit('open-login')">
             找AI向导
           </a>
         </div>
@@ -46,6 +46,7 @@ gsap.registerPlugin(ScrollTrigger)
 const isHover = ref(false)
 const sectionRef = ref(null)
 const overlayRef = ref(null)
+const emit = defineEmits(['open-login'])
 
 let ctx
 

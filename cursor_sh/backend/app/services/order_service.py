@@ -1,12 +1,15 @@
 """订单服务"""
 
+import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
 from typing import List, Optional, Union
-from datetime import datetime, timezone
+from datetime import datetime
 
 from app.models.order import Order, OrderType, OrderStatus, OrderAssignee
+from app.models.contractor_assignment import ContractorAssignment
+from app.models.contractor_deliverable import ContractorDeliverable
 from app.models.user import EnterpriseStatus, User, UserRole
 from app.utils.dependencies import AnyUser
 from app.models.admin import Admin
@@ -23,6 +26,21 @@ from app.services.email_service import EmailService
 from app.services.notification_service import NotificationService
 from app.services.pdf_service import PDFService
 from app.config import settings
+from app.utils.business_log import log_business_event
+from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_iso, beijing_now, beijing_now_iso
+
+
+logger = get_module_logger("order")
+
+
+def _log_email_result(event: str, sent: bool, **fields):
+    log_business_event(
+        logger,
+        event if sent else f"{event}_failed",
+        level="info" if sent else "warning",
+        **fields,
+    )
 
 
 async def _get_order_assignee_ids(db: AsyncSession, order_id: str) -> List[str]:
@@ -31,6 +49,12 @@ async def _get_order_assignee_ids(db: AsyncSession, order_id: str) -> List[str]:
         select(OrderAssignee.assignee_id).where(OrderAssignee.order_id == order_id)
     )
     return [row[0] for row in result.all()]
+
+
+def _iso_beijing(dt: datetime | None) -> str | None:
+    if not dt:
+        return None
+    return beijing_iso(dt)
 
 
 class OrderStateMachine:
@@ -92,6 +116,106 @@ class OrderStateMachine:
 
 class OrderService:
     """订单服务类"""
+
+    @staticmethod
+    def _confirmation_pdf_filename(order: Order) -> str:
+        return f"订单需求确认函_{order.order_number}.pdf"
+
+    @staticmethod
+    def _confirmation_pdf_object_key(order: Order) -> str:
+        return f"confirmation_pdfs/{order.user_id}/{order.id}_{order.order_number}.pdf"
+
+    @staticmethod
+    def _confirmation_pdf_local_path(order: Order) -> str:
+        return os.path.join(
+            settings.UPLOAD_DIR,
+            "confirmation_pdfs",
+            order.user_id,
+            f"{order.id}_{order.order_number}.pdf",
+        )
+
+    @staticmethod
+    def _get_archived_confirmation_meta(order: Order) -> dict:
+        order_data = order.order_data if isinstance(order.order_data, dict) else {}
+        return order_data.get("confirmationPdf") or {}
+
+    @staticmethod
+    async def _ensure_confirmation_pdf_archive(
+        db: AsyncSession,
+        order: Order,
+        user: User,
+        order_response: Optional[dict] = None,
+    ) -> tuple[bytes, str]:
+        """确保订单需求确认函只生成并归档一次，后续邮件/下载复用同一文件。"""
+        meta = OrderService._get_archived_confirmation_meta(order)
+        filename = meta.get("filename") or OrderService._confirmation_pdf_filename(order)
+
+        if settings.OSS_ENABLED and meta.get("objectKey"):
+            from app.services.oss_service import download_object_bytes
+            try:
+                return download_object_bytes(meta["objectKey"]), filename
+            except Exception as e:
+                log_business_event(
+                    logger,
+                    "order_confirmation_pdf_archive_read_failed",
+                    level="warning",
+                    order_id=order.id,
+                    order_number=order.order_number,
+                    object_key=meta.get("objectKey", ""),
+                    error=str(e),
+                )
+
+        if not settings.OSS_ENABLED and meta.get("filePath") and os.path.exists(meta["filePath"]):
+            with open(meta["filePath"], "rb") as f:
+                return f.read(), filename
+
+        if order_response is None:
+            order_response = await OrderService._build_order_response(db, order, user)
+
+        pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response)
+        archived_at = beijing_now_iso()
+
+        if settings.OSS_ENABLED:
+            from app.services.oss_service import upload_bytes
+            object_key = OrderService._confirmation_pdf_object_key(order)
+            upload_bytes(pdf_bytes, object_key, "application/pdf")
+            confirmation_meta = {
+                "storage": "oss",
+                "objectKey": object_key,
+                "filename": filename,
+                "contentType": "application/pdf",
+                "size": len(pdf_bytes),
+                "archivedAt": archived_at,
+            }
+        else:
+            file_path = OrderService._confirmation_pdf_local_path(order)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "wb") as f:
+                f.write(pdf_bytes)
+            confirmation_meta = {
+                "storage": "local",
+                "filePath": file_path,
+                "filename": filename,
+                "contentType": "application/pdf",
+                "size": len(pdf_bytes),
+                "archivedAt": archived_at,
+            }
+
+        next_order_data = dict(order.order_data or {})
+        next_order_data["confirmationPdf"] = confirmation_meta
+        order.order_data = next_order_data
+        await db.commit()
+        await db.refresh(order)
+        log_business_event(
+            logger,
+            "order_confirmation_pdf_archived",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            storage=confirmation_meta["storage"],
+            object_key=confirmation_meta.get("objectKey", ""),
+        )
+        return pdf_bytes, filename
 
     @staticmethod
     def _enterprise_status_value(user: AnyUser) -> str:
@@ -196,6 +320,18 @@ class OrderService:
         
         await db.commit()
         await db.refresh(new_order)
+        log_business_event(
+            logger,
+            "order_created",
+            order_id=new_order.id,
+            order_number=new_order.order_number,
+            user_id=user.id,
+            username=user.username,
+            order_type=new_order.order_type,
+            status=new_order.status,
+            is_draft=is_draft,
+            file_count=len(files_to_create),
+        )
         
         # 构造响应
         order_response = await OrderService._build_order_response(db, new_order, user)
@@ -203,11 +339,24 @@ class OrderService:
         # 如果不是草稿（直接提交），生成 PDF 并发邮件
         if not is_draft:
             if user.email:
-                pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response)
-                await EmailService.send_order_confirmation(
+                pdf_bytes, _ = await OrderService._ensure_confirmation_pdf_archive(
+                    db,
+                    new_order,
+                    user,
+                    order_response,
+                )
+                email_sent = await EmailService.send_order_confirmation(
                     user.email,
                     new_order.order_number,
                     pdf_bytes
+                )
+                _log_email_result(
+                    "order_confirmation_email_sent",
+                    email_sent,
+                    order_id=new_order.id,
+                    order_number=new_order.order_number,
+                    user_id=user.id,
+                    email=user.email,
                 )
             
             # 通知所有管理员有新订单提交
@@ -226,7 +375,15 @@ class OrderService:
                         order_id=new_order.id
                     )
             except Exception as e:
-                print(f"[Order] 发送管理员新订单通知失败: {e}")
+                log_business_event(
+                    logger,
+                    "order_admin_notification_failed",
+                    level="warning",
+                    order_id=new_order.id,
+                    order_number=new_order.order_number,
+                    user_id=user.id,
+                    error=str(e),
+                )
 
         return order_response
     
@@ -340,6 +497,19 @@ class OrderService:
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "order_updated",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            order_type=order.order_type,
+            status=order.status,
+            file_count=len(files_to_create),
+            deleted_file_count=len(files_to_delete),
+        )
         
         # 构造响应
         return await OrderService._build_order_response(db, order, current_user)
@@ -433,6 +603,32 @@ class OrderService:
                 raise HTTPException(status_code=403, detail="无权查看此订单")
         
         return await OrderService._build_order_response(db, order, current_user)
+
+    @staticmethod
+    async def get_confirmation_pdf_archive(
+        db: AsyncSession,
+        order_id: str,
+        current_user: AnyUser,
+    ) -> tuple[bytes, str]:
+        """获取订单需求确认函归档文件；旧订单没有归档时补生成一次。"""
+        order_response = await OrderService.get_order_detail(db, order_id, current_user)
+
+        result = await db.execute(select(Order).where(Order.id == order_id))
+        order = result.scalar_one_or_none()
+        if not order:
+            raise HTTPException(status_code=404, detail="订单不存在")
+
+        user_result = await db.execute(select(User).where(User.id == order.user_id))
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=404, detail="订单用户不存在")
+
+        return await OrderService._ensure_confirmation_pdf_archive(
+            db,
+            order,
+            user,
+            order_response,
+        )
     
     @staticmethod
     async def update_order_status(
@@ -500,27 +696,63 @@ class OrderService:
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "order_status_updated",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            status_from=old_status,
+            status_to=order.status,
+            is_draft_submit=is_draft_submit,
+            is_draft_delete=is_draft_delete,
+        )
         
         # 发送邮件通知（获取用户邮箱）
         user_result = await db.execute(select(User).where(User.id == order.user_id))
         user = user_result.scalar_one_or_none()
         if user and user.email:
             if is_draft_submit:
-                # 生成需求告知函 PDF 并作为附件发送
+                # 生成并归档订单需求确认函 PDF，邮件和后续下载复用同一份文件
                 order_response_for_pdf = await OrderService._build_order_response(db, order, user)
-                pdf_bytes = PDFService.generate_order_confirmation_pdf(order_response_for_pdf)
-                await EmailService.send_order_confirmation(
+                pdf_bytes, _ = await OrderService._ensure_confirmation_pdf_archive(
+                    db,
+                    order,
+                    user,
+                    order_response_for_pdf,
+                )
+                email_sent = await EmailService.send_order_confirmation(
                     user.email,
                     order.order_number,
                     pdf_bytes
                 )
+                _log_email_result(
+                    "order_confirmation_email_sent",
+                    email_sent,
+                    order_id=order.id,
+                    order_number=order.order_number,
+                    user_id=order.user_id,
+                    email=user.email,
+                )
             else:
                 # 发送普通的状态变更邮件
-                await EmailService.send_order_status_notification(
+                email_sent = await EmailService.send_order_status_notification(
                     user.email,
                     order.order_number,
                     old_status.value,
                     new_status.value
+                )
+                _log_email_result(
+                    "order_status_email_sent",
+                    email_sent,
+                    order_id=order.id,
+                    order_number=order.order_number,
+                    user_id=order.user_id,
+                    status_from=old_status,
+                    status_to=new_status,
+                    email=user.email,
                 )
         
         # 创建系统内消息通知
@@ -580,7 +812,17 @@ class OrderService:
                         order_id=order.id
                     )
             except Exception as e:
-                print(f"[Order] 发送管理员状态变更通知失败: {e}")
+                log_business_event(
+                    logger,
+                    "order_admin_notification_failed",
+                    level="warning",
+                    order_id=order.id,
+                    order_number=order.order_number,
+                    user_id=order.user_id,
+                    status_from=old_status,
+                    status_to=new_status,
+                    error=str(e),
+                )
         
         return await OrderService._build_order_response(db, order, current_user)
     
@@ -641,12 +883,26 @@ class OrderService:
             )
             db.add(order_assignee)
         
+        old_status = order.status
         # 如果订单是旧的待分配状态，自动转为制作中（合同与付款状态下分配负责人不改变订单状态）
         if order.status == OrderStatus.PENDING_ASSIGN:
             order.status = OrderStatus.IN_PRODUCTION
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "order_assigned",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            status_from=old_status,
+            status_to=order.status,
+            old_assignee_ids=sorted(old_assignee_ids),
+            new_assignee_ids=sorted(new_assignee_ids),
+        )
         
         # 创建系统内消息通知
         # 判断是新分配还是重新分配
@@ -706,6 +962,16 @@ class OrderService:
         # 权限检查
         if current_user.role not in [UserRole.ADMIN, UserRole.STAFF]:
             raise HTTPException(status_code=403, detail="权限不足")
+
+        if current_user.role == UserRole.STAFF:
+            assignee_result = await db.execute(
+                select(OrderAssignee).where(
+                    OrderAssignee.order_id == order_id,
+                    OrderAssignee.assignee_id == current_user.id
+                )
+            )
+            if not assignee_result.scalar_one_or_none():
+                raise HTTPException(status_code=403, detail="无权为未分配给自己的订单上传预览")
         
         # 处理预览文件
         preview_files = []
@@ -732,14 +998,13 @@ class OrderService:
         order_data["previewFiles"] = preview_files_field
         
         # 存储预览历史记录（每次上传都保存一条完整记录）
-        # 使用 UTC 时间并添加时区信息，与数据库时间格式保持一致
-        utc_now = datetime.now(timezone.utc)
+        now = beijing_now()
         preview_type_value = preview_type if preview_type in ["initial", "final"] else "initial"
         preview_history_entry = {
             "id": generate_id("preview"),
             "files": preview_files,
             "note": note or "",
-            "createdAt": utc_now.isoformat(),
+            "createdAt": now.isoformat(),
             "createdBy": current_user.id,
             "createdByName": current_user.real_name or current_user.username,
             "previewType": preview_type_value,
@@ -765,13 +1030,14 @@ class OrderService:
                 order_data["previewNotes"] = []
             order_data["previewNotes"].append({
                 "note": note,
-                "createdAt": utc_now.isoformat(),
+                "createdAt": now.isoformat(),
                 "createdBy": current_user.id,
                 "createdByName": current_user.real_name or current_user.username
             })
             # 同时保存最新备注，方便快速访问
             order_data["previewNote"] = note
         
+        old_status = order.status
         # 验证状态转换
         OrderStateMachine.validate_transition(order.status, OrderStatus.PENDING_REVIEW)
         
@@ -780,6 +1046,20 @@ class OrderService:
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "preview_uploaded",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            preview_id=preview_history_entry["id"],
+            preview_type=preview_type_value,
+            file_count=len(preview_files),
+            status_from=old_status,
+            status_to=order.status,
+        )
         
         # 通知管理员有新的预览待审核（从 admins 表查询）
         admin_result = await db.execute(select(Admin))
@@ -837,12 +1117,12 @@ class OrderService:
         if target_preview.get("reviewStatus") != "pending":
             raise HTTPException(status_code=400, detail="该预览已审核")
         
-        utc_now = datetime.now(timezone.utc).isoformat()
+        now = beijing_now_iso()
         reviewer_name = current_user.real_name or current_user.username
         
         target_preview["reviewStatus"] = "approved" if review_data.action == "approve" else "rejected"
         target_preview["reviewNote"] = review_data.note or ""
-        target_preview["reviewedAt"] = utc_now
+        target_preview["reviewedAt"] = now
         target_preview["reviewedBy"] = current_user.id
         target_preview["reviewedByName"] = reviewer_name
         
@@ -871,6 +1151,21 @@ class OrderService:
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "preview_reviewed",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            preview_id=target_preview["id"],
+            preview_type=target_preview.get("previewType"),
+            action=review_data.action,
+            review_status=target_preview.get("reviewStatus"),
+            status_from=old_status,
+            status_to=order.status,
+        )
         
         # 审核通过：通知用户与负责人员
         preview_type_text = "终稿" if target_preview.get("previewType") == "final" else "初稿"
@@ -878,10 +1173,19 @@ class OrderService:
             user_result = await db.execute(select(User).where(User.id == order.user_id))
             user = user_result.scalar_one_or_none()
             if user and user.email:
-                await EmailService.send_preview_ready_notification(
+                email_sent = await EmailService.send_preview_ready_notification(
                     user.email,
                     order.order_number,
                     preview_type_text
+                )
+                _log_email_result(
+                    "preview_ready_email_sent",
+                    email_sent,
+                    order_id=order.id,
+                    order_number=order.order_number,
+                    user_id=order.user_id,
+                    preview_id=target_preview["id"],
+                    email=user.email,
                 )
             
             await NotificationService.create_notification(
@@ -927,7 +1231,7 @@ class OrderService:
                     order.order_number,
                     old_status.value,
                     order.status.value
-            )
+                )
         
         return await OrderService._build_order_response(db, order, current_user)
     
@@ -948,6 +1252,37 @@ class OrderService:
         # 权限检查：只有订单创建者可以提交反馈
         if order.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="只有订单创建者可以提交反馈")
+
+        # 交付物反馈必须指向当前订单下已经推送给客户的交付物。
+        if feedback_data.deliverableId:
+            deliverable_result = await db.execute(
+                select(ContractorDeliverable)
+                .join(ContractorAssignment, ContractorDeliverable.assignment_id == ContractorAssignment.id)
+                .where(
+                    ContractorDeliverable.id == feedback_data.deliverableId,
+                    ContractorAssignment.order_id == order_id,
+                    ContractorDeliverable.is_published_to_user == True,  # noqa: E712
+                )
+            )
+            if not deliverable_result.scalar_one_or_none():
+                raise HTTPException(status_code=404, detail="交付物不存在或尚未对客户发布")
+
+        target_status = None
+        if not feedback_data.deliverableId:
+            if feedback_data.type == FeedbackType.REVISION:
+                if order.status not in [OrderStatus.PREVIEW_READY, OrderStatus.FINAL_PREVIEW]:
+                    raise HTTPException(status_code=400, detail="当前订单状态不能提交修改反馈")
+                target_status = OrderStatus.REVISION_NEEDED
+            elif feedback_data.type == FeedbackType.APPROVAL:
+                if order.status == OrderStatus.PREVIEW_READY:
+                    target_status = OrderStatus.IN_PRODUCTION
+                elif order.status == OrderStatus.FINAL_PREVIEW:
+                    target_status = OrderStatus.COMPLETED
+                else:
+                    raise HTTPException(status_code=400, detail="当前订单状态不能确认通过")
+
+            if target_status:
+                OrderStateMachine.validate_transition(order.status, target_status)
         
         # 创建反馈记录
         feedback = Feedback(
@@ -961,22 +1296,31 @@ class OrderService:
         db.add(feedback)
         
         # 仅订单级别反馈时才更新订单状态（交付物级别反馈不影响订单状态）
-        if not feedback_data.deliverableId:
+        old_status = order.status
+        if target_status:
             if feedback_data.type == FeedbackType.REVISION:
-                # 需要修改
-                order.status = OrderStatus.REVISION_NEEDED
+                order.status = target_status
                 order.revision_count += 1
             elif feedback_data.type == FeedbackType.APPROVAL:
-                # 确认通过
-                if order.status == OrderStatus.PREVIEW_READY:
-                    # 初稿通过，继续制作终稿
-                    order.status = OrderStatus.IN_PRODUCTION
-                elif order.status == OrderStatus.FINAL_PREVIEW:
-                    # 终稿通过，订单完成
-                    order.status = OrderStatus.COMPLETED
+                order.status = target_status
         
         await db.commit()
         await db.refresh(feedback)
+        log_business_event(
+            logger,
+            "feedback_submitted",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            feedback_id=feedback.id,
+            feedback_type=feedback.type,
+            deliverable_id=feedback.deliverable_id,
+            status_from=old_status,
+            status_to=order.status,
+            revision_count=order.revision_count,
+        )
         
         # 构建通知描述
         feedback_type_text = "需要修改" if feedback_data.type == FeedbackType.REVISION else "确认通过"
@@ -1012,13 +1356,16 @@ class OrderService:
                     order_id=order.id
                 )
         except Exception as e:
-            print(f"[Feedback] 发送管理员反馈通知失败: {e}")
-        
-        # 确保时间包含时区信息（UTC）
-        feedback_created_at = feedback.created_at
-        if feedback_created_at.tzinfo is None:
-            # 如果没有时区信息，假设是 UTC 时间
-            feedback_created_at = feedback_created_at.replace(tzinfo=timezone.utc)
+            log_business_event(
+                logger,
+                "feedback_admin_notification_failed",
+                level="warning",
+                order_id=order.id,
+                order_number=order.order_number,
+                user_id=order.user_id,
+                feedback_id=feedback.id,
+                error=str(e),
+            )
         
         return {
             "id": feedback.id,
@@ -1026,7 +1373,7 @@ class OrderService:
             "deliverableId": feedback.deliverable_id,
             "content": feedback.content,
             "type": feedback.type.value,
-            "createdAt": feedback_created_at.isoformat(),
+            "createdAt": beijing_iso(feedback.created_at),
             "createdBy": feedback.created_by,
             "createdByName": current_user.username
         }
@@ -1061,12 +1408,12 @@ class OrderService:
         
         # 保存合同信息到 order_data
         order_data = order.order_data.copy()
-        utc_now = datetime.now(timezone.utc)
+        now = beijing_now()
         order_data["contractInfo"] = {
             "contractNumber": contract_number,
             "paymentAmount": payment_amount,
             "note": note or "",
-            "confirmedAt": utc_now.isoformat(),
+            "confirmedAt": now.isoformat(),
             "confirmedBy": current_user.id,
             "confirmedByName": current_user.real_name or current_user.username
         }
@@ -1077,16 +1424,39 @@ class OrderService:
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "order_contract_advanced",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            contract_number=contract_number,
+            payment_amount=payment_amount,
+            status_from=old_status,
+            status_to=order.status,
+        )
         
         # 通知用户：订单已进入制作阶段
         user_result = await db.execute(select(User).where(User.id == order.user_id))
         user = user_result.scalar_one_or_none()
         if user and user.email:
-            await EmailService.send_order_status_notification(
+            email_sent = await EmailService.send_order_status_notification(
                 user.email,
                 order.order_number,
                 old_status.value,
                 OrderStatus.IN_PRODUCTION.value
+            )
+            _log_email_result(
+                "order_status_email_sent",
+                email_sent,
+                order_id=order.id,
+                order_number=order.order_number,
+                user_id=order.user_id,
+                status_from=old_status,
+                status_to=OrderStatus.IN_PRODUCTION,
+                email=user.email,
             )
         
         await NotificationService.create_notification(
@@ -1144,10 +1514,10 @@ class OrderService:
         
         # 保存取消原因到 order_data
         order_data = order.order_data.copy()
-        utc_now = datetime.now(timezone.utc)
+        now = beijing_now()
         order_data["cancelInfo"] = {
             "reason": reason or "",
-            "cancelledAt": utc_now.isoformat(),
+            "cancelledAt": now.isoformat(),
             "cancelledBy": current_user.id,
             "cancelledByName": current_user.real_name or current_user.username
         }
@@ -1157,6 +1527,18 @@ class OrderService:
         
         await db.commit()
         await db.refresh(order)
+        log_business_event(
+            logger,
+            "order_cancelled_by_admin",
+            order_id=order.id,
+            order_number=order.order_number,
+            user_id=order.user_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            status_from=old_status,
+            status_to=order.status,
+            reason_present=bool(reason),
+        )
         
         # 通知用户订单已取消
         user_result = await db.execute(select(User).where(User.id == order.user_id))
@@ -1164,11 +1546,21 @@ class OrderService:
         cancel_reason_text = f"取消原因：{reason}" if reason else ""
         
         if user and user.email:
-            await EmailService.send_order_status_notification(
+            email_sent = await EmailService.send_order_status_notification(
                 user.email,
                 order.order_number,
                 old_status.value,
                 OrderStatus.CANCELLED.value
+            )
+            _log_email_result(
+                "order_status_email_sent",
+                email_sent,
+                order_id=order.id,
+                order_number=order.order_number,
+                user_id=order.user_id,
+                status_from=old_status,
+                status_to=OrderStatus.CANCELLED,
+                email=user.email,
             )
         
         await NotificationService.create_notification(
@@ -1225,31 +1617,16 @@ class OrderService:
             creator_result = await db.execute(select(User).where(User.id == feedback.created_by))
             creator = creator_result.scalar_one_or_none()
             
-            # 确保时间包含时区信息（UTC）
-            feedback_created_at = feedback.created_at
-            if feedback_created_at.tzinfo is None:
-                # 如果没有时区信息，假设是 UTC 时间
-                feedback_created_at = feedback_created_at.replace(tzinfo=timezone.utc)
-            
             feedback_responses.append({
                 "id": feedback.id,
                 "orderId": feedback.order_id,
                 "deliverableId": feedback.deliverable_id,
                 "content": feedback.content,
                 "type": feedback.type.value,
-                "createdAt": feedback_created_at.isoformat(),
+                "createdAt": beijing_iso(feedback.created_at),
                 "createdBy": feedback.created_by,
                 "createdByName": creator.username if creator else None
             })
-        
-        # 确保订单时间包含时区信息（UTC）
-        order_created_at = order.created_at
-        if order_created_at.tzinfo is None:
-            order_created_at = order_created_at.replace(tzinfo=timezone.utc)
-        
-        order_updated_at = order.updated_at
-        if order_updated_at.tzinfo is None:
-            order_updated_at = order_updated_at.replace(tzinfo=timezone.utc)
         
         # 基础响应数据
         base_response = {
@@ -1263,8 +1640,8 @@ class OrderService:
             "userPhone": user.phone if user else None,
             "userEmail": user.email if user else None,
             "assignees": assignees_data,
-            "createdAt": order_created_at.isoformat(),
-            "updatedAt": order_updated_at.isoformat(),
+            "createdAt": beijing_iso(order.created_at),
+            "updatedAt": beijing_iso(order.updated_at),
             "feedbacks": feedback_responses,
             "revisionCount": order.revision_count,
             "previewHistory": order.order_data.get("previewHistory", []),  # 预览历史记录
@@ -1288,7 +1665,7 @@ class OrderService:
                     ContractorAssignment.order_id == order.id,
                     ContractorDeliverable.is_published_to_user == True
                 )
-                .order_by(ContractorDeliverable.stage_order.asc(), ContractorDeliverable.created_at.asc())
+                .order_by(ContractorDeliverable.published_at.desc(), ContractorDeliverable.created_at.desc())
             )
             published_deliverables = published_dlv_result.scalars().all()
             
@@ -1303,7 +1680,8 @@ class OrderService:
                         "files": dlv.files or [],
                         "description": dlv.description,
                         "publishedNote": dlv.published_note,
-                        "publishedAt": dlv.published_at.isoformat() if dlv.published_at else None,
+                        "publishedAt": _iso_beijing(dlv.published_at),
+                        "createdAt": _iso_beijing(dlv.created_at),
                     }
                     base_response["publishedDeliverables"].append(dlv_item)
         except Exception as e:
@@ -1323,23 +1701,28 @@ def _sign_file_urls_in_response(data: dict):
     处理字段：
     - scenePhotos[].url
     - scenePhotos[].file_url
+    - materials[].url
+    - materials[].file_url
     - previewFiles[].url
     - previewHistory[].files[].url
     - site_photos[].url / site_photos[].file_url
+    - designPlan.files[].url / designPlan.files[].file_url
+    - publishedDeliverables[].files[].url / publishedDeliverables[].files[].file_url
     """
-    from app.services.oss_service import maybe_sign_url
+    from app.services.oss_service import sign_file_url_fields
 
     # 签名单个文件对象的 url 字段
     def _sign_file_item(item):
         if isinstance(item, dict):
-            if "url" in item and item["url"]:
-                item["url"] = maybe_sign_url(item["url"])
-            if "file_url" in item and item["file_url"]:
-                item["file_url"] = maybe_sign_url(item["file_url"])
+            sign_file_url_fields(item)
 
     # scenePhotos
     for photo in data.get("scenePhotos", []) or []:
         _sign_file_item(photo)
+
+    # digital_art materials
+    for material in data.get("materials", []) or []:
+        _sign_file_item(material)
 
     # site_photos（承包商端脱敏后的字段名）
     for photo in data.get("site_photos", []) or []:
@@ -1358,3 +1741,8 @@ def _sign_file_urls_in_response(data: dict):
     for dlv in data.get("publishedDeliverables", []) or []:
         for f in dlv.get("files", []) or []:
             _sign_file_item(f)
+
+    # designPlan -> files
+    design_plan = data.get("designPlan") or data.get("design_plan") or {}
+    for f in design_plan.get("files", []) or []:
+        _sign_file_item(f)

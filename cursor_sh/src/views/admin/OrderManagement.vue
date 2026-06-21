@@ -33,9 +33,9 @@
       />
       <el-select v-model="filters.orderType" placeholder="全部类型" clearable class="filter-select">
         <el-option label="全部类型" value="" />
-        <el-option label="裸眼3D成片购买" value="video_purchase" />
-        <el-option label="AI裸眼3D定制" value="ai_3d_custom" />
-        <el-option label="数字艺术定制" value="digital_art" />
+        <el-option label="3D OOH数字内容资源库" value="video_purchase" />
+        <el-option label="AI驱动3D OOH内容定制" value="ai_3d_custom" />
+        <el-option label="数字艺术与沉浸式视觉设计" value="digital_art" />
       </el-select>
       <el-select v-model="filters.assigneeId" placeholder="全部负责人" clearable class="filter-select">
         <el-option label="全部负责人" value="" />
@@ -110,6 +110,11 @@
           <div class="order-card-summary" v-if="getOrderSummary(order)">
             {{ getOrderSummary(order) }}
           </div>
+
+          <div class="order-card-notes" v-if="getOrderRemarks(order)">
+            <span class="notes-label">备注</span>
+            <span class="notes-text">{{ getOrderRemarks(order) }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -125,6 +130,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useOrderStore } from '@/stores/order'
 import { useStaffStore } from '@/stores/staff'
+import { formatServerTime } from '@/utils/time'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import type { Order, OrderType, OrderStatus } from '@/types'
 
@@ -175,7 +181,9 @@ const filteredOrders = computed(() => {
     const kw = searchKeyword.value.toLowerCase()
     result = result.filter(o => 
       (o.orderNumber && o.orderNumber.toLowerCase().includes(kw)) ||
-      (o.userName && o.userName.toLowerCase().includes(kw))
+      (o.userName && o.userName.toLowerCase().includes(kw)) ||
+      getOrderSummary(o).toLowerCase().includes(kw) ||
+      getOrderRemarks(o).toLowerCase().includes(kw)
     )
   }
   return result
@@ -191,22 +199,15 @@ const refreshData = () => {
 }
 
 const orderTypeMap: Record<OrderType, string> = {
-  video_purchase: '裸眼3D成片购买',
-  ai_3d_custom: 'AI裸眼3D定制',
-  digital_art: '数字艺术定制'
+  video_purchase: '3D OOH数字内容资源库',
+  ai_3d_custom: 'AI驱动3D OOH内容定制',
+  digital_art: '数字艺术与沉浸式视觉设计'
 }
 
 const getOrderTypeText = (type: OrderType) => orderTypeMap[type] || type
 
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  const date = new Date(timeString)
-  if (isNaN(date.getTime())) return timeString
-  return date.toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false
-  })
+  return formatServerTime(timeString)
 }
 
 const getStatusColorClass = (status: string) => {
@@ -226,10 +227,22 @@ const getStatusColorClass = (status: string) => {
 }
 
 const getOrderSummary = (order: Order) => {
-  const data = (order as any).orderData || {}
-  const parts = [data.brand, data.content, data.city].filter(Boolean)
+  const data = (order as any).orderData || order
+  const parts = [
+    data.project_name,
+    data.brand,
+    data.theme_concept,
+    data.content,
+    data.city_location,
+    data.city,
+  ].filter(Boolean)
   if (parts.length === 0) return ''
   return parts.join(' · ')
+}
+
+const getOrderRemarks = (order: Order) => {
+  const data = (order as any).orderData || order
+  return [data.special_requirements, data.remarks].filter(Boolean).join('；')
 }
 
 const viewDetail = (order: Order) => {
@@ -274,6 +287,12 @@ const viewDetail = (order: Order) => {
 
   @media (max-width: 1200px) {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  @media (max-width: 768px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
   }
 }
 
@@ -343,6 +362,16 @@ const viewDetail = (order: Order) => {
     :deep(.el-input__wrapper) {
       border-radius: 10px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+  }
+
+  @media (max-width: 768px) {
+    margin-bottom: 14px;
+
+    .search-input,
+    .filter-select {
+      width: 100%;
+      max-width: none;
     }
   }
 }
@@ -471,9 +500,116 @@ const viewDetail = (order: Order) => {
   text-overflow: ellipsis;
 }
 
+.order-card-notes {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #515154;
+  min-width: 0;
+}
+
+.notes-label {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #F5F7FA;
+  color: #6B7280;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.notes-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* 按钮 */
 :deep(.el-button) {
   border-radius: 8px;
   font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .order-management-page {
+    padding: 0;
+    background: transparent;
+    min-height: auto;
+  }
+
+  .page-header {
+    margin-bottom: 16px;
+
+    :deep(.el-button) {
+      width: 100%;
+    }
+  }
+
+  .stat-card {
+    padding: 14px 12px;
+    border-radius: 8px;
+    align-items: flex-start;
+
+    &:hover {
+      transform: none;
+    }
+
+    .stat-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+    }
+  }
+
+  .order-card {
+    border-radius: 8px;
+  }
+
+  .order-card-body {
+    padding: 14px;
+  }
+
+  .order-card-header {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .order-main-info {
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .order-number {
+    max-width: 100%;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+  }
+
+  .order-status-area {
+    flex-shrink: 0;
+  }
+
+  .order-card-meta {
+    gap: 8px 12px;
+  }
+
+  .meta-item {
+    max-width: 100%;
+
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
 }
 </style>

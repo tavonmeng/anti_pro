@@ -176,7 +176,7 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 **Swagger UI 截图说明**:
 ```
 ┌─────────────────────────────────────────┐
-│  AI设计任务管理系统 API     [Authorize] │
+│  Unique Vision AI API     [Authorize] │
 ├─────────────────────────────────────────┤
 │  🔐 认证                                │
 │    POST /api/auth/login                 │

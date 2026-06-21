@@ -26,6 +26,7 @@ from app.utils.log_setup import (
     get_module_logger,
 )
 from app.utils.security import decode_access_token
+from app.utils.request_context import reset_request_context, set_request_context
 
 
 # 预解析配置
@@ -165,6 +166,14 @@ class AuditLoggerMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         module = resolve_module(path)
         method = request.method.upper()
+        context_token = set_request_context(
+            trace_id=trace_id,
+            actor_id=user_id,
+            actor_username=username,
+            method=method,
+            path=path,
+            ip=_get_client_ip(request),
+        )
 
         # ---- 5. 读取请求体（仅写操作） ----
         request_body_str = ""
@@ -200,6 +209,8 @@ class AuditLoggerMiddleware(BaseHTTPMiddleware):
                 f"💥 未捕获异常 | {method} {path} | user={username}"
             )
             raise
+        finally:
+            reset_request_context(context_token)
 
         # ---- 7. 计时结束 ----
         duration_ms = int((time.perf_counter() - start_time) * 1000)

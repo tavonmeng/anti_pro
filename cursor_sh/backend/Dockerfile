@@ -2,9 +2,13 @@
 FROM python:3.11-slim
 
 WORKDIR /app
+ENV TZ=Asia/Shanghai
 
 # 系统依赖（中文字体用于 PDF 生成）
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i 's|http://deb.debian.org|https://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update \
+    && apt-get install -y --no-install-recommends \
+    tzdata \
     fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/* \
     && fc-cache -f
@@ -12,7 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Python 依赖（挂载 pip 缓存，第二次构建秒装）
 COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt gunicorn uvicorn
+    pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple --retries 5 --timeout 60 -r requirements.txt \
+    || pip install --index-url https://pypi.org/simple --retries 5 --timeout 60 -r requirements.txt
 
 # 拷贝代码
 COPY . .

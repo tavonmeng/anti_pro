@@ -25,6 +25,11 @@ MODULE_ROUTE_MAP = {
     "/api/orders": "order",
     "/api/staff": "staff",
     "/api/notifications": "notification",
+    "/api/human-handoffs": "ai",
+    "/api/ai": "ai",
+    "/api/ai/chat-history": "ai",
+    "/api/admin-memory": "ai",
+    "/api/admin-documents": "ai",
     "/api/logs": "workspace",
     "/api/contractor-admin": "contractor",
     "/api/contractor": "contractor",
@@ -105,6 +110,19 @@ def truncate_payload(text: str, max_size: int = None) -> str:
     return text
 
 
+def _add_file_sink(path: str, **kwargs):
+    """Register a file sink, falling back to sync writes if multiprocessing queues are unavailable."""
+    try:
+        return logger.add(path, enqueue=True, **kwargs)
+    except OSError as exc:
+        if getattr(exc, "errno", None) != 28:
+            raise
+        logger.bind(module="system").warning(
+            f"日志异步队列不可用，已切换为同步写入: {path}"
+        )
+        return logger.add(path, enqueue=False, **kwargs)
+
+
 # ============================================================
 # 4. Loguru 初始化
 # ============================================================
@@ -159,7 +177,7 @@ def init_loguru():
     # 为每个业务模块创建独立 sink
     for mod in modules:
         mod_dir = os.path.join(log_dir, mod)
-        logger.add(
+        _add_file_sink(
             os.path.join(mod_dir, f"{mod}_{{time:YYYY-MM-DD}}.log"),
             format=log_format,
             level=settings.LOG_LEVEL,
@@ -167,33 +185,30 @@ def init_loguru():
             retention=settings.LOG_RETENTION,
             compression=compression,
             filter=lambda record, m=mod: record["extra"].get("module", "").lower() == m,
-            enqueue=True,  # 异步写入，不阻塞主线程
             encoding="utf-8",
         )
 
     # ---- error/ sink：汇聚所有 ERROR 及以上级别 ----
     error_dir = os.path.join(log_dir, "error")
-    logger.add(
+    _add_file_sink(
         os.path.join(error_dir, "error_{time:YYYY-MM-DD}.log"),
         format=log_format,
         level="ERROR",
         rotation=settings.LOG_ROTATION,
         retention=settings.LOG_RETENTION,
         compression=compression,
-        enqueue=True,
         encoding="utf-8",
     )
 
     # ---- crash/ sink：仅 CRITICAL 级别 ----
     crash_dir = os.path.join(log_dir, "crash")
-    logger.add(
+    _add_file_sink(
         os.path.join(crash_dir, "crash_{time:YYYY-MM-DD}.log"),
         format=log_format,
         level="CRITICAL",
         rotation=settings.LOG_ROTATION,
         retention=settings.LOG_RETENTION,
         compression=compression,
-        enqueue=True,
         encoding="utf-8",
     )
 

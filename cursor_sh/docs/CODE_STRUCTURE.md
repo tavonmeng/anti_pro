@@ -1,4 +1,4 @@
-# AI设计任务管理系统 - 代码结构指南
+# Unique Vision AI - 代码结构指南
 
 ## 📋 文档目的
 
@@ -521,7 +521,7 @@ const orderStore = useOrderStore()
 const services = ref([
   {
     type: 'video_purchase',
-    title: '裸眼3D成片购买适配',
+    title: '3D OOH数字内容资源库',
     description: '现有视频内容适配到裸眼3D设备'
   },
   // ...
@@ -700,7 +700,7 @@ from app.api import auth, orders, staff
 from app.middleware.cors import setup_cors
 
 app = FastAPI(
-    title="AI设计任务管理系统",
+    title="Unique Vision AI",
     version="1.0.0"
 )
 
@@ -718,7 +718,7 @@ async def startup():
 
 @app.get("/")
 async def root():
-    return {"app": "AI设计任务管理系统"}
+    return {"app": "Unique Vision AI"}
 ```
 
 **修改指南**:

@@ -27,7 +27,7 @@
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="confirmation">需求告知函</el-dropdown-item>
+                <el-dropdown-item command="confirmation">订单需求确认函</el-dropdown-item>
                 <el-dropdown-item command="detail">订单详情报告</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -177,7 +177,7 @@
               <p class="description-text">{{ order.prohibited_content || '-' }}</p>
             </template>
             <div v-if="order.scenePhotos && order.scenePhotos.length > 0">
-              <p><strong>现场实拍图（{{ order.scenePhotos.length }}张）：</strong></p>
+              <p><strong>现场实拍图和其他文件（{{ order.scenePhotos.length }}个）：</strong></p>
               <div class="file-list">
                 <div v-for="file in order.scenePhotos" :key="file.id" class="file-item">
                   <el-icon><Picture /></el-icon>
@@ -282,6 +282,7 @@ import { ArrowLeft, Upload, ArrowDown, Picture, Document as DocumentIcon, VideoP
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useOrderStore } from '@/stores/order'
 import { orderApi } from '@/utils/api'
+import { formatServerTime, parseServerTime } from '@/utils/time'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
 import type { Order, OrderStatus, VideoPurchaseOrder, DigitalArtOrder, UploadedFile, TimelineItem } from '@/types'
@@ -295,9 +296,9 @@ const loading = ref(true)
 const uploadDialogVisible = ref(false)
 
 const orderTypeMap: Record<string, string> = {
-  video_purchase: '裸眼3D成片购买适配',
-  ai_3d_custom: 'AI裸眼3D内容定制',
-  digital_art: '数字艺术内容定制'
+  video_purchase: '3D OOH数字内容资源库',
+  ai_3d_custom: 'AI驱动3D OOH内容定制',
+  digital_art: '数字艺术与沉浸式视觉设计'
 }
 
 const orderTypeText = computed(() => {
@@ -334,8 +335,8 @@ const timelineItems = computed<TimelineItem[]>(() => {
   
   // 按时间排序（从早到晚）
   return items.sort((a, b) => {
-    const timeA = new Date(a.data.createdAt).getTime()
-    const timeB = new Date(b.data.createdAt).getTime()
+    const timeA = parseServerTime(a.data.createdAt)?.getTime() || 0
+    const timeB = parseServerTime(b.data.createdAt)?.getTime() || 0
     return timeA - timeB
   })
 })
@@ -415,26 +416,7 @@ const getArtDirectionText = () => {
 }
 
 const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  // 解析时间字符串（支持带时区和不带时区的格式）
-  const date = new Date(timeString)
-  
-  // 检查日期是否有效
-  if (isNaN(date.getTime())) {
-    return timeString
-  }
-  
-  // 使用北京时间（UTC+8）格式化时间
-  // 将 UTC 时间转换为北京时间显示
-  return date.toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
+  return formatServerTime(timeString)
 }
 
 const formatFileSize = (bytes: number): string => {
@@ -797,5 +779,3 @@ const goBack = () => {
   margin: 0;
 }
 </style>
-
-

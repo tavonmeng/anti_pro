@@ -8,7 +8,7 @@ from app.database import get_db
 from app.schemas.response import ApiResponse
 from app.schemas.homepage_bar import HomepageBarResponse, HomepageBarUpdate
 from app.services.homepage_bar_service import HomepageBarService
-from app.utils.dependencies import require_admin, AnyUser
+from app.utils.dependencies import require_internal_admin, AnyUser
 
 router = APIRouter(prefix="/homepage-bar", tags=["官网运营条"])
 
@@ -22,7 +22,7 @@ async def get_public_homepage_bar(db: AsyncSession = Depends(get_db)):
 
 @router.get("", response_model=ApiResponse[HomepageBarResponse])
 async def get_homepage_bar(
-    current_user: AnyUser = Depends(require_admin),
+    current_user: AnyUser = Depends(require_internal_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Admin reads the editable marketing bar config."""
@@ -33,7 +33,7 @@ async def get_homepage_bar(
 @router.put("", response_model=ApiResponse[HomepageBarResponse])
 async def update_homepage_bar(
     data: HomepageBarUpdate,
-    current_user: AnyUser = Depends(require_admin),
+    current_user: AnyUser = Depends(require_internal_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Admin updates the homepage marketing bar config."""

@@ -1,9 +1,9 @@
 """订单-承包商派单记录模型"""
 
 from sqlalchemy import Column, String, DateTime, Enum, Text, JSON, ForeignKey
-from sqlalchemy.sql import func
 import enum
 from app.database import Base
+from app.utils.timezone import beijing_now
 
 
 class AssignmentStatus(str, enum.Enum):
@@ -43,7 +43,7 @@ class ContractorAssignment(Base):
     # 当前活跃环节序号（管理员手动推进时 +1）
     current_stage_order = Column(String(10), nullable=True, default="1")
 
-    assigned_at = Column(DateTime(timezone=True), server_default=func.now())
+    assigned_at = Column(DateTime(timezone=True), default=beijing_now)
     responded_at = Column(DateTime(timezone=True), nullable=True)     # 接单/拒绝时间
     completed_at = Column(DateTime(timezone=True), nullable=True)     # 全部完成时间
 

@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
+import { isExternalDeployment, isInternalDeployment, isInternalRoute, isUserRoute, loginPathForRoute } from '@/utils/deployment'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -145,9 +146,21 @@ const router = createRouter({
           meta: { requiresAuth: true, role: 'admin' }
         },
         {
+          path: 'human-handoffs',
+          name: 'HumanHandoffs',
+          component: () => import('../views/admin/HumanHandoffs.vue'),
+          meta: { requiresAuth: true, role: 'admin' }
+        },
+        {
           path: 'customers',
           name: 'CustomerManagement',
           component: () => import('../views/admin/CustomerManagement.vue'),
+          meta: { requiresAuth: true, role: 'admin' }
+        },
+        {
+          path: 'creative-agent',
+          name: 'CreativeAgent',
+          component: () => import('../views/admin/CreativeAgent.vue'),
           meta: { requiresAuth: true, role: 'admin' }
         }
       ]
@@ -227,13 +240,52 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+
+  const authenticatedHome = () => {
+    if (authStore.isAdmin()) return '/admin'
+    if (authStore.isStaff()) return '/staff'
+    if (authStore.isContractor()) return '/contractor'
+    return isInternalDeployment ? '/admin/login' : '/user/workspace'
+  }
+
+  if (isExternalDeployment && isInternalRoute(to.path)) {
+    next('/')
+    return
+  }
+
+  if (isInternalDeployment && authStore.isAuthenticated() && authStore.isUser()) {
+    authStore.token = null
+    authStore.user = null
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    next({ name: 'AdminLogin' })
+    return
+  }
+
+  if (isInternalDeployment) {
+    if (to.path === '/' || to.name === 'Login' || to.name === 'Register' || isUserRoute(to.path)) {
+      next(authStore.isAuthenticated() ? authenticatedHome() : { name: 'AdminLogin', query: to.meta.requiresAuth ? { redirect: to.fullPath } : {} })
+      return
+    }
+  }
   
   // 检查是否需要认证
   if (to.meta.requiresAuth && !authStore.isAuthenticated()) {
-    next({ name: 'Login', query: { redirect: to.fullPath } })
+    next({ path: loginPathForRoute(to.path), query: { redirect: to.fullPath } })
     return
+  }
+
+  if (authStore.isAuthenticated()) {
+    try {
+      await authStore.refreshCurrentUser()
+    } catch (error) {
+      if (to.meta.requiresAuth) {
+        next({ path: loginPathForRoute(to.path), query: { redirect: to.fullPath } })
+        return
+      }
+    }
   }
   
   // 检查角色权限
@@ -266,7 +318,7 @@ router.beforeEach((to, from, next) => {
       } else if (authStore.isContractor()) {
         next('/contractor')
       } else {
-        next('/login')
+        next(loginPathForRoute(to.path))
       }
       return
     }
@@ -277,7 +329,7 @@ router.beforeEach((to, from, next) => {
       } else if (authStore.isStaff()) {
         next('/staff')
       } else {
-        next('/login')
+        next(loginPathForRoute(to.path))
       }
       return
     }
@@ -317,4 +369,3 @@ router.beforeEach((to, from, next) => {
 })
 
 export default router
-

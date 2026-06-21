@@ -1,9 +1,9 @@
 """用户模型（仅存储普通客户）"""
 
 from sqlalchemy import Column, String, Boolean, DateTime, Enum, Text
-from sqlalchemy.sql import func
 import enum
 from app.database import Base
+from app.utils.timezone import beijing_now
 
 
 class UserRole(str, enum.Enum):
@@ -52,8 +52,8 @@ class User(Base):
     last_login_at = Column(DateTime(timezone=True))            # 最近登录时间
     last_login_ip = Column(String(50))                         # 最近登录 IP
     
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
+    updated_at = Column(DateTime(timezone=True), default=beijing_now, onupdate=beijing_now)
     
     def __repr__(self):
         return f"<User(id={self.id}, username={self.username}, role={self.role}, enterprise={self.enterprise_status})>"

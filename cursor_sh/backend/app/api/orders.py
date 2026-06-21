@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List, Union
 import io
+from urllib.parse import quote
 
 from app.database import get_db
 from app.models.order import OrderType, OrderStatus
@@ -13,7 +14,12 @@ from app.schemas.feedback import FeedbackCreate
 from app.schemas.response import ApiResponse
 from app.services.order_service import OrderService
 from app.services.pdf_service import PDFService
-from app.utils.dependencies import get_current_user, require_admin, require_admin_or_staff, AnyUser
+from app.utils.dependencies import (
+    get_current_user_for_public_deployment,
+    require_internal_admin,
+    require_internal_admin_or_staff,
+    AnyUser,
+)
 
 router = APIRouter(prefix="/orders", tags=["订单"])
 
@@ -24,7 +30,7 @@ async def get_orders(
     order_type: Optional[OrderType] = Query(None),
     status: Optional[OrderStatus] = Query(None),
     assignee_id: Optional[str] = Query(None),
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """获取订单列表"""
@@ -34,14 +40,14 @@ async def get_orders(
         )
         return ApiResponse(code=200, message="获取成功", data=orders)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("", response_model=ApiResponse[dict])
 async def create_order(
     order_data: Union[VideoPurchaseOrderCreate, AI3DCustomOrderCreate, DigitalArtOrderCreate],
     is_draft: bool = Query(False, description="是否保存为草稿"),
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """创建订单（支持草稿模式）"""
@@ -94,13 +100,13 @@ async def create_order(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.get("/{order_id}", response_model=ApiResponse[dict])
 async def get_order_detail(
     order_id: str,
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """获取订单详情"""
@@ -110,14 +116,14 @@ async def get_order_detail(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.put("/{order_id}", response_model=ApiResponse[dict])
 async def update_order(
     order_id: str,
     order_data: Union[VideoPurchaseOrderCreate, AI3DCustomOrderCreate, DigitalArtOrderCreate],
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """修改订单（仅待分配状态可修改）"""
@@ -127,14 +133,14 @@ async def update_order(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.put("/{order_id}/status", response_model=ApiResponse[dict])
 async def update_order_status(
     order_id: str,
     status_update: OrderStatusUpdate,
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """更新订单状态"""
@@ -146,14 +152,14 @@ async def update_order_status(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.put("/{order_id}/assign", response_model=ApiResponse[dict])
 async def assign_order(
     order_id: str,
     assign_data: OrderAssign,
-    current_user: AnyUser = Depends(require_admin_or_staff),
+    current_user: AnyUser = Depends(require_internal_admin_or_staff),
     db: AsyncSession = Depends(get_db)
 ):
     """分配订单负责人"""
@@ -165,14 +171,14 @@ async def assign_order(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("/{order_id}/preview", response_model=ApiResponse[dict])
 async def upload_preview(
     order_id: str,
     preview_data: PreviewUpload,
-    current_user: AnyUser = Depends(require_admin_or_staff),
+    current_user: AnyUser = Depends(require_internal_admin_or_staff),
     db: AsyncSession = Depends(get_db)
 ):
     """上传预览文件"""
@@ -184,14 +190,14 @@ async def upload_preview(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("/{order_id}/preview/review", response_model=ApiResponse[dict])
 async def review_preview(
     order_id: str,
     review_data: PreviewReview,
-    current_user: AnyUser = Depends(require_admin),
+    current_user: AnyUser = Depends(require_internal_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """审核预览文件"""
@@ -201,14 +207,14 @@ async def review_preview(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("/{order_id}/feedback", response_model=ApiResponse[dict])
 async def submit_feedback(
     order_id: str,
     feedback_data: FeedbackCreate,
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
     """提交订单反馈"""
@@ -220,14 +226,14 @@ async def submit_feedback(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("/{order_id}/contract/advance", response_model=ApiResponse[dict])
 async def advance_contract(
     order_id: str,
     contract_data: ContractAdvance,
-    current_user: AnyUser = Depends(require_admin),
+    current_user: AnyUser = Depends(require_internal_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """管理员推进合同流程（填写合同信息后进入制作阶段）"""
@@ -243,14 +249,14 @@ async def advance_contract(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.post("/{order_id}/cancel", response_model=ApiResponse[dict])
 async def admin_cancel_order(
     order_id: str,
     cancel_data: AdminCancelOrder,
-    current_user: AnyUser = Depends(require_admin),
+    current_user: AnyUser = Depends(require_internal_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """管理员取消订单（需 SMS 验证）"""
@@ -266,44 +272,44 @@ async def admin_cancel_order(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.get("/{order_id}/pdf/confirmation")
 async def download_confirmation_pdf(
     order_id: str,
-    current_user: AnyUser = Depends(get_current_user),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db)
 ):
-    """下载需求告知函 PDF（用户可用）"""
+    """下载订单需求确认函 PDF（用户可用）"""
     try:
-        order = await OrderService.get_order_detail(db, order_id, current_user)
-        
-        # 确保 orderData 字段存在（从 order_data 合并到响应中）
-        order_for_pdf = {**order, "orderData": order}
-        
-        pdf_bytes = PDFService.generate_order_confirmation_pdf(order_for_pdf)
-        
-        filename = f"confirmation_{order.get('orderNumber', order_id)}.pdf"
+        pdf_bytes, filename = await OrderService.get_confirmation_pdf_archive(
+            db,
+            order_id,
+            current_user,
+        )
         
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": (
+                    f'attachment; filename="confirmation_{order_id}.pdf"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                ),
                 "Content-Length": str(len(pdf_bytes)),
             }
         )
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
 @router.get("/{order_id}/pdf/detail")
 async def download_detail_pdf(
     order_id: str,
-    current_user: AnyUser = Depends(require_admin_or_staff),
+    current_user: AnyUser = Depends(require_internal_admin_or_staff),
     db: AsyncSession = Depends(get_db)
 ):
     """下载订单详情 PDF（仅管理员/负责人可用）"""
@@ -327,4 +333,4 @@ async def download_detail_pdf(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e

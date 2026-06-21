@@ -2,94 +2,60 @@
   <div class="landing-scope">
     <PageLoader v-if="!loaderDestroyed" @complete="handleLoadComplete" />
     <MarketingTopBar
-      v-if="!isShowcaseOpen && !isDetailOpen"
       @visibility-change="isMarketingBarVisible = $event"
       @active-change="isMarketingBarActive = $event"
     />
     <TheHeader
-      :force-light="isDetailOpen"
-      :force-transparent="isShowcaseOpen && !isDetailOpen"
       :top-offset="headerTopOffset"
-      @logoClick="handleGlobalLogoClick"
-      @menuClick="handleGlobalMenuClick"
       @openLogin="openAuth('login')"
       @openRegister="openAuth('register')"
     />
     <CustomCursor />
     
-    <div class="main-page" ref="mainPageRef">
+    <div class="main-page">
       <main>
         <HeroSection :is-loaded="isLoaded" />
         <IntroSection />
         <BrandsSection />
-        <CasesSection @open-showcase="handleCaseClick" />
-        <ContactSection />
+        <ContactSection @open-login="openAuth('login')" />
       </main>
       
-      <TheFooter @open-experiment="isExperimentOpen = true" />
+      <TheFooter />
     </div>
 
-    <CaseShowcasePage 
-      v-if="isShowcaseOpen"
-      :cases="cases"
-      :initial-case-id="activeCaseShowcase?.id"
-      @open-detail="handleOpenDetail"
-      @close="handleCloseShowcase"
-    />
-
-    <CaseDetailPage 
-      v-if="isDetailOpen" 
-      :case-data="activeCaseDetail"
-      @close="handleCloseDetail"
-      @navigate-case="handleNavigateCase"
-    />
-
-    <Experiment3D 
-      v-if="isExperimentOpen" 
-      @close="isExperimentOpen = false" 
-    />
-
     <!-- 登录/注册弹窗 -->
-    <AuthModal :visible="authModalVisible" :initial-tab="authModalTab" @close="authModalVisible = false" />
+    <AuthModal
+      :visible="authModalVisible"
+      :initial-tab="authModalTab"
+      :invite-token="inviteToken"
+      :invite-company-name="inviteCompanyName"
+      @close="authModalVisible = false"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import TheHeader from './components/TheHeader.vue'
 import MarketingTopBar from './components/MarketingTopBar.vue'
 import AuthModal from './components/AuthModal.vue'
-import CaseDetailPage from './components/CaseDetailPage.vue'
-import CaseShowcasePage from './components/CaseShowcasePage.vue'
 import CustomCursor from './components/CustomCursor.vue'
 import PageLoader from './components/PageLoader.vue'
-import Experiment3D from './components/Experiment3D.vue'
-import gsap from 'gsap'
-import ScrollTrigger from 'gsap/ScrollTrigger'
-
-gsap.registerPlugin(ScrollTrigger)
 
 import HeroSection from './sections/HeroSection.vue'
 import IntroSection from './sections/IntroSection.vue'
 import BrandsSection from './sections/BrandsSection.vue'
-import CasesSection from './sections/CasesSection.vue'
 import ContactSection from './sections/ContactSection.vue'
 import TheFooter from './sections/TheFooter.vue'
-
-import { cases } from './data/cases'
+import { authApi } from '@/utils/api'
 
 // 状态
-const mainPageRef = ref(null)
-const activeCaseShowcase = ref(null)
-const isShowcaseOpen = ref(false)
-const activeCaseDetail = ref(null)
-const isDetailOpen = ref(false)
-const isExperimentOpen = ref(false)
 const isMarketingBarVisible = ref(true)
 const isMarketingBarActive = ref(false)
 const marketingBarHeight = 58
 const headerTopOffset = computed(() => (
-  isMarketingBarActive.value && isMarketingBarVisible.value && !isShowcaseOpen.value && !isDetailOpen.value
+  isMarketingBarActive.value && isMarketingBarVisible.value
     ? marketingBarHeight
     : 0
 ))
@@ -97,8 +63,14 @@ const headerTopOffset = computed(() => (
 // 登录/注册弹窗
 const authModalVisible = ref(false)
 const authModalTab = ref('login')
+const inviteToken = ref('')
+const inviteCompanyName = ref('')
 
 const openAuth = (tab) => {
+  if (tab === 'register' && !inviteToken.value) {
+    ElMessage.info('当前仍在内测阶段，仅支持受邀用户注册。请联系管理员获取邀请链接。')
+    return
+  }
   authModalTab.value = tab
   authModalVisible.value = true
 }
@@ -113,106 +85,36 @@ const handleLoadComplete = () => {
   setTimeout(() => loaderDestroyed.value = true, 800)
 }
 
-const handleGlobalLogoClick = () => {
-  if (isDetailOpen.value) handleCloseDetail()
-  if (isShowcaseOpen.value) handleCloseShowcase()
-}
-
-const handleGlobalMenuClick = (item) => {
-  if (isDetailOpen.value) handleCloseDetail()
-  if (isShowcaseOpen.value) handleCloseShowcase()
-}
-
-// 处理案例点击（打开陈列页）
-const handleCaseClick = (caseData) => {
-  // 记录当前滚动位置
-  const currentScrollY = window.scrollY
-  activeCaseShowcase.value = caseData
-  isShowcaseOpen.value = true
-  
-  // 禁用ScrollTrigger以防止冲突
-  ScrollTrigger.getAll().forEach(st => st.disable(false))
-  
-  // 页面切换动画：主页面左移
-  gsap.to(mainPageRef.value, {
-    x: '-30%',
-    opacity: 0.5,
-    duration: 0.8,
-    ease: 'power3.out',
-    onComplete: () => {
-        // 关键：锁定主页面位置，防止背景滚动
-        mainPageRef.value.style.position = 'fixed'
-        mainPageRef.value.style.width = '100%'
-        mainPageRef.value.style.top = `-${currentScrollY}px`
-    }
-  })
-}
-
-// 关闭陈列页
-const handleCloseShowcase = () => {
-  const scrollY = Math.abs(parseFloat(mainPageRef.value.style.top || '0'))
-  
-  mainPageRef.value.style.position = ''
-  mainPageRef.value.style.width = ''
-  mainPageRef.value.style.top = ''
-  window.scrollTo(0, scrollY)
-
-  gsap.to(mainPageRef.value, {
-    x: '0%',
-    opacity: 1,
-    duration: 0.8,
-    ease: 'power3.out',
-    onComplete: () => {
-      gsap.set(mainPageRef.value, { clearProps: 'transform,opacity' })
-      ScrollTrigger.getAll().forEach(st => st.enable())
-      ScrollTrigger.refresh()
-    }
-  })
-  
-  isShowcaseOpen.value = false
-  activeCaseShowcase.value = null
-}
-
-// 打开详情页
-const handleOpenDetail = (caseData) => {
-  activeCaseDetail.value = caseData
-  isDetailOpen.value = true
-}
-
-const handleNavigateCase = (nextCase) => {
-  activeCaseDetail.value = nextCase
-  // also update showcase background if navigating using NEXT link in details
-  activeCaseShowcase.value = nextCase 
-}
-
-// 关闭详情页（返回陈列页）
-const handleCloseDetail = () => {
-  const detailPageEl = document.querySelector('.case-detail-page')
-  if (detailPageEl) {
-    gsap.to(detailPageEl, {
-      x: '100%',
-      duration: 0.6,
-      ease: 'power3.in',
-      onComplete: () => {
-        isDetailOpen.value = false
-        activeCaseDetail.value = null
-      }
-    })
-  } else {
-    isDetailOpen.value = false
-    activeCaseDetail.value = null
-  }
-}
-
 onMounted(() => {
   // 设置官网专属背景色
   document.body.classList.add('landing-active')
+  handleInviteLink()
 })
 
 onUnmounted(() => {
   // 离开官网时恢复背景色
   document.body.classList.remove('landing-active')
 })
+
+const handleInviteLink = async () => {
+  const params = new URLSearchParams(window.location.search)
+  const token = (params.get('invite') || params.get('user_invite') || '').trim()
+  if (!token) return
+
+  try {
+    const data = await authApi.validateInvite(token)
+    if (data?.valid) {
+      inviteToken.value = token
+      inviteCompanyName.value = data.companyName || ''
+      openAuth('register')
+    } else {
+      ElMessage.warning(data?.message || '邀请链接无效或已过期')
+    }
+  } catch (e) {
+    const message = e?.response?.data?.message || e?.message || '邀请链接无效或已过期'
+    ElMessage.warning(message)
+  }
+}
 </script>
 
 <style>

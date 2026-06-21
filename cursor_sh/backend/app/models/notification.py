@@ -1,12 +1,12 @@
 """
 消息通知模型
 """
-from datetime import datetime
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from enum import Enum
 from app.database import Base
 from app.utils.validators import generate_id
+from app.utils.timezone import beijing_now
 
 
 class NotificationType(str, Enum):
@@ -43,8 +43,8 @@ class Notification(Base):
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False, nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    read_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=beijing_now, nullable=False)
+    read_at = Column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self):
         return f"<Notification {self.id} - {self.type.value} - User {self.user_id}>"
