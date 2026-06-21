@@ -263,7 +263,6 @@ import {
   Location, Lock, MagicStick, Monitor, SetUp
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
-import { formatServerMonthDayTime } from '@/utils/time'
 
 const router = useRouter()
 const activeTab = ref('all')
@@ -319,12 +318,6 @@ const showNextOverviewAssignment = () => {
   if (total <= 1) return
   overviewIndex.value = (overviewIndex.value + 1) % total
 }
-
-const statusSummary = computed(() => ({
-  pending: assignments.value.filter(item => item.status === 'pending').length,
-  inProgress: assignments.value.filter(item => ['accepted', 'in_progress'].includes(item.status)).length,
-  completed: assignments.value.filter(item => item.status === 'completed').length,
-}))
 
 const feedbackText = (item: any) =>
   item?.feedback?.content ||
@@ -422,7 +415,9 @@ const orderArtDirection = (item: any) =>
 
 const imageUrlKeys = ['signed_url', 'signedUrl', 'url', 'fileUrl', 'file_url', 'ossUrl', 'object_url', 'path']
 
-const orderPreviewImages = (item: any) => {
+type PreviewImage = { url: string; name: string }
+
+const orderPreviewImages = (item: any): PreviewImage[] => {
   const photos = item?.order?.site_photos
   if (!Array.isArray(photos)) return []
 
@@ -440,7 +435,7 @@ const orderPreviewImages = (item: any) => {
         ? { url, name: photo?.name || photo?.filename || `项目参考图 ${index + 1}` }
         : null
     })
-    .filter(Boolean)
+    .filter((image): image is PreviewImage => !!image)
     .slice(0, 2)
 }
 
@@ -568,10 +563,6 @@ const privacyCalendarClasses = (day: { label: string; classes: Record<string, bo
 }
 
 const statusClass = (status: string) => `is-${status || 'unknown'}`
-
-const formatTime = (iso: string) => {
-  return formatServerMonthDayTime(iso, '—')
-}
 
 const fetchAssignments = async () => {
   loading.value = true
