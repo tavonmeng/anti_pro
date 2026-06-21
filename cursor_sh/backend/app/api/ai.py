@@ -123,9 +123,158 @@ def _substantive_user_message_count(history: list, latest_message: str = "") -> 
     return sum(1 for text in user_messages if text.lower() not in ignored and len(text) >= 2)
 
 
+def _is_passive_requirement_wrap_up(message: str) -> bool:
+    """Allow a user-driven wrap-up even when the structured brief is incomplete."""
+    text = re.sub(r"\s+", "", (message or "").lower())
+    if not text:
+        return False
+    negative_markers = ("还没", "没有完成", "不完整", "继续补", "继续问", "还要补")
+    if any(marker in text for marker in negative_markers):
+        return False
+    wrap_up_markers = (
+        "算了", "就这样", "先这样", "回头再说", "下次再说", "后面再补",
+        "不用问了", "别问了", "不想继续", "直接填表", "先整理", "先生成",
+        "可以了", "够了",
+    )
+    return any(marker in text for marker in wrap_up_markers)
+
+
+def _is_no_more_media_assets_reply(message: str) -> bool:
+    text = re.sub(r"\s+", "", (message or "").lower())
+    if not text:
+        return False
+    markers = (
+        "没有", "没有了", "没了", "暂无", "暂时没有", "无", "不用上传",
+        "没有素材", "没有文件", "没有照片", "没有图片", "不上传",
+    )
+    return text in markers or any(marker in text for marker in markers[4:])
+
+
+_MEDIA_REQUIREMENT_SIGNAL_PATTERNS = {
+    "overall_need": r"(裸眼|3d|视频|内容|项目|投放|宣传|招商|文旅|城市形象|活动)",
+    "city_location": r"(北京|上海|深圳|广州|成都|杭州|重庆|南京|武汉|西安|苏州|天津|长沙|郑州|青岛|厦门|宁波|商场|广场|机场|高铁|地铁|天幕|大屏|屏幕|点位|站点)",
+    "resource_background": r"(商圈|核心区|主广场|交通枢纽|户外|室内|地标|人流|客流|媒体资源|位置|资源)",
+    "audience_scene": r"(面向|受众|游客|市民|年轻|亲子|商务|白领|消费者|观众|人群|客群|场景)",
+    "viewing_path": r"(观看|视角|动线|仰视|平视|正向|侧向|连廊|中轴|遮挡|可视|安全区)",
+    "theme_concept": r"(主题|概念|创意|故事|表达|元素|ip|logo|slogan|品牌露出|西湖|春节|国潮|文化|科技|未来|自然|生态)",
+    "art_direction": r"(风格|调性|写实|写意|水墨|赛博|科技感|未来感|高级|震撼|年轻|东方|现代|艺术)",
+    "media_specs": r"(\d{3,5}\s*[x×]\s*\d{3,5}|\d+(?:\.\d+)?(?:m|米)?[x×]\d+(?:\.\d+)?(?:m|米)?|分辨率|物理尺寸|宽|高|比例|格式|mp4|mov|fps|rec\.?709|srgb)",
+    "duration_count": r"(\d{1,3}\s*(?:s|秒)|时长|几秒|条|数量|支|版)",
+    "tech_delivery": r"(交付|技术|审核|规范|格式|帧率|色彩|安全区|源文件|无特定要求|没有特定要求)",
+    "online_time": r"(上线|上刊|投放时间|活动时间|交付时间|月底|月初|下个月|本月|明年|今年|\d{1,2}月|\d{4}年)",
+    "budget": r"(预算|费用|报价|万|万元|十万|几十万)",
+    "site_materials": r"(已上传|现场实拍|屏幕照片|参考素材|参考文件|暂无素材|没有素材|暂时没有)",
+    "special_requirements": r"(特殊|禁忌|避免|不要|必须|要求|合作|限制|备注)",
+}
+
+
+def _media_requirement_source_text(history: list, latest_message: str = "") -> str:
+    requirement_summary_markers = ("项目需求汇总", "需求确认清单", "需求信息整理", "需求明细")
+    relevant_history_text = [
+        m.get("content") or ""
+        for m in (history or [])
+        if m.get("role") == "user"
+        or (
+            m.get("role") == "assistant"
+            and any(marker in (m.get("content") or "") for marker in requirement_summary_markers)
+        )
+    ]
+    return re.sub(r"\s+", "", "\n".join(relevant_history_text + ([latest_message] if latest_message else [])).lower())
+
+
+def _media_requirement_signals(history: list, latest_message: str = "") -> set[str]:
+    text = _media_requirement_source_text(history, latest_message)
+    if not text:
+        return set()
+    return {
+        signal
+        for signal, pattern in _MEDIA_REQUIREMENT_SIGNAL_PATTERNS.items()
+        if re.search(pattern, text, re.I)
+    }
+
+
+def _media_requirement_signal_count(history: list, latest_message: str = "") -> int:
+    """Conservatively count distinct media-brief information signals."""
+    return len(_media_requirement_signals(history, latest_message))
+
+
 def _has_media_completion_floor(history: list, latest_message: str = "") -> bool:
     """Keep media-mode completion from firing before enough real answers exist."""
-    return _substantive_user_message_count(history, latest_message) >= 7
+    if _is_passive_requirement_wrap_up(latest_message):
+        return True
+    signal_count = _media_requirement_signal_count(history, latest_message)
+    if signal_count >= 8:
+        return True
+    return _substantive_user_message_count(history, latest_message) >= 7 and signal_count >= 7
+
+
+def _has_answered_media_followup(history: list, keywords: tuple[str, ...], latest_message: str = "") -> bool:
+    """Detect whether a deterministic fallback question has already received a user reply."""
+    sequence = list(history or [])
+    if latest_message and latest_message.strip():
+        sequence.append({"role": "user", "content": latest_message})
+
+    pending_followup = False
+    for message in sequence:
+        content = message.get("content") or ""
+        if message.get("role") == "assistant" and any(keyword in content for keyword in keywords):
+            pending_followup = True
+            continue
+        if pending_followup and message.get("role") == "user" and content.strip():
+            return True
+    return False
+
+
+def _media_completion_followup(history: list, latest_message: str = "") -> str:
+    if _has_media_completion_floor(history, latest_message):
+        return (
+            "我还需要再补充一个关键信息：您这边是否有现场实拍图、屏幕照片或其他参考素材可以上传？"
+            "如果暂时没有，也可以直接说明没有。"
+        )
+
+    fallback_questions = (
+        {
+            "signals": ("city_location", "media_specs"),
+            "keywords": ("投放点位或屏幕规格", "城市、屏幕位置", "已有规格"),
+            "question": (
+                "我还需要再补充一个关键信息：这次项目对应的投放点位或屏幕规格目前方便确认吗？"
+                "如果暂时没有完整参数，先说城市、屏幕位置或已有规格也可以。"
+            ),
+        },
+        {
+            "signals": ("theme_concept", "overall_need"),
+            "keywords": ("主要想做什么内容或主题", "什么内容或主题"),
+            "question": "这项我先记录为待确认。为了继续推进，想再确认这次主要想做什么内容或主题？",
+        },
+        {
+            "signals": ("audience_scene",),
+            "keywords": ("主要面向哪类人群", "观看场景"),
+            "question": "这项我先记录为待确认。为了继续推进，想再确认这次主要面向哪类人群或观看场景？",
+        },
+        {
+            "signals": ("online_time",),
+            "keywords": ("预计上刊", "活动或交付时间", "大概是什么时候"),
+            "question": "这项我先记录为待确认。为了继续推进，想再确认预计上刊、活动或交付时间大概是什么时候？",
+        },
+        {
+            "signals": ("site_materials",),
+            "keywords": ("现场实拍图", "屏幕照片", "参考素材"),
+            "question": (
+                "这项我先记录为待确认。最后再确认一下：您这边是否有现场实拍图、屏幕照片或其他参考素材可以上传？"
+                "如果暂时没有，也可以直接说明没有。"
+            ),
+        },
+    )
+
+    signals = _media_requirement_signals(history, latest_message)
+    for fallback in fallback_questions:
+        if all(signal in signals for signal in fallback["signals"]):
+            continue
+        if _has_answered_media_followup(history, fallback["keywords"], latest_message):
+            continue
+        return fallback["question"]
+
+    return "我先把这些缺口记录为待确认，您可以继续补充项目里最确定的信息。"
 
 
 def _has_media_upload_wrap_up(history: list) -> bool:
@@ -372,6 +521,28 @@ def _sanitize_upload_reply(current_message: str, reply: str) -> str:
     )
 
 
+def _sanitize_media_redundant_followup(history: list, latest_message: str, reply: str) -> str:
+    """Remove model-generated fallback questions that contradict information in the same reply."""
+    if "投放点位或屏幕规格" not in (reply or ""):
+        return reply
+
+    source_history = list(history or []) + [{"role": "assistant", "content": reply}]
+    signals = _media_requirement_signals(source_history, latest_message)
+    if not {"city_location", "media_specs"}.issubset(signals):
+        return reply
+
+    redundant_question_pattern = (
+        r"\n*\s*我还需要再补充一个关键信息："
+        r"这次项目对应的投放点位或屏幕规格目前方便确认吗？"
+        r"如果暂时没有完整参数，先说城市、屏幕位置或已有规格也可以。?\s*$"
+    )
+    cleaned = re.sub(redundant_question_pattern, "", reply).strip()
+    if cleaned == reply.strip():
+        return reply
+
+    return cleaned + "\n\n" + _media_completion_followup(source_history, latest_message)
+
+
 def _sse_event(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
@@ -452,7 +623,13 @@ def _should_enable_design_thinking(message: str, history: list | None = None) ->
         "写个设计方案", "写一版设计方案", "写个策划方案", "写一版策划方案",
         "出个设计方案", "出个策划方案",
     ]
-    return any(keyword in text for keyword in design_plan_keywords)
+    generic_plan_patterns = [
+        r"(给我|帮我|能不能|可以|麻烦|请|想看|需要).{0,8}(出|做|写|生成|来|给).{0,4}(一个|一版|个|版)?方案",
+        r"(出|做|写|生成|来).{0,4}(一个|一版|个|版)?方案",
+    ]
+    return any(keyword in text for keyword in design_plan_keywords) or any(
+        re.search(pattern, text) for pattern in generic_plan_patterns
+    )
 
 
 _CREATIVE_DIRECTION_DRAFT_RULES = (
@@ -461,6 +638,8 @@ _CREATIVE_DIRECTION_DRAFT_RULES = (
     "- 这不是正式完整提案，不要承诺已经完成完整创意方案、脚本分镜、报价或排期。\n"
     "- 可以基于当前已知需求，先给出一个轻量的「创意方向草案」，帮助客户判断大方向是否合适。\n"
     "- 如果用户是在上一版草案基础上表达不满意、换方向、改风格或要求优化，先用一句话复述本轮要调整的点，再输出一版「修订方向草案」。\n"
+    "- 不要输出完整分镜脚本、时间轴脚本、执行方案或制作说明；不要写“第一阶段/第二阶段/第三阶段”、"
+    "“0-5s/5-15s/15-25s”等分段，不要单列“视觉与技术执行要点”或“下一步建议”。\n"
     "- 输出必须简洁，包含以下四项，使用清晰小标题：\n"
     "  1. 创意方向名称：一句短名称，具有传播记忆点。\n"
     "  2. 计划概括：用2-3句话概括画面逻辑、空间关系或内容主线。\n"
@@ -483,9 +662,17 @@ async def _finalize_ai_chat_reply(
 ) -> tuple[str, bool, dict]:
     if settings.AGENT_MODE == "media":
         reply = _sanitize_upload_reply(request.message, reply)
-        if "【需求收集完成】" in reply and (
-            not _has_media_completion_floor(request.history, request.message)
-            or not _has_media_upload_wrap_up(request.history)
+        reply = _sanitize_media_redundant_followup(request.history, request.message, reply)
+        passive_wrap_up = _is_passive_requirement_wrap_up(request.message)
+        no_more_assets = _is_no_more_media_assets_reply(request.message) and _has_media_upload_wrap_up(request.history)
+        if (
+            "【需求收集完成】" in reply
+            and not passive_wrap_up
+            and not no_more_assets
+            and (
+                not _has_media_completion_floor(request.history, request.message)
+                or not _has_media_upload_wrap_up(request.history)
+            )
         ):
             log_business_event(
                 logger,
@@ -496,9 +683,10 @@ async def _finalize_ai_chat_reply(
                 session_id=request.session_id,
                 business_type=request.business_type,
                 substantive_user_count=_substantive_user_message_count(request.history, request.message),
+                requirement_signal_count=_media_requirement_signal_count(request.history, request.message),
                 has_upload_wrap_up=_has_media_upload_wrap_up(request.history),
             )
-            reply = _strip_completion_marker(reply) + "\n\n我还需要再补充一个关键信息：您这边是否有现场实拍图、屏幕照片或其他参考素材可以上传？如果暂时没有，也可以直接说明没有。"
+            reply = _strip_completion_marker(reply) + "\n\n" + _media_completion_followup(request.history, request.message)
 
     handoff = _HUMAN_HANDOFF_MARKER in reply
     if handoff:
@@ -779,6 +967,16 @@ _MEDIA_TONE_RULES = (
     "- 不使用内部流程词或过程说明，例如：开放问题、开放起手、阶段过渡、核心必问项、字段清单、触发完成、严格条件、Memory、记忆里、留存过、系统记录显示、第一阶段、下面进入某阶段、按流程收集。\n\n"
 )
 
+_MEDIA_FORMAT_RULES = (
+    "【输出格式要求】\n"
+    "- 普通追问保持短段落，不要为了格式而格式化。\n"
+    "- 需要总结、判断、方案草案、评估、确认项时，使用简洁 Markdown，便于前端排版。\n"
+    "- 一级结构用加粗短标题，例如：**核心目标与对象**。\n"
+    "- 列表统一使用 `-`，不要使用 `*`；列表项采用 `- **字段名**：内容`。\n"
+    "- 不使用表格；不使用多层列表；不要连续堆叠加粗，只加粗字段名和关键结论。\n"
+    "- 每次回复如果需要追问，最后只保留一个明确问题。\n\n"
+)
+
 _MEDIA_DIALOG_RULES = (
     "【对话推进规则】\n"
     "1. 每次回复只问一个问题。客户一次回答多个信息时，先记录，再追问一个最自然的缺口。\n"
@@ -805,6 +1003,7 @@ _PROMPT_MEDIA_3D = (
     "媒体方客户通常拥有户外大屏、交通枢纽屏幕等媒体资源。你的目标是帮助客户把本次裸眼3D内容需求梳理清楚，"
     "包括项目大方向、媒体资源、创意表达、技术规格、交付节点和可选参考素材。\n\n"
     + _MEDIA_TONE_RULES +
+    _MEDIA_FORMAT_RULES +
     "【开场】\n"
     "- 第一轮必须接近这个结构：一句预期说明 + 一个宽问题。\n"
     "- 预期说明：会从基础信息、创意方向、技术与交付几方面帮助梳理。\n"

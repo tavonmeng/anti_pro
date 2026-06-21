@@ -151,7 +151,7 @@
                       <span>.</span>
                     </span>
                   </div>
-                  <p v-else class="bubble-text" v-html="highlightSearch(displayContent(msg.content))"></p>
+                  <div v-else class="bubble-text chat-markdown" v-html="renderAssistantContent(msg.content)"></div>
                   <!-- Special button for 'purchase' mode in the AI msg -->
                   <div v-if="msg.isPurchasePrompt" class="message-actions">
                     <el-button class="stitch-primary-btn" @click="goToBrowse('video_purchase')">
@@ -429,6 +429,8 @@ import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Loading, Plus, Check } from '@element-plus/icons-vue'
+import MarkdownIt from 'markdown-it'
+import DOMPurify from 'dompurify'
 import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
@@ -459,6 +461,12 @@ const authStore = useAuthStore()
 const uiStore = useUiStore()
 
 const searchQuery = ref('')
+
+const markdown = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true
+})
 
 // ========== 语音输入 ==========
 const isRecording = ref(false)
@@ -1646,6 +1654,55 @@ const highlightSearch = (text: string) => {
   const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const regex = new RegExp(`(${escapedQ})`, 'gi')
   return sanitized.replace(regex, '<mark class="highlight-text">$1</mark>')
+}
+
+const highlightSearchInHtml = (html: string) => {
+  const q = searchQuery.value.trim()
+  if (!q || !html) return html
+  const template = document.createElement('template')
+  template.innerHTML = html
+  const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(escapedQ, 'gi')
+  const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT)
+  const textNodes: Text[] = []
+  while (walker.nextNode()) {
+    textNodes.push(walker.currentNode as Text)
+  }
+  for (const node of textNodes) {
+    const value = node.nodeValue || ''
+    if (!regex.test(value)) {
+      regex.lastIndex = 0
+      continue
+    }
+    regex.lastIndex = 0
+    const fragment = document.createDocumentFragment()
+    let lastIndex = 0
+    value.replace(regex, (match, offset) => {
+      if (offset > lastIndex) {
+        fragment.appendChild(document.createTextNode(value.slice(lastIndex, offset)))
+      }
+      const mark = document.createElement('mark')
+      mark.className = 'highlight-text'
+      mark.textContent = match
+      fragment.appendChild(mark)
+      lastIndex = offset + match.length
+      return match
+    })
+    if (lastIndex < value.length) {
+      fragment.appendChild(document.createTextNode(value.slice(lastIndex)))
+    }
+    node.parentNode?.replaceChild(fragment, node)
+  }
+  return template.innerHTML
+}
+
+const renderAssistantContent = (text: string) => {
+  const rendered = markdown.render(displayContent(text))
+  const clean = DOMPurify.sanitize(rendered, {
+    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'a', 'code', 'pre', 'blockquote', 'hr', 'mark'],
+    ALLOWED_ATTR: ['href', 'target', 'rel', 'class']
+  })
+  return highlightSearchInHtml(clean)
 }
 
 const scrollToBottom = async (instant: boolean = false) => {
@@ -3406,6 +3463,63 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 
 .bubble-text {
   margin: 0;
+}
+
+.chat-markdown {
+  white-space: normal;
+  line-height: 1.68;
+}
+
+.chat-markdown :deep(p) {
+  margin: 0 0 10px;
+}
+
+.chat-markdown :deep(p:last-child),
+.chat-markdown :deep(ul:last-child),
+.chat-markdown :deep(ol:last-child),
+.chat-markdown :deep(blockquote:last-child) {
+  margin-bottom: 0;
+}
+
+.chat-markdown :deep(strong) {
+  font-weight: 650;
+  color: #111313;
+}
+
+.chat-markdown :deep(ul),
+.chat-markdown :deep(ol) {
+  margin: 6px 0 12px;
+  padding-left: 1.35em;
+}
+
+.chat-markdown :deep(li) {
+  margin: 4px 0;
+  padding-left: 2px;
+}
+
+.chat-markdown :deep(li > p) {
+  margin: 0;
+}
+
+.chat-markdown :deep(a) {
+  color: #1f5fbf;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-markdown :deep(code) {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+}
+
+.chat-markdown :deep(blockquote) {
+  margin: 8px 0 12px;
+  padding-left: 10px;
+  border-left: 3px solid rgba(0, 0, 0, 0.16);
+  color: rgba(0, 0, 0, 0.68);
 }
 
 /* Stitch Welcome Options Layout */

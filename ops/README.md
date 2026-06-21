@@ -11,6 +11,15 @@ Fill in the four server IPs in `ops/deploy.config`.
 Each server keeps its own backend `.env` file locally. Do not commit real
 secrets.
 
+## Known Servers
+
+| Environment | Role | Host |
+|---|---|---|
+| staging | external | `8.141.104.119` |
+| staging | internal | `47.93.18.165` |
+| production | external | `8.141.111.94` |
+| production | internal | `101.201.58.68` |
+
 ## Release
 
 Deploy test servers first:
