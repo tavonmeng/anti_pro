@@ -77,6 +77,8 @@ sync_code() {
   rsync -az --delete \
     --exclude '.git' \
     --exclude '.DS_Store' \
+    --exclude '.agents/' \
+    --exclude 'skills-lock.json' \
     --exclude 'node_modules' \
     --exclude 'dist' \
     --exclude 'venv' \
