@@ -436,6 +436,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { logger } from '@/utils/logger'
 import { chatHistoryApi, orderApi } from '@/utils/api'
+import { toAiAttachmentPayload } from '@/utils/chatAttachments'
+import { prepareAssistantTypewriterTarget } from '@/utils/messageTypewriter'
 import {
   createAiChatSessionFromRemote,
   deleteAiChatSession,
@@ -726,7 +728,7 @@ const getAuthHeaders = () => {
 const agentMode = import.meta.env.VITE_AGENT_MODE || 'media'
 const isMediaMode = agentMode === 'media'
 
-const welcomeTitleFull = '您好，我是 Unique Vision AI 的项目顾问。'
+const welcomeTitleFull = '您好，我是 Unique Vision AI 的创意提案总监。'
 const welcomeDescFull = isMediaMode
   ? '我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多媒体方客户提供过高品质的裸眼3D视觉内容解决方案。'
   : '我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多一线品牌提供过高品质视觉解决方案。'
@@ -763,6 +765,7 @@ const playWelcomeAnimation = () => {
 
 // ===== 内嵌表单相关状态 =====
 const inlineFormData = ref<Record<string, string> | null>(null)
+const agentState = ref<Record<string, any> | null>(null)
 const draftSavedOrderId = ref<string | null>(null)
 const showConfirmation = ref(false)
 const confirmOrderNumber = ref('')
@@ -777,6 +780,7 @@ type ConversationStateSnapshot = {
   selectedMode: string | null
   businessType: string
   inlineFormData: Record<string, string> | null
+  agentState?: Record<string, any> | null
   draftSavedOrderId: string | null
   showConfirmation: boolean
   confirmOrderNumber: string
@@ -1116,6 +1120,7 @@ const startNewSession = () => {
   selectedMode.value = null
   businessType.value = 'ai_3d_custom'
   inlineFormData.value = null
+  agentState.value = null
   draftSavedOrderId.value = null
   showConfirmation.value = false
   confirmOrderNumber.value = ''
@@ -1441,6 +1446,7 @@ const captureConversationState = (): ConversationStateSnapshot => ({
   selectedMode: selectedMode.value,
   businessType: businessType.value,
   inlineFormData: inlineFormData.value ? clonePlain(inlineFormData.value) : null,
+  agentState: agentState.value ? clonePlain(agentState.value) : null,
   draftSavedOrderId: draftSavedOrderId.value,
   showConfirmation: showConfirmation.value,
   confirmOrderNumber: confirmOrderNumber.value,
@@ -1469,6 +1475,7 @@ const restoreConversationState = async (snapshot?: ConversationStateSnapshot) =>
   selectedMode.value = snapshot?.selectedMode ?? null
   businessType.value = snapshot?.businessType || 'ai_3d_custom'
   inlineFormData.value = snapshot?.inlineFormData ? clonePlain(snapshot.inlineFormData) : null
+  agentState.value = snapshot?.agentState ? clonePlain(snapshot.agentState) : null
   draftSavedOrderId.value = snapshot?.draftSavedOrderId ?? null
   showConfirmation.value = snapshot?.showConfirmation ?? false
   confirmOrderNumber.value = snapshot?.confirmOrderNumber || ''
@@ -1491,6 +1498,7 @@ const restoreSavedSessionState = async (session: SavedSession) => {
   selectedMode.value = snapshot?.selectedMode ?? session.mode ?? agentMeta.selectedMode
   businessType.value = snapshot?.businessType || session.businessType || agentMeta.businessType || 'ai_3d_custom'
   inlineFormData.value = snapshot?.inlineFormData ? clonePlain(snapshot.inlineFormData) : null
+  agentState.value = snapshot?.agentState ? clonePlain(snapshot.agentState) : null
   draftSavedOrderId.value = snapshot?.draftSavedOrderId ?? null
   showConfirmation.value = snapshot?.showConfirmation ?? false
   confirmOrderNumber.value = snapshot?.confirmOrderNumber || ''
@@ -1720,13 +1728,10 @@ const typewriterEffect = (fullText: string, onComplete?: () => void | Promise<vo
   isLoading.value = false
   isTyping.value = true
   
-  // 先 push 一条空的 assistant 消息
-  const msgIndex = messages.value.length
-  messages.value.push({
-    client_message_id: clientMessageId || createMessageId('assistant'),
-    role: 'assistant',
-    content: '',
-    timestamp: getCurrentTime()
+  const msgIndex = prepareAssistantTypewriterTarget(messages.value, {
+    clientMessageId,
+    createMessageId: () => createMessageId('assistant'),
+    now: getCurrentTime,
   })
 
   let charIndex = 0
@@ -1847,6 +1852,21 @@ const activateOrderCreateFromGuide = (type: string = 'ai_3d_custom', requirement
   }
 }
 
+const continueBriefFromBusinessIntro = async (type: string, requirementSummary: string) => {
+  activateOrderCreateFromGuide(type, requirementSummary)
+  const handoffText = [
+    `[业务咨询已切换到需求梳理。用户已描述：${requirementSummary}]`,
+    '请基于这些已知信息继续问下一个最关键的 Brief 缺口。',
+    '不要重新询问“这次大概想做什么样的内容”。'
+  ].join('\n')
+  logger.logAction('AI', 'business_intro_handoff_to_brief', {
+    businessType: type,
+    sessionId: session_id.value,
+    summaryLength: requirementSummary.length
+  })
+  await handleCustomAiChat(handoffText)
+}
+
 // 从业务介绍切换到下单 Agent。可见话术统一由后端 /ai/start 输出。
 const switchToOrderCreate = async (type: string = 'ai_3d_custom') => {
   activateOrderCreateFromGuide(type)
@@ -1865,7 +1885,7 @@ const switchToOrderCreate = async (type: string = 'ai_3d_custom') => {
     const result = await response.json()
     if (result.reply) typewriterEffect(result.reply)
   } catch (e) {
-    typewriterEffect('已进入需求梳理流程。我会从基础信息、创意方向、技术与交付几方面帮助您梳理。您可以先简单说说，这次大概想做什么样的内容？')
+    typewriterEffect('好的。我们会先结合这次项目背景信息、投放场景和大概目标，再从基础信息、创意方向以及技术与交付几方面帮您把需求梳理清楚。您可以先简单说说，这次大概想做什么样的内容？')
   } finally {
     isLoading.value = false
   }
@@ -1915,7 +1935,44 @@ const classifyMessageRoute = async (message: string) => {
   }
 }
 
-const rerouteFromOrderQueryIfNeeded = async (messageContent: string, userMessageId: string) => {
+const getRouterAgentState = () => {
+  if (selectedMode.value === 'order_create') {
+    return { current_agent: 'brief_agent', stage: 'brief_building' }
+  }
+  if (selectedMode.value === 'order_query') {
+    return { current_agent: 'order_agent', stage: 'order_query' }
+  }
+  if (selectedMode.value === 'business_intro') {
+    return { current_agent: 'business_intro_agent', stage: 'business_intro' }
+  }
+  return { current_agent: 'general_agent', stage: 'idle' }
+}
+
+const requestOrchestratorRoute = async (message: string, userMessageId?: string) => {
+  const historyMsgs = messages.value.slice(0, messages.value.length - 1)
+    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .map(m => ({ role: m.role, content: m.content }))
+  const response = await fetch('/ai/orchestrate', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      session_id: session_id.value,
+      message,
+      history: historyMsgs,
+      business_type: businessType.value,
+      user_message_id: userMessageId,
+      ...getRouterAgentState(),
+    })
+  })
+  if (!response.ok) return null
+  return await response.json()
+}
+
+const rerouteFromOrderQueryIfNeeded = async (
+  messageContent: string,
+  userMessageId: string,
+  attachments: UploadedFile[] = [],
+) => {
   if (selectedMode.value !== 'order_query') return false
 
   const shouldCreateOrder = isLikelyOrderCreateRequest(messageContent)
@@ -1931,7 +1988,7 @@ const rerouteFromOrderQueryIfNeeded = async (messageContent: string, userMessage
     selectedMode.value = 'order_create'
     emit('mode-change', 'order_create')
     logger.logAction('AI', 'order_query_rerouted', { intent: 'order_create', businessType: businessType.value, sessionId: session_id.value })
-    await handleCustomAiChat(messageContent, userMessageId)
+    await handleCustomAiChat(messageContent, userMessageId, attachments)
     return true
   }
 
@@ -1940,6 +1997,72 @@ const rerouteFromOrderQueryIfNeeded = async (messageContent: string, userMessage
   logger.logAction('AI', 'order_query_rerouted', { intent: 'business_intro', sessionId: session_id.value })
   await handleBusinessIntro(messageContent)
   return true
+}
+
+const rerouteFromOrderCreateIfNeeded = async (
+  messageContent: string,
+  userMessageId: string,
+  attachments: UploadedFile[] = [],
+) => {
+  if (selectedMode.value !== 'order_create') return false
+
+  try {
+    isLoading.value = true
+    const route = await requestOrchestratorRoute(messageContent, userMessageId)
+    if (route?.agent_state) agentState.value = route.agent_state
+    if (route?.business_type) businessType.value = route.business_type
+    if (route?.action !== 'switch') {
+      isLoading.value = false
+      return false
+    }
+
+    const targetAgent = route.target_agent
+    if (targetAgent === 'order_agent' || route.intent === 'order_query') {
+      selectedMode.value = 'order_query'
+      emit('mode-change', 'order_query')
+      logger.logAction('AI', 'orchestrator_route_detected', { intent: route.intent, targetAgent, sessionId: session_id.value })
+      await handleOrderQuery(messageContent)
+      return true
+    }
+
+    if (targetAgent === 'business_intro_agent' || route.intent === 'business_intro') {
+      selectedMode.value = 'business_intro'
+      emit('mode-change', 'business_intro')
+      logger.logAction('AI', 'orchestrator_route_detected', { intent: route.intent, targetAgent, sessionId: session_id.value })
+      await handleBusinessIntro(messageContent)
+      return true
+    }
+
+    if (targetAgent === 'creative_direction_agent' || route.intent === 'creative_direction') {
+      selectedMode.value = 'order_create'
+      emit('mode-change', 'order_create')
+      logger.logAction('AI', 'orchestrator_route_detected', { intent: route.intent, targetAgent, sessionId: session_id.value })
+      await handleCreativeDirection(messageContent, attachments)
+      return true
+    }
+
+    if (targetAgent === 'creative_diagnosis_agent' || route.intent === 'creative_diagnosis') {
+      selectedMode.value = 'order_create'
+      emit('mode-change', 'order_create')
+      logger.logAction('AI', 'orchestrator_route_detected', { intent: route.intent, targetAgent, sessionId: session_id.value })
+      await handleCreativeDiagnosis(messageContent, attachments)
+      return true
+    }
+
+    if (targetAgent === 'general_agent' || route.intent === 'general') {
+      selectedMode.value = 'general'
+      emit('mode-change', 'general')
+      logger.logAction('AI', 'orchestrator_route_detected', { intent: route.intent, targetAgent, sessionId: session_id.value })
+      await handleGeneral(messageContent, userMessageId)
+      return true
+    }
+
+    isLoading.value = false
+    return false
+  } catch (e) {
+    isLoading.value = false
+    return false
+  }
 }
 
 const selectMode = async (mode: string) => {
@@ -1959,7 +2082,7 @@ const selectMode = async (mode: string) => {
       const result = await response.json()
       if (result.reply) typewriterEffect(result.reply)
     } catch (e) {
-      const fallback = '您好，我是 Unique Vision AI 的项目顾问。\n\n我可以协助您梳理项目需求、确认关键制作信息，并在信息完整后生成需求单。\n\n请先简单介绍这次项目的背景、投放场景或内容方向。'
+      const fallback = '您好，我是 Unique Vision AI 的创意提案总监。\n\n我可以协助您判断创意方向、梳理项目需求、确认关键制作信息，并在信息完整后生成需求单。\n\n请先简单介绍这次项目的背景、投放场景或内容方向。'
       typewriterEffect(fallback)
     } finally {
       isLoading.value = false
@@ -2107,16 +2230,20 @@ const sendMessage = async () => {
   if (isHumanHandoffRequest(messageContent)) {
     selectedMode.value = 'order_create'
     emit('mode-change', 'order_create')
-    await handleCustomAiChat(messageContent, userMessageId)
+    await handleCustomAiChat(messageContent, userMessageId, pendingFiles)
     return
   }
 
-  if (await rerouteFromOrderQueryIfNeeded(messageContent, userMessageId)) {
+  if (await rerouteFromOrderQueryIfNeeded(messageContent, userMessageId, pendingFiles)) {
+    return
+  }
+
+  if (await rerouteFromOrderCreateIfNeeded(messageContent, userMessageId, pendingFiles)) {
     return
   }
 
   if (selectedMode.value === 'order_create') {
-    await handleCustomAiChat(messageContent, userMessageId)
+    await handleCustomAiChat(messageContent, userMessageId, pendingFiles)
   } else if (selectedMode.value === 'order_query') {
     await handleOrderQuery(messageContent)
   } else if (selectedMode.value === 'business_intro') {
@@ -2180,6 +2307,11 @@ const handleBusinessIntro = async (userText: string) => {
     if (!response.ok) throw new Error('intro failed')
     const data = await response.json()
     if (data.business_type) businessType.value = data.business_type
+    const guide = data.guide || {}
+    if (guide.should_guide && guide.business_type && guide.requirement_summary) {
+      await continueBriefFromBusinessIntro(guide.business_type, guide.requirement_summary)
+      return
+    }
     const replyContent = data.message || ''
     // 显示时清洗掉内部标记
     const cleanMsg = replyContent.replace(/【推荐案例:case_\w+】/g, '').replace(/【引导下单(?::[^】]+)?】/g, '').trim()
@@ -2190,23 +2322,102 @@ const handleBusinessIntro = async (userText: string) => {
         lastMsg.content = replyContent
       }
       // 如果 AI 建议引导下单
-      const guide = data.guide || {}
       if (guide.should_guide) {
-        if (guide.business_type && guide.requirement_summary) {
-          // 后端已经输出了可见引导语，前端只切换状态并携带隐藏上下文。
-          activateOrderCreateFromGuide(guide.business_type, guide.requirement_summary)
-        } else {
-          // 后端已经输出了可见引导语，前端只把业务选择按钮挂到同一条消息上。
-          const lastGuideMsg = messages.value[messages.value.length - 1]
-          if (lastGuideMsg && lastGuideMsg.role === 'assistant') {
-            lastGuideMsg.isGuideToOrder = true
-          }
-          scrollToBottom()
+        // 后端已经输出了可见引导语，前端只把业务选择按钮挂到同一条消息上。
+        const lastGuideMsg = messages.value[messages.value.length - 1]
+        if (lastGuideMsg && lastGuideMsg.role === 'assistant') {
+          lastGuideMsg.isGuideToOrder = true
         }
+        scrollToBottom()
       }
     })
   } catch (e) {
     messages.value.push({ role: 'assistant', content: '获取信息时遇到问题，请稍后重试。', timestamp: getCurrentTime() })
+    void syncCurrentConversationToBackend()
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// ===== 创意方向生成子 Agent：生成轻量草案后自然衔接回需求梳理 =====
+const handleCreativeDirection = async (userText: string, attachments: UploadedFile[] = []) => {
+  isLoading.value = true
+  const assistantMessageId = createMessageId('assistant')
+  const waitingText = '我正在进入创意方向构思，这一步会比普通问答更久一些，通常需要 1-2 分钟。先基于当前 Brief 做一轮完整思考，完成后会给您一版可讨论的方向草案。'
+  const finalFallback = '这次创意方向思考时间还是过长了。我先保留当前 Brief，您可以稍后再试一次，或者继续补充屏幕参数、观看动线和现场素材，我会接着推进。'
+
+  try {
+    const historyMsgs = messages.value
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.content }))
+    messages.value.push({
+      client_message_id: assistantMessageId,
+      role: 'assistant',
+      content: waitingText,
+      timestamp: getCurrentTime(),
+      isThinkingStatus: true
+    })
+    await scrollToBottom()
+    void syncCurrentConversationToBackend()
+
+    const response = await fetch('/ai/creative-direction', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        session_id: session_id.value,
+        message: userText,
+        history: historyMsgs,
+        business_type: businessType.value,
+        agent_state: agentState.value,
+        attachments: toAiAttachmentPayload(attachments),
+      })
+    })
+    if (!response.ok) throw new Error('creative direction failed')
+    const data = await response.json()
+    selectedMode.value = 'order_create'
+    emit('mode-change', 'order_create')
+    typewriterEffect(
+      data.message || '我先给出一版轻量创意方向草案。接下来我们继续把 Brief 里的关键条件确认完整。',
+      undefined,
+      assistantMessageId,
+    )
+  } catch (e) {
+    typewriterEffect(finalFallback, undefined, assistantMessageId)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// ===== 创意评估子 Agent：完成专业判断后自然衔接回需求梳理 =====
+const handleCreativeDiagnosis = async (userText: string, attachments: UploadedFile[] = []) => {
+  isLoading.value = true
+  try {
+    const historyMsgs = messages.value
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.content }))
+    const response = await fetch('/ai/creative-diagnosis', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        session_id: session_id.value,
+        message: userText,
+        history: historyMsgs,
+        business_type: businessType.value,
+        agent_state: agentState.value,
+        attachments: toAiAttachmentPayload(attachments),
+      })
+    })
+    if (!response.ok) throw new Error('creative diagnosis failed')
+    const data = await response.json()
+    selectedMode.value = 'order_create'
+    emit('mode-change', 'order_create')
+    typewriterEffect(data.message || '我先完成了阶段性创意判断。接下来我们继续把 Brief 里的关键条件确认完整。')
+  } catch (e) {
+    messages.value.push({
+      role: 'assistant',
+      content: '创意评估暂时不可用。我先保留当前方向，接下来继续确认这个方向落地所需的关键条件。',
+      timestamp: getCurrentTime()
+    })
     void syncCurrentConversationToBackend()
   } finally {
     isLoading.value = false
@@ -2293,6 +2504,9 @@ const findAssistantMessage = (assistantMessageId?: string) => {
 }
 
 const applyCustomAiChatFinalState = async (data: any, replyContent: string, assistantMessageId?: string) => {
+  if (data?.agent_state) {
+    agentState.value = data.agent_state
+  }
   const isHumanHandoff = Boolean(data?.handoff) || replyContent.includes(HUMAN_HANDOFF_MARKER)
   const userMsgCount = messages.value.filter(m => m.role === 'user').length
   const shouldComplete = !isHumanHandoff && replyContent.includes('【需求收集完成】') && userMsgCount >= 3
@@ -2322,7 +2536,12 @@ const applyCustomAiChatFinalState = async (data: any, replyContent: string, assi
   }
 }
 
-const buildRequirementChatPayload = (userText: string, userMessageId?: string, assistantMessageId?: string) => {
+const buildRequirementChatPayload = (
+  userText: string,
+  userMessageId?: string,
+  assistantMessageId?: string,
+  attachments: UploadedFile[] = [],
+) => {
   const historyMessages = messages.value.slice(0, messages.value.length - 1)
   const formattedHistory = historyMessages
     .filter(m => m.role === 'user' || m.role === 'assistant')
@@ -2334,15 +2553,21 @@ const buildRequirementChatPayload = (userText: string, userMessageId?: string, a
     history: formattedHistory,
     business_type: businessType.value,
     user_message_id: userMessageId,
-    assistant_message_id: assistantMessageId
+    assistant_message_id: assistantMessageId,
+    attachments: toAiAttachmentPayload(attachments)
   }
 }
 
-const handleCustomAiChatJson = async (userText: string, userMessageId?: string, assistantMessageId?: string) => {
+const handleCustomAiChatJson = async (
+  userText: string,
+  userMessageId?: string,
+  assistantMessageId?: string,
+  attachments: UploadedFile[] = [],
+) => {
   const response = await fetch('/ai/chat', {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify(buildRequirementChatPayload(userText, userMessageId, assistantMessageId))
+    body: JSON.stringify(buildRequirementChatPayload(userText, userMessageId, assistantMessageId, attachments))
   })
 
   if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
@@ -2356,11 +2581,16 @@ const handleCustomAiChatJson = async (userText: string, userMessageId?: string, 
   }, assistantMessageId)
 }
 
-const handleCustomAiChatStream = async (userText: string, userMessageId?: string, assistantMessageId?: string) => {
+const handleCustomAiChatStream = async (
+  userText: string,
+  userMessageId?: string,
+  assistantMessageId?: string,
+  attachments: UploadedFile[] = [],
+) => {
   const response = await fetch('/ai/chat/stream', {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify(buildRequirementChatPayload(userText, userMessageId, assistantMessageId))
+    body: JSON.stringify(buildRequirementChatPayload(userText, userMessageId, assistantMessageId, attachments))
   })
 
   if (!response.ok || response.headers.get('content-type')?.includes('text/html') || !response.body) {
@@ -2486,12 +2716,12 @@ const handleCustomAiChatStream = async (userText: string, userMessageId?: string
   }
 }
 
-const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
+const handleCustomAiChat = async (userText: string, userMessageId?: string, attachments: UploadedFile[] = []) => {
   isLoading.value = true
   const assistantMessageId = createMessageId('assistant')
   try {
     try {
-      const streamHandled = await handleCustomAiChatStream(userText, userMessageId, assistantMessageId)
+      const streamHandled = await handleCustomAiChatStream(userText, userMessageId, assistantMessageId, attachments)
       if (streamHandled) {
         return
       }
@@ -2499,7 +2729,7 @@ const handleCustomAiChat = async (userText: string, userMessageId?: string) => {
       logger.logAction('AI', 'chat_stream_unavailable', { mode: selectedMode.value, businessType: businessType.value, sessionId: session_id.value })
     }
     isLoading.value = true
-    await handleCustomAiChatJson(userText, userMessageId, assistantMessageId)
+    await handleCustomAiChatJson(userText, userMessageId, assistantMessageId, attachments)
 
   } catch (error) {
     if (isHumanHandoffRequest(userText)) {

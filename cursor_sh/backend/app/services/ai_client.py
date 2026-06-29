@@ -80,6 +80,7 @@ async def post_chat_completion(
     payload: dict[str, Any],
     *,
     timeout: float | None = None,
+    attempts: int | None = None,
 ) -> dict[str, Any]:
     """Call the configured chat-completions API behind a bounded queue.
 
@@ -117,7 +118,7 @@ async def post_chat_completion(
             _call_provider,
             logger=logger,
             event="ai_chat_completion_provider_call",
-            attempts=settings.AI_RETRY_ATTEMPTS,
+            attempts=attempts if attempts is not None else settings.AI_RETRY_ATTEMPTS,
             fields={
                 "model": payload.get("model") or settings.AI_MODEL_NAME,
                 "base_url": settings.AI_BASE_URL,

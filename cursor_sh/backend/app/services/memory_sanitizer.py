@@ -53,6 +53,37 @@ AMOUNT_ONLY_PRICE_KEYWORDS = (
     "budget",
 )
 
+PROJECT_SCHEDULE_FIELD_KEYS = {
+    "online_time",
+    "launch_time",
+    "go_live_time",
+    "publish_time",
+    "publication_time",
+    "delivery_time",
+    "release_time",
+    "上刊时间",
+    "上线时间",
+    "投放时间",
+    "交付时间",
+}
+
+PROJECT_SCHEDULE_KEYWORDS = (
+    "上刊",
+    "上线",
+    "投放时间",
+    "活动时间",
+    "交付时间",
+    "发布时间",
+    "发布节点",
+    "上线节点",
+    "上刊节点",
+    "下月",
+    "下个月",
+    "本月",
+    "月底",
+    "月初",
+)
+
 _MONEY_AMOUNT_RE = re.compile(
     r"(?:[¥￥]\s*)?\d[\d,]*(?:\.\d+)?\s*(?:万|万元|元|人民币|rmb|cny|k|w)?"
     r"|[¥￥]\s*\d",
@@ -97,12 +128,28 @@ def sanitize_agent_notes(notes: Any) -> str:
     return "\n".join(lines).strip()
 
 
+def sanitize_reusable_memory_text(text: Any) -> str:
+    """Remove project-specific budget and schedule fragments from reusable memory."""
+    cleaned = _sanitize_text(str(text or ""))
+    return _sanitize_project_schedule_text(cleaned)
+
+
+def is_project_sensitive_memory_key(key: str) -> bool:
+    """Return True for memory fields that should never be reused across projects."""
+    normalized = str(key or "").strip().lower()
+    return (
+        _is_sensitive_field_key(normalized)
+        or normalized in PROJECT_SCHEDULE_FIELD_KEYS
+        or any(token in normalized for token in PROJECT_SCHEDULE_FIELD_KEYS)
+    )
+
+
 def _sanitize_value(value: Any, *, parent_key: str = "") -> Any:
     if isinstance(value, dict):
         result = {}
         for key, child in value.items():
             key_text = str(key)
-            if _is_sensitive_field_key(key_text):
+            if is_project_sensitive_memory_key(key_text):
                 continue
             if parent_key == "source" and key_text.lower() in SOURCE_FILENAME_KEYS:
                 continue
@@ -140,6 +187,19 @@ def _sanitize_text(text: str) -> str:
     return "，".join(kept)
 
 
+def _sanitize_project_schedule_text(text: str) -> str:
+    fragments = [
+        fragment.strip(" \t，,；;")
+        for fragment in re.split(r"(?:[；;，,\n\r|｜]+|\s+/\s+)", str(text or ""))
+    ]
+    kept = [
+        fragment
+        for fragment in fragments
+        if fragment and not _is_project_schedule_fragment(fragment)
+    ]
+    return "，".join(kept)
+
+
 def _is_sensitive_field_key(key: str) -> bool:
     normalized = str(key or "").strip().lower()
     return normalized in PRICE_FIELD_KEYS or any(token in normalized for token in PRICE_FIELD_KEYS)
@@ -150,6 +210,11 @@ def _is_sensitive_price_fragment(text: str) -> bool:
     if any(keyword in normalized for keyword in PRICE_KEYWORDS):
         return True
     return any(keyword in normalized for keyword in AMOUNT_ONLY_PRICE_KEYWORDS) and bool(_MONEY_AMOUNT_RE.search(normalized))
+
+
+def _is_project_schedule_fragment(text: str) -> bool:
+    normalized = str(text or "").lower()
+    return any(keyword.lower() in normalized for keyword in PROJECT_SCHEDULE_KEYWORDS)
 
 
 def _is_empty_after_sanitize(value: Any) -> bool:

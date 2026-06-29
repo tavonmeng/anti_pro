@@ -6,6 +6,7 @@
 import uuid
 import asyncio
 import re
+from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,8 +14,10 @@ from app.models.user_memory import UserMemory
 from app.database import async_session_maker
 from app.config import settings
 from app.services.memory_sanitizer import (
+    is_project_sensitive_memory_key,
     sanitize_agent_notes,
     sanitize_document_memory_data,
+    sanitize_reusable_memory_text,
     sanitize_screen_resources,
 )
 from app.utils.business_log import log_business_event
@@ -60,6 +63,7 @@ def _compact_agent_notes(notes: str, max_lines: int = 8, max_chars: int = 700) -
     candidates: list[str] = []
     for raw_line in notes.replace("\r", "\n").split("\n"):
         line = raw_line.strip().strip("-•* \t")
+        line = sanitize_reusable_memory_text(line)
         if not line:
             continue
         if line.startswith("【") and line.endswith("】"):
@@ -97,7 +101,7 @@ def _compact_preference_notes(notes: str, max_items: int = 6, max_chars: int = 3
         return ""
 
     fragments: list[str] = []
-    buffer = notes.replace("\r", "\n")
+    buffer = sanitize_reusable_memory_text(notes).replace("\r", "\n")
     for mark in ("；", ";", "。", "\n", "，", ","):
         buffer = buffer.replace(mark, "|")
 
@@ -167,10 +171,73 @@ def _stable_memory_values(values: list, *, exclude_project_specific: bool = Fals
 
 
 def _stable_memory_scalar(value) -> str:
-    text = str(value or "").strip()
+    text = sanitize_reusable_memory_text(value).strip()
     if text in {"未提供", "未知", "暂无", "无", "不清楚"}:
         return ""
     return text
+
+
+def _sanitize_project_preferences(preferences: dict | None) -> dict:
+    """Keep only preference fields that are safe to reuse across projects."""
+    if not isinstance(preferences, dict):
+        return {}
+    sanitized: dict = {}
+    for key, value in preferences.items():
+        if is_project_sensitive_memory_key(str(key)):
+            continue
+        if key == "_field_updated" and isinstance(value, dict):
+            cleaned_timestamps = {
+                field: timestamp
+                for field, timestamp in value.items()
+                if not is_project_sensitive_memory_key(str(field))
+            }
+            if cleaned_timestamps:
+                sanitized[key] = cleaned_timestamps
+            continue
+        if key == "notes":
+            cleaned_notes = _compact_preference_notes(str(value or ""))
+            if cleaned_notes:
+                sanitized[key] = cleaned_notes
+            continue
+        sanitized[key] = value
+    return sanitized
+
+
+def _sanitize_memory_record_for_reuse(memory: Any) -> bool:
+    """Remove project-specific budget and schedule data from persisted memory."""
+    changed = False
+
+    original_preferences = getattr(memory, "project_preferences", None) or {}
+    sanitized_preferences = _sanitize_project_preferences(original_preferences)
+    if sanitized_preferences != original_preferences:
+        memory.project_preferences = sanitized_preferences
+        changed = True
+
+    original_screens = getattr(memory, "screen_resources", None) or []
+    sanitized_screens: list[dict] = []
+    if isinstance(original_screens, list):
+        for screen in original_screens:
+            if not isinstance(screen, dict):
+                continue
+            sanitized_screen = dict(screen)
+            if sanitized_screen.get("notes"):
+                cleaned_notes = sanitize_reusable_memory_text(sanitized_screen.get("notes"))
+                if cleaned_notes:
+                    sanitized_screen["notes"] = cleaned_notes
+                else:
+                    sanitized_screen.pop("notes", None)
+            sanitized_screens.append(sanitized_screen)
+    if sanitized_screens != original_screens:
+        memory.screen_resources = sanitized_screens
+        changed = True
+
+    original_agent_notes = str(getattr(memory, "agent_notes", None) or "")
+    sanitized_agent_notes = sanitize_reusable_memory_text(original_agent_notes)
+    if sanitized_agent_notes != original_agent_notes:
+        memory.agent_notes = sanitized_agent_notes
+        changed = True
+
+    return changed
 
 
 def _migrate_legacy_preference_notes(memory: UserMemory) -> bool:
@@ -284,17 +351,23 @@ async def get_memory(user_id: str, db: AsyncSession | None = None) -> UserMemory
     if db:
         result = await db.execute(select(UserMemory).where(UserMemory.user_id == user_id))
         memory = result.scalar_one_or_none()
-        if memory and _migrate_legacy_preference_notes(memory):
-            await db.commit()
-            await db.refresh(memory)
+        if memory:
+            changed = _migrate_legacy_preference_notes(memory)
+            changed = _sanitize_memory_record_for_reuse(memory) or changed
+            if changed:
+                await db.commit()
+                await db.refresh(memory)
         return memory
     else:
         async with async_session_maker() as session:
             result = await session.execute(select(UserMemory).where(UserMemory.user_id == user_id))
             memory = result.scalar_one_or_none()
-            if memory and _migrate_legacy_preference_notes(memory):
-                await session.commit()
-                await session.refresh(memory)
+            if memory:
+                changed = _migrate_legacy_preference_notes(memory)
+                changed = _sanitize_memory_record_for_reuse(memory) or changed
+                if changed:
+                    await session.commit()
+                    await session.refresh(memory)
             return memory
 
 
@@ -304,7 +377,9 @@ async def get_or_create_memory(user_id: str, db: AsyncSession | None = None) -> 
         result = await session.execute(select(UserMemory).where(UserMemory.user_id == user_id))
         memory = result.scalar_one_or_none()
         if memory:
-            if _migrate_legacy_preference_notes(memory):
+            changed = _migrate_legacy_preference_notes(memory)
+            changed = _sanitize_memory_record_for_reuse(memory) or changed
+            if changed:
                 await session.commit()
                 await session.refresh(memory)
             return memory
@@ -466,6 +541,13 @@ def build_memory_context(memory: UserMemory | None) -> str:
     if screens:
         lines = []
         for s in screens:
+            s = dict(s)
+            if s.get("notes"):
+                cleaned_notes = sanitize_reusable_memory_text(s.get("notes"))
+                if cleaned_notes:
+                    s["notes"] = cleaned_notes
+                else:
+                    s.pop("notes", None)
             location = s.get("media_position") or s.get("location", "")
             parts = [s.get("city", ""), s.get("district", ""), s.get("name", "") or location]
             if s.get("specs"):
@@ -514,7 +596,7 @@ def build_memory_context(memory: UserMemory | None) -> str:
         )
 
     # 项目偏好
-    pp = memory.project_preferences or {}
+    pp = _sanitize_project_preferences(memory.project_preferences or {})
     screen_names = {
         str(s.get("name") or s.get("location") or "").strip()
         for s in screens
@@ -523,7 +605,7 @@ def build_memory_context(memory: UserMemory | None) -> str:
     if (
         pp.get("preferred_styles") or pp.get("creative_goals") or
         pp.get("theme_concepts") or pp.get("content_taboos") or
-        pp.get("budget_range") or pp.get("common_cities")
+        pp.get("common_cities")
     ):
         pref_lines = []
         if pp.get("common_cities"):
@@ -542,9 +624,6 @@ def build_memory_context(memory: UserMemory | None) -> str:
         ]
         if reference_cases:
             pref_lines.append(f"历史参考案例/点位：{', '.join(reference_cases)}")
-        budget_range = _stable_memory_scalar(pp.get("budget_range"))
-        if budget_range:
-            pref_lines.append(f"预算范围：{budget_range}")
         typical_duration = _stable_memory_scalar(pp.get("typical_duration"))
         if typical_duration:
             pref_lines.append(f"常用时长：{typical_duration}")
@@ -726,12 +805,11 @@ async def _extract_preferences(conversation: list[dict]) -> dict:
             "preferred_styles": ["科技感"],
             "creative_goals": ["招商展示"],
             "theme_concepts": ["城市文化"],
-            "budget_range": "20-30万",
             "typical_duration": "30秒",
             "screen_preferences": ["L型大屏"],
             "screen_resources": [{"city": "深圳", "name": "万象天地主广场大屏", "specs": "30m×20m，3:2比例", "notes": "中轴步行道正向视角，需规避左右立柱遮挡"}],
             "content_taboos": ["过度商业广告化"],
-            "notes": "客户对交付时间比较敏感"
+            "notes": "客户偏好治愈风格"
         }
     """
     import re
@@ -754,11 +832,11 @@ async def _extract_preferences(conversation: list[dict]) -> dict:
         "- theme_concepts (list[string]): 内容主题或核心表达，如'城市文化'、'春节氛围'、'品牌招商'\n"
         "- content_taboos (list[string]): 明确不希望出现或需要规避的内容/调性\n"
         "- reference_cases (list[string]): 客户明确喜欢或提到的参考案例/参考方向\n"
-        "- budget_range (string): 预算范围，如'20-30万'\n"
         "- typical_duration (string): 视频时长偏好，如'30秒'\n"
         "- screen_preferences (list[string]): 偏好的屏幕类型，如'L型大屏'、'曲面屏'\n"
-        "- screen_resources (list[object]): 客户明确提到的具体屏幕资源，尽量简短；只使用 city, name, specs, notes 四个字段。city 是城市；name 是点位/屏幕名称，如'万象天地主广场大屏'；specs 是屏幕参数摘要，如'L型屏，3840x2160，约20m x 8m'；notes 是这块屏幕的观看动线、客流、遮挡、亮点、审核/上刊节点等屏幕相关补充。只有出现具体点位/屏幕名称/屏幕参数时才提取，不要只因为提到城市就生成屏幕资源\n"
-        "- notes (string): 其他值得后续对话自然复用的非屏幕类线索，一句话概括；不要记录具体点位、屏幕参数、观看动线、遮挡、上刊节点等屏幕相关内容，这些应写入 screen_resources[].notes\n\n"
+        "- screen_resources (list[object]): 客户明确提到的具体屏幕资源，尽量简短；只使用 city, name, specs, notes 四个字段。city 是城市；name 是点位/屏幕名称，如'万象天地主广场大屏'；specs 是屏幕参数摘要，如'L型屏，3840x2160，约20m x 8m'；notes 是这块屏幕的观看动线、客流、遮挡、亮点等稳定补充。只有出现具体点位/屏幕名称/屏幕参数时才提取，不要只因为提到城市就生成屏幕资源\n"
+        "- notes (string): 其他值得后续对话自然复用的非屏幕类线索，一句话概括；不要记录具体点位、屏幕参数、观看动线、遮挡等屏幕相关内容，这些应写入 screen_resources[].notes\n\n"
+        "严禁提取预算、报价、费用、成本、上刊时间、上线时间、投放时间、活动时间、交付时间或类似项目节点；这些只属于当前项目，不可写入跨会话记忆。\n"
         "重要：只提取客户（user）明确提到的信息，不要推测。\n"
         "如果信息只属于某一次具体屏幕/点位，应优先放进 screen_resources；不要写成长段项目复述。\n"
         "如果整段对话没有任何可提取的偏好信息，返回空对象 {}"
@@ -818,6 +896,8 @@ def _normalize_conversation_screens(value) -> list[dict]:
         item = {}
         for key in allowed_fields:
             text = str(raw.get(key) or "").strip()
+            if key == "notes":
+                text = sanitize_reusable_memory_text(text)
             if text and text not in {"未知", "未提供", "暂无", "无", "不清楚"}:
                 item[key] = text
 
@@ -842,6 +922,7 @@ def _normalize_conversation_screens(value) -> list[dict]:
             for k in ("daily_traffic", "viewing_path", "highlights")
             if str(raw.get(k) or "").strip()
         )
+        legacy_notes = sanitize_reusable_memory_text(legacy_notes)
         if legacy_notes and not item.get("notes"):
             item["notes"] = legacy_notes
 
@@ -967,11 +1048,12 @@ def _merge_preferences(existing: dict, new: dict) -> dict:
 
     规则：
     - 列表类型（cities, styles 等）：去重合并
-    - 字符串类型（budget, duration）：新值覆盖旧值
+    - 字符串类型（duration 等可复用偏好）：新值覆盖旧值
     - notes：追加，不覆盖
     - 自动记录 last_updated 和各字段的更新时间
     """
-    merged = {**existing}
+    merged = _sanitize_project_preferences(existing)
+    new = _sanitize_project_preferences(new)
     now = beijing_now_iso()
     changed_fields = []
 
@@ -987,7 +1069,7 @@ def _merge_preferences(existing: dict, new: dict) -> dict:
                 merged[field] = combined
                 changed_fields.append(field)
 
-    scalar_fields = ["budget_range", "typical_duration"]
+    scalar_fields = ["typical_duration"]
     for field in scalar_fields:
         if field in new and new[field]:
             if merged.get(field) != new[field]:
@@ -995,9 +1077,9 @@ def _merge_preferences(existing: dict, new: dict) -> dict:
                 changed_fields.append(field)
 
     # notes 追加
-    if new.get("notes") and not _note_looks_screen_specific(new["notes"]):
+    if new.get("notes"):
         new_notes = _compact_preference_notes(str(new["notes"]))
-        if new_notes:
+        if new_notes and not _note_looks_screen_specific(new_notes):
             old_notes = merged.get("notes", "")
             if old_notes:
                 compact_notes = _compact_preference_notes(f"{old_notes}；{new_notes}")

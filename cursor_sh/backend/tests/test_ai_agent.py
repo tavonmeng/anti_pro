@@ -1,5 +1,6 @@
 import pytest
 from starlette.requests import Request
+from types import SimpleNamespace
 
 from app.api import ai as ai_module
 
@@ -15,6 +16,57 @@ class _FakeUser:
 
 def _fake_user() -> _FakeUser:
     return _FakeUser()
+
+
+def test_requirement_prompt_keeps_goal_on_brief_form_and_order_confirmation():
+    messages = ai_module._build_requirement_llm_messages(
+        ai_module.ChatRequest(
+            session_id="test-session",
+            message="这个创意方向可以吗？",
+            history=[],
+            business_type="ai_3d_custom",
+        )
+    )
+    system_prompt = messages[0]["content"]
+
+    assert "创意提案总监" in system_prompt
+    assert "Brief" in system_prompt
+    assert "表单" in system_prompt
+    assert "确认下单" in system_prompt
+    assert "创意评估" in system_prompt
+    assert "评估完成后" in system_prompt
+    assert "收集顺序可以根据用户已给信息动态调整" in system_prompt
+    assert "不要按固定清单逐项盘问" in system_prompt
+
+
+def test_requirement_prompt_uses_state_projection_instead_of_raw_memory_context():
+    brief_state = {
+        "fields": {},
+        "pending_confirmation": {
+            "id": "pending-city-location",
+            "field": "city_location",
+            "label": "投放城市与媒体位置",
+            "candidate_value": "杭州巨屏（湖滨银泰in77 L型地标大屏）",
+            "source": "memory_candidate",
+            "status": "pending",
+        },
+    }
+
+    messages = ai_module._build_requirement_llm_messages(
+        ai_module.ChatRequest(
+            session_id="test-session",
+            message="我想做毛绒质感的大熊猫",
+            history=[],
+            business_type="ai_3d_custom",
+        ),
+        memory_context="RAW_MEMORY_CONTEXT_SHOULD_NOT_ENTER_PROMPT：杭州巨屏",
+        agent_state={"brief_state": brief_state},
+    )
+
+    system_prompt = messages[0]["content"]
+    assert "RAW_MEMORY_CONTEXT_SHOULD_NOT_ENTER_PROMPT" not in system_prompt
+    assert "待用户确认" in system_prompt
+    assert "杭州巨屏" in system_prompt
 
 
 async def _no_existing_handoff(**_):
@@ -138,8 +190,21 @@ async def test_ai_start_media_ai_3d_custom_uses_opening_question(monkeypatch):
     response = await ai_module.ai_start("test-session", "ai_3d_custom")
 
     assert "这次大概想做什么样的内容" in response["reply"]
+    assert "项目背景" in response["reply"]
+    assert "投放场景" in response["reply"]
+    assert "北京" not in response["reply"]
     assert "请先告诉我品牌或项目名称" not in response["reply"]
     assert "请先告诉我项目名称" not in response["reply"]
+
+
+@pytest.mark.asyncio
+async def test_ai_start_uses_creative_director_identity(monkeypatch):
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+
+    response = await ai_module.ai_start("test-session", None)
+
+    assert "您好，我是 Unique Vision AI 的创意提案总监。" in response["reply"]
+    assert "创意提案总监型项目顾问" not in response["reply"]
 
 
 @pytest.mark.asyncio
@@ -288,7 +353,7 @@ async def test_media_ai_chat_strips_completion_when_signal_coverage_is_too_low(m
     )
 
     assert "【需求收集完成】" not in response["message"]
-    assert "投放点位或屏幕规格" in response["message"]
+    assert "观看" in response["message"] or "动线" in response["message"]
 
 
 @pytest.mark.asyncio
@@ -372,7 +437,7 @@ async def test_media_ai_chat_does_not_repeat_answered_theme_fallback(monkeypatch
 
     assert "【需求收集完成】" not in response["message"]
     assert "主要想做什么内容或主题" not in response["message"]
-    assert "哪类人群或观看场景" in response["message"]
+    assert any(keyword in response["message"] for keyword in ("观看", "动线", "哪类人群或观看场景"))
 
 
 @pytest.mark.asyncio
@@ -471,6 +536,140 @@ async def test_media_ai_chat_removes_redundant_specs_followup_from_same_reply(mo
     assert "杭州湖滨银泰in77 L型巨屏" in response["message"]
     assert "投放点位或屏幕规格" not in response["message"]
     assert "现场实拍图" in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_media_ai_chat_uses_brief_state_to_choose_next_question(monkeypatch):
+    async def _mock_completion(payload, *, timeout=None):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            "收到已上传的参考文件。\n\n"
+                            "结合您提供的素材和之前的沟通，目前项目核心要素已明确："
+                            "杭州湖滨银泰in77 L型大屏、毛绒质感熊猫、慵懒趴姿、4K规格、下个月上刊、预算20w。\n\n"
+                            "我还需要再补充一个关键信息：这次项目对应的投放点位或屏幕规格目前方便确认吗？"
+                            "如果暂时没有完整参数，先说城市、屏幕位置或已有规格也可以。"
+                        )
+                    }
+                }
+            ]
+        }
+
+    async def _mock_agent_state(**_):
+        from app.services.ai_brief_state import create_empty_brief_state, merge_brief_updates
+
+        brief_state = merge_brief_updates(
+            create_empty_brief_state("ai_3d_custom"),
+            {
+                "city_location": "杭州湖滨银泰in77 L型大屏",
+                "media_specs": "L型大屏，4K规格",
+                "theme_concept": "毛绒质感熊猫，慵懒趴姿，与周围环境互动并冲出屏幕",
+                "art_direction": "毛绒质感",
+                "audience_scene": "商圈年轻消费者和游客",
+                "budget": "20w",
+                "online_time": "下个月上刊",
+                "site_photos": "已上传参考文件",
+            },
+        )
+        return {"current_agent": "brief_agent", "stage": "brief_building", "business_type": "ai_3d_custom", "brief_state": brief_state}
+
+    monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "test-key")
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+    monkeypatch.setattr(ai_module, "post_chat_completion", _mock_completion)
+    monkeypatch.setattr(ai_module, "_update_agent_state_for_message", _mock_agent_state)
+    monkeypatch.setattr(ai_module, "_save_session_file", lambda **_: None)
+    monkeypatch.setattr(ai_module, "_append_handoff_message", _no_existing_handoff)
+
+    response = await ai_module.ai_chat(
+        ai_module.ChatRequest(
+            session_id="test-session",
+            message="[已上传文件: reference.png]",
+            history=[
+                {"role": "user", "content": "杭州湖滨银泰in77 L型大屏，4K规格，想做毛绒质感熊猫，预算20w，下个月上刊"},
+            ],
+        ),
+        _request_without_auth(),
+        _fake_user(),
+    )
+
+    assert "杭州湖滨银泰in77 L型大屏" in response["message"]
+    assert "投放点位或屏幕规格" not in response["message"]
+    assert "城市、屏幕位置或已有规格" not in response["message"]
+    assert "观看" in response["message"] or "动线" in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_media_ai_chat_uses_memory_city_hint_for_next_question(monkeypatch):
+    async def _mock_completion(payload, *, timeout=None):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": "这个方向我先记下。为了判断画面尺度和现场观看关系，想确认一下这条内容大概会投放在哪个城市或哪块屏幕？"
+                    }
+                }
+            ]
+        }
+
+    async def _mock_agent_state(**_):
+        from app.services.ai_brief_state import create_empty_brief_state, merge_brief_updates
+
+        brief_state = merge_brief_updates(
+            create_empty_brief_state("ai_3d_custom"),
+            {
+                "theme_concept": "毛绒质感的大熊猫",
+                "art_direction": "毛绒质感",
+            },
+        )
+        brief_state["pending_confirmation"] = {
+            "id": "pending-city",
+            "field": "city_location",
+            "label": "投放城市与媒体位置",
+            "candidate_value": "杭州",
+            "source": "memory_candidate",
+            "status": "pending",
+        }
+        return {"current_agent": "brief_agent", "stage": "brief_building", "business_type": "ai_3d_custom", "brief_state": brief_state}
+
+    async def _mock_memory(_user_id):
+        return SimpleNamespace(
+            company_info={},
+            screen_resources=[],
+            project_preferences={"common_cities": ["杭州"]},
+            past_projects=[],
+            agent_notes="",
+        )
+
+    async def _mock_update_stats(_user_id):
+        return None
+
+    import app.services.memory_service as memory_service
+
+    monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "test-key")
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+    monkeypatch.setattr(ai_module, "post_chat_completion", _mock_completion)
+    monkeypatch.setattr(ai_module, "_update_agent_state_for_message", _mock_agent_state)
+    monkeypatch.setattr(ai_module, "_save_session_file", lambda **_: None)
+    monkeypatch.setattr(ai_module, "_append_handoff_message", _no_existing_handoff)
+    monkeypatch.setattr(memory_service, "get_or_create_memory", _mock_memory)
+    monkeypatch.setattr(memory_service, "update_interaction_stats", _mock_update_stats)
+
+    response = await ai_module.ai_chat(
+        ai_module.ChatRequest(
+            session_id="test-session",
+            message="我想做毛绒质感的大熊猫",
+            history=[
+                {"role": "assistant", "content": "您可以先简单说说，这次大概想做什么样的内容？"},
+            ],
+        ),
+        _request_without_auth(),
+        _fake_user(),
+    )
+
+    assert "杭州" in response["message"]
+    assert "哪个城市或哪块屏幕" not in response["message"]
 
 
 @pytest.mark.asyncio
@@ -610,37 +809,7 @@ async def test_qwen_chat_payload_disables_thinking_by_default(monkeypatch):
     assert payload["enable_thinking"] is False
 
 
-def test_design_thinking_only_for_creative_plan_requests():
-    assert ai_module._should_enable_design_thinking("帮我生成一个设计方案")
-    assert ai_module._should_enable_design_thinking("根据上面的信息写一版策划方案")
-    assert ai_module._should_enable_design_thinking("出个创意方案给客户看")
-    assert ai_module._should_enable_design_thinking("能不能给我出一个方案")
-    assert ai_module._should_enable_design_thinking("帮我做一版方案")
-
-    assert not ai_module._should_enable_design_thinking("这个能不能做")
-    assert not ai_module._should_enable_design_thinking("排期多久")
-    assert not ai_module._should_enable_design_thinking("报价方案大概怎么定")
-    assert not ai_module._should_enable_design_thinking("怎么落地执行")
-
-
-def test_design_thinking_for_creative_draft_revision_requests():
-    history = [
-        {"role": "user", "content": "根据上面的信息帮我生成一个创意方案"},
-        {
-            "role": "assistant",
-            "content": "创意方向名称：西湖未来折叠\n\n计划概括：...\n\n适合的原因：...\n\n传播价值：...",
-        },
-    ]
-
-    assert ai_module._should_enable_design_thinking("不太满意，能不能更科技一点", history)
-    assert ai_module._should_enable_design_thinking("换一个更年轻的方向", history)
-
-
-def test_revision_words_without_recent_creative_draft_do_not_enable_thinking():
-    assert not ai_module._should_enable_design_thinking("不太满意，能不能更科技一点", [])
-
-
-def test_creative_plan_request_injects_direction_draft_rules(monkeypatch):
+def test_creative_plan_request_no_longer_injects_direction_draft_rules(monkeypatch):
     monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
 
     messages = ai_module._build_requirement_llm_messages(
@@ -652,19 +821,11 @@ def test_creative_plan_request_injects_direction_draft_rules(monkeypatch):
     )
 
     system_prompt = messages[0]["content"]
-    assert "创意方向草案" in system_prompt
-    assert "创意方向名称" in system_prompt
-    assert "计划概括" in system_prompt
-    assert "适合的原因" in system_prompt
-    assert "传播价值" in system_prompt
-    assert "不要输出完整分镜脚本" in system_prompt
-    assert "0-5s/5-15s/15-25s" in system_prompt
-    assert "完整创意方案需要结合屏幕参数" in system_prompt
-    assert "项目顾问和策划团队继续深化" in system_prompt
-    assert "转入当前需求梳理" in system_prompt
+    assert "创意方向草案" not in system_prompt
+    assert "创意方向名称" not in system_prompt
 
 
-def test_creative_revision_request_injects_direction_draft_rules(monkeypatch):
+def test_creative_revision_request_no_longer_injects_direction_draft_rules(monkeypatch):
     monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
 
     messages = ai_module._build_requirement_llm_messages(
@@ -679,8 +840,8 @@ def test_creative_revision_request_injects_direction_draft_rules(monkeypatch):
     )
 
     system_prompt = messages[0]["content"]
-    assert "修订方向草案" in system_prompt
-    assert "项目顾问和策划团队继续深化" in system_prompt
+    assert "修订方向草案" not in system_prompt
+    assert "创意方向草案" not in system_prompt
 
 
 def test_non_creative_plan_request_does_not_inject_direction_draft_rules(monkeypatch):

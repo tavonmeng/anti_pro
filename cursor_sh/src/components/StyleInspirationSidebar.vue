@@ -66,8 +66,8 @@ import gsap from 'gsap'
 const emit = defineEmits(['close'])
 
 const inspirationImageFiles = [
-  '风格化设计.jpg',
-  '毛绒质感.jpg',
+  '风格化设计.png',
+  '毛绒质感.png',
   '巨物.jpg',
   '2D+3D.jpg',
   '写实风.jpg',

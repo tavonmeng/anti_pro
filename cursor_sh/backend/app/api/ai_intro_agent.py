@@ -80,10 +80,30 @@ def _has_order_context(history: list) -> bool:
     return bool(re.search(r"下单|需求梳理|创建订单|项目构想|开始流程|推进|立项", recent))
 
 
+def _has_meaningful_requirement_summary(requirement_summary: str) -> bool:
+    summary = (requirement_summary or "").strip()
+    if not summary:
+        return False
+    generic_summaries = {
+        "意向AI驱动3D OOH内容定制",
+        "意向3D OOH数字内容资源库",
+        "意向数字艺术与沉浸式视觉设计",
+        "意向相关服务",
+    }
+    return summary not in generic_summaries
+
+
 def _build_order_entry_reply(business_type: str, requirement_summary: str = "") -> str:
     label = ORDERABLE_BUSINESS_LABELS.get(business_type, ORDERABLE_BUSINESS_LABELS["ai_3d_custom"])
     summary_line = f"\n\n已记录的信息：{requirement_summary.strip()}" if requirement_summary else ""
     if business_type == "ai_3d_custom":
+        if _has_meaningful_requirement_summary(requirement_summary):
+            return (
+                f"好的，已为您匹配「{label}」。"
+                f"{summary_line}\n\n"
+                "这个创意方向我先记下。接下来进入需求梳理，我会基于已知方向继续补齐关键信息。"
+                "为了判断裸眼3D的空间关系，想先确认一下：这条内容大概会投放在哪类屏幕或场景里？"
+            )
         return (
             f"好的，已为您匹配「{label}」。"
             f"{summary_line}\n\n"
@@ -104,6 +124,43 @@ def _build_order_choice_reply() -> str:
         "请先选择本次项目更接近的业务类型：AI驱动3D OOH内容定制、3D OOH数字内容资源库，"
         "或数字艺术与沉浸式视觉设计。确认后我会按对应流程继续追问关键需求。"
     )
+
+
+def _is_first_3d_custom_intro_request(message: str, history: list | None = None) -> bool:
+    if history:
+        return False
+    text = re.sub(r"\s+", "", (message or "").lower())
+    if not text:
+        return False
+    return bool(re.search(r"3d.*(视频|内容|ooh|裸眼|定制)|裸眼3d|3d视频定制|3d内容定制", text, re.I))
+
+
+def _build_soft_3d_custom_intro_reply() -> str:
+    return (
+        "可以，先简单聊聊。3D 视频定制这类项目，前期不用一下子把参数都准备好。\n\n"
+        "您这次大概想做成什么样的3D视频？"
+    )
+
+
+def _sanitize_first_3d_custom_intro_reply(message: str, history: list | None, reply: str) -> str:
+    if not _is_first_3d_custom_intro_request(message, history):
+        return reply
+
+    stiff_markers = [
+        "AI-Based Creative Development",
+        "品牌名称",
+        "投放城市",
+        "屏幕位置",
+        "视频主题",
+        "风格偏好",
+        "场景化裸眼3D空间适配",
+        "真实环境播放模拟",
+        "一站式DOOH内容制作",
+    ]
+    question_count = (reply or "").count("？") + (reply or "").count("?")
+    if question_count > 1 or any(marker in (reply or "") for marker in stiff_markers):
+        return _build_soft_3d_custom_intro_reply()
+    return reply
 
 
 class BusinessIntroRequest(BaseModel):
@@ -172,6 +229,8 @@ async def ai_business_intro(request: BusinessIntroRequest):
         msg = request.message.lower()
         if "案例" in msg or "作品" in msg:
             return {"message": _build_case_consultant_reply(), "cases": [], "guide": {}}
+        elif _is_first_3d_custom_intro_request(request.message, request.history):
+            return {"message": _build_soft_3d_custom_intro_reply(), "cases": [], "guide": {}, "business_type": "ai_3d_custom"}
         elif "裸眼" in msg or "3d" in msg or "成片" in msg:
             reply = ("3D OOH是我们的核心服务方向，提供两种主要交付模式：\n\n"
                      "**3D OOH数字内容资源库**\n"
@@ -247,6 +306,12 @@ async def ai_business_intro(request: BusinessIntroRequest):
             "【对话节奏规则】\n"
             "1. 当你完成业务板块介绍后，可询问客户是否需要咨询顾问进一步匹配方案或资料。\n"
             "2. 只介绍业务资料中列出的六个业务板块，不要编造不存在的服务。\n\n"
+            "【第一次回答：低压力开场】\n"
+            "1. 如果客户第一次提到3D视频定制、裸眼3D内容定制、AI驱动3D OOH内容定制，"
+            "不要马上输出完整服务介绍，也不要像表单一样收集资料。\n"
+            "2. 第一次回答只需要自然确认可以先聊大概想法，并只问一个开放问题，例如："
+            "'可以，先简单聊聊。3D 视频定制这类项目，前期不用一下子把参数都准备好。您这次大概想做成什么样的3D视频？'\n"
+            "3. 不要一次性索要品牌名称、投放城市、屏幕位置、视频主题或风格偏好；这些信息后续由需求梳理流程一步一步确认。\n\n"
 
             "【引导下单规则 — 核心】\n"
             "只有在以下明确信号出现时，才在回复的最后一行加上标记：【引导下单】\n"
@@ -288,6 +353,7 @@ async def ai_business_intro(request: BusinessIntroRequest):
             timeout=60.0,
         )
         reply = data["choices"][0]["message"]["content"]
+        reply = _sanitize_first_3d_custom_intro_reply(request.message, request.history, reply)
 
         if re.search(r'【展示案例(?::[^】]*)?】|【推荐案例:case_\w+】', reply):
             reply = re.sub(r'【展示案例(?::[^】]*)?】', _build_case_consultant_reply(), reply)

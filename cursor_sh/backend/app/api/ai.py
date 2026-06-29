@@ -22,10 +22,29 @@ from app.services.ai_client import (
     stream_chat_completion_events,
     stream_responses_completion,
 )
+from app.services.ai_image_understanding import (
+    IMAGE_CONTEXT_MARKER,
+    UploadedAttachment,
+    append_image_context_to_message,
+    build_image_feedback_reply_instruction,
+    summarize_uploaded_images,
+)
 from app.services.platform_service_catalog import (
     get_business_type_label,
     get_consultation_intro,
     is_consultation_business_type,
+)
+from app.services.ai_orchestrator import OrchestratorContext, RouteDecision, decide_route
+from app.services.ai_brief_state import (
+    build_brief_state_context,
+    load_agent_state,
+    update_agent_state_from_message,
+)
+from app.services.ai_brief_agent import (
+    build_brief_memory_hints,
+    build_brief_agent_instruction,
+    sanitize_brief_agent_reply,
+    select_next_brief_question,
 )
 from app.utils.business_log import log_business_event
 from app.utils.dependencies import AnyUser, get_current_user_for_public_deployment
@@ -44,11 +63,15 @@ from app.api.ai_classify import classify_router
 from app.api.ai_order_agent import order_router
 from app.api.ai_intro_agent import intro_router
 from app.api.ai_general_agent import general_router
+from app.api.ai_creative_diagnosis_agent import creative_diagnosis_router
+from app.api.ai_creative_direction_agent import creative_direction_router
 
 router.include_router(classify_router)
 router.include_router(order_router)
 router.include_router(intro_router)
 router.include_router(general_router)
+router.include_router(creative_diagnosis_router)
+router.include_router(creative_direction_router)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -62,6 +85,54 @@ class ChatRequest(BaseModel):
     business_type: str = "ai_3d_custom"
     user_message_id: str | None = None
     assistant_message_id: str | None = None
+    agent_state: dict | None = None
+    attachments: list[UploadedAttachment] = Field(default_factory=list)
+
+
+class OrchestrateRequest(BaseModel):
+    session_id: str
+    message: str
+    history: list = Field(default_factory=list)
+    current_agent: str | None = None
+    stage: str | None = None
+    business_type: str | None = "ai_3d_custom"
+    user_message_id: str | None = None
+    attachments: list[UploadedAttachment] = Field(default_factory=list)
+
+
+@router.post("/orchestrate")
+async def ai_orchestrate(
+    request: OrchestrateRequest,
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
+):
+    """Control-plane router for selecting the next agent.
+
+    This endpoint returns routing metadata only. User-facing replies remain the
+    responsibility of the selected sub-agent.
+    """
+    user_id, _username = _current_user_identity(current_user)
+    memory_hints = await _build_memory_hints(user_id)
+    agent_state = await _update_agent_state_for_message(
+        session_id=request.session_id,
+        user_id=user_id,
+        business_type=request.business_type or "ai_3d_custom",
+        message=request.message,
+        history=request.history,
+        source_message_id=request.user_message_id,
+        memory_hints=memory_hints,
+    )
+    route = await decide_route(
+        OrchestratorContext(
+            session_id=request.session_id,
+            message=request.message,
+            history=request.history,
+            current_agent=request.current_agent,
+            stage=request.stage,
+            business_type=request.business_type,
+            brief_state=agent_state.get("brief_state"),
+        )
+    )
+    return {**route.to_dict(), "agent_state": agent_state}
 
 
 _INTERNAL_SECURITY_RULES = (
@@ -82,6 +153,50 @@ _INTERNAL_DISCLOSURE_REPLY = (
 
 def _current_user_identity(current_user: AnyUser) -> tuple[str, str]:
     return current_user.id, getattr(current_user, "username", "") or getattr(current_user, "real_name", "") or "user"
+
+
+async def _build_memory_hints(user_id: str) -> dict[str, str]:
+    try:
+        from app.services.memory_service import get_or_create_memory
+
+        memory = await get_or_create_memory(user_id)
+        return build_brief_memory_hints(memory)
+    except Exception as e:
+        log_business_event(
+            logger,
+            "ai_memory_hints_failed",
+            level="warning",
+            user_id=user_id,
+            error=str(e),
+        )
+        return {}
+
+
+def _should_maintain_media_brief_state(business_type: str | None) -> bool:
+    return settings.AGENT_MODE == "media" and (business_type or "ai_3d_custom") == "ai_3d_custom"
+
+
+async def _update_agent_state_for_message(
+    *,
+    session_id: str,
+    user_id: str,
+    business_type: str,
+    message: str,
+    history: list | None = None,
+    source_message_id: str | None = None,
+    memory_hints: dict[str, str] | None = None,
+) -> dict:
+    if not _should_maintain_media_brief_state(business_type):
+        return load_agent_state(session_id, user_id, business_type)
+    return await update_agent_state_from_message(
+        session_id=session_id,
+        user_id=user_id,
+        business_type=business_type,
+        message=message,
+        history=history or [],
+        source_message_id=source_message_id,
+        memory_hints=memory_hints or {},
+    )
 
 
 def _is_internal_disclosure_request(message: str) -> bool:
@@ -158,7 +273,7 @@ _MEDIA_REQUIREMENT_SIGNAL_PATTERNS = {
     "viewing_path": r"(观看|视角|动线|仰视|平视|正向|侧向|连廊|中轴|遮挡|可视|安全区)",
     "theme_concept": r"(主题|概念|创意|故事|表达|元素|ip|logo|slogan|品牌露出|西湖|春节|国潮|文化|科技|未来|自然|生态)",
     "art_direction": r"(风格|调性|写实|写意|水墨|赛博|科技感|未来感|高级|震撼|年轻|东方|现代|艺术)",
-    "media_specs": r"(\d{3,5}\s*[x×]\s*\d{3,5}|\d+(?:\.\d+)?(?:m|米)?[x×]\d+(?:\.\d+)?(?:m|米)?|分辨率|物理尺寸|宽|高|比例|格式|mp4|mov|fps|rec\.?709|srgb)",
+    "media_specs": r"(\d{3,5}\s*[x×]\s*\d{3,5}|\d+(?:\.\d+)?(?:m|米)?[x×]\d+(?:\.\d+)?(?:m|米)?|[248]k\s*(?:规格|分辨率|输出)?|分辨率|物理尺寸|宽|高|比例|格式|mp4|mov|fps|rec\.?709|srgb)",
     "duration_count": r"(\d{1,3}\s*(?:s|秒)|时长|几秒|条|数量|支|版)",
     "tech_delivery": r"(交付|技术|审核|规范|格式|帧率|色彩|安全区|源文件|无特定要求|没有特定要求)",
     "online_time": r"(上线|上刊|投放时间|活动时间|交付时间|月底|月初|下个月|本月|明年|今年|\d{1,2}月|\d{4}年)",
@@ -225,12 +340,26 @@ def _has_answered_media_followup(history: list, keywords: tuple[str, ...], lates
     return False
 
 
-def _media_completion_followup(history: list, latest_message: str = "") -> str:
+def _media_completion_followup(
+    history: list,
+    latest_message: str = "",
+    agent_state: dict | None = None,
+    memory_hints: dict[str, str] | None = None,
+) -> str:
     if _has_media_completion_floor(history, latest_message):
         return (
             "我还需要再补充一个关键信息：您这边是否有现场实拍图、屏幕照片或其他参考素材可以上传？"
             "如果暂时没有，也可以直接说明没有。"
         )
+
+    signals = _media_requirement_signals(history, latest_message)
+    next_question = select_next_brief_question(
+        (agent_state or {}).get("brief_state") or {},
+        signals,
+        memory_hints=memory_hints,
+    )
+    if next_question:
+        return next_question["question"]
 
     fallback_questions = (
         {
@@ -266,7 +395,6 @@ def _media_completion_followup(history: list, latest_message: str = "") -> str:
         },
     )
 
-    signals = _media_requirement_signals(history, latest_message)
     for fallback in fallback_questions:
         if all(signal in signals for signal in fallback["signals"]):
             continue
@@ -501,10 +629,27 @@ def _uploaded_file_names(message: str) -> list[str]:
     return list(dict.fromkeys(names))
 
 
+async def _request_with_image_context(request: ChatRequest | OrchestrateRequest) -> ChatRequest | OrchestrateRequest:
+    if not getattr(request, "attachments", None):
+        return request
+
+    image_context = await summarize_uploaded_images(
+        message=request.message,
+        attachments=request.attachments,
+    )
+    if not image_context:
+        return request
+    return request.model_copy(
+        update={"message": append_image_context_to_message(request.message, image_context)}
+    )
+
+
 def _sanitize_upload_reply(current_message: str, reply: str) -> str:
     """文件上传消息只带文件名时，避免模型假装看过图片内容。"""
     file_names = _uploaded_file_names(current_message)
     if not file_names:
+        return reply
+    if IMAGE_CONTEXT_MARKER in (current_message or ""):
         return reply
 
     visual_claims = [
@@ -521,7 +666,13 @@ def _sanitize_upload_reply(current_message: str, reply: str) -> str:
     )
 
 
-def _sanitize_media_redundant_followup(history: list, latest_message: str, reply: str) -> str:
+def _sanitize_media_redundant_followup(
+    history: list,
+    latest_message: str,
+    reply: str,
+    agent_state: dict | None = None,
+    memory_hints: dict[str, str] | None = None,
+) -> str:
     """Remove model-generated fallback questions that contradict information in the same reply."""
     if "投放点位或屏幕规格" not in (reply or ""):
         return reply
@@ -540,19 +691,34 @@ def _sanitize_media_redundant_followup(history: list, latest_message: str, reply
     if cleaned == reply.strip():
         return reply
 
-    return cleaned + "\n\n" + _media_completion_followup(source_history, latest_message)
+    return cleaned + "\n\n" + _media_completion_followup(
+        source_history,
+        latest_message,
+        agent_state,
+        memory_hints=memory_hints,
+    )
 
 
 def _sse_event(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-def _build_requirement_llm_messages(request: ChatRequest, memory_context: str = "") -> list[dict[str, str]]:
-    system_prompt = _INTERNAL_SECURITY_RULES + _get_requirement_prompt(request.business_type)
-    if _should_enable_design_thinking(request.message, request.history):
-        system_prompt += _CREATIVE_DIRECTION_DRAFT_RULES
-    if memory_context:
-        system_prompt += memory_context
+def _build_requirement_llm_messages(
+    request: ChatRequest,
+    memory_context: str = "",
+    agent_state: dict | None = None,
+    memory_hints: dict[str, str] | None = None,
+) -> list[dict[str, str]]:
+    system_prompt = _INTERNAL_SECURITY_RULES + _get_requirement_prompt(request.business_type) + _ORDER_FLOW_GOAL_RULES
+    brief_context = build_brief_state_context(agent_state)
+    if brief_context:
+        system_prompt += brief_context
+    brief_agent_instruction = build_brief_agent_instruction(agent_state, memory_hints=memory_hints)
+    if brief_agent_instruction:
+        system_prompt += brief_agent_instruction
+    image_feedback_instruction = build_image_feedback_reply_instruction(request.message)
+    if image_feedback_instruction:
+        system_prompt += image_feedback_instruction
 
     llm_messages = [{"role": "system", "content": system_prompt}]
     for h in request.history:
@@ -570,86 +736,14 @@ def _build_responses_input(messages: list[dict[str, str]]) -> list[dict[str, str
     ]
 
 
-def _has_recent_creative_direction_draft(history: list | None) -> bool:
-    """Detect whether the assistant recently gave a lightweight creative draft."""
-    markers = ("创意方向草案", "创意方向名称", "计划概括", "适合的原因", "传播价值")
-    recent = list(history or [])[-6:]
-    return any(
-        item.get("role") == "assistant"
-        and any(marker in (item.get("content") or "") for marker in markers)
-        for item in recent
-    )
-
-
-def _is_creative_direction_revision_request(message: str, history: list | None = None) -> bool:
-    """Treat feedback after a draft as a lightweight creative revision request."""
-    if not _has_recent_creative_direction_draft(history):
-        return False
-    text = re.sub(r"\s+", "", (message or "").lower())
-    if not text:
-        return False
-
-    revision_keywords = [
-        "不满意", "不太满意", "不喜欢", "不够", "不行", "太普通", "太传统", "太平",
-        "换个", "换一个", "换方向", "另一个", "还有别的", "再来", "再出", "再给",
-        "重新", "重写", "改进", "优化", "调整", "修改", "润色",
-        "更科技", "更年轻", "更高级", "更震撼", "更现代", "更国潮", "更商业",
-        "更艺术", "更东方", "更未来", "更有冲击", "更有记忆点",
-        "不要", "别太", "去掉", "保留", "加强",
-    ]
-    return any(keyword in text for keyword in revision_keywords)
-
-
-def _should_enable_design_thinking(message: str, history: list | None = None) -> bool:
-    """Enable deeper thinking for creative draft requests and draft revisions."""
-    text = re.sub(r"\s+", "", (message or "").lower())
-    if not text:
-        return False
-
-    excluded_keywords = [
-        "排期", "报价", "预算", "可行", "能不能做", "能做吗",
-        "怎么落地", "怎么执行", "周期", "多久", "合同",
-    ]
-    if any(keyword in text for keyword in excluded_keywords):
-        return False
-
-    if _is_creative_direction_revision_request(message, history):
-        return True
-
-    design_plan_keywords = [
-        "设计方案", "策划方案", "创意方案", "视觉方案", "内容方案",
-        "设计提案", "创意提案", "视觉提案", "内容策划",
-        "帮我设计方案", "帮我策划方案", "生成设计", "生成策划",
-        "写个设计方案", "写一版设计方案", "写个策划方案", "写一版策划方案",
-        "出个设计方案", "出个策划方案",
-    ]
-    generic_plan_patterns = [
-        r"(给我|帮我|能不能|可以|麻烦|请|想看|需要).{0,8}(出|做|写|生成|来|给).{0,4}(一个|一版|个|版)?方案",
-        r"(出|做|写|生成|来).{0,4}(一个|一版|个|版)?方案",
-    ]
-    return any(keyword in text for keyword in design_plan_keywords) or any(
-        re.search(pattern, text) for pattern in generic_plan_patterns
-    )
-
-
-_CREATIVE_DIRECTION_DRAFT_RULES = (
-    "\n\n【用户要求创意/设计/策划方向，或对上一版草案继续追问时的处理】\n"
-    "- 采用三段策略：第一轮给轻量创意方向草案；后续反馈时基于用户偏好修订一版；连续多轮追问时收束为偏好记录，并继续回到需求收集。\n"
-    "- 这不是正式完整提案，不要承诺已经完成完整创意方案、脚本分镜、报价或排期。\n"
-    "- 可以基于当前已知需求，先给出一个轻量的「创意方向草案」，帮助客户判断大方向是否合适。\n"
-    "- 如果用户是在上一版草案基础上表达不满意、换方向、改风格或要求优化，先用一句话复述本轮要调整的点，再输出一版「修订方向草案」。\n"
-    "- 不要输出完整分镜脚本、时间轴脚本、执行方案或制作说明；不要写“第一阶段/第二阶段/第三阶段”、"
-    "“0-5s/5-15s/15-25s”等分段，不要单列“视觉与技术执行要点”或“下一步建议”。\n"
-    "- 输出必须简洁，包含以下四项，使用清晰小标题：\n"
-    "  1. 创意方向名称：一句短名称，具有传播记忆点。\n"
-    "  2. 计划概括：用2-3句话概括画面逻辑、空间关系或内容主线。\n"
-    "  3. 适合的原因：说明它为什么适合当前点位、受众、品牌/媒体目标或裸眼3D观看场景。\n"
-    "  4. 传播价值：说明它可能带来的停留、拍摄、社交传播或招商展示价值。\n"
-    "- 输出草案后，必须补一句专业边界说明：完整创意方案需要结合屏幕参数、观看动线、现场素材、品牌限制、制作周期和审核规范，由项目顾问和策划团队继续深化。\n"
-    "- 随后用一句自然承接，转入当前需求梳理：说明为了让后续策划判断更准确，还需要继续补齐本次项目的其他关键信息。\n"
-    "- 最后只问一个问题，优先追问当前仍缺失的最关键项；如果核心信息已基本齐全，再请客户确认这个方向是否符合想要的气质，或是否有必须保留/避免的元素。\n"
-    "- 如果用户已经连续多轮围绕创意草案追问，不要无限展开方案；要说明已记录偏好，后续完整方案会由项目顾问和策划团队深化，然后继续追问一个最关键的 brief 缺失项。\n"
-    "- 不要输出【需求收集完成】，除非普通需求收集规则已经满足完成条件。\n"
+_ORDER_FLOW_GOAL_RULES = (
+    "\n\n【整体业务目标】\n"
+    "- 你是创意提案总监：既能判断创意是否值得做、为什么成立、风险在哪里、如何优化，也能把讨论收拢成可执行 Brief。\n"
+    "- 这个 Agent 的最终目标不是停留在问答、预算讨论或方案发散，而是把用户输入逐步收拢成当前项目 Brief。\n"
+    "- 创意评估应先完成专业判断；评估完成后，再自然衔接回需求梳理主流程，不要把评估写成单纯补字段。\n"
+    "- 预算判断、可行性建议、业务解释要在回答后自然回到下一个关键缺口。\n"
+    "- 当 Brief 信息达到完成条件，并完成现场实拍图/参考素材收尾后，在回复末尾输出【需求收集完成】，用于触发表单、草稿和用户确认下单流程。\n"
+    "- 信息不足时不要输出完成标记；可以给阶段性判断，但必须说明判断边界，并只追问一个最关键的 Brief 缺口。\n"
 )
 
 
@@ -659,10 +753,19 @@ async def _finalize_ai_chat_reply(
     user_id: str,
     username: str,
     reply: str,
+    agent_state: dict | None = None,
+    memory_hints: dict[str, str] | None = None,
 ) -> tuple[str, bool, dict]:
     if settings.AGENT_MODE == "media":
         reply = _sanitize_upload_reply(request.message, reply)
-        reply = _sanitize_media_redundant_followup(request.history, request.message, reply)
+        reply = sanitize_brief_agent_reply(reply, agent_state, memory_hints=memory_hints)
+        reply = _sanitize_media_redundant_followup(
+            request.history,
+            request.message,
+            reply,
+            agent_state,
+            memory_hints=memory_hints,
+        )
         passive_wrap_up = _is_passive_requirement_wrap_up(request.message)
         no_more_assets = _is_no_more_media_assets_reply(request.message) and _has_media_upload_wrap_up(request.history)
         if (
@@ -686,7 +789,12 @@ async def _finalize_ai_chat_reply(
                 requirement_signal_count=_media_requirement_signal_count(request.history, request.message),
                 has_upload_wrap_up=_has_media_upload_wrap_up(request.history),
             )
-            reply = _strip_completion_marker(reply) + "\n\n" + _media_completion_followup(request.history, request.message)
+            reply = _strip_completion_marker(reply) + "\n\n" + _media_completion_followup(
+                request.history,
+                request.message,
+                agent_state,
+                memory_hints=memory_hints,
+            )
 
     handoff = _HUMAN_HANDOFF_MARKER in reply
     if handoff:
@@ -769,8 +877,8 @@ async def ai_start(session_id: str, business_type: str | None = None):
         label = business_labels.get(business_type, business_labels["ai_3d_custom"])
         if settings.AGENT_MODE == "media" and business_type == "ai_3d_custom":
             reply = (
-                f"好的，我们进入「{label}」需求梳理。\n\n"
-                "我会从基础信息、创意方向、技术与交付几方面帮助您梳理。"
+                "好的。我们会先结合这次项目背景信息、投放场景和大概目标，"
+                "再从基础信息、创意方向以及技术与交付几方面帮您把需求梳理清楚。"
                 "您可以先简单说说，这次大概想做什么样的内容？"
             )
         elif business_type == "video_purchase":
@@ -788,13 +896,13 @@ async def ai_start(session_id: str, business_type: str | None = None):
         else:
             reply = (
                 f"好的，我们进入「{label}」需求梳理。\n\n"
-                "我会从基础信息、创意方向、技术与交付几方面帮助您梳理。"
+                "我会先结合项目背景、使用场景和大概目标，再从基础信息、创意方向以及技术与交付几方面帮助您梳理。"
                 "您可以先简单说说，这次大概想做什么样的内容？"
             )
         return {"reply": reply, "agent_mode": settings.AGENT_MODE, "business_type": business_type}
 
     if settings.AGENT_MODE == "media":
-        reply = """您好，我是 Unique Vision AI 的项目顾问。
+        reply = """您好，我是 Unique Vision AI 的创意提案总监。
 
 我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，核心团队深耕行业多年，已为众多媒体方客户提供过高品质的裸眼3D视觉内容解决方案。
 
@@ -806,7 +914,7 @@ async def ai_start(session_id: str, business_type: str | None = None):
 
 请直接告知您的需求，或通过下方快捷入口进入对应流程。"""
     else:
-        reply = """您好，我是 Unique Vision AI 的项目顾问。
+        reply = """您好，我是 Unique Vision AI 的创意提案总监。
 
 我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，核心团队深耕行业多年，已为众多一线品牌提供过高品质的视觉解决方案。
 
@@ -997,8 +1105,8 @@ _MEDIA_DIALOG_RULES = (
 )
 
 _PROMPT_MEDIA_3D = (
-    "你是 Unique Vision AI 的资深项目顾问，在裸眼3D户外媒体内容定制领域有多年的项目经验。"
-    "你的任务是通过自然、专业的对话，高效地收集媒体方客户的裸眼3D项目需求信息。\n\n"
+    "你是 Unique Vision AI 的创意提案总监，在裸眼3D户外媒体内容定制领域有多年的项目经验。"
+    "你的任务是通过自然、专业的对话，判断项目方向和创意价值，并高效收拢媒体方客户的裸眼3D项目 Brief。\n\n"
     "【目标】\n"
     "媒体方客户通常拥有户外大屏、交通枢纽屏幕等媒体资源。你的目标是帮助客户把本次裸眼3D内容需求梳理清楚，"
     "包括项目大方向、媒体资源、创意表达、技术规格、交付节点和可选参考素材。\n\n"
@@ -1019,6 +1127,8 @@ _PROMPT_MEDIA_3D = (
     "- 可以提及具体点位，但提问不要替客户预设答案。如果需要确认点位，用更轻的问法，例如“这次会使用已有点位，还是先按一个新点位来梳理？”\n"
     "- 创意偏好只能作为建议和确认项。客户确认后，再写入 art_direction、theme_concept 或 special_requirements。\n\n"
     "【需要逐步收集的信息】\n"
+    "- 信息收集可以围绕基础信息、创意方向以及技术与交付三个维度展开，但收集顺序可以根据用户已给信息动态调整。\n"
+    "- 不要按固定清单逐项盘问；每轮只追问当前上下文里最自然、最有判断价值的一项。\n"
     "- 整体想法：初步内容设想、项目目标、当前遇到的问题。\n"
     "- 基础信息：投放城市、媒体位置、媒体背景、位置特点、目标受众、场景特点。\n"
     "- 创意方向：观看动线、整体艺术方向、风格偏好、内容主题、核心表达、IP形象或品牌露出。\n"
@@ -1101,16 +1211,17 @@ async def ai_chat(
         )
         return {"message": _INTERNAL_DISCLOSURE_REPLY, "handoff": False}
 
+    processing_request = await _request_with_image_context(request)
+
     # ── 加载用户 Memory ──
-    memory = None
-    memory_context = ""
+    memory_hints: dict[str, str] = {}
     try:
         from app.services.memory_service import (
-            get_or_create_memory, build_memory_context,
+            get_or_create_memory,
             update_interaction_stats,
         )
         memory = await get_or_create_memory(user_id)
-        memory_context = build_memory_context(memory)
+        memory_hints = build_brief_memory_hints(memory)
 
         # 更新交互统计（后台，不阻塞）
         import asyncio
@@ -1118,13 +1229,23 @@ async def ai_chat(
     except Exception as e:
         log_business_event(
             logger,
-            "ai_memory_context_failed",
+            "ai_memory_hints_failed",
             level="warning",
             user_id=user_id,
             session_id=request.session_id,
             business_type=request.business_type,
             error=str(e),
         )
+
+    agent_state = await _update_agent_state_for_message(
+        session_id=processing_request.session_id,
+        user_id=user_id,
+        business_type=processing_request.business_type,
+        message=processing_request.message,
+        history=processing_request.history,
+        source_message_id=processing_request.user_message_id,
+        memory_hints=memory_hints,
+    )
 
     existing_handoff = await _append_handoff_message(
         user_id=user_id,
@@ -1213,23 +1334,25 @@ async def ai_chat(
         return {"message": mock_reply}
 
     try:
-        llm_messages = _build_requirement_llm_messages(request, memory_context)
+        llm_messages = _build_requirement_llm_messages(processing_request, agent_state=agent_state, memory_hints=memory_hints)
         data = await post_chat_completion(
             {
                 "model": settings.AI_MODEL_NAME,
                 "messages": llm_messages,
-                "enable_thinking": _should_enable_design_thinking(request.message, request.history),
+                "enable_thinking": False,
             },
             timeout=settings.AI_HTTP_TIMEOUT,
         )
         reply = data["choices"][0]["message"]["content"]
         reply, handoff, handoff_meta = await _finalize_ai_chat_reply(
-            request=request,
+            request=processing_request,
             user_id=user_id,
             username=username,
             reply=reply,
+            agent_state=agent_state,
+            memory_hints=memory_hints,
         )
-        return {"message": reply, "handoff": handoff, **handoff_meta}
+        return {"message": reply, "handoff": handoff, "agent_state": agent_state, **handoff_meta}
 
     except HTTPException:
         raise
@@ -1256,27 +1379,38 @@ async def ai_chat_stream(
 ):
     """流式需求收集对话。保留 /chat 作为非流式兼容入口。"""
     user_id, username = _current_user_identity(current_user)
+    processing_request = await _request_with_image_context(request)
 
-    memory_context = ""
+    memory_hints: dict[str, str] = {}
     try:
         from app.services.memory_service import (
-            get_or_create_memory, build_memory_context,
+            get_or_create_memory,
             update_interaction_stats,
         )
         memory = await get_or_create_memory(user_id)
-        memory_context = build_memory_context(memory)
+        memory_hints = build_brief_memory_hints(memory)
 
         asyncio.create_task(update_interaction_stats(user_id))
     except Exception as e:
         log_business_event(
             logger,
-            "ai_memory_context_failed",
+            "ai_memory_hints_failed",
             level="warning",
             user_id=user_id,
             session_id=request.session_id,
             business_type=request.business_type,
             error=str(e),
         )
+
+    agent_state = await _update_agent_state_for_message(
+        session_id=processing_request.session_id,
+        user_id=user_id,
+        business_type=processing_request.business_type,
+        message=processing_request.message,
+        history=processing_request.history,
+        source_message_id=processing_request.user_message_id,
+        memory_hints=memory_hints,
+    )
 
     async def one_shot(payload: dict):
         yield _sse_event("start", {})
@@ -1397,12 +1531,10 @@ async def ai_chat_stream(
             headers=stream_headers,
         )
 
-    llm_messages = _build_requirement_llm_messages(request, memory_context)
+    llm_messages = _build_requirement_llm_messages(processing_request, agent_state=agent_state, memory_hints=memory_hints)
 
     async def event_generator():
         collected: list[str] = []
-        thinking_enabled = _should_enable_design_thinking(request.message, request.history)
-        thinking_sent = False
         yield _sse_event("start", {})
         try:
             provider = "chat_completions"
@@ -1439,22 +1571,12 @@ async def ai_chat_stream(
                     {
                         "model": settings.AI_MODEL_NAME,
                         "messages": llm_messages,
-                        "enable_thinking": thinking_enabled,
+                        "enable_thinking": False,
                     },
                     timeout=settings.AI_HTTP_TIMEOUT,
                 ):
                     event_type = event.get("type")
                     if event_type == "reasoning":
-                        if thinking_enabled and not thinking_sent:
-                            thinking_sent = True
-                            yield _sse_event(
-                                "thinking",
-                                {
-                                    "stage": "creative_plan",
-                                    "label": "正在梳理设计与策划思路，可能需要稍长时间",
-                                    "provider": provider,
-                                },
-                            )
                         continue
                     delta = event.get("content") or ""
                     if delta:
@@ -1466,10 +1588,12 @@ async def ai_chat_stream(
                 raise HTTPException(status_code=502, detail="AI 服务未返回内容")
 
             reply, handoff, handoff_meta = await _finalize_ai_chat_reply(
-                request=request,
+                request=processing_request,
                 user_id=user_id,
                 username=username,
                 reply=raw_reply,
+                agent_state=agent_state,
+                memory_hints=memory_hints,
             )
             log_business_event(
                 logger,
@@ -1482,7 +1606,7 @@ async def ai_chat_stream(
                 handoff=handoff,
                 reply_length=len(reply or ""),
             )
-            yield _sse_event("final", {"message": reply, "handoff": handoff, "provider": provider, **handoff_meta})
+            yield _sse_event("final", {"message": reply, "handoff": handoff, "provider": provider, "agent_state": agent_state, **handoff_meta})
         except HTTPException as e:
             log_business_event(
                 logger,
