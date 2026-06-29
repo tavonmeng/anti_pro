@@ -249,12 +249,14 @@ def load_agent_state(session_id: str, user_id: str, business_type: str = "ai_3d_
             "business_type": business_type,
             "brief_state": create_empty_brief_state(business_type),
             "pending_evaluation": None,
+            "creative_direction_offer": None,
         }
     state.setdefault("business_type", business_type)
     state.setdefault("brief_state", create_empty_brief_state(business_type))
     state["brief_state"] = merge_brief_updates(state["brief_state"], {})
     state["brief_state"].setdefault("pending_confirmation", None)
     state.setdefault("pending_evaluation", None)
+    state.setdefault("creative_direction_offer", None)
     return state
 
 

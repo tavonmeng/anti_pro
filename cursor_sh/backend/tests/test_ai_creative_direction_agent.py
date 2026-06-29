@@ -38,6 +38,8 @@ async def test_creative_direction_fallback_generates_draft_then_returns_to_brief
     assert "计划概括" in message
     assert "适合的原因" in message
     assert "传播价值" in message
+    assert "不是完整创意方案" in message
+    assert "策划专家" in message
     assert "回到 Brief" not in message
     assert "Brief 附件" not in message
     assert "我先记录下来" not in message
@@ -57,7 +59,12 @@ async def test_creative_direction_agent_enables_thinking_with_long_timeout_and_s
             "choices": [
                 {
                     "message": {
-                        "content": "**创意方向草案**\n\n- **创意方向名称**：未来折境\n\n【需求收集完成】"
+                        "content": (
+                            "**创意方向草案**\n\n"
+                            "- **创意方向名称**：未来折境\n\n"
+                            "如果这个方向继续推进，预计上刊或交付时间大概是什么时候？\n\n"
+                            "【需求收集完成】"
+                        )
                     }
                 }
             ]
@@ -85,6 +92,9 @@ async def test_creative_direction_agent_enables_thinking_with_long_timeout_and_s
     assert captured_payload["messages"][0]["role"] == "system"
     assert response["return_to_brief"] is True
     assert "创意方向草案" in response["message"]
+    assert "不是完整创意方案" in response["message"]
+    assert "策划专家" in response["message"]
+    assert response["message"].index("策划专家") < response["message"].index("预计上刊")
     assert "【需求收集完成】" not in response["message"]
 
 
@@ -117,6 +127,8 @@ async def test_creative_direction_provider_timeout_returns_fallback(monkeypatch)
     assert response["return_to_brief"] is True
     assert "创意方向草案" in response["message"]
     assert "熊猫" in response["message"]
+    assert "不是完整创意方案" in response["message"]
+    assert "策划专家" in response["message"]
     assert "回到 Brief" not in response["message"]
     assert "Brief 附件" not in response["message"]
     assert "我先记录下来" not in response["message"]

@@ -38,6 +38,7 @@ from app.services.ai_orchestrator import OrchestratorContext, RouteDecision, dec
 from app.services.ai_brief_state import (
     build_brief_state_context,
     load_agent_state,
+    save_agent_state as _save_agent_state,
     update_agent_state_from_message,
 )
 from app.services.ai_brief_agent import (
@@ -64,7 +65,11 @@ from app.api.ai_order_agent import order_router
 from app.api.ai_intro_agent import intro_router
 from app.api.ai_general_agent import general_router
 from app.api.ai_creative_diagnosis_agent import creative_diagnosis_router
-from app.api.ai_creative_direction_agent import creative_direction_router
+from app.api.ai_creative_direction_agent import (
+    CreativeDirectionRequest,
+    ai_creative_direction,
+    creative_direction_router,
+)
 
 router.include_router(classify_router)
 router.include_router(order_router)
@@ -197,6 +202,225 @@ async def _update_agent_state_for_message(
         source_message_id=source_message_id,
         memory_hints=memory_hints or {},
     )
+
+
+def _brief_field_values(agent_state: dict | None) -> dict[str, str]:
+    brief_state = (agent_state or {}).get("brief_state") or {}
+    values: dict[str, str] = {}
+    for field, raw in (brief_state.get("fields") or {}).items():
+        value = raw.get("value") if isinstance(raw, dict) else raw
+        text = str(value or "").strip()
+        if text:
+            values[field] = text
+    return values
+
+
+def _creative_direction_offer_status(agent_state: dict | None) -> str:
+    offer = (agent_state or {}).get("creative_direction_offer")
+    if not isinstance(offer, dict):
+        return ""
+    return str(offer.get("status") or "").strip()
+
+
+def _has_pending_brief_confirmation(agent_state: dict | None) -> bool:
+    pending = ((agent_state or {}).get("brief_state") or {}).get("pending_confirmation")
+    if not isinstance(pending, dict):
+        return False
+    return bool(str(pending.get("field") or "").strip() and str(pending.get("candidate_value") or "").strip())
+
+
+def _history_has_creative_direction(history: list | None) -> bool:
+    return any("创意方向草案" in str(item.get("content") or "") for item in (history or []))
+
+
+def _brief_ready_for_creative_direction_offer(agent_state: dict | None) -> bool:
+    brief_state = (agent_state or {}).get("brief_state") or {}
+    readiness = brief_state.get("readiness") or {}
+    if _has_pending_brief_confirmation(agent_state):
+        return False
+    if _creative_direction_offer_status(agent_state):
+        return False
+    return readiness.get("level") in {"provisional", "formal"} or readiness.get("can_score") is True
+
+
+def _is_creative_direction_offer_acceptance(message: str, agent_state: dict | None) -> bool:
+    if _creative_direction_offer_status(agent_state) != "offered":
+        return False
+    text = re.sub(r"\s+", "", (message or "").lower())
+    if not text:
+        return False
+    if _is_creative_direction_offer_rejection(message, agent_state):
+        return False
+    positive_patterns = (
+        "可以",
+        "好的",
+        "好啊",
+        "行",
+        "要",
+        "做一次",
+        "来一版",
+        "出一版",
+        "生成",
+        "ai创意",
+        "创意方向",
+        "帮我做",
+        "帮我出",
+    )
+    return any(pattern in text for pattern in positive_patterns)
+
+
+def _is_creative_direction_offer_rejection(message: str, agent_state: dict | None) -> bool:
+    if _creative_direction_offer_status(agent_state) != "offered":
+        return False
+    text = re.sub(r"\s+", "", (message or "").lower())
+    negative_patterns = (
+        "不用",
+        "不要",
+        "不需要",
+        "先不",
+        "暂时不",
+        "别做",
+        "不用ai创意",
+        "直接整理",
+        "先整理",
+    )
+    return any(pattern in text for pattern in negative_patterns)
+
+
+def _mark_creative_direction_offer(
+    agent_state: dict | None,
+    status: str,
+    *,
+    reason: str = "",
+) -> dict:
+    next_state = dict(agent_state or {})
+    brief_state = next_state.get("brief_state") or {}
+    readiness = brief_state.get("readiness") or {}
+    existing = next_state.get("creative_direction_offer")
+    offer = dict(existing) if isinstance(existing, dict) else {}
+    now = beijing_now().isoformat()
+    offer.setdefault("created_at", now)
+    offer.update(
+        {
+            "status": status,
+            "brief_version": int(brief_state.get("version") or 0),
+            "readiness_level": readiness.get("level"),
+            "source": "auto_brief_readiness",
+            "reason": reason,
+            "updated_at": now,
+        }
+    )
+    next_state["creative_direction_offer"] = offer
+    next_state["current_agent"] = "brief_agent"
+    next_state["stage"] = "brief_building"
+    next_state["updated_at"] = now
+    return next_state
+
+
+def _build_creative_direction_offer_reply(agent_state: dict | None) -> str:
+    values = _brief_field_values(agent_state)
+    highlights = []
+    if values.get("city_location"):
+        highlights.append(values["city_location"])
+    if values.get("theme_concept"):
+        highlights.append(values["theme_concept"])
+    if values.get("audience_scene"):
+        highlights.append(values["audience_scene"])
+    highlight_text = "、".join(highlights[:3])
+    if highlight_text:
+        return (
+            f"基于目前这些信息（{highlight_text}），已经足够先做一次轻量的 AI 创意方向。\n\n"
+            "要不要我先基于当前需求出一版创意方向草案？做完后我会再回到需求确认，把剩下的信息收拢到表单里。"
+        )
+    return (
+        "基于目前这些信息，已经足够先做一次轻量的 AI 创意方向。\n\n"
+        "要不要我先基于当前需求出一版创意方向草案？做完后我会再回到需求确认，把剩下的信息收拢到表单里。"
+    )
+
+
+async def _maybe_handle_creative_direction_offer(
+    *,
+    request: ChatRequest,
+    user_id: str,
+    username: str,
+    agent_state: dict,
+) -> tuple[dict | None, dict]:
+    if settings.AGENT_MODE != "media" or request.business_type != "ai_3d_custom":
+        return None, agent_state
+
+    if _is_creative_direction_offer_acceptance(request.message, agent_state):
+        next_state = _mark_creative_direction_offer(agent_state, "accepted", reason="user_accepted")
+        direction_response = await ai_creative_direction(
+            CreativeDirectionRequest(
+                session_id=request.session_id,
+                message=request.message,
+                history=request.history,
+                business_type=request.business_type,
+                agent_state=next_state,
+                attachments=[],
+            )
+        )
+        reply = str(direction_response.get("message") or "").strip()
+        next_state = _mark_creative_direction_offer(next_state, "completed", reason="creative_direction_generated")
+        _save_agent_state(request.session_id, user_id, next_state)
+        _save_session_file(
+            session_id=request.session_id,
+            user_id=user_id,
+            username=username,
+            history=request.history,
+            user_msg=request.message,
+            assistant_msg=reply,
+            business_type=request.business_type,
+            user_message_id=request.user_message_id,
+            assistant_message_id=request.assistant_message_id,
+        )
+        log_business_event(
+            logger,
+            "ai_creative_direction_offer_completed",
+            user_id=user_id,
+            username=username,
+            session_id=request.session_id,
+            business_type=request.business_type,
+        )
+        return {"message": reply, "handoff": False, "agent_state": next_state, "return_to_brief": True}, next_state
+
+    if _is_creative_direction_offer_rejection(request.message, agent_state):
+        next_state = _mark_creative_direction_offer(agent_state, "declined", reason="user_declined")
+        _save_agent_state(request.session_id, user_id, next_state)
+        return None, next_state
+
+    if (
+        _brief_ready_for_creative_direction_offer(agent_state)
+        and not _history_has_creative_direction(request.history)
+        and not _is_passive_requirement_wrap_up(request.message)
+        and not (_is_no_more_media_assets_reply(request.message) and _has_media_upload_wrap_up(request.history))
+    ):
+        next_state = _mark_creative_direction_offer(agent_state, "offered", reason="brief_ready")
+        reply = _build_creative_direction_offer_reply(next_state)
+        _save_agent_state(request.session_id, user_id, next_state)
+        _save_session_file(
+            session_id=request.session_id,
+            user_id=user_id,
+            username=username,
+            history=request.history,
+            user_msg=request.message,
+            assistant_msg=reply,
+            business_type=request.business_type,
+            user_message_id=request.user_message_id,
+            assistant_message_id=request.assistant_message_id,
+        )
+        log_business_event(
+            logger,
+            "ai_creative_direction_offer_presented",
+            user_id=user_id,
+            username=username,
+            session_id=request.session_id,
+            business_type=request.business_type,
+            readiness_level=((next_state.get("brief_state") or {}).get("readiness") or {}).get("level"),
+        )
+        return {"message": reply, "handoff": False, "agent_state": next_state}, next_state
+
+    return None, agent_state
 
 
 def _is_internal_disclosure_request(message: str) -> bool:
@@ -1333,6 +1557,15 @@ async def ai_chat(
         )
         return {"message": mock_reply}
 
+    creative_offer_payload, agent_state = await _maybe_handle_creative_direction_offer(
+        request=processing_request,
+        user_id=user_id,
+        username=username,
+        agent_state=agent_state,
+    )
+    if creative_offer_payload:
+        return creative_offer_payload
+
     try:
         llm_messages = _build_requirement_llm_messages(processing_request, agent_state=agent_state, memory_hints=memory_hints)
         data = await post_chat_completion(
@@ -1527,6 +1760,60 @@ async def ai_chat_stream(
         )
         return StreamingResponse(
             one_shot({"message": mock_reply, "handoff": False}),
+            media_type="text/event-stream",
+            headers=stream_headers,
+        )
+
+    if _is_creative_direction_offer_acceptance(processing_request.message, agent_state):
+        async def creative_direction_offer_generator():
+            yield _sse_event("start", {})
+            yield _sse_event(
+                "thinking",
+                {
+                    "label": (
+                        "我正在基于当前 Brief 做一轮 AI 创意方向构思，这一步会比普通问答更久一些。"
+                        "完成后会给您一版可讨论的方向草案。"
+                    )
+                },
+            )
+            try:
+                payload, _next_state = await _maybe_handle_creative_direction_offer(
+                    request=processing_request,
+                    user_id=user_id,
+                    username=username,
+                    agent_state=agent_state,
+                )
+                if not payload:
+                    payload = {"message": "我先回到需求梳理，继续把剩下的信息确认完整。", "handoff": False, "agent_state": agent_state}
+                yield _sse_event("final", payload)
+            except Exception as e:
+                log_business_event(
+                    logger,
+                    "ai_creative_direction_offer_stream_failed",
+                    level="error",
+                    user_id=user_id,
+                    username=username,
+                    session_id=request.session_id,
+                    business_type=request.business_type,
+                    error=str(e),
+                )
+                yield _sse_event("error", {"detail": "AI 创意方向暂时不可用，请稍后再试"})
+
+        return StreamingResponse(
+            creative_direction_offer_generator(),
+            media_type="text/event-stream",
+            headers=stream_headers,
+        )
+
+    creative_offer_payload, agent_state = await _maybe_handle_creative_direction_offer(
+        request=processing_request,
+        user_id=user_id,
+        username=username,
+        agent_state=agent_state,
+    )
+    if creative_offer_payload:
+        return StreamingResponse(
+            one_shot(creative_offer_payload),
             media_type="text/event-stream",
             headers=stream_headers,
         )

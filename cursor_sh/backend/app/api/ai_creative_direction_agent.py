@@ -24,6 +24,12 @@ from app.utils.log_setup import get_module_logger
 creative_direction_router = APIRouter()
 logger = get_module_logger("ai")
 
+_BOUNDARY_NOTE = (
+    "**边界说明**\n"
+    "这是一版创意方向草案，用来判断视觉策略和讨论大方向，还不是完整创意方案。"
+    "具体创意方案还需要策划专家结合品牌目标、屏幕参数、现场观看动线、现场素材、审核规范、预算周期等信息继续深化。"
+)
+
 
 class CreativeDirectionRequest(BaseModel):
     session_id: str
@@ -91,10 +97,28 @@ def _build_fallback_message(request: CreativeDirectionRequest) -> str:
         f"- **适合的原因**：这个方向适合面向{audience}的户外大屏传播，因为它把地域/主题记忆点和裸眼3D的空间错觉结合起来，"
         "不会只停留在单一出屏奇观。\n"
         "- **传播价值**：重点制造前 3 秒的识别钩子和中段的拍摄高点，有利于形成现场围观、短视频传播和招商展示素材。\n\n"
-        "**边界说明**\n"
-        "这是一版轻量创意方向草案，不是完整分镜脚本或正式执行方案。完整提案还需要结合屏幕参数、观看动线、现场素材、审核规范和上线周期继续深化。\n\n"
+        f"{_BOUNDARY_NOTE}\n\n"
         f"{_next_brief_question(request)}"
     )
+
+
+def _has_clear_boundary_note(message: str) -> bool:
+    text = re.sub(r"\s+", "", message or "")
+    return "策划专家" in text and ("不是完整创意方案" in text or "还不是完整创意方案" in text)
+
+
+def _ensure_boundary_note(message: str) -> str:
+    cleaned = (message or "").replace("【需求收集完成】", "").strip()
+    if not cleaned or _has_clear_boundary_note(cleaned):
+        return cleaned
+
+    paragraphs = re.split(r"\n\s*\n", cleaned)
+    last = paragraphs[-1].strip() if paragraphs else ""
+    if last and ("？" in last or "?" in last) and not last.startswith("- "):
+        body = "\n\n".join(paragraphs[:-1]).strip()
+        if body:
+            return f"{body}\n\n{_BOUNDARY_NOTE}\n\n{last}".strip()
+    return f"{cleaned}\n\n{_BOUNDARY_NOTE}".strip()
 
 
 def _creative_direction_timeout() -> float:
@@ -140,6 +164,7 @@ def build_creative_direction_messages(request: CreativeDirectionRequest) -> list
         "不要输出完整分镜脚本、时间轴脚本、制作排期、报价或执行说明。\n\n"
         "输出结构固定为：**创意方向草案**，包含 **创意方向名称**、**计划概括**、**适合的原因**、"
         "**传播价值**，然后输出 **边界说明**。"
+        "边界说明必须明确：这只是创意方向草案，不是完整创意方案；具体创意方案还需要策划专家结合品牌目标、屏幕参数、现场观看动线、现场素材、审核规范、预算周期等信息继续深化。"
         "最后用一段自然口语承接到 next_brief_question，只问一个问题，不要使用英文 Brief 的返回标题、附件式表达或已记录式固定话术。"
         "不要输出【需求收集完成】；表单触发只由主 Brief 流程负责。"
     )
@@ -157,7 +182,7 @@ async def ai_creative_direction(request: CreativeDirectionRequest):
     """Generate a creative direction draft, then return to Brief collection."""
     request = await _request_with_image_context(request)
     if not settings.AI_API_KEY:
-        return {"message": _build_fallback_message(request), "return_to_brief": True}
+        return {"message": _ensure_boundary_note(_build_fallback_message(request)), "return_to_brief": True}
 
     try:
         data = await post_chat_completion(
@@ -170,7 +195,7 @@ async def ai_creative_direction(request: CreativeDirectionRequest):
             timeout=_creative_direction_timeout(),
             attempts=settings.AI_CREATIVE_DIRECTION_RETRY_ATTEMPTS,
         )
-        message = data["choices"][0]["message"]["content"].replace("【需求收集完成】", "").strip()
+        message = _ensure_boundary_note(data["choices"][0]["message"]["content"])
         return {"message": message, "return_to_brief": True}
     except HTTPException as exc:
         log_business_event(
@@ -182,7 +207,7 @@ async def ai_creative_direction(request: CreativeDirectionRequest):
             status_code=exc.status_code,
             detail=str(exc.detail),
         )
-        return {"message": _build_fallback_message(request), "return_to_brief": True}
+        return {"message": _ensure_boundary_note(_build_fallback_message(request)), "return_to_brief": True}
     except Exception as exc:
         log_business_event(
             logger,
@@ -192,4 +217,4 @@ async def ai_creative_direction(request: CreativeDirectionRequest):
             business_type=request.business_type,
             error=str(exc),
         )
-        return {"message": _build_fallback_message(request), "return_to_brief": True}
+        return {"message": _ensure_boundary_note(_build_fallback_message(request)), "return_to_brief": True}

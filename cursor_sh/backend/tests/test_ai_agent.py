@@ -673,6 +673,176 @@ async def test_media_ai_chat_uses_memory_city_hint_for_next_question(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_media_ai_chat_offers_creative_direction_when_brief_is_ready(monkeypatch):
+    async def _unexpected_completion(*_, **__):
+        raise AssertionError("ready brief should offer creative direction before calling main LLM")
+
+    async def _mock_agent_state(**_):
+        from app.services.ai_brief_state import create_empty_brief_state, merge_brief_updates
+
+        brief_state = merge_brief_updates(
+            create_empty_brief_state("ai_3d_custom"),
+            {
+                "theme_concept": "毛绒质感大熊猫，与现场环境互动并冲出屏幕",
+                "city_location": "杭州湖滨银泰in77 L型地标大屏",
+                "audience_scene": "商圈年轻消费者和游客",
+                "resource_background": "核心商圈地标屏，适合城市打卡传播",
+            },
+        )
+        return {"current_agent": "brief_agent", "stage": "brief_building", "business_type": "ai_3d_custom", "brief_state": brief_state}
+
+    monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "test-key")
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+    monkeypatch.setattr(ai_module, "post_chat_completion", _unexpected_completion)
+    monkeypatch.setattr(ai_module, "_update_agent_state_for_message", _mock_agent_state)
+    monkeypatch.setattr(ai_module, "_save_agent_state", lambda *_: None)
+    monkeypatch.setattr(ai_module, "_save_session_file", lambda **_: None)
+    monkeypatch.setattr(ai_module, "_append_handoff_message", _no_existing_handoff)
+
+    response = await ai_module.ai_chat(
+        ai_module.ChatRequest(
+            session_id="test-session",
+            message="核心信息就是这些",
+            history=[
+                {"role": "user", "content": "杭州湖滨银泰in77，想做毛绒大熊猫，面向年轻游客"},
+            ],
+        ),
+        _request_without_auth(),
+        _fake_user(),
+    )
+
+    assert "AI 创意方向" in response["message"]
+    assert "基于目前这些信息" in response["message"]
+    assert "【需求收集完成】" not in response["message"]
+    assert response["agent_state"]["creative_direction_offer"]["status"] == "offered"
+
+
+@pytest.mark.asyncio
+async def test_media_ai_chat_accepts_creative_direction_offer_and_calls_subagent(monkeypatch):
+    captured_request = {}
+
+    async def _unexpected_completion(*_, **__):
+        raise AssertionError("accepted creative offer should call creative direction subagent")
+
+    async def _mock_agent_state(**_):
+        from app.services.ai_brief_state import create_empty_brief_state, merge_brief_updates
+
+        brief_state = merge_brief_updates(
+            create_empty_brief_state("ai_3d_custom"),
+            {
+                "theme_concept": "毛绒质感大熊猫，与现场环境互动并冲出屏幕",
+                "city_location": "杭州湖滨银泰in77 L型地标大屏",
+                "audience_scene": "商圈年轻消费者和游客",
+                "resource_background": "核心商圈地标屏，适合城市打卡传播",
+            },
+        )
+        return {
+            "current_agent": "brief_agent",
+            "stage": "brief_building",
+            "business_type": "ai_3d_custom",
+            "brief_state": brief_state,
+            "creative_direction_offer": {"status": "offered", "brief_version": brief_state["version"]},
+        }
+
+    async def _mock_direction(request):
+        captured_request["message"] = request.message
+        captured_request["agent_state"] = request.agent_state
+        return {
+            "message": (
+                "**创意方向草案**\n\n"
+                "- **创意方向名称**：云绒熊猫探屏\n"
+                "- **计划概括**：基于当前点位做一版轻量方向。\n\n"
+                "为了继续推进，想确认一下观众主要从哪个方向观看？"
+            ),
+            "return_to_brief": True,
+        }
+
+    monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "test-key")
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+    monkeypatch.setattr(ai_module, "post_chat_completion", _unexpected_completion)
+    monkeypatch.setattr(ai_module, "_update_agent_state_for_message", _mock_agent_state)
+    monkeypatch.setattr(ai_module, "ai_creative_direction", _mock_direction)
+    monkeypatch.setattr(ai_module, "_save_agent_state", lambda *_: None)
+    monkeypatch.setattr(ai_module, "_save_session_file", lambda **_: None)
+    monkeypatch.setattr(ai_module, "_append_handoff_message", _no_existing_handoff)
+
+    response = await ai_module.ai_chat(
+        ai_module.ChatRequest(
+            session_id="test-session",
+            message="可以，先做一次AI创意",
+            history=[
+                {"role": "user", "content": "杭州湖滨银泰in77，想做毛绒大熊猫，面向年轻游客"},
+                {"role": "assistant", "content": "基于目前这些信息，要不要我先做一次 AI 创意方向？"},
+            ],
+        ),
+        _request_without_auth(),
+        _fake_user(),
+    )
+
+    assert "创意方向草案" in response["message"]
+    assert captured_request["message"] == "可以，先做一次AI创意"
+    assert captured_request["agent_state"]["brief_state"]["readiness"]["level"] == "provisional"
+    assert response["agent_state"]["creative_direction_offer"]["status"] == "completed"
+    assert response["agent_state"]["current_agent"] == "brief_agent"
+
+
+@pytest.mark.asyncio
+async def test_media_ai_chat_stream_sends_thinking_for_accepted_creative_offer(monkeypatch):
+    async def _mock_agent_state(**_):
+        from app.services.ai_brief_state import create_empty_brief_state, merge_brief_updates
+
+        brief_state = merge_brief_updates(
+            create_empty_brief_state("ai_3d_custom"),
+            {
+                "theme_concept": "毛绒质感大熊猫，与现场环境互动并冲出屏幕",
+                "city_location": "杭州湖滨银泰in77 L型地标大屏",
+                "audience_scene": "商圈年轻消费者和游客",
+                "resource_background": "核心商圈地标屏，适合城市打卡传播",
+            },
+        )
+        return {
+            "current_agent": "brief_agent",
+            "stage": "brief_building",
+            "business_type": "ai_3d_custom",
+            "brief_state": brief_state,
+            "creative_direction_offer": {"status": "offered", "brief_version": brief_state["version"]},
+        }
+
+    async def _mock_direction(request):
+        return {"message": "**创意方向草案**\n\n- **创意方向名称**：云绒熊猫探屏", "return_to_brief": True}
+
+    monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "test-key")
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+    monkeypatch.setattr(ai_module, "_update_agent_state_for_message", _mock_agent_state)
+    monkeypatch.setattr(ai_module, "ai_creative_direction", _mock_direction)
+    monkeypatch.setattr(ai_module, "_save_agent_state", lambda *_: None)
+    monkeypatch.setattr(ai_module, "_save_session_file", lambda **_: None)
+    monkeypatch.setattr(ai_module, "_append_handoff_message", _no_existing_handoff)
+
+    response = await ai_module.ai_chat_stream(
+        ai_module.ChatRequest(
+            session_id="test-session",
+            message="可以，先做一次AI创意",
+            history=[
+                {"role": "assistant", "content": "基于目前这些信息，要不要我先做一次 AI 创意方向？"},
+            ],
+        ),
+        _request_without_auth(),
+        _fake_user(),
+    )
+
+    chunks = []
+    async for chunk in response.body_iterator:
+        chunks.append(chunk.decode() if isinstance(chunk, bytes) else chunk)
+    body = "".join(chunks)
+
+    assert "event: thinking" in body
+    assert "AI 创意方向构思" in body
+    assert "event: final" in body
+    assert "创意方向草案" in body
+
+
+@pytest.mark.asyncio
 async def test_media_ai_chat_allows_no_more_assets_to_complete(monkeypatch):
     async def _mock_completion(payload, *, timeout=None):
         return {
