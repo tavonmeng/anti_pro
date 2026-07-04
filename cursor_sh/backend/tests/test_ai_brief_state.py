@@ -4,11 +4,11 @@ from app.services.ai_brief_state import (
     MEDIA_3D_BRIEF_FIELDS,
     build_brief_state_context,
     create_empty_brief_state,
-    deterministic_media_brief_updates,
     evaluate_creative_readiness,
     merge_brief_updates,
     update_agent_state_from_message,
 )
+from app.services.ai_image_understanding import IMAGE_CONTEXT_MARKER
 
 
 def test_empty_media_brief_state_uses_current_3d_custom_fields():
@@ -74,15 +74,189 @@ def test_creative_readiness_levels_follow_media_3d_brief_fields():
     assert evaluate_creative_readiness(formal)["level"] == "formal"
 
 
-def test_deterministic_updates_detect_4k_and_l_type_screen_specs():
-    updates = deterministic_media_brief_updates(
-        "杭州湖滨银泰in77 L型大屏，4K规格，下个月上刊，预算20w，毛绒质感熊猫。"
+@pytest.mark.asyncio
+async def test_state_update_does_not_use_regex_fallback_when_llm_extracts_nothing(monkeypatch, tmp_path):
+    async def _mock_state_parser(payload, *, timeout=None):
+        return {"choices": [{"message": {"content": '{"updates":{},"events":[]}'}}]}
+
+    monkeypatch.setattr("app.services.ai_brief_state.settings.LOG_DIR", str(tmp_path))
+    monkeypatch.setattr("app.services.ai_brief_state.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_brief_state.post_chat_completion", _mock_state_parser)
+
+    state = await update_agent_state_from_message(
+        session_id="session-no-regex-fallback",
+        user_id="user-no-regex-fallback",
+        business_type="ai_3d_custom",
+        message="杭州湖滨银泰in77 L型大屏，4K规格，下个月上刊，预算20w，毛绒质感熊猫。",
+        history=[],
+        source_message_id="msg-no-regex",
+        memory_hints={},
     )
 
-    assert "city_location" in updates
-    assert "media_specs" in updates
-    assert "online_time" in updates
-    assert "budget" in updates
+    fields = state["brief_state"]["fields"]
+    assert fields["city_location"]["value"] == ""
+    assert fields["media_specs"]["value"] == ""
+    assert fields["online_time"]["value"] == ""
+    assert fields["budget"]["value"] == ""
+    assert fields["theme_concept"]["value"] == ""
+
+
+@pytest.mark.asyncio
+async def test_state_update_maps_short_delivery_answers_from_previous_question(monkeypatch, tmp_path):
+    captured_payloads = []
+
+    async def _mock_state_parser(payload, *, timeout=None):
+        captured_payloads.append(payload)
+        request_text = payload["messages"][-1]["content"]
+        if '"current_user_message": "mp4"' in request_text:
+            return {"choices": [{"message": {"content": '{"updates":{"tech_delivery":"视频格式 MP4"},"events":[]}'}}]}
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"updates":{"tech_delivery":"视频格式 MP4；'
+                            '帧率、色彩空间等技术参数无特殊要求，可按通用交付规范执行"},"events":[]}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.services.ai_brief_state.settings.LOG_DIR", str(tmp_path))
+    monkeypatch.setattr("app.services.ai_brief_state.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_brief_state.post_chat_completion", _mock_state_parser)
+
+    first_state = await update_agent_state_from_message(
+        session_id="session-short-tech",
+        user_id="user-short-tech",
+        business_type="ai_3d_custom",
+        message="mp4",
+        history=[
+            {
+                "role": "assistant",
+                "content": "交付规范这边有固定要求吗？比如视频格式是MP4还是MOV、帧率25fps还是30fps、色彩空间Rec.709或sRGB。",
+            }
+        ],
+        source_message_id="msg-mp4",
+        memory_hints={},
+    )
+
+    tech_delivery = first_state["brief_state"]["fields"]["tech_delivery"]["value"]
+    assert "MP4" in tech_delivery
+    first_payload_text = captured_payloads[-1]["messages"][-1]["content"]
+    assert "last_assistant_question" in first_payload_text
+    assert "交付规范这边有固定要求吗" in first_payload_text
+
+    second_state = await update_agent_state_from_message(
+        session_id="session-short-tech",
+        user_id="user-short-tech",
+        business_type="ai_3d_custom",
+        message="没有",
+        history=[
+            {
+                "role": "assistant",
+                "content": "为了确保画面流畅且色彩还原准确，帧率和色彩空间有固定要求吗？比如30fps配合Rec.709或sRGB。",
+            }
+        ],
+        source_message_id="msg-no-tech",
+        memory_hints={},
+    )
+
+    tech_delivery = second_state["brief_state"]["fields"]["tech_delivery"]["value"]
+    assert "MP4" in tech_delivery
+    assert "无特殊要求" in tech_delivery
+
+
+@pytest.mark.asyncio
+async def test_image_only_state_update_keeps_only_neutral_site_photo_fact(monkeypatch, tmp_path):
+    async def _mock_state_parser(payload, *, timeout=None):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"updates":{'
+                            '"city_location":"图片摘要：城市街景和高楼",'
+                            '"theme_concept":"巨型网球破墙而出",'
+                            '"online_time":"图片摘要中没有时间但模型误填",'
+                            '"site_photos":"参考图：巨型网球破墙而出，毛绒纤维质感明显"'
+                            '},"events":[]}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.services.ai_brief_state.settings.LOG_DIR", str(tmp_path))
+    monkeypatch.setattr("app.services.ai_brief_state.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_brief_state.post_chat_completion", _mock_state_parser)
+
+    state = await update_agent_state_from_message(
+        session_id="session-image-only",
+        user_id="user-image-only",
+        business_type="ai_3d_custom",
+        message=(
+            "[已上传文件: reference.png]\n\n"
+            f"{IMAGE_CONTEXT_MARKER}\n"
+            "文件：reference.png\n"
+            "图片类型：参考设计/风格图\n"
+            "视觉摘要：巨型网球冲破建筑外墙，具备裸眼3D破屏效果。"
+        ),
+        history=[],
+        source_message_id="msg-image-only",
+        memory_hints={},
+    )
+
+    fields = state["brief_state"]["fields"]
+    assert fields["site_photos"]["value"] == "已上传图片素材"
+    assert fields["city_location"]["value"] == ""
+    assert fields["theme_concept"]["value"] == ""
+    assert fields["art_direction"]["value"] == ""
+    assert fields["media_specs"]["value"] == ""
+    assert fields["online_time"]["value"] == ""
+
+    context_message = state["agent_context_window"]["messages"][-1]["content"]
+    assert IMAGE_CONTEXT_MARKER not in context_message
+    assert "reference.png" not in context_message
+    assert "巨型网球" not in context_message
+    assert "用户上传了图片素材" in context_message
+
+
+@pytest.mark.asyncio
+async def test_image_context_is_not_sent_to_brief_state_parser(monkeypatch, tmp_path):
+    captured_payload = {}
+
+    async def _mock_state_parser(payload, *, timeout=None):
+        captured_payload.update(payload)
+        return {"choices": [{"message": {"content": '{"updates":{},"events":[]}'}}]}
+
+    monkeypatch.setattr("app.services.ai_brief_state.settings.LOG_DIR", str(tmp_path))
+    monkeypatch.setattr("app.services.ai_brief_state.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_brief_state.post_chat_completion", _mock_state_parser)
+
+    await update_agent_state_from_message(
+        session_id="session-image-parser",
+        user_id="user-image-parser",
+        business_type="ai_3d_custom",
+        message=(
+            "这张是杭州 in77 的现场参考\n"
+            "[已上传文件: reference.png]\n\n"
+            f"{IMAGE_CONTEXT_MARKER}\n"
+            "文件：reference.png\n"
+            "图片类型：参考设计/风格图\n"
+            "视觉摘要：巨型网球冲破建筑外墙，具备裸眼3D破屏效果。"
+        ),
+        history=[],
+        source_message_id="msg-image-text",
+        memory_hints={},
+    )
+
+    payload_text = "\n".join(item["content"] for item in captured_payload["messages"])
+    assert "这张是杭州 in77 的现场参考" in payload_text
+    assert IMAGE_CONTEXT_MARKER not in payload_text
+    assert "reference.png" not in payload_text
+    assert "巨型网球" not in payload_text
 
 
 @pytest.mark.asyncio
@@ -112,6 +286,41 @@ async def test_state_update_turns_memory_hint_into_pending_confirmation(monkeypa
     context = build_brief_state_context(state)
     assert "待用户确认" in context
     assert "杭州巨屏" in context
+
+
+@pytest.mark.asyncio
+async def test_state_update_maintains_compact_agent_context_window(monkeypatch, tmp_path):
+    long_history_message = "创意方向草案：毛绒大熊猫从L型屏幕深处探出，与路人挥手互动。" * 40
+    history = [{"role": "assistant", "content": long_history_message}]
+    original_history = [dict(item) for item in history]
+
+    async def _mock_brief_parser(payload, *, timeout=None):
+        return {"choices": [{"message": {"content": '{"updates":{},"events":[]}'}}]}
+
+    async def _mock_context_compactor(payload, *, timeout=None, attempts=None):
+        return {"choices": [{"message": {"content": "压缩摘要：毛绒大熊猫从L型屏幕探出，与路人互动。"}}]}
+
+    monkeypatch.setattr("app.services.ai_brief_state.settings.LOG_DIR", str(tmp_path))
+    monkeypatch.setattr("app.services.ai_brief_state.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_brief_state.post_chat_completion", _mock_brief_parser)
+    monkeypatch.setattr("app.services.ai_context.post_chat_completion", _mock_context_compactor)
+
+    state = await update_agent_state_from_message(
+        session_id="session-context-window",
+        user_id="user-context-window",
+        business_type="ai_3d_custom",
+        message="评估一下刚才这个方向",
+        history=history,
+        source_message_id="user-msg-1",
+        memory_hints={},
+    )
+
+    assert history == original_history
+    context_messages = state["agent_context_window"]["messages"]
+    assert context_messages[0]["content"] == "压缩摘要：毛绒大熊猫从L型屏幕探出，与路人互动。"
+    assert context_messages[0]["compacted"] is True
+    assert context_messages[-1]["content"] == "评估一下刚才这个方向"
+    assert all(len(item["content"]) <= 700 for item in context_messages)
 
 
 @pytest.mark.asyncio

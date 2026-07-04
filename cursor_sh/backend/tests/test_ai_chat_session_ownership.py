@@ -66,6 +66,11 @@ class _FakeSessionContext:
         return False
 
 
+class _FakeUser:
+    id = "user-a"
+    username = "Alice"
+
+
 @pytest.mark.asyncio
 async def test_ai_background_save_skips_cross_user_session(monkeypatch):
     existing = AIChatSession(id="session-1", user_id="user-a", username="A")
@@ -86,3 +91,45 @@ async def test_ai_background_save_skips_cross_user_session(monkeypatch):
     assert fake_db.added == []
     assert fake_db.committed is False
     assert existing.user_id == "user-a"
+
+
+@pytest.mark.asyncio
+async def test_chat_history_state_loads_owned_agent_state(monkeypatch):
+    existing = AIChatSession(
+        id="session-1",
+        user_id="user-a",
+        username="Alice",
+        business_type="ai_3d_custom",
+    )
+    fake_db = _FakeDb(existing)
+    captured = {}
+
+    def _fake_load_agent_state(session_id, user_id, business_type):
+        captured.update(
+            {
+                "session_id": session_id,
+                "user_id": user_id,
+                "business_type": business_type,
+            }
+        )
+        return {
+            "current_agent": "brief_agent",
+            "stage": "brief_building",
+            "brief_state": {"fields": {"theme_concept": {"value": "毛绒大熊猫"}}},
+        }
+
+    monkeypatch.setattr(ai_chat_history, "load_agent_state", _fake_load_agent_state)
+
+    response = await ai_chat_history.get_session_state(
+        "session-1",
+        _FakeUser(),
+        fake_db,
+    )
+
+    assert response["code"] == 200
+    assert response["data"]["brief_state"]["fields"]["theme_concept"]["value"] == "毛绒大熊猫"
+    assert captured == {
+        "session_id": "session-1",
+        "user_id": "user-a",
+        "business_type": "ai_3d_custom",
+    }

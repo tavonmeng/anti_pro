@@ -115,7 +115,7 @@
       </div> <!-- end main-column -->
       
       <transition name="fade">
-        <StyleInspirationSidebar v-if="uiStore.isAiExpanded && showInspiration" @close="showInspiration = false" />
+        <StyleInspirationSidebar v-if="uiStore.isAiExpanded && showInspiration && !isMobileWorkspace" @close="showInspiration = false" />
       </transition>
     </div>
   </div>
@@ -139,6 +139,7 @@ const uiStore = useUiStore()
 
 const aiSelectedMode = ref<string | null>(null)
 const showInspiration = ref(true)
+const isMobileWorkspace = ref(false)
 const activeService = computed(() => getServiceByType(uiStore.activeModule))
 
 const promptTexts = [
@@ -154,9 +155,21 @@ let timer: ReturnType<typeof setTimeout> | null = null
 let blinkTimer: ReturnType<typeof setInterval> | null = null
 let currentPromptIndex = 0
 
+const updateMobileWorkspaceState = () => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+  isMobileWorkspace.value = window.matchMedia('(max-width: 768px)').matches
+  if (isMobileWorkspace.value && uiStore.isAiExpanded) {
+    uiStore.setSecondarySidebar(false)
+    uiStore.toggleSidebar(false)
+    showInspiration.value = false
+  }
+}
+
 onMounted(() => {
-  orderStore.fetchOrders()
   logger.logAction('Workspace', 'page_enter')
+  orderStore.fetchOrders()
+  updateMobileWorkspaceState()
+  window.addEventListener('resize', updateMobileWorkspaceState)
 
   const typingSpeed = 120
   const deletingSpeed = 60
@@ -211,6 +224,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (timer) clearTimeout(timer)
   if (blinkTimer) clearInterval(blinkTimer)
+  window.removeEventListener('resize', updateMobileWorkspaceState)
 })
 
 const handleAiExpand = (expanded: boolean) => {
@@ -223,9 +237,15 @@ const handleAiExpand = (expanded: boolean) => {
   }
   // Instant expand without waiting for crazy delays
   uiStore.setIsAiExpanded(true)
-  uiStore.setSecondarySidebar(true)
-  uiStore.toggleSidebar(true)
-  showInspiration.value = true
+  if (isMobileWorkspace.value) {
+    uiStore.setSecondarySidebar(false)
+    uiStore.toggleSidebar(false)
+    showInspiration.value = false
+  } else {
+    uiStore.setSecondarySidebar(true)
+    uiStore.toggleSidebar(true)
+    showInspiration.value = true
+  }
   logger.logAction('Workspace', 'open_ai_assistant')
 }
 
@@ -775,6 +795,152 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 
   .service-focus-title {
     font-size: 24px;
+  }
+}
+
+@media (max-width: 768px) {
+  .workspace-page {
+    height: 100vh;
+    height: 100svh;
+    min-height: 100vh;
+    min-height: 100svh;
+    overflow: hidden;
+  }
+
+  .workspace-layout {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .main-column {
+    height: 100%;
+    min-height: 0;
+    width: 100%;
+  }
+
+  .overview-state {
+    --overview-top-space: 16px;
+    height: 100%;
+    min-height: 0;
+    padding: 16px 14px calc(18px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .hero-banner {
+    padding: 20px 16px;
+    margin-bottom: 18px;
+    border-radius: 14px;
+  }
+
+  .hero-title {
+    margin-bottom: 16px;
+    font-size: 20px;
+    line-height: 1.25;
+    letter-spacing: 0;
+  }
+
+  .hero-input-area {
+    min-height: 48px;
+    padding: 5px 5px 5px 14px;
+    border-radius: 18px;
+  }
+
+  .hero-input {
+    min-width: 0;
+    font-size: 16px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .generate-btn {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .figma-divider {
+    margin: 18px 0 20px;
+  }
+
+  .section-header {
+    margin-bottom: 14px;
+  }
+
+  .section-title {
+    font-size: 17px;
+  }
+
+  .service-cards {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    margin-bottom: 0;
+  }
+
+  .service-card {
+    width: 100%;
+    gap: 10px;
+  }
+
+  .card-image-wrapper {
+    height: clamp(148px, 42vw, 190px);
+    border-radius: 10px;
+  }
+
+  .service-title {
+    font-size: 16px;
+    line-height: 1.35;
+  }
+
+  .service-description {
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .service-features {
+    gap: 6px;
+  }
+
+  .outline-tag {
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
+  .full-ai-container {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .service-focus-state {
+    height: 100%;
+    padding: 18px 14px calc(20px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .service-focus-panel {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .service-focus-title {
+    font-size: 22px;
+  }
+
+  .service-focus-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .service-focus-actions :deep(.el-button) {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  :deep(.style-inspiration-sidebar) {
+    display: none !important;
   }
 }
 

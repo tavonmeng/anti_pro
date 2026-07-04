@@ -117,7 +117,7 @@
       <el-menu-item index="drafts">
         <el-icon><EditPen /></el-icon>
         <template #title>
-          <span>草稿箱</span>
+          <span>{{ orderDraftCopy.navLabel }}</span>
           <el-badge v-if="draftCount > 0" :value="draftCount" :max="99" class="draft-badge" />
         </template>
       </el-menu-item>
@@ -159,6 +159,7 @@ import { Grid, Document, User, Setting, SwitchButton, EditPen, ChatDotRound, Off
 import { useAuthStore } from '@/stores/auth'
 import { useOrderStore } from '@/stores/order'
 import { loginPathForRole } from '@/utils/deployment'
+import { orderDraftCopy } from '@/utils/orderDraftCopy'
 import request from '@/utils/request'
 import NotificationBell from './NotificationBell.vue'
 

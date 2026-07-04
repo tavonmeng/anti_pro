@@ -64,10 +64,52 @@ async def test_router_payload_declares_brief_to_order_goal():
     payload_text = "\n".join(m["content"] for m in messages)
 
     assert "Brief" in payload_text
-    assert "需求收集完成" in payload_text
+    assert "control_action" in payload_text
+    assert "ready_to_extract" in payload_text
+    assert "finish_brief_now" in payload_text
+    assert "handoff_requested" in payload_text
     assert "表单" in payload_text
     assert "确认下单" in payload_text
     assert "评估完成后" in payload_text
+
+
+@pytest.mark.asyncio
+async def test_router_can_return_finish_brief_control_action(monkeypatch):
+    async def _mock_completion(payload, *, timeout=None):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"action":"stay","intent":"brief_building",'
+                            '"target_agent":"brief_agent","stage":"brief_building",'
+                            '"control_action":"finish_brief_now",'
+                            '"reason":"用户明确希望停止追问并直接整理需求"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.services.ai_orchestrator.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_orchestrator.post_chat_completion", _mock_completion)
+
+    route = await decide_route(
+        OrchestratorContext(
+            session_id="session-test",
+            message="先这样，直接帮我整理吧",
+            history=[{"role": "user", "content": "杭州大屏，想做宠物裸眼3D"}],
+            current_agent="brief_agent",
+            stage="brief_building",
+            business_type="ai_3d_custom",
+        )
+    )
+
+    assert route.action == "stay"
+    assert route.target_agent == "brief_agent"
+    assert route.intent == "brief_building"
+    assert route.control_action == "finish_brief_now"
+    assert route.source == "llm_router"
 
 
 @pytest.mark.asyncio
@@ -107,6 +149,399 @@ async def test_brief_flow_routes_creative_direction_generation_to_direction_agen
 
 
 @pytest.mark.asyncio
+async def test_creative_revision_after_evaluation_routes_to_direction_agent_via_llm(monkeypatch):
+    captured_payload = {}
+
+    async def _mock_completion(payload, *, timeout=None):
+        captured_payload.update(payload)
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"action":"switch","intent":"creative_direction",'
+                            '"target_agent":"creative_direction_agent","stage":"creative_direction",'
+                            '"reason":"用户要求基于上一轮评估优化现有方案"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.services.ai_orchestrator.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_orchestrator.post_chat_completion", _mock_completion)
+
+    route = await decide_route(
+        OrchestratorContext(
+            session_id="session-test",
+            message="这个方案优化一下",
+            history=[
+                {
+                    "role": "user",
+                    "content": "创意概念：水滴凝结成瓶，冰晶沿L型屏曲面飞散，最后露出品牌瓶身。",
+                },
+                {
+                    "role": "assistant",
+                    "content": "阶段性创意评估：成立点是空间感强，风险点是品牌识别滞后，优化方向是前置品牌资产。",
+                },
+            ],
+            current_agent="brief_agent",
+            stage="brief_building",
+            business_type="ai_3d_custom",
+        )
+    )
+
+    payload_text = "\n".join(item["content"] for item in captured_payload["messages"])
+    assert route.action == "switch"
+    assert route.target_agent == "creative_direction_agent"
+    assert route.intent == "creative_direction"
+    assert route.source == "llm_router"
+    assert "基于评估结果继续产出优化稿" in payload_text
+    assert "不要把单独的“优化一下/帮我改一下/能不能再调整”当作 creative_diagnosis" in payload_text
+
+
+@pytest.mark.asyncio
+async def test_order_agent_can_leave_order_query_through_llm_router(monkeypatch):
+    captured_payload = {}
+
+    async def _mock_completion(payload, *, timeout=None):
+        captured_payload.update(payload)
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"action":"switch","intent":"creative_direction",'
+                            '"target_agent":"creative_direction_agent","stage":"creative_direction",'
+                            '"reason":"用户在订单查询上下文里提出了新的创意延展需求"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.services.ai_orchestrator.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_orchestrator.post_chat_completion", _mock_completion)
+
+    route = await decide_route(
+        OrchestratorContext(
+            session_id="session-test",
+            message="我想基于上传的图片做一些创意延展，请先告诉我可以从哪些方向展开。",
+            history=[{"role": "assistant", "content": "当前账户下暂无订单记录。"}],
+            current_agent="order_agent",
+            stage="order_query",
+            business_type="ai_3d_custom",
+        )
+    )
+
+    payload_text = "\n".join(m["content"] for m in captured_payload["messages"])
+    assert "当前处于 order_agent" in payload_text
+    assert route.action == "switch"
+    assert route.target_agent == "creative_direction_agent"
+    assert route.stage == "creative_direction"
+    assert route.intent == "creative_direction"
+    assert route.source == "llm_router"
+
+
+@pytest.mark.asyncio
+async def test_generic_view_reference_image_request_is_not_order_query_hard_guard(monkeypatch):
+    async def _mock_completion(payload, *, timeout=None):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"action":"switch","intent":"creative_direction",'
+                            '"target_agent":"creative_direction_agent","stage":"creative_direction",'
+                            '"reason":"用户想基于参考图看创意方向"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.services.ai_orchestrator.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_orchestrator.post_chat_completion", _mock_completion)
+
+    route = await decide_route(
+        OrchestratorContext(
+            session_id="session-test",
+            message="帮我查看这张参考图能做哪些创意方向",
+            history=[],
+            current_agent="brief_agent",
+            stage="brief_building",
+            business_type="ai_3d_custom",
+        )
+    )
+
+    assert route.action == "switch"
+    assert route.target_agent == "creative_direction_agent"
+    assert route.intent == "creative_direction"
+    assert route.source == "llm_router"
+
+
+@pytest.mark.asyncio
+async def test_brief_flow_routes_attachment_only_upload_through_llm_router(monkeypatch):
+    captured_payload = {}
+
+    async def _mock_completion(payload, *, timeout=None):
+        captured_payload.update(payload)
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"action":"stay","intent":"brief_building",'
+                            '"target_agent":"brief_agent","stage":"brief_building",'
+                            '"reason":"用户只是上传素材补充 Brief，没有提出创意生成或评估意图"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.services.ai_orchestrator.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_orchestrator.post_chat_completion", _mock_completion)
+
+    route = await decide_route(
+        OrchestratorContext(
+            session_id="session-test",
+            message=(
+                "[已上传文件: screen-photo.png]\n\n"
+                "[图片理解摘要]\n"
+                "文件：screen-photo.png\n"
+                "视觉摘要：这是一张户外裸眼3D大屏现场图，可作为参考素材。"
+            ),
+            history=[
+                {
+                    "role": "assistant",
+                    "content": "需求方向基本清楚了。您这边是否还有现场实拍图、屏幕照片或其他参考素材可以补充？",
+                }
+            ],
+            current_agent="brief_agent",
+            stage="brief_building",
+            business_type="ai_3d_custom",
+            has_attachments=True,
+        )
+    )
+
+    payload_text = "\n".join(m["content"] for m in captured_payload["messages"])
+    assert '"upload_only_material": true' in payload_text
+    assert '"user_authored_text": ""' in payload_text
+    assert "上传素材是 Brief 收集的一部分" in payload_text
+    assert route.action == "stay"
+    assert route.target_agent == "brief_agent"
+    assert route.stage == "brief_building"
+    assert route.intent == "brief_building"
+    assert route.source == "llm_router"
+
+
+@pytest.mark.asyncio
+async def test_brief_flow_routes_image_with_creative_extension_text_to_direction_agent(monkeypatch):
+    captured_payload = {}
+
+    async def _mock_completion(payload, *, timeout=None):
+        captured_payload.update(payload)
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"action":"switch","intent":"creative_direction",'
+                            '"target_agent":"creative_direction_agent","stage":"creative_direction",'
+                            '"reason":"用户明确要求基于图片做创意延展"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.services.ai_orchestrator.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_orchestrator.post_chat_completion", _mock_completion)
+
+    route = await decide_route(
+        OrchestratorContext(
+            session_id="session-test",
+            message=(
+                "基于这张图做一些创意延展\n"
+                "[已上传文件: reference.png]\n\n"
+                "[图片理解摘要]\n"
+                "文件：reference.png\n"
+                "视觉摘要：这是一张带毛绒质感角色的参考设计图。"
+            ),
+            history=[],
+            current_agent="brief_agent",
+            stage="brief_building",
+            business_type="ai_3d_custom",
+            has_attachments=True,
+        )
+    )
+
+    payload_text = "\n".join(m["content"] for m in captured_payload["messages"])
+    assert '"upload_only_material": false' in payload_text
+    assert '"user_authored_text": "基于这张图做一些创意延展"' in payload_text
+    assert route.action == "switch"
+    assert route.target_agent == "creative_direction_agent"
+    assert route.intent == "creative_direction"
+    assert route.source == "llm_router"
+
+
+@pytest.mark.asyncio
+async def test_pending_creative_direction_image_upload_routes_through_llm_router(monkeypatch):
+    captured_payload = {}
+
+    async def _mock_completion(payload, *, timeout=None):
+        captured_payload.update(payload)
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"action":"switch","intent":"creative_direction",'
+                            '"target_agent":"creative_direction_agent","stage":"creative_direction",'
+                            '"reason":"用户上传图片是在补全上一轮创意延展任务"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.services.ai_orchestrator.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_orchestrator.post_chat_completion", _mock_completion)
+
+    route = await decide_route(
+        OrchestratorContext(
+            session_id="session-test",
+            message=(
+                "[已上传文件: reference.png]\n\n"
+                "[图片理解摘要]\n"
+                "文件：reference.png\n"
+                "视觉摘要：这是一张毛绒动物参考设计图。"
+            ),
+            history=[
+                {"role": "user", "content": "我想基于上传的图片做一些创意延展，请先告诉我可以从哪些方向展开。"},
+                {"role": "assistant", "content": "我还没有看到这轮消息里有图片附件，所以不能直接基于图片内容做创意延展。"},
+            ],
+            current_agent="brief_agent",
+            stage="brief_building",
+            business_type="ai_3d_custom",
+            pending_creative_direction={
+                "status": "awaiting_image",
+                "source": "creative_direction_agent",
+                "prompt_message": "我想基于上传的图片做一些创意延展，请先告诉我可以从哪些方向展开。",
+            },
+            has_attachments=True,
+        )
+    )
+
+    payload_text = "\n".join(m["content"] for m in captured_payload["messages"])
+    assert '"pending_creative_direction"' in payload_text
+    assert '"status": "awaiting_image"' in payload_text
+    assert '"upload_only_material": true' in payload_text
+    assert "补全上一轮创意方向任务" in payload_text
+    assert route.action == "switch"
+    assert route.target_agent == "creative_direction_agent"
+    assert route.intent == "creative_direction"
+    assert route.source == "llm_router"
+
+
+@pytest.mark.asyncio
+async def test_upload_image_summary_does_not_trigger_business_intro_rule(monkeypatch):
+    captured_payload = {}
+
+    async def _mock_completion(payload, *, timeout=None):
+        captured_payload.update(payload)
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"action":"switch","intent":"creative_direction",'
+                            '"target_agent":"creative_direction_agent","stage":"creative_direction",'
+                            '"reason":"pending 创意方向任务正在等待图片"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.services.ai_orchestrator.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_orchestrator.post_chat_completion", _mock_completion)
+
+    route = await decide_route(
+        OrchestratorContext(
+            session_id="session-test",
+            message=(
+                "[已上传文件: reference.png]\n\n"
+                "[图片理解摘要]\n"
+                "文件：reference.png\n"
+                "视觉摘要：这张图可以用于业务服务方向判断。"
+            ),
+            history=[
+                {"role": "user", "content": "我想基于上传的图片做一些创意延展，请先告诉我可以从哪些方向展开。"},
+            ],
+            current_agent="brief_agent",
+            stage="brief_building",
+            business_type="ai_3d_custom",
+            pending_creative_direction={
+                "status": "awaiting_image",
+                "source": "creative_direction_agent",
+                "prompt_message": "我想基于上传的图片做一些创意延展，请先告诉我可以从哪些方向展开。",
+            },
+            has_attachments=True,
+        )
+    )
+
+    payload_text = "\n".join(m["content"] for m in captured_payload["messages"])
+    assert '"user_authored_text": ""' in payload_text
+    assert route.action == "switch"
+    assert route.target_agent == "creative_direction_agent"
+    assert route.intent == "creative_direction"
+    assert route.source == "llm_router"
+
+
+@pytest.mark.asyncio
+async def test_brief_flow_uses_llm_router_for_initial_3d_video_brief_kickoff(monkeypatch):
+    captured_payload = {}
+
+    async def _mock_completion(payload, *, timeout=None):
+        captured_payload.update(payload)
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"action":"stay","intent":"brief_building",'
+                            '"target_agent":"brief_agent","reason":"用户只是开始梳理3D视频需求"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.services.ai_orchestrator.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_orchestrator.post_chat_completion", _mock_completion)
+
+    route = await decide_route(
+        OrchestratorContext(
+            session_id="session-test",
+            message="想做一个3D视频，先帮我梳理一下大概方向。",
+            history=[],
+            current_agent="brief_agent",
+            stage="brief_building",
+            business_type="ai_3d_custom",
+        )
+    )
+
+    assert route.action == "stay"
+    assert route.target_agent == "brief_agent"
+    assert route.stage == "brief_building"
+    assert route.intent == "brief_building"
+    assert captured_payload["messages"][0]["role"] == "system"
+    assert "想做一个3D视频" in captured_payload["messages"][1]["content"]
+
+
+@pytest.mark.asyncio
 async def test_brief_flow_routes_explicit_creative_evaluation_to_diagnosis_agent(monkeypatch):
     async def _mock_completion(payload, *, timeout=None):
         return {
@@ -140,6 +575,33 @@ async def test_brief_flow_routes_explicit_creative_evaluation_to_diagnosis_agent
     assert route.target_agent == "creative_diagnosis_agent"
     assert route.stage == "creative_diagnosis"
     assert route.intent == "creative_diagnosis"
+
+
+@pytest.mark.asyncio
+async def test_pending_creative_diagnosis_routes_next_concept_back_to_diagnosis_agent(monkeypatch):
+    async def _mock_completion(payload, *, timeout=None):
+        raise AssertionError("pending creative diagnosis should route before llm router")
+
+    monkeypatch.setattr("app.services.ai_orchestrator.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_orchestrator.post_chat_completion", _mock_completion)
+
+    route = await decide_route(
+        OrchestratorContext(
+            session_id="session-test",
+            message="毛绒大熊猫从L型屏幕里探出来，和路人互动",
+            history=[{"role": "assistant", "content": "可以，我会从可行性、裸眼3D适配、传播价值和优化空间几个角度帮您看。"}],
+            current_agent="brief_agent",
+            stage="brief_building",
+            business_type="ai_3d_custom",
+            pending_evaluation={"status": "awaiting_target"},
+        )
+    )
+
+    assert route.action == "switch"
+    assert route.target_agent == "creative_diagnosis_agent"
+    assert route.stage == "creative_diagnosis"
+    assert route.intent == "creative_diagnosis"
+    assert route.source == "rule"
 
 
 @pytest.mark.asyncio

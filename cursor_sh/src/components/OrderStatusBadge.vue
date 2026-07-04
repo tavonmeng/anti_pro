@@ -20,7 +20,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const statusConfig: Record<OrderStatus, { text: string; type: 'success' | 'info' | 'warning' | 'danger' | '' }> = {
-  draft: { text: '草稿', type: 'info' },
+  draft: { text: '订单草稿', type: 'info' },
   pending_assign: { text: '待分配', type: 'info' },
   pending_contract: { text: '合同与付款', type: 'warning' },
   in_production: { text: '制作中', type: '' },
@@ -36,4 +36,3 @@ const statusConfig: Record<OrderStatus, { text: string; type: 'success' | 'info'
 const statusText = computed(() => statusConfig[props.status]?.text || props.status)
 const tagType = computed(() => statusConfig[props.status]?.type || '')
 </script>
-

@@ -34,7 +34,7 @@ class QueryOrdersRequest(BaseModel):
 # ───────────────────────────────────────────────────────
 
 _STATUS_MAP = {
-    "draft": "草稿", "pending_assign": "待分配", "pending_contract": "合同与付款",
+    "draft": "订单草稿", "pending_assign": "待分配", "pending_contract": "合同与付款",
     "in_production": "制作中",
     "pending_review": "待审核", "review_rejected": "审核驳回",
     "preview_ready": "初稿就绪", "final_preview": "终稿就绪",
@@ -56,6 +56,7 @@ _STATUS_KW_MAP = {
     "初稿": "preview_ready", "终稿": "final_preview",
     "需修改": "revision_needed", "已完成": "completed",
     "草稿": "draft",
+    "订单草稿": "draft",
 }
 
 # 搜索时需要扫描的业务字段
@@ -349,7 +350,7 @@ def _build_status_overview(orders: list) -> str:
         st = _get_status_text(o)
         counts[st] = counts.get(st, 0) + 1
 
-    priority = ["制作中", "待审核", "需修改", "合同与付款", "待分配", "初稿就绪", "终稿就绪", "审核驳回", "已完成", "草稿"]
+    priority = ["制作中", "待审核", "需修改", "合同与付款", "待分配", "初稿就绪", "终稿就绪", "审核驳回", "已完成", "订单草稿"]
     parts = [f"{counts[s]}个{s}" for s in priority if counts.get(s, 0) > 0]
     for s, c in counts.items():
         if s not in priority and c > 0:
@@ -381,7 +382,7 @@ async def _llm_understand_query(user_msg: str, history: list, orders_summary: st
             '   返回 {"intent": "detail", "match_indices": [序号], "label": "匹配关键词"}\n\n'
             "2. 如果用户想筛选/查看多个订单，请尝试捕捉用户想匹配的【数据库业务字段】，目前支持的维度有：\n"
             "   - 业务类型：如裸眼3D、数字艺术\n"
-            "   - 订单状态：如草稿、合同与付款、制作中、审核、完成\n"
+            "   - 订单状态：如订单草稿、合同与付款、制作中、审核、完成\n"
             "   - 客户属性：品牌(brand)、城市(city)、风格(style)\n"
             "   - 时间范围：如上个月、本周等\n"
             '   遇到这几类描述时进行多项匹配，返回 {"intent": "filter", "match_indices": [匹配的序号列表], "label": "筛选条件描述"}\n\n'

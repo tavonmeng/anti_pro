@@ -6,20 +6,29 @@
       <p class="page-subtitle">探索数百项优质纯原创 AGI 与 CG 结合制作的震撼案例，挑选符合您心意的裸眼 3D 成片进行二次适配。</p>
     </div>
 
-    <!-- 瀑布流容器 -->
     <div class="waterfall-container">
-      <div v-for="video in videoList" :key="video.id" class="video-card" @click="openModal(video)">
+      <div
+        v-for="video in videoList"
+        :key="video.id"
+        class="video-card"
+        role="button"
+        tabindex="0"
+        @click="goToDetail(video)"
+        @keydown.enter.self.prevent="goToDetail(video)"
+        @keydown.space.self.prevent="goToDetail(video)"
+      >
         <div class="video-preview-wrapper">
           <img
-            v-if="video.image"
+            v-if="video.media.type === 'image'"
             class="preview-image"
-            :src="video.image"
+            :src="video.media.url"
             :alt="video.title"
           />
           <video 
-            v-else-if="video.src"
+            v-else
             class="video-element" 
-            :src="video.src" 
+            :src="video.media.url"
+            :poster="video.media.poster"
             muted 
             loop 
             playsinline
@@ -28,7 +37,7 @@
           ></video>
           <div class="play-overlay">
             <el-icon class="play-icon"><VideoPlay /></el-icon>
-            <span>{{ video.image ? '查看详情' : '点击播放' }}</span>
+            <span>查看详情</span>
           </div>
         </div>
         
@@ -39,111 +48,26 @@
           </div>
           <h3 class="card-title">{{ video.title }}</h3>
           <p class="card-desc">{{ video.desc }}</p>
+          <div class="card-price">
+            <span>{{ video.price.label }}</span>
+            <strong>{{ video.price.display }}</strong>
+          </div>
         </div>
       </div>
     </div>
-
-    <!-- 视频播放模态框 -->
-    <el-dialog 
-      v-model="isModalVisible" 
-      :title="activeVideo?.title" 
-      width="60%"
-      destroy-on-close
-      class="video-dialog"
-    >
-      <div class="dialog-content" v-if="activeVideo">
-        <img
-          v-if="activeVideo.image"
-          class="dialog-image"
-          :src="activeVideo.image"
-          :alt="activeVideo.title"
-        />
-        <video 
-          v-else-if="activeVideo.src"
-          class="dialog-video" 
-          :src="activeVideo.src" 
-          controls 
-          autoplay 
-          playsinline
-        ></video>
-      </div>
-      <template #footer>
-        <div class="dialog-footer">
-          <div class="dialog-price">
-            <span class="price-hint">成片适配起步价</span>
-            <span class="price-amount">¥ 8,800起</span>
-          </div>
-          <div>
-            <el-button @click="isModalVisible = false">取消</el-button>
-            <el-button type="primary" class="purchase-btn" @click="goToPurchase">
-              立即购买适配
-              <el-icon><ArrowRight /></el-icon>
-            </el-button>
-          </div>
-        </div>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { VideoPlay, ArrowRight } from '@element-plus/icons-vue'
+import { VideoPlay } from '@element-plus/icons-vue'
+import { buildVideoPurchaseRoute, videoLibraryItems, type VideoLibraryItem } from '@/data/videoMarketplace'
 
 const router = useRouter()
-const isModalVisible = ref(false)
-interface LibraryItem {
-  id: number
-  title: string
-  type: string
-  tag: string
-  desc: string
-  image?: string
-  src?: string
-}
+const videoList = videoLibraryItems
 
-const activeVideo = ref<LibraryItem | null>(null)
-
-const videoList = ref<LibraryItem[]>([
-  { 
-    id: 1, 
-    title: '赛博朋克深空穿越', 
-    type: '科幻奇境', 
-    tag: '飞行器穿梭', 
-    desc: '极具纵深感的宇宙飞行画面，机械部件极度写实，适合追求震撼冲击力的品牌展示。',
-    image: '/video-library-images/1.png'
-  },
-  { 
-    id: 2, 
-    title: '未来机甲异星破阵', 
-    type: '硬科幻', 
-    tag: '机械跃出', 
-    desc: '巨型机甲从屏幕深处跳跃而出的裸眼3D大作，强烈的打破屏幕错觉。',
-    image: '/video-library-images/2.jpg'
-  },
-  { 
-    id: 3, 
-    title: '数字生机奇幻绿洲', 
-    type: '超现实空间', 
-    tag: '自然奇观', 
-    desc: '数字花卉与晶体融合盛开，色彩艳丽，优雅高级，适合美妆或高端商业综合体宣发。',
-    image: '/video-library-images/3.jpg'
-  }
-])
-
-const openModal = (video: LibraryItem) => {
-  activeVideo.value = video
-  isModalVisible.value = true
-}
-
-const goToPurchase = () => {
-  isModalVisible.value = false
-  // 传参可以在query或者仅仅进入填写页
-  router.push({
-    path: '/user/create-order/video_purchase',
-    query: { selected_id: activeVideo.value?.id, title: activeVideo.value?.title }
-  })
+const goToDetail = (video: VideoLibraryItem) => {
+  router.push(buildVideoPurchaseRoute(video))
 }
 </script>
 
@@ -300,56 +224,24 @@ const goToPurchase = () => {
   overflow: hidden;
 }
 
-/* 弹窗特化 */
-.dialog-content {
-  background: #000;
-  border-radius: 8px;
-  overflow: hidden;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.dialog-video {
-  width: 100%;
-  max-height: 60vh;
-  object-fit: contain;
-  display: block;
-}
-
-.dialog-image {
-  width: 100%;
-  max-height: 60vh;
-  object-fit: contain;
-  display: block;
-}
-
-.dialog-footer {
+.card-price {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 8px;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
 }
 
-.dialog-price {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.price-hint {
+.card-price span {
   font-size: 13px;
-  color: #888;
+  color: #86868b;
 }
 
-.price-amount {
+.card-price strong {
   font-size: 20px;
   font-weight: 700;
   color: #FF4D4F;
-  margin-top: 4px;
-}
-
-.purchase-btn {
-  font-weight: 600;
 }
 </style>

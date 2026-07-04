@@ -2,7 +2,7 @@
   <div class="handoff-page">
     <div class="page-header">
       <h2>转人工客户</h2>
-      <p class="page-desc">集中查看用户主动转人工后的客户线索、草稿订单与聊天记录</p>
+      <p class="page-desc">集中查看用户主动转人工后的客户线索、订单草稿与聊天记录</p>
     </div>
 
     <div class="toolbar">
@@ -127,7 +127,7 @@
             <div class="section-title">草稿与跟进</div>
             <div class="section-actions">
               <el-button v-if="activeHandoff.draftOrderId" size="small" @click="goToDraft(activeHandoff.draftOrderId)">
-                查看草稿订单
+                查看订单草稿
               </el-button>
               <el-button
                 size="small"

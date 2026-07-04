@@ -1308,6 +1308,11 @@ export const chatHistoryApi = {
     return request.get(`/ai/chat-history/sessions/${sessionId}/messages`)
   },
 
+  // 获取某个会话的 Agent 状态
+  async getSessionState(sessionId: string): Promise<any> {
+    return request.get(`/ai/chat-history/sessions/${sessionId}/state`, { silent: true })
+  },
+
   // 管理员：获取所有用户的聊天记录
   async adminGetSessions(params: {
     page?: number

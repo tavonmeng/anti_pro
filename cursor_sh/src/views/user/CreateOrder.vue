@@ -15,6 +15,7 @@
       <VideoPurchaseForm
         v-if="orderType === 'video_purchase'"
         :order="isEditMode ? (order || undefined) : undefined"
+        :selected-library-item="selectedVideoLibraryItem"
         @submit="handleSubmit"
         @save-draft="handleSaveDraft"
         @cancel="goBack"
@@ -116,7 +117,9 @@ import { useOrderStore } from '@/stores/order'
 import { useAuthStore } from '@/stores/auth'
 import { orderApi } from '@/utils/api'
 import { getLatestEnterpriseStatus, showEnterpriseAuthPrompt } from '@/utils/enterpriseGuard'
+import { orderDraftCopy } from '@/utils/orderDraftCopy'
 import { getServiceBadgeLabel, getServiceByType, isOrderableServiceType } from '@/data/platformServices'
+import { getVideoLibraryItemById } from '@/data/videoMarketplace'
 import { useUiStore } from '@/stores/ui'
 import VideoPurchaseForm from '@/components/VideoPurchaseForm.vue'
 import AI3DCustomForm from '@/components/AI3DCustomForm.vue'
@@ -139,6 +142,10 @@ const orderType = computed(() => {
   return route.params.type as string
 })
 const activeService = computed(() => getServiceByType(orderType.value))
+const selectedVideoLibraryItem = computed(() => {
+  if (orderType.value !== 'video_purchase' || isEditMode.value) return null
+  return getVideoLibraryItemById(route.query.selected_id as string)
+})
 const confirmOrderType = computed<OrderType>(() => {
   return isOrderableServiceType(orderType.value) ? orderType.value : 'ai_3d_custom'
 })
@@ -201,7 +208,7 @@ onMounted(async () => {
         ElMessage.error('订单不存在')
         router.push('/user/orders')
       } else if (order.value.status !== 'pending_contract' && order.value.status !== 'pending_assign' && order.value.status !== 'draft') {
-        ElMessage.warning('只有待分配、合同与付款或草稿状态的订单可以修改')
+        ElMessage.warning('只有待分配、合同与付款或订单草稿状态的订单可以修改')
         router.push(`/user/orders/${orderId.value}`)
       }
     } catch (error) {
@@ -224,7 +231,7 @@ const handleSubmit = async (formData: any) => {
   const enterpriseStatus = await getLatestEnterpriseStatus(authStore)
   if (enterpriseStatus !== 'approved') {
     if (!isEditMode.value) {
-      // 新建订单未认证时，先自动保存为草稿；编辑已有草稿时不重复创建草稿。
+      // 新建订单未认证时，先自动保存为订单草稿；编辑已有订单草稿时不重复创建。
       try {
         await orderStore.createOrder({
           orderType: orderType.value,
@@ -232,15 +239,15 @@ const handleSubmit = async (formData: any) => {
         }, true)
         await orderStore.fetchOrders()
       } catch (e) {
-        console.error('自动保存草稿失败:', e)
+        console.error('自动保存订单草稿失败:', e)
       }
     }
 
     await showEnterpriseAuthPrompt(
       router,
       isEditMode.value
-        ? '请先完成企业认证后再提交订单。当前草稿会继续保留在草稿箱中。'
-        : '请先完成企业认证后再提交订单。您的订单已自动保存为草稿。'
+        ? orderDraftCopy.keepAfterAuth
+        : '请先完成企业认证后再提交订单。您的订单已自动保存为订单草稿。'
     )
     return
   }
@@ -325,7 +332,7 @@ const handleSaveDraft = async (formData: any) => {
     await orderStore.fetchOrders()
     router.push('/user/drafts')
   } catch (error) {
-    console.error('保存草稿失败:', error)
+    console.error('保存订单草稿失败:', error)
   }
 }
 

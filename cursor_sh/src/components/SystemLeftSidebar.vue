@@ -36,7 +36,7 @@
           @click="navigate('drafts')"
         >
           <el-icon><EditPen /></el-icon>
-          <span v-if="!uiStore.isSidebarCollapsed">草稿箱</span>
+          <span v-if="!uiStore.isSidebarCollapsed">{{ orderDraftCopy.navLabel }}</span>
           <el-badge v-if="draftCount > 0 && !uiStore.isSidebarCollapsed" :value="draftCount" :max="99" class="draft-nav-badge" />
         </div>
         
@@ -153,6 +153,7 @@ import SystemAnnouncement from '@/components/SystemAnnouncement.vue'
 import { useUiStore } from '@/stores/ui'
 import { useOrderStore } from '@/stores/order'
 import { Document } from '@element-plus/icons-vue'
+import { orderDraftCopy } from '@/utils/orderDraftCopy'
 
 const router = useRouter()
 const route = useRoute()
@@ -304,7 +305,7 @@ const handleStackClick = (order: any) => {
 
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
-    'draft': '草稿',
+    'draft': '订单草稿',
     'pending_assign': '等待接单',
     'pending_contract': '合同与付款',
     'in_production': '制作生产中',

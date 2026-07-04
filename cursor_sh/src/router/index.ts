@@ -270,7 +270,7 @@ router.beforeEach(async (to, from, next) => {
       return
     }
   }
-  
+
   // 检查是否需要认证
   if (to.meta.requiresAuth && !authStore.isAuthenticated()) {
     next({ path: loginPathForRoute(to.path), query: { redirect: to.fullPath } })

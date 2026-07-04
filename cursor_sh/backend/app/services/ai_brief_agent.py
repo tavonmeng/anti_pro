@@ -3,70 +3,56 @@
 from __future__ import annotations
 
 import re
+from copy import deepcopy
 from typing import Any
 
 from app.services.ai_brief_state import FIELD_LABELS
 from app.services.memory_sanitizer import sanitize_reusable_memory_text
+from app.utils.log_setup import get_module_logger
+from app.utils.timezone import beijing_now
 
 
-NEXT_QUESTION_PRIORITY = [
-    (
-        "theme_concept",
-        "我先把当前信息记下。为了继续收拢 Brief，想确认一下这次内容主题或核心表达希望围绕什么展开？",
-    ),
-    (
-        "city_location",
-        "这个方向我先记下。为了判断画面尺度和现场观看关系，想确认一下这条内容大概会投放在哪个城市或哪块屏幕？",
-    ),
-    (
-        "viewing_path",
-        "这些核心信息我先记下。为了判断裸眼3D的空间关系，想确认一下观众主要会从哪个方向观看，比如正面、斜侧、仰视，还是有多条人流动线？",
-    ),
-    (
-        "audience_scene",
-        "我先按这个方向记录。为了判断内容的吸引点和节奏，想确认一下现场主要面向哪类人群或观看场景？",
-    ),
-    (
-        "art_direction",
-        "项目方向我先记下。为了后续策划更准确，想确认一下整体视觉气质更偏写实、治愈、科技，还是有其他风格偏好？",
-    ),
-    (
-        "resource_background",
-        "我先继续整理。为了判断内容目标，想了解一下这个点位或项目的背景，是开业造势、节日活动、招商展示，还是常规内容焕新？",
-    ),
-    (
-        "media_specs",
-        "前面的项目背景和创意方向我先记下。为了后续判断裸眼3D透视和出屏幅度，再确认一下屏幕有没有明确分辨率或物理尺寸？如果暂时没有，先说已有参数也可以。",
-    ),
-    (
-        "online_time",
-        "这些信息已经够形成初步方向。为了判断制作节奏，预计上刊、活动或交付时间大概是什么时候？",
-    ),
-    (
-        "content_review",
-        "我先记录当前方向。为了避免后续返工，想确认一下这次有没有审核规范、禁忌元素，或必须避免的表现尺度？",
-    ),
-    (
-        "special_requirements",
-        "主要信息我先记录。除了当前这些要求外，还有没有必须保留、必须避免，或需要特别配合的事项？",
-    ),
-    (
-        "site_photos",
-        "需求方向基本清楚了。您这边是否还有现场实拍图、屏幕照片或其他参考素材可以补充？如果暂时没有，也可以直接说明没有。",
-    ),
+logger = get_module_logger("ai")
+
+
+BRIEF_CATEGORY_GROUPS = [
+    {
+        "key": "basic_info",
+        "label": "基础信息",
+        "fields": ("city_location", "resource_background", "audience_scene", "viewing_path"),
+        "question": "基础信息这边，我想先补一个最影响判断的点：投放点位、现场观看关系或目标受众里，您现在方便先确认哪一项？",
+    },
+    {
+        "key": "creative_direction",
+        "label": "创意方向",
+        "fields": ("theme_concept", "art_direction", "content_review", "special_requirements"),
+        "question": "创意方向这边，我想先把核心画面机制收清楚：主体、动作或视觉风格里，您最想先确定哪一个？",
+    },
+    {
+        "key": "tech_delivery",
+        "label": "技术与交付",
+        "fields": ("media_specs", "timing_number", "tech_delivery", "online_time", "budget", "site_photos"),
+        "question": "技术与交付这边，我想先确认一个会影响制作判断的条件：屏幕规格、交付时间或素材资料里，您现在手头最明确的是哪一项？",
+    },
 ]
+
+BRIEF_CATEGORY_BY_FIELD = {
+    field: category
+    for category in BRIEF_CATEGORY_GROUPS
+    for field in category["fields"]
+}
 
 
 QUESTION_KEYWORDS_BY_FIELD = {
-    "city_location": ("投放点位", "屏幕位置", "城市、屏幕位置", "哪块屏", "哪个城市", "点位"),
-    "media_specs": ("屏幕规格", "已有规格", "分辨率", "物理尺寸", "屏幕尺寸", "4k", "8k", "2k"),
-    "theme_concept": ("内容或主题", "内容主题", "核心表达", "主要想做什么"),
+    "city_location": ("投放点位", "屏幕位置", "城市、屏幕位置", "哪块屏", "哪个城市", "点位", "投放在哪里"),
+    "media_specs": ("屏幕规格", "已有规格", "规格", "分辨率", "物理尺寸", "屏幕尺寸", "4k", "8k", "2k"),
+    "theme_concept": ("内容或主题", "内容主题", "核心表达", "主要想做什么", "创意方向"),
     "viewing_path": ("观看动线", "观看方向", "哪个方向观看", "正面", "斜侧", "仰视"),
     "audience_scene": ("哪类人群", "观看场景", "目标受众", "面向"),
     "art_direction": ("风格偏好", "视觉气质", "艺术方向"),
-    "online_time": ("预计上刊", "交付时间", "活动时间"),
+    "online_time": ("预计上刊", "上线时间", "交付时间", "活动时间"),
     "content_review": ("审核规范", "禁忌", "避免", "表现尺度"),
-    "site_photos": ("现场实拍图", "屏幕照片", "参考素材", "上传"),
+    "site_photos": ("现场实拍图", "屏幕照片", "参考素材", "素材", "上传"),
 }
 
 
@@ -83,6 +69,46 @@ def _filled_fields(brief_state: dict[str, Any] | None) -> set[str]:
         for field in ((brief_state or {}).get("fields") or {})
         if _field_value(brief_state, field)
     }
+
+
+def _creative_evaluation_hint_status(agent_state: dict[str, Any] | None) -> str:
+    hint = (agent_state or {}).get("creative_evaluation_hint")
+    if not isinstance(hint, dict):
+        return ""
+    return str(hint.get("status") or "").strip()
+
+
+def should_show_creative_evaluation_hint(agent_state: dict[str, Any] | None) -> bool:
+    """Return true once the creative direction has enough shape for a non-blocking evaluation hint."""
+    if _creative_evaluation_hint_status(agent_state):
+        return False
+    if (agent_state or {}).get("pending_evaluation"):
+        return False
+    if (agent_state or {}).get("pending_creative_direction"):
+        return False
+
+    brief_state = (agent_state or {}).get("brief_state") or {}
+    if _pending_confirmation(brief_state):
+        return False
+
+    filled = _filled_fields(brief_state)
+    has_creative_shape = {"theme_concept", "art_direction"}.issubset(filled)
+    has_basic_grounding = bool({"city_location", "viewing_path", "audience_scene", "resource_background"} & filled)
+    return has_creative_shape and has_basic_grounding
+
+
+def mark_creative_evaluation_hint_shown(agent_state: dict[str, Any] | None) -> dict[str, Any]:
+    next_state = deepcopy(agent_state or {})
+    brief_state = next_state.get("brief_state") or {}
+    now = beijing_now().isoformat()
+    next_state["creative_evaluation_hint"] = {
+        "status": "shown",
+        "source": "brief_agent",
+        "brief_version": int(brief_state.get("version") or 0),
+        "updated_at": now,
+    }
+    next_state["updated_at"] = now
+    return next_state
 
 
 def _pending_confirmation(brief_state: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -125,12 +151,29 @@ def _first_nonempty(*values: Any) -> str:
     return ""
 
 
+def _append_unique_candidate(candidates: list[str], value: str, max_items: int = 3) -> None:
+    text = _compact_hint(value)
+    if not text or text in candidates or len(candidates) >= max_items:
+        return
+    candidates.append(text)
+
+
+def _join_candidates(candidates: list[str]) -> str:
+    return "；".join(candidate for candidate in candidates if candidate)
+
+
 def build_brief_memory_hints(memory: Any) -> dict[str, str]:
     """Extract non-confirmed Brief candidates from user memory."""
     if not memory:
         return {}
 
     hints: dict[str, str] = {}
+    candidate_lists: dict[str, list[str]] = {
+        "city_location": [],
+        "media_specs": [],
+        "viewing_path": [],
+        "audience_scene": [],
+    }
     screens = _memory_value(memory, "screen_resources") or []
     if isinstance(screens, list):
         for screen in screens:
@@ -156,16 +199,19 @@ def build_brief_memory_hints(memory: Any) -> dict[str, str]:
             )
             viewing_path = _first_nonempty(screen.get("viewing_path"), screen.get("notes"))
             audience_scene = _first_nonempty(screen.get("audience_profile"))
-            if city_location and "city_location" not in hints:
-                hints["city_location"] = city_location
-            if media_specs and "media_specs" not in hints:
-                hints["media_specs"] = media_specs
-            if viewing_path and "viewing_path" not in hints:
-                hints["viewing_path"] = viewing_path
-            if audience_scene and "audience_scene" not in hints:
-                hints["audience_scene"] = audience_scene
-            if "city_location" in hints:
-                break
+            _append_unique_candidate(candidate_lists["city_location"], city_location)
+            _append_unique_candidate(
+                candidate_lists["media_specs"],
+                f"{city_location}：{media_specs}" if city_location and media_specs else media_specs,
+            )
+            _append_unique_candidate(
+                candidate_lists["viewing_path"],
+                f"{city_location}：{viewing_path}" if city_location and viewing_path else viewing_path,
+            )
+            _append_unique_candidate(
+                candidate_lists["audience_scene"],
+                f"{city_location}：{audience_scene}" if city_location and audience_scene else audience_scene,
+            )
 
     preferences = _memory_value(memory, "project_preferences") or {}
     if isinstance(preferences, dict):
@@ -173,8 +219,13 @@ def build_brief_memory_hints(memory: Any) -> dict[str, str]:
         if isinstance(common_cities, str):
             common_cities = [common_cities]
         common_city_text = "、".join(_compact_hint(city, 24) for city in common_cities[:3] if _compact_hint(city))
-        if common_city_text and "city_location" not in hints:
-            hints["city_location"] = common_city_text
+        if common_city_text and not candidate_lists["city_location"]:
+            _append_unique_candidate(candidate_lists["city_location"], common_city_text)
+
+    for field, candidates in candidate_lists.items():
+        joined = _join_candidates(candidates)
+        if joined:
+            hints[field] = joined
 
     return hints
 
@@ -189,8 +240,8 @@ def _pending_confirmation_question(pending: dict[str, Any]) -> str:
         )
     if field == "media_specs":
         return (
-            f"点位方向我先记录。我们了解到这块屏幕可能有这些参数：「{hint_text}」，"
-            "这次是否按这个规格适配？如果有更新参数，也可以直接告诉我。"
+            f"点位方向我先记录。我们了解到这块屏幕的规格线索是「{hint_text}」，"
+            "这次先按这个规格来适配吗？如果参数有更新，也可以直接告诉我。"
         )
     return (
         f"我先记下当前方向。我们了解到有一个可参考的信息是「{hint_text}」，"
@@ -198,30 +249,69 @@ def _pending_confirmation_question(pending: dict[str, Any]) -> str:
     )
 
 
+def _pending_confirmation_llm_context(pending: dict[str, Any]) -> str:
+    field = str(pending.get("field") or "")
+    label = str(pending.get("label") or FIELD_LABELS.get(field, field))
+    candidate = _compact_hint(pending.get("candidate_value"), 240)
+    if not candidate:
+        return ""
+    return (
+        f"- 待确认字段：{label}。\n"
+        f"- 候选信息：{candidate}。\n"
+        "- 回复中必须带出候选信息里的核心内容，不能只说“一组信息”“一组规格”“可参考信息”。\n"
+        "- 你需要先理解候选信息，再用自然措辞向用户确认；不要原样罗列候选信息，"
+        "如果候选里有重复表述，要自行合并为一句清楚的话。\n"
+        "- 对外措辞使用“我们了解到……”或“这块屏幕大致……”这类自然表达；"
+        "不要说 Memory、候选、系统记录、当前 Brief。\n"
+    )
+
+
 def select_next_brief_question(
     brief_state: dict[str, Any] | None,
     filled_overrides: set[str] | None = None,
     memory_hints: dict[str, str] | None = None,
-) -> dict[str, str] | None:
-    """Choose the next Brief question strictly from missing state fields."""
+) -> dict[str, Any] | None:
+    """Choose the next Brief focus from the three fixed Brief categories."""
     pending = _pending_confirmation(brief_state)
     if pending:
         field = str(pending.get("field") or "")
+        category = BRIEF_CATEGORY_BY_FIELD.get(field) or {}
         return {
             "field": field,
+            "category": str(category.get("key") or ""),
+            "missing_fields": [field],
             "label": str(pending.get("label") or FIELD_LABELS.get(field, field)),
             "question": _pending_confirmation_question(pending),
         }
 
     filled = _filled_fields(brief_state) | set(filled_overrides or set())
-    for field, question in NEXT_QUESTION_PRIORITY:
-        if field not in filled:
+    for category in BRIEF_CATEGORY_GROUPS:
+        missing = [field for field in category["fields"] if field not in filled]
+        if missing:
             return {
-                "field": field,
-                "label": FIELD_LABELS.get(field, field),
-                "question": question,
+                "field": missing[0],
+                "category": category["key"],
+                "label": category["label"],
+                "missing_fields": missing,
+                "missing_labels": [FIELD_LABELS.get(field, field) for field in missing],
+                "question": category["question"],
             }
     return None
+
+
+def _brief_category_gap_lines(brief_state: dict[str, Any], filled: set[str]) -> str:
+    lines = []
+    for category in BRIEF_CATEGORY_GROUPS:
+        missing_labels = [
+            FIELD_LABELS.get(field, field)
+            for field in category["fields"]
+            if field not in filled
+        ]
+        if missing_labels:
+            lines.append(f"- {category['label']}：{', '.join(missing_labels)}")
+        else:
+            lines.append(f"- {category['label']}：暂无明显缺口")
+    return "\n".join(lines)
 
 
 def build_brief_agent_instruction(
@@ -231,12 +321,21 @@ def build_brief_agent_instruction(
     brief_state = (agent_state or {}).get("brief_state") or {}
     next_question = select_next_brief_question(brief_state)
     filled = sorted(_filled_fields(brief_state))
+    filled_set = set(filled)
     filled_labels = [FIELD_LABELS.get(field, field) for field in filled]
     pending = _pending_confirmation(brief_state)
     pending_block = ""
     if pending:
         pending_block = (
             "- 当前存在一个待用户确认的 Brief 候选。只能围绕该候选确认，不要把它当成已确认事实，也不要重复问开放式城市/规格问题。\n"
+        )
+    creative_evaluation_hint_block = ""
+    if should_show_creative_evaluation_hint(agent_state):
+        creative_evaluation_hint_block = (
+            "- 本轮需要插入一次非阻塞创意评估提醒：如果用户已有自己的创意概念，可以随时发来做创意评估；"
+            "如果没有，后续也会基于当前 Brief 生成一版 AI 创意方向。\n"
+            "- 这个提醒不能变成一个选择题，不要要求用户回答“有/没有”，不要创建等待状态；提醒后必须继续当前 Brief 的自然下一问。\n"
+            "- 下一问必须由当前 Brief 缺口决定，不要把下一问锁定为屏幕规格、交付时间或任何固定字段。\n"
         )
 
     if not next_question:
@@ -249,39 +348,60 @@ def build_brief_agent_instruction(
         "\n\n【Brief 子 Agent 下一问约束】\n"
         "- 追问必须基于当前动态 Brief 状态，而不是固定模板。\n"
         f"- 已填字段：{', '.join(filled_labels) if filled_labels else '暂无'}。\n"
+        "- Brief 固定分为三大类：基础信息、创意方向、技术与交付。总体按这个顺序推进，但不是字段硬顺序；你可以在当前大类里自行判断下一步问哪个缺口最自然、最有判断价值。\n"
+        + "当前三大类缺口：\n"
+        + _brief_category_gap_lines(brief_state, filled_set)
+        + "\n"
         + pending_block
-        + f"- 当前只允许围绕「{next_question['label']}」追问一个自然问题。\n"
-        + f"- 建议下一问：{next_question['question']}\n"
+        + creative_evaluation_hint_block
+        + "- 可以按信息复杂度给出专业判断承接用户刚补充的信息，说明它对创意成立、裸眼3D空间、制作或上刊判断的影响；这不是每轮必须，用户只是短答、确认或信息很少时可以直接自然追问，避免啰嗦，也不要只做机械确认。\n"
+        + "- 如果本轮涉及关键 Brief 信息，例如点位、规格、观看关系、创意动作机制、预算周期、审核边界或交付要求，可以适度展开专业影响；但不要为了显得专业而写成小报告。\n"
+        + "- 承接必须优先回应用户最新输入，不要复述上一轮 assistant 的专业判断；如果用户刚回答的是参数、时间、受众这类短信息，先确认这条新信息的作用，再追问下一个缺口。\n"
+        + "- 避免连续使用同一种过渡句式，尤其不要每轮都用“既然……已经明确”“接下来我们需要……”。可以直接用更轻的承接，例如“这个信息够用了”“我先按这个记录”“下一步主要看……”。\n"
+        + "- 如果信息密度较高、包含多个判断点，或需要同时承接信息与追问，可以使用简洁 Markdown 提升可读性；Markdown 不是固定模板，可以只是自然分段、少量加粗关键事实或关键判断，或少量列表。\n"
+        + "- 当回复同时包含专业判断和下一问时，必须分成至少两个短段落，最后一个问题单独成段。\n"
+        + "- 凡是会进入 Brief 的内容信息都属于重点信息，包括用户刚确认或补充的信息、状态里已确认并用于承接的信息、需要用户确认的候选信息，以及影响下一步判断的关键字段。\n"
+        + "- 加粗只用于帮助客户快速抓住关键事实或关键结论；可以克制地少量加粗具体 Brief 内容，例如点位、屏幕规格、观看视角、主题、角色、风格、动作机制、受众、预算、上刊时间、审核边界、交付规格、参考素材状态或短判断。\n"
+        + "- 只加粗具体 Brief 内容或关键判断，不加粗模板词、流程词或固定标题，比如“已记录”“下一步”“重点判断”。只有纯确认或一句话短追问可以不加粗；如果回复同时承担解释、判断和引导，需要自然使用 2-4 个阅读锚点。阅读锚点由语义选择，可以是核心概念、关键判断、关键范围或用户最需要记住的信息。\n"
+        + "- 不要每轮都使用固定标题，如 **重点判断**、**下一步**。\n"
+        + f"- 下一轮优先关注大类：「{next_question['label']}」。只追问一个自然问题。\n"
+        + (
+            _pending_confirmation_llm_context(pending)
+            if pending
+            else (
+                f"- 下一问可覆盖的缺口字段：{', '.join(next_question.get('missing_labels') or [next_question['label']])}。\n"
+                "- 不要输出字段清单，不要问用户想先确认哪一项；必须自行选择一个最有判断价值的具体缺口，直接问一个具体问题。\n"
+                "- 如果用户上一轮只是选择了某个信息维度、但没有给出具体内容，要围绕该维度追问具体内容；"
+                "如果该维度在当前 Brief 中已存在，则自然转向同大类里未填的具体缺口。\n"
+            )
+        )
         + "- 禁止追问已填字段；如果点位、屏幕位置或规格已在状态中存在，不要再问投放点位或屏幕规格。\n"
     )
 
 
 def _asked_filled_fields(reply: str, brief_state: dict[str, Any]) -> set[str]:
-    tail = (reply or "")[-260:].lower()
-    if "？" not in tail and "?" not in tail:
+    question = _last_question_text(reply).lower()
+    if not question:
         return set()
     filled = _filled_fields(brief_state)
     asked: set[str] = set()
     for field, keywords in QUESTION_KEYWORDS_BY_FIELD.items():
         if field not in filled:
             continue
-        if any(keyword.lower() in tail for keyword in keywords):
+        if any(keyword.lower() in question for keyword in keywords):
             asked.add(field)
     return asked
 
 
-def _asked_pending_fields(reply: str, brief_state: dict[str, Any]) -> set[str]:
-    tail = (reply or "")[-260:].lower()
-    if "？" not in tail and "?" not in tail:
-        return set()
-    pending = _pending_confirmation(brief_state)
-    if not pending:
-        return set()
-    field = str(pending.get("field") or "")
-    keywords = QUESTION_KEYWORDS_BY_FIELD.get(field, ())
-    if any(keyword.lower() in tail for keyword in keywords):
-        return {field}
-    return set()
+def _last_question_text(reply: str) -> str:
+    text = str(reply or "")[-400:]
+    question_marks = [text.rfind("？"), text.rfind("?")]
+    end = max(question_marks)
+    if end < 0:
+        return ""
+    before = text[:end]
+    start = max(before.rfind("\n"), before.rfind("。"), before.rfind("！"), before.rfind("!"), before.rfind("？"), before.rfind("?"))
+    return text[start + 1 : end + 1].strip()
 
 
 def _remove_redundant_trailing_question(reply: str, asked_fields: set[str]) -> str:
@@ -320,19 +440,18 @@ def sanitize_brief_agent_reply(
     agent_state: dict[str, Any] | None,
     memory_hints: dict[str, str] | None = None,
 ) -> str:
-    """Replace redundant questions about filled fields with the state-driven next question."""
+    """Observe redundant questions about confirmed fields without rewriting user-facing copy."""
     brief_state = (agent_state or {}).get("brief_state") or {}
     if not brief_state or not reply:
         return reply
 
-    asked_fields = _asked_filled_fields(reply, brief_state) | _asked_pending_fields(reply, brief_state)
-    if not asked_fields:
-        return reply
-
-    cleaned = _remove_redundant_trailing_question(reply, asked_fields)
-    next_question = select_next_brief_question(brief_state)
-    if not next_question:
-        return cleaned
-    if next_question["question"] in cleaned:
-        return cleaned
-    return (cleaned.rstrip() + "\n\n" + next_question["question"]).strip()
+    asked_fields = _asked_filled_fields(reply, brief_state)
+    if asked_fields:
+        question = _last_question_text(reply)
+        logger.info(
+            "brief_agent_sanitizer_observed_redundant_question "
+            f"fields={','.join(sorted(asked_fields))} "
+            f"reply_chars={len(str(reply))} "
+            f"question_chars={len(question)}"
+        )
+    return reply

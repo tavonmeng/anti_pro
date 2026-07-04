@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_client import post_chat_completion
+from app.services.ai_opening_copy import build_ai_3d_custom_brief_opening
 from app.services.platform_service_catalog import get_consultation_intro
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
@@ -107,8 +108,7 @@ def _build_order_entry_reply(business_type: str, requirement_summary: str = "") 
         return (
             f"好的，已为您匹配「{label}」。"
             f"{summary_line}\n\n"
-            "接下来我会从基础信息、创意方向、技术与交付几方面帮助您梳理。"
-            "您可以先简单说说，这次大概想做什么样的内容？"
+            + build_ai_3d_custom_brief_opening(prefix="")
         )
     return (
         f"好的，已为您匹配「{label}」。"

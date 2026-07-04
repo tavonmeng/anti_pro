@@ -97,7 +97,7 @@ async def test_summarize_uploaded_images_calls_multimodal_model(monkeypatch, tmp
 
 
 @pytest.mark.asyncio
-async def test_ai_chat_augments_image_context_before_state_update(monkeypatch, tmp_path):
+async def test_ai_chat_uses_current_image_context_without_needing_state_persistence(monkeypatch, tmp_path):
     upload_root = tmp_path / "uploads"
     image_path = upload_root / "site_photos" / "user-test" / "scene.png"
     image_path.parent.mkdir(parents=True)
@@ -120,7 +120,18 @@ async def test_ai_chat_augments_image_context_before_state_update(monkeypatch, t
 
     async def fake_update_agent_state(**kwargs):
         captured_state["message"] = kwargs["message"]
-        return {"brief_state": {"fields": {}}}
+        return {
+            "brief_state": {"fields": {}},
+            "agent_context_window": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "[用户上传了图片素材]",
+                        "source_message_id": kwargs.get("source_message_id"),
+                    }
+                ]
+            },
+        }
 
     async def fake_main_completion(payload, *, timeout=None, attempts=None):
         captured_state["llm_message"] = payload["messages"][-1]["content"]
@@ -150,8 +161,80 @@ async def test_ai_chat_augments_image_context_before_state_update(monkeypatch, t
     )
 
     assert "毛绒熊猫方向" in response["message"]
-    assert image_module.IMAGE_CONTEXT_MARKER in captured_state["message"]
     assert "主视觉角色、毛绒材质" in captured_state["llm_message"]
+    assert image_module.IMAGE_CONTEXT_MARKER in captured_state["llm_message"]
+
+
+@pytest.mark.asyncio
+async def test_ai_orchestrate_keeps_image_context_out_of_router_state(monkeypatch):
+    monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "test-key")
+
+    async def fake_memory_hints(_user_id):
+        return {}
+
+    monkeypatch.setattr(ai_module, "_build_memory_hints", fake_memory_hints)
+
+    async def fake_image_summary(*_, **__):
+        raise AssertionError("orchestrate should not consume image content before routing")
+
+    captured = {}
+
+    async def fake_update_agent_state(**kwargs):
+        captured["state_message"] = kwargs["message"]
+        return {
+            "brief_state": {"fields": {}, "readiness": {"level": "insufficient"}},
+            "agent_context_window": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": kwargs["message"],
+                        "source_message_id": kwargs.get("source_message_id"),
+                    }
+                ]
+            },
+        }
+
+    async def fake_decide_route(context):
+        captured["router_message"] = context.message
+        return ai_module.RouteDecision(
+            action="switch",
+            intent="creative_direction",
+            target_agent="creative_direction_agent",
+            stage="creative_direction",
+            business_type="ai_3d_custom",
+            reason="用户要基于图片做创意延展",
+        )
+
+    monkeypatch.setattr(ai_module, "summarize_uploaded_images", fake_image_summary)
+    monkeypatch.setattr(ai_module, "_update_agent_state_for_message", fake_update_agent_state)
+    monkeypatch.setattr(ai_module, "decide_route", fake_decide_route)
+
+    response = await ai_module.ai_orchestrate(
+        ai_module.OrchestrateRequest(
+            session_id="test-session",
+            message="我想基于上传的图片做一些创意延展，请先告诉我可以从哪些方向展开。",
+            history=[],
+            current_agent="brief_agent",
+            stage="brief_building",
+            business_type="ai_3d_custom",
+            user_message_id="user-msg-1",
+            attachments=[
+                image_module.UploadedAttachment(
+                    name="scene.png",
+                    url="/uploads/site_photos/user-test/scene.png",
+                    type="image/png",
+                    isImage=True,
+                    size=14,
+                )
+            ],
+        ),
+        _FakeUser(),
+    )
+
+    assert response["target_agent"] == "creative_direction_agent"
+    assert image_module.IMAGE_CONTEXT_MARKER not in captured["state_message"]
+    assert image_module.IMAGE_CONTEXT_MARKER not in captured["router_message"]
+    assert "毛绒质感熊猫参考图" not in captured["router_message"]
 
 
 def test_upload_reply_sanitizer_allows_visual_claims_when_image_summary_exists():

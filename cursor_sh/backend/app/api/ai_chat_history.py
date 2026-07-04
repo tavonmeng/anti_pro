@@ -16,6 +16,7 @@ from app.database import get_db
 from app.models.ai_chat import AIChatSession, AIChatMessage
 from app.models.user import User
 from app.schemas.response import ApiResponse
+from app.services.ai_brief_state import load_agent_state
 from app.utils.dependencies import get_current_user_for_public_deployment, require_internal_admin, AnyUser
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
@@ -479,6 +480,43 @@ async def get_session_messages(
             error=str(e),
         )
         return {"code": 200, "data": []}
+
+
+@router.get("/sessions/{session_id}/state")
+async def get_session_state(
+    session_id: str,
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取某个会话对应的 AI Agent 状态，用于历史会话恢复后继续对话。"""
+    user_id, _ = _user_identity(current_user)
+
+    try:
+        session_result = await db.execute(
+            select(AIChatSession).where(AIChatSession.id == session_id)
+        )
+        session = session_result.scalar_one_or_none()
+        if not session:
+            return {"code": 404, "data": None, "message": "会话不存在"}
+        if session.user_id != user_id:
+            return {"code": 403, "data": None, "message": "无权查看"}
+
+        state = load_agent_state(
+            session_id=session_id,
+            user_id=user_id,
+            business_type=session.business_type or "ai_3d_custom",
+        )
+        return {"code": 200, "data": state}
+    except Exception as e:
+        log_business_event(
+            logger,
+            "ai_chat_history_state_failed",
+            level="warning",
+            user_id=user_id,
+            session_id=session_id,
+            error=str(e),
+        )
+        return {"code": 200, "data": None}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

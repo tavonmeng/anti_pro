@@ -230,7 +230,7 @@
     
     <div class="form-actions">
       <button class="btn-secondary" @click="handleCancel">取消</button>
-      <button class="btn-draft" @click="handleSaveDraft">保存草稿</button>
+      <button class="btn-draft" @click="handleSaveDraft">保存为订单草稿</button>
       <button class="btn-primary" @click="handleSubmit">确认提交</button>
     </div>
   </div>

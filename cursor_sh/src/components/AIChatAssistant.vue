@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-assistant-wrapper">
+  <div class="ai-assistant-wrapper" :class="{ 'is-mobile-keyboard-open': isMobileKeyboardOpen }">
     <!-- Expanded View (Sidebar Chat) -->
     <div class="expanded-view">
       <!-- Stitch Header -->
@@ -30,7 +30,7 @@
           <!-- Welcome + Quick Actions -->
           <div v-if="!selectedMode" class="welcome-section message assistant">
             <div class="assistant-wrapper">
-              <div class="assistant-tag"><span class="engine-name">智能引擎</span> <span class="pro-badge">专业版</span></div>
+              <div class="assistant-tag"><span class="engine-name">创意提案总监</span></div>
               <div class="message-bubble glass-ai welcome-bubble">
                 <p class="welcome-text">
                   {{ welcomeTitleText }}<span v-if="!showWelcomeOptions && welcomeTitleText.length < welcomeTitleFull.length" class="typing-cursor">|</span>
@@ -38,26 +38,6 @@
                 <p class="welcome-sub" v-if="welcomeTitleText.length === welcomeTitleFull.length || showWelcomeOptions">
                   {{ welcomeDescText }}<span v-if="!showWelcomeOptions && welcomeDescText.length < welcomeDescFull.length" class="typing-cursor">|</span>
                 </p>
-                
-                <transition name="fade">
-                  <div v-if="showWelcomeOptions">
-                    <div class="options-container stitched-options">
-                      <div class="option-card stitch-card" @click="selectMode('order_create')">
-                        <span class="opt-text">咨询下单</span>
-                        <span class="opt-desc">梳理项目需求，创建订单</span>
-                      </div>
-                      <div class="option-card stitch-card" @click="selectMode('order_query')">
-                        <span class="opt-text">查看订单</span>
-                        <span class="opt-desc">查询订单进展与状态</span>
-                      </div>
-                      <div class="option-card stitch-card" @click="selectMode('business_intro')">
-                        <span class="opt-text">了解业务</span>
-                        <span class="opt-desc">服务体系与咨询顾问</span>
-                      </div>
-                    </div>
-                    <p class="welcome-hint">也可以直接在下方输入您的问题</p>
-                  </div>
-                </transition>
               </div>
             </div>
           </div>
@@ -127,7 +107,7 @@
 
             <template v-else>
               <div class="assistant-wrapper">
-                <div class="assistant-tag"><span class="engine-name">智能引擎</span></div>
+                <div class="assistant-tag"><span class="engine-name">创意提案总监</span></div>
                 <div class="message-bubble glass-ai">
                   <p v-if="msg.isThinkingStatus" class="bubble-text thinking-status">
                     <span class="thinking-status-text">{{ displayContent(msg.content) }}</span>
@@ -211,7 +191,7 @@
                         <button class="comp-btn comp-btn-ghost" @click="handleContinueEditing(msg)">继续对话补充</button>
                         <button class="comp-btn comp-btn-primary" @click="handleSubmitOrder">确认无误，提交订单</button>
                       </div>
-                      <p class="auto-draft-notice" v-if="draftSavedOrderId">已自动保存至草稿箱</p>
+                      <p class="auto-draft-notice" v-if="draftSavedOrderId">{{ orderDraftCopy.savedToDrafts }}</p>
                     </template>
                   </div>
                   <!-- 订单列表卡片展示 -->
@@ -272,9 +252,9 @@
             </template>
           </div>
           
-          <div v-if="isLoading" class="message assistant">
+          <div v-if="showGlobalAssistantLoading" class="message assistant">
             <div class="assistant-wrapper">
-               <div class="assistant-tag"><span class="engine-name">智能引擎</span></div>
+               <div class="assistant-tag"><span class="engine-name">创意提案总监</span></div>
                <div class="message-bubble glass-ai typing">
                  <span>智能体思考中</span>
                  <span class="thinking-ellipsis" aria-hidden="true">
@@ -290,6 +270,31 @@
           </div>
         </div>
       </div>
+
+      <transition
+        :css="false"
+        @enter="handleQuickStartsEnter"
+        @leave="handleQuickStartsLeave"
+      >
+        <div
+          v-if="showWelcomeOptions && !selectedMode && !inputMsg.trim() && uploadedFiles.length === 0 && !isRecording && !isTranscribing"
+          class="composer-quick-starts-shell"
+        >
+          <div class="composer-quick-starts">
+            <button
+              v-for="item in welcomeQuickStarts"
+              :key="item.label"
+              type="button"
+              class="composer-suggestion"
+              :disabled="isLoading || isTyping"
+              @click="handleWelcomePromptSuggestion(item.prompt)"
+            >
+              <el-icon class="suggestion-icon"><component :is="getWelcomeSuggestionIcon(item.kind)" /></el-icon>
+              <span>{{ item.label }}</span>
+            </button>
+          </div>
+        </div>
+      </transition>
 
       <!-- Input Area — Stitch Style Pill -->
       <div class="input-area-container">
@@ -350,6 +355,7 @@
                 @compositionend="isComposing = false"
                 :disabled="isLoading || isTyping || isRecording"
                 @focus="handleInputFocus"
+                @blur="handleInputBlur"
                 rows="1"
               ></textarea>
               
@@ -428,7 +434,8 @@
 import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Close, Right, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Loading, Plus, Check } from '@element-plus/icons-vue'
+import { Close, Top, QuestionFilled, CirclePlusFilled, PictureRounded, Search, Loading, Plus, Check } from '@element-plus/icons-vue'
+import gsap from 'gsap'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import { useOrderStore } from '@/stores/order'
@@ -437,7 +444,11 @@ import { useUiStore } from '@/stores/ui'
 import { logger } from '@/utils/logger'
 import { chatHistoryApi, orderApi } from '@/utils/api'
 import { toAiAttachmentPayload } from '@/utils/chatAttachments'
+import { getModeForTargetAgent, getRouterStateForMode } from '@/utils/aiOrchestratorRouting'
+import { normalizeAssistantMarkdown } from '@/utils/assistantMarkdown'
+import { orderDraftCopy } from '@/utils/orderDraftCopy'
 import { prepareAssistantTypewriterTarget } from '@/utils/messageTypewriter'
+import { getAssistantWelcomeCopy, welcomeQuickStarts, type WelcomeQuickStart } from '@/utils/assistantWelcome'
 import {
   createAiChatSessionFromRemote,
   deleteAiChatSession,
@@ -728,13 +739,97 @@ const getAuthHeaders = () => {
 const agentMode = import.meta.env.VITE_AGENT_MODE || 'media'
 const isMediaMode = agentMode === 'media'
 
-const welcomeTitleFull = '您好，我是 Unique Vision AI 的创意提案总监。'
-const welcomeDescFull = isMediaMode
-  ? '我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多媒体方客户提供过高品质的裸眼3D视觉内容解决方案。'
-  : '我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多一线品牌提供过高品质视觉解决方案。'
+const welcomeCopy = getAssistantWelcomeCopy(agentMode)
+const welcomeTitleFull = welcomeCopy.title
+const welcomeDescFull = welcomeCopy.description
 const welcomeTitleText = ref('')
 const welcomeDescText = ref('')
 const showWelcomeOptions = ref(false)
+const welcomeSuggestionIconMap = {
+  create: CirclePlusFilled,
+  evaluate: QuestionFilled,
+  image: PictureRounded,
+  order: Search,
+} as const
+
+const getWelcomeSuggestionIcon = (kind: WelcomeQuickStart['kind']) => {
+  return welcomeSuggestionIconMap[kind] || CirclePlusFilled
+}
+
+const prefersReducedMotion = () => {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+const getQuickStartMotionTargets = (el: Element) => {
+  const shell = el as HTMLElement
+  const strip = shell.querySelector<HTMLElement>('.composer-quick-starts')
+  const chips = Array.from(shell.querySelectorAll<HTMLElement>('.composer-suggestion'))
+  return { shell, strip, chips }
+}
+
+const clearQuickStartMotion = (targets: Array<HTMLElement | null | undefined>) => {
+  const elements = targets.filter(Boolean) as HTMLElement[]
+  if (elements.length === 0) return
+  gsap.set(elements, { clearProps: 'opacity,visibility,transform,filter' })
+}
+
+const handleQuickStartsEnter = (el: Element, done: () => void) => {
+  const { shell, chips } = getQuickStartMotionTargets(el)
+  const targets = [shell, ...chips].filter(Boolean) as HTMLElement[]
+  gsap.killTweensOf(targets)
+
+  if (prefersReducedMotion() || chips.length === 0) {
+    clearQuickStartMotion(targets)
+    done()
+    return
+  }
+
+  gsap.set(shell, { autoAlpha: 0, y: 10, filter: 'blur(8px)' })
+  gsap.set(chips, { autoAlpha: 0, y: 8, scale: 0.96, filter: 'blur(4px)' })
+
+  gsap.timeline({
+    defaults: { ease: 'power3.out' },
+    onComplete: () => {
+      clearQuickStartMotion(targets)
+      done()
+    },
+  })
+    .to(shell, { autoAlpha: 1, y: 0, filter: 'blur(0px)', duration: 0.42 })
+    .to(chips, {
+      autoAlpha: 1,
+      y: 0,
+      scale: 1,
+      filter: 'blur(0px)',
+      duration: 0.42,
+      ease: 'sine.out',
+      stagger: 0.055,
+    }, 0.08)
+}
+
+const handleQuickStartsLeave = (el: Element, done: () => void) => {
+  const { shell, strip, chips } = getQuickStartMotionTargets(el)
+  const targets = [shell, strip, ...chips].filter(Boolean) as HTMLElement[]
+  gsap.killTweensOf(targets)
+
+  if (prefersReducedMotion()) {
+    done()
+    return
+  }
+
+  gsap.to(shell, {
+    autoAlpha: 0,
+    y: 4,
+    filter: 'blur(4px)',
+    duration: 0.18,
+    ease: 'power2.in',
+    onComplete: () => {
+      clearQuickStartMotion(targets)
+      done()
+    },
+  })
+}
 
 const playWelcomeAnimation = () => {
   welcomeTitleText.value = ''
@@ -941,7 +1036,7 @@ const buildUserMessageContent = (text: string, files: UploadedFile[]) => {
 }
 
 const HUMAN_HANDOFF_MARKER = '【转人工】'
-const HUMAN_HANDOFF_FALLBACK_REPLY = '已识别到您希望转人工，但当前系统未能完成草稿保存和管理员通知。请稍后重试。'
+const HUMAN_HANDOFF_FALLBACK_REPLY = '已识别到您希望转人工，但当前系统未能完成订单草稿保存和管理员通知。请稍后重试。'
 
 const isHumanHandoffRequest = (text: string = '') => {
   const normalized = text.toLowerCase().replace(/\s+/g, '')
@@ -1036,6 +1131,95 @@ const inlineEditTextareaRef = ref<HTMLTextAreaElement | null>(null)
 const inlineEditingKey = ref('')
 const inlineEditText = ref('')
 const isComposing = ref(false) // 中文输入法组合输入状态
+const isMobileKeyboardOpen = ref(false)
+let mobileViewportBaseline = 0
+let mobileViewportFrame: number | null = null
+let mobileViewportTimers: Array<ReturnType<typeof setTimeout>> = []
+
+const isMobileViewport = () => {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(max-width: 768px)').matches
+}
+
+const updateMobileViewportMetrics = () => {
+  if (typeof window === 'undefined') return
+  if (!isMobileViewport()) {
+    mobileViewportBaseline = 0
+    cleanupMobileViewportMetrics()
+    return
+  }
+
+  const visualViewport = window.visualViewport
+  const viewportHeight = Math.round(visualViewport?.height || window.innerHeight)
+  const viewportOffsetTop = Math.round(visualViewport?.offsetTop || 0)
+  mobileViewportBaseline = Math.max(mobileViewportBaseline, window.innerHeight, viewportHeight)
+  const activeElement = document.activeElement
+  const isComposerFocused = activeElement === textareaRef.value
+  const keyboardOpen = isComposerFocused && (mobileViewportBaseline - viewportHeight > 80 || viewportOffsetTop > 0)
+
+  isMobileKeyboardOpen.value = keyboardOpen
+  setMobileKeyboardRootLock(keyboardOpen)
+  const root = document.documentElement
+  root.style.setProperty('--uv-ai-mobile-visual-height', `${viewportHeight}px`)
+  root.style.setProperty('--uv-ai-mobile-visual-top', `${viewportOffsetTop}px`)
+
+  if (keyboardOpen && window.scrollY !== 0) {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }
+}
+
+const cleanupMobileViewportMetrics = () => {
+  clearScheduledMobileViewportSync()
+  isMobileKeyboardOpen.value = false
+  setMobileKeyboardRootLock(false)
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.removeProperty('--uv-ai-mobile-visual-height')
+    document.documentElement.style.removeProperty('--uv-ai-mobile-visual-top')
+  }
+}
+
+const setMobileKeyboardRootLock = (locked: boolean) => {
+  if (typeof document === 'undefined') return
+  document.documentElement.classList.toggle('uv-ai-mobile-keyboard-open', locked)
+  document.body?.classList.toggle('uv-ai-mobile-keyboard-open', locked)
+}
+
+const clearScheduledMobileViewportSync = () => {
+  if (typeof window === 'undefined') return
+  if (mobileViewportFrame !== null) {
+    window.cancelAnimationFrame(mobileViewportFrame)
+    mobileViewportFrame = null
+  }
+  mobileViewportTimers.forEach(timer => window.clearTimeout(timer))
+  mobileViewportTimers = []
+}
+
+const scheduleMobileViewportSync = () => {
+  if (typeof window === 'undefined' || !isMobileViewport()) return
+  clearScheduledMobileViewportSync()
+  updateMobileViewportMetrics()
+
+  mobileViewportFrame = window.requestAnimationFrame(() => {
+    mobileViewportFrame = null
+    updateMobileViewportMetrics()
+  })
+
+  mobileViewportTimers = [80, 180, 320, 520, 800].map(delay => window.setTimeout(() => {
+    updateMobileViewportMetrics()
+  }, delay))
+}
+
+const focusComposerInput = () => {
+  const input = textareaRef.value
+  if (!input) return
+  try {
+    input.focus({ preventScroll: true })
+  } catch {
+    input.focus()
+  }
+  scheduleMobileViewportSync()
+}
 
 const adjustTextareaHeight = () => {
   const ta = textareaRef.value
@@ -1064,14 +1248,35 @@ const handleEnterKey = (e: KeyboardEvent) => {
 }
 
 const handleInputFocus = () => {
+  scheduleMobileViewportSync()
+  setTimeout(() => {
+    if (isMobileViewport()) void scrollToBottom(true)
+  }, 180)
+
   if (!selectedMode.value) {
-    // Gentle visual hint: the welcome options flash
-    const el = document.querySelector('.stitched-options')
+    // Gentle visual hint: the welcome quick starts flash
+    const el = document.querySelector('.composer-quick-starts')
     if (el) {
       el.classList.add('hint-flash')
       setTimeout(() => el.classList.remove('hint-flash'), 600)
     }
   }
+}
+
+const handleInputBlur = () => {
+  setTimeout(() => {
+    if (document.activeElement !== textareaRef.value) {
+      cleanupMobileViewportMetrics()
+    }
+  }, 120)
+}
+
+const handleWelcomePromptSuggestion = async (prompt: string) => {
+  if (isLoading.value || isTyping.value) return
+  inputMsg.value = prompt
+  await nextTick()
+  adjustTextareaHeight()
+  focusComposerInput()
 }
 
 const collapse = () => {
@@ -1118,6 +1323,7 @@ const startNewSession = () => {
   clearInlineEdit()
   messages.value = []
   selectedMode.value = null
+  emit('mode-change', null)
   businessType.value = 'ai_3d_custom'
   inlineFormData.value = null
   agentState.value = null
@@ -1151,6 +1357,14 @@ const displayedMessages = computed(() => {
     if (m.isOrderList || m.isGuideToOrder || m.isPurchasePrompt || m.isCompletePrompt || m.isHumanHandoff) return true
     return false
   })
+})
+
+const hasVisibleThinkingStatus = computed(() => {
+  return messages.value.some(m => m.role === 'assistant' && m.isThinkingStatus)
+})
+
+const showGlobalAssistantLoading = computed(() => {
+  return isLoading.value && !hasVisibleThinkingStatus.value
 })
 
 type SavedSession = AiChatSavedSession
@@ -1198,6 +1412,24 @@ const loadSavedHistory = () => {
   savedHistories.value = loadAiChatSessions(getCurrentUserId())
 }
 
+const enrichSessionWithBackendAgentState = async (session: SavedSession): Promise<SavedSession> => {
+  if (session.stateSnapshot?.agentState || !localStorage.getItem('token')) return session
+  try {
+    const remoteState = await chatHistoryApi.getSessionState(session.id)
+    if (!remoteState || typeof remoteState !== 'object') return session
+    return {
+      ...session,
+      stateSnapshot: {
+        ...(session.stateSnapshot || {}),
+        agentState: remoteState,
+      },
+    }
+  } catch (error) {
+    console.warn('[ChatHistory] 恢复 Agent 状态失败:', session.id, error)
+    return session
+  }
+}
+
 const loadBackendHistoryById = async (id: string): Promise<SavedSession | null> => {
   if (!localStorage.getItem('token')) return null
   try {
@@ -1213,8 +1445,9 @@ const loadBackendHistoryById = async (id: string): Promise<SavedSession | null> 
       Array.isArray(remoteMessages) ? remoteMessages : [],
     )
     if (session.messages.length === 0) return null
-    savedHistories.value = upsertAiChatSession(getCurrentUserId(), session)
-    return session
+    const hydratedSession = await enrichSessionWithBackendAgentState(session)
+    savedHistories.value = upsertAiChatSession(getCurrentUserId(), hydratedSession)
+    return hydratedSession
   } catch (error) {
     console.warn('[ChatHistory] 从后端恢复历史失败:', error)
     return null
@@ -1228,6 +1461,11 @@ onMounted(() => {
   if (uiStore.pendingAIChatSessionId) {
     void restoreHistoryById(uiStore.pendingAIChatSessionId)
   }
+  updateMobileViewportMetrics()
+  window.visualViewport?.addEventListener('resize', updateMobileViewportMetrics)
+  window.visualViewport?.addEventListener('scroll', updateMobileViewportMetrics)
+  window.addEventListener('resize', updateMobileViewportMetrics)
+  window.addEventListener('orientationchange', scheduleMobileViewportSync)
   // 监听浏览器关闭/刷新事件，确保保存聊天记录
   window.addEventListener('beforeunload', _handleBeforeUnload)
 })
@@ -1241,6 +1479,11 @@ watch(() => uiStore.pendingAIChatSessionId, (sessionId) => {
 // 1. 组件卸载时保存（父组件切换、v-if 销毁等）
 onBeforeUnmount(() => {
   saveCurrentToHistory()
+  window.visualViewport?.removeEventListener('resize', updateMobileViewportMetrics)
+  window.visualViewport?.removeEventListener('scroll', updateMobileViewportMetrics)
+  window.removeEventListener('resize', updateMobileViewportMetrics)
+  window.removeEventListener('orientationchange', scheduleMobileViewportSync)
+  cleanupMobileViewportMetrics()
   window.removeEventListener('beforeunload', _handleBeforeUnload)
   // 清理语音录制资源
   if (isRecording.value) cleanupRecording()
@@ -1625,6 +1868,9 @@ const restoreHistoryById = async (id: string) => {
   let history = savedHistories.value.find(session => session.id === id)
   if (!history) {
     history = await loadBackendHistoryById(id) || undefined
+  } else if (!history.stateSnapshot?.agentState) {
+    history = await enrichSessionWithBackendAgentState(history)
+    savedHistories.value = upsertAiChatSession(getCurrentUserId(), history)
   }
   if (!history) {
     uiStore.clearPendingAIChatSession()
@@ -1705,7 +1951,7 @@ const highlightSearchInHtml = (html: string) => {
 }
 
 const renderAssistantContent = (text: string) => {
-  const rendered = markdown.render(displayContent(text))
+  const rendered = markdown.render(normalizeAssistantMarkdown(displayContent(text)))
   const clean = DOMPurify.sanitize(rendered, {
     ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'a', 'code', 'pre', 'blockquote', 'hr', 'mark'],
     ALLOWED_ATTR: ['href', 'target', 'rel', 'class']
@@ -1755,7 +2001,7 @@ const typewriterEffect = (fullText: string, onComplete?: () => void | Promise<vo
       
       // 打字结束后自动让输入框获取焦点，方便用户继续输入
       nextTick(() => {
-        textareaRef.value?.focus()
+        focusComposerInput()
       })
       
       ;(async () => {
@@ -1779,7 +2025,7 @@ const getCurrentTime = () => {
 // ===== 订单展示辅助函数 =====
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
-    draft: '草稿', pending_assign: '待分配', pending_contract: '合同与付款',
+    draft: '订单草稿', pending_assign: '待分配', pending_contract: '合同与付款',
     in_production: '制作中',
     pending_review: '待审核', review_rejected: '审核驳回',
     preview_ready: '初稿就绪', final_preview: '终稿就绪',
@@ -1867,6 +2113,16 @@ const continueBriefFromBusinessIntro = async (type: string, requirementSummary: 
   await handleCustomAiChat(handoffText)
 }
 
+const ai3dBriefOpeningFallback = [
+  '好的。',
+  '',
+  '裸眼3D视频和普通平面视频不太一样，它要同时考虑屏幕结构、观看动线、现场空间，以及出屏、入屏这些视觉机制；这些条件会直接影响创意是否成立、制作难度和最终播放效果。',
+  '',
+  '所以前期我会先用轻量对话把 Brief 梳理清楚，不需要您一次准备完整资料。我们会结合项目背景、投放场景和大概目标，围绕三个维度慢慢收拢：基础信息、创意方向以及技术与交付。',
+  '',
+  '您可以先简单说说，这次大概想做什么样的内容？'
+].join('\n')
+
 // 从业务介绍切换到下单 Agent。可见话术统一由后端 /ai/start 输出。
 const switchToOrderCreate = async (type: string = 'ai_3d_custom') => {
   activateOrderCreateFromGuide(type)
@@ -1885,70 +2141,21 @@ const switchToOrderCreate = async (type: string = 'ai_3d_custom') => {
     const result = await response.json()
     if (result.reply) typewriterEffect(result.reply)
   } catch (e) {
-    typewriterEffect('好的。我们会先结合这次项目背景信息、投放场景和大概目标，再从基础信息、创意方向以及技术与交付几方面帮您把需求梳理清楚。您可以先简单说说，这次大概想做什么样的内容？')
+    typewriterEffect(ai3dBriefOpeningFallback)
   } finally {
     isLoading.value = false
   }
 }
 
-const isLikelyOrderCreateRequest = (text: string) => {
-  const normalized = (text || '').replace(/\s+/g, '')
-  if (!normalized) return false
-  const hasOrderQueryContext = /(查询|查看|进度|状态|历史|下过|已下|之前|下单后|订单)/.test(normalized)
-
-  const directCreatePatterns = [
-    /想下单|我要下单|要下单|帮我下单|开始下单|咨询下单/,
-    /创建需求|提交需求|需求单|创建订单|提交订单/,
-  ]
-  if (directCreatePatterns.some(pattern => pattern.test(normalized))) return true
-
-  if (hasOrderQueryContext) return false
-
-  const broadCreatePatterns = [
-    /想做|要做|做一个|做个|需要做|想要做|可以开始/,
-    /定制|想定制|要定制/,
-    /我要买|想买|购买|买一个|买个|买套|成片|模板|现成|成品/,
-  ]
-  if (broadCreatePatterns.some(pattern => pattern.test(normalized))) return true
-
-  return /下单/.test(normalized)
-}
-
-const isLikelyBusinessIntroRequest = (text: string) => {
-  const normalized = (text || '').replace(/\s+/g, '')
-  if (!normalized) return false
-  if (/(订单|进度|状态|查询|查看|历史|下过|已下)/.test(normalized)) return false
-  return /了解|介绍|业务|案例|服务|你们做什么|什么公司|你们公司/.test(normalized)
-}
-
-const classifyMessageRoute = async (message: string) => {
-  try {
-    const response = await fetch('/ai/classify', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ message })
-    })
-    if (!response.ok) return null
-    return await response.json()
-  } catch (e) {
-    return null
-  }
-}
-
 const getRouterAgentState = () => {
-  if (selectedMode.value === 'order_create') {
-    return { current_agent: 'brief_agent', stage: 'brief_building' }
-  }
-  if (selectedMode.value === 'order_query') {
-    return { current_agent: 'order_agent', stage: 'order_query' }
-  }
-  if (selectedMode.value === 'business_intro') {
-    return { current_agent: 'business_intro_agent', stage: 'business_intro' }
-  }
-  return { current_agent: 'general_agent', stage: 'idle' }
+  return getRouterStateForMode(selectedMode.value)
 }
 
-const requestOrchestratorRoute = async (message: string, userMessageId?: string) => {
+const requestOrchestratorRoute = async (
+  message: string,
+  userMessageId?: string,
+  attachments: UploadedFile[] = [],
+) => {
   const historyMsgs = messages.value.slice(0, messages.value.length - 1)
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .map(m => ({ role: m.role, content: m.content }))
@@ -1961,6 +2168,7 @@ const requestOrchestratorRoute = async (message: string, userMessageId?: string)
       history: historyMsgs,
       business_type: businessType.value,
       user_message_id: userMessageId,
+      attachments: toAiAttachmentPayload(attachments),
       ...getRouterAgentState(),
     })
   })
@@ -1968,97 +2176,73 @@ const requestOrchestratorRoute = async (message: string, userMessageId?: string)
   return await response.json()
 }
 
-const rerouteFromOrderQueryIfNeeded = async (
+const dispatchToAgent = async (
+  targetAgent: string,
+  intent: string,
   messageContent: string,
   userMessageId: string,
   attachments: UploadedFile[] = [],
+  controlAction?: string,
 ) => {
-  if (selectedMode.value !== 'order_query') return false
-
-  const shouldCreateOrder = isLikelyOrderCreateRequest(messageContent)
-  const shouldIntroduceBusiness = !shouldCreateOrder && isLikelyBusinessIntroRequest(messageContent)
-  if (!shouldCreateOrder && !shouldIntroduceBusiness) return false
-
-  isLoading.value = true
-  const classified = await classifyMessageRoute(messageContent)
-  if (classified?.business_type) businessType.value = classified.business_type
-
-  if (shouldCreateOrder) {
-    businessType.value = classified?.business_type || businessType.value || 'ai_3d_custom'
+  if (['handoff_requested', 'finish_brief_now', 'ready_to_extract'].includes(controlAction || '')) {
     selectedMode.value = 'order_create'
     emit('mode-change', 'order_create')
-    logger.logAction('AI', 'order_query_rerouted', { intent: 'order_create', businessType: businessType.value, sessionId: session_id.value })
-    await handleCustomAiChat(messageContent, userMessageId, attachments)
-    return true
+    logger.logAction('AI', 'orchestrator_control_action_detected', { intent, targetAgent, controlAction, sessionId: session_id.value })
+    await handleCustomAiChat(messageContent, userMessageId, attachments, controlAction)
+    return
   }
 
-  selectedMode.value = 'business_intro'
-  emit('mode-change', 'business_intro')
-  logger.logAction('AI', 'order_query_rerouted', { intent: 'business_intro', sessionId: session_id.value })
-  await handleBusinessIntro(messageContent)
-  return true
+  const nextMode = getModeForTargetAgent(targetAgent, intent)
+  selectedMode.value = nextMode
+  emit('mode-change', nextMode)
+  logger.logAction('AI', 'orchestrator_route_detected', { intent, targetAgent, sessionId: session_id.value })
+
+  if (nextMode === 'order_query') {
+    await handleOrderQuery(messageContent)
+    return
+  }
+
+  if (nextMode === 'business_intro') {
+    await handleBusinessIntro(messageContent)
+    return
+  }
+
+  if (targetAgent === 'creative_direction_agent' || intent === 'creative_direction') {
+    await handleCreativeDirection(messageContent, attachments)
+    return
+  }
+
+  if (targetAgent === 'creative_diagnosis_agent' || intent === 'creative_diagnosis') {
+    await handleCreativeDiagnosis(messageContent, attachments)
+    return
+  }
+
+  if (nextMode === 'general') {
+    await handleGeneral(messageContent, userMessageId)
+    return
+  }
+
+  await handleCustomAiChat(messageContent, userMessageId, attachments, controlAction)
 }
 
-const rerouteFromOrderCreateIfNeeded = async (
+const routeCurrentMessageWithOrchestrator = async (
   messageContent: string,
   userMessageId: string,
   attachments: UploadedFile[] = [],
 ) => {
-  if (selectedMode.value !== 'order_create') return false
-
   try {
     isLoading.value = true
-    const route = await requestOrchestratorRoute(messageContent, userMessageId)
+    const route = await requestOrchestratorRoute(messageContent, userMessageId, attachments)
     if (route?.agent_state) agentState.value = route.agent_state
     if (route?.business_type) businessType.value = route.business_type
-    if (route?.action !== 'switch') {
+    if (!route) {
       isLoading.value = false
       return false
     }
 
-    const targetAgent = route.target_agent
-    if (targetAgent === 'order_agent' || route.intent === 'order_query') {
-      selectedMode.value = 'order_query'
-      emit('mode-change', 'order_query')
-      logger.logAction('AI', 'orchestrator_route_detected', { intent: route.intent, targetAgent, sessionId: session_id.value })
-      await handleOrderQuery(messageContent)
-      return true
-    }
-
-    if (targetAgent === 'business_intro_agent' || route.intent === 'business_intro') {
-      selectedMode.value = 'business_intro'
-      emit('mode-change', 'business_intro')
-      logger.logAction('AI', 'orchestrator_route_detected', { intent: route.intent, targetAgent, sessionId: session_id.value })
-      await handleBusinessIntro(messageContent)
-      return true
-    }
-
-    if (targetAgent === 'creative_direction_agent' || route.intent === 'creative_direction') {
-      selectedMode.value = 'order_create'
-      emit('mode-change', 'order_create')
-      logger.logAction('AI', 'orchestrator_route_detected', { intent: route.intent, targetAgent, sessionId: session_id.value })
-      await handleCreativeDirection(messageContent, attachments)
-      return true
-    }
-
-    if (targetAgent === 'creative_diagnosis_agent' || route.intent === 'creative_diagnosis') {
-      selectedMode.value = 'order_create'
-      emit('mode-change', 'order_create')
-      logger.logAction('AI', 'orchestrator_route_detected', { intent: route.intent, targetAgent, sessionId: session_id.value })
-      await handleCreativeDiagnosis(messageContent, attachments)
-      return true
-    }
-
-    if (targetAgent === 'general_agent' || route.intent === 'general') {
-      selectedMode.value = 'general'
-      emit('mode-change', 'general')
-      logger.logAction('AI', 'orchestrator_route_detected', { intent: route.intent, targetAgent, sessionId: session_id.value })
-      await handleGeneral(messageContent, userMessageId)
-      return true
-    }
-
-    isLoading.value = false
-    return false
+    const targetAgent = route.target_agent || getRouterAgentState().current_agent
+    await dispatchToAgent(targetAgent, route.intent || 'unclear', messageContent, userMessageId, attachments, route.control_action)
+    return true
   } catch (e) {
     isLoading.value = false
     return false
@@ -2082,7 +2266,7 @@ const selectMode = async (mode: string) => {
       const result = await response.json()
       if (result.reply) typewriterEffect(result.reply)
     } catch (e) {
-      const fallback = '您好，我是 Unique Vision AI 的创意提案总监。\n\n我可以协助您判断创意方向、梳理项目需求、确认关键制作信息，并在信息完整后生成需求单。\n\n请先简单介绍这次项目的背景、投放场景或内容方向。'
+      const fallback = '您好，我是 Unique Vision AI 的创意提案总监。\n\n我们是国内裸眼3D视觉内容与数字艺术创意领域的头部服务商，已为众多媒体方客户提供过高品质的裸眼3D视觉内容解决方案。\n\n我可以协助您判断创意方向、梳理项目需求、确认关键制作信息，并在信息完整后生成需求单。\n\n请先简单介绍这次项目的背景、投放场景或内容方向。'
       typewriterEffect(fallback)
     } finally {
       isLoading.value = false
@@ -2192,54 +2376,13 @@ const sendMessage = async () => {
     textareaRef.value.style.height = 'auto'
   }
   
-  // 如果还没有选择模式，先做意图分类
-  if (!selectedMode.value) {
-    isLoading.value = true
-    try {
-      const classifyRes = await fetch('/ai/classify', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ message: messageContent })
-      })
-      if (classifyRes.ok) {
-        const { intent, business_type } = await classifyRes.json()
-        if (business_type) businessType.value = business_type
-        selectedMode.value = intent
-        emit('mode-change', intent)
-      } else {
-        selectedMode.value = 'order_create'
-        emit('mode-change', 'order_create')
-      }
-    } catch (e) {
-      // 降级：关键词快速匹配
-      if (/订单|进度|状态|查看|查询/.test(userText)) {
-        selectedMode.value = 'order_query'
-      } else if (/了解|介绍|业务|案例|服务/.test(userText)) {
-        selectedMode.value = 'business_intro'
-      } else {
-        selectedMode.value = 'order_create'
-      }
-      emit('mode-change', selectedMode.value)
-    } finally {
-      isLoading.value = false
-    }
+  if (await routeCurrentMessageWithOrchestrator(messageContent, userMessageId, pendingFiles)) {
+    return
   }
-  
-  // 根据当前意图路由到对应 handler
 
-  if (isHumanHandoffRequest(messageContent)) {
+  if (!selectedMode.value) {
     selectedMode.value = 'order_create'
     emit('mode-change', 'order_create')
-    await handleCustomAiChat(messageContent, userMessageId, pendingFiles)
-    return
-  }
-
-  if (await rerouteFromOrderQueryIfNeeded(messageContent, userMessageId, pendingFiles)) {
-    return
-  }
-
-  if (await rerouteFromOrderCreateIfNeeded(messageContent, userMessageId, pendingFiles)) {
-    return
   }
 
   if (selectedMode.value === 'order_create') {
@@ -2374,6 +2517,7 @@ const handleCreativeDirection = async (userText: string, attachments: UploadedFi
     })
     if (!response.ok) throw new Error('creative direction failed')
     const data = await response.json()
+    if (data?.agent_state) agentState.value = data.agent_state
     selectedMode.value = 'order_create'
     emit('mode-change', 'order_create')
     typewriterEffect(
@@ -2409,6 +2553,7 @@ const handleCreativeDiagnosis = async (userText: string, attachments: UploadedFi
     })
     if (!response.ok) throw new Error('creative diagnosis failed')
     const data = await response.json()
+    if (data?.agent_state) agentState.value = data.agent_state
     selectedMode.value = 'order_create'
     emit('mode-change', 'order_create')
     typewriterEffect(data.message || '我先完成了阶段性创意判断。接下来我们继续把 Brief 里的关键条件确认完整。')
@@ -2507,9 +2652,14 @@ const applyCustomAiChatFinalState = async (data: any, replyContent: string, assi
   if (data?.agent_state) {
     agentState.value = data.agent_state
   }
-  const isHumanHandoff = Boolean(data?.handoff) || replyContent.includes(HUMAN_HANDOFF_MARKER)
+  const controlAction = data?.control_action || 'none'
+  const isHumanHandoff = controlAction === 'handoff_requested' || Boolean(data?.handoff) || replyContent.includes(HUMAN_HANDOFF_MARKER)
   const userMsgCount = messages.value.filter(m => m.role === 'user').length
-  const shouldComplete = !isHumanHandoff && replyContent.includes('【需求收集完成】') && userMsgCount >= 3
+  const shouldComplete = !isHumanHandoff && (
+    controlAction === 'ready_to_extract' ||
+    controlAction === 'finish_brief_now' ||
+    (replyContent.includes('【需求收集完成】') && userMsgCount >= 3)
+  )
   const assistantMsg = findAssistantMessage(assistantMessageId)
 
   if (assistantMsg) {
@@ -2541,6 +2691,7 @@ const buildRequirementChatPayload = (
   userMessageId?: string,
   assistantMessageId?: string,
   attachments: UploadedFile[] = [],
+  controlAction?: string,
 ) => {
   const historyMessages = messages.value.slice(0, messages.value.length - 1)
   const formattedHistory = historyMessages
@@ -2554,7 +2705,8 @@ const buildRequirementChatPayload = (
     business_type: businessType.value,
     user_message_id: userMessageId,
     assistant_message_id: assistantMessageId,
-    attachments: toAiAttachmentPayload(attachments)
+    attachments: toAiAttachmentPayload(attachments),
+    control_action: controlAction || 'none',
   }
 }
 
@@ -2563,11 +2715,12 @@ const handleCustomAiChatJson = async (
   userMessageId?: string,
   assistantMessageId?: string,
   attachments: UploadedFile[] = [],
+  controlAction?: string,
 ) => {
   const response = await fetch('/ai/chat', {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify(buildRequirementChatPayload(userText, userMessageId, assistantMessageId, attachments))
+    body: JSON.stringify(buildRequirementChatPayload(userText, userMessageId, assistantMessageId, attachments, controlAction))
   })
 
   if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
@@ -2586,11 +2739,12 @@ const handleCustomAiChatStream = async (
   userMessageId?: string,
   assistantMessageId?: string,
   attachments: UploadedFile[] = [],
+  controlAction?: string,
 ) => {
   const response = await fetch('/ai/chat/stream', {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify(buildRequirementChatPayload(userText, userMessageId, assistantMessageId, attachments))
+    body: JSON.stringify(buildRequirementChatPayload(userText, userMessageId, assistantMessageId, attachments, controlAction))
   })
 
   if (!response.ok || response.headers.get('content-type')?.includes('text/html') || !response.body) {
@@ -2689,7 +2843,7 @@ const handleCustomAiChatStream = async (
     }
     isTyping.value = false
     scrollToBottom()
-    nextTick(() => textareaRef.value?.focus())
+    nextTick(() => focusComposerInput())
     saveCurrentToHistory({ force: true, syncBackend: false })
     await syncCurrentConversationToBackend()
     return true
@@ -2716,12 +2870,17 @@ const handleCustomAiChatStream = async (
   }
 }
 
-const handleCustomAiChat = async (userText: string, userMessageId?: string, attachments: UploadedFile[] = []) => {
+const handleCustomAiChat = async (
+  userText: string,
+  userMessageId?: string,
+  attachments: UploadedFile[] = [],
+  controlAction?: string,
+) => {
   isLoading.value = true
   const assistantMessageId = createMessageId('assistant')
   try {
     try {
-      const streamHandled = await handleCustomAiChatStream(userText, userMessageId, assistantMessageId, attachments)
+      const streamHandled = await handleCustomAiChatStream(userText, userMessageId, assistantMessageId, attachments, controlAction)
       if (streamHandled) {
         return
       }
@@ -2729,7 +2888,7 @@ const handleCustomAiChat = async (userText: string, userMessageId?: string, atta
       logger.logAction('AI', 'chat_stream_unavailable', { mode: selectedMode.value, businessType: businessType.value, sessionId: session_id.value })
     }
     isLoading.value = true
-    await handleCustomAiChatJson(userText, userMessageId, assistantMessageId, attachments)
+    await handleCustomAiChatJson(userText, userMessageId, assistantMessageId, attachments, controlAction)
 
   } catch (error) {
     if (isHumanHandoffRequest(userText)) {
@@ -2754,7 +2913,7 @@ const handleCustomAiChat = async (userText: string, userMessageId?: string, atta
   }
 }
 
-// ===== 需求收集完成 -> 自动提取 + 专业评估 + 保存草稿 + 内嵌表单 =====
+// ===== 需求收集完成 -> 自动提取 + 专业评估 + 保存订单草稿 + 内嵌表单 =====
 const autoExtractAndSaveDraft = async () => {
   extractLoading.value = true
   try {
@@ -2779,7 +2938,7 @@ const autoExtractAndSaveDraft = async () => {
     if (!hasExtractedValue) {
       messages.value.push({
         role: 'assistant',
-        content: '需求整理暂时失败，未生成草稿。请稍后点击继续对话补充或重新发送上一条信息，我会重新整理。',
+        content: '需求整理暂时失败，未生成订单草稿。请稍后点击继续对话补充或重新发送上一条信息，我会重新整理。',
         timestamp: getCurrentTime()
       })
       void syncCurrentConversationToBackend()
@@ -2856,7 +3015,7 @@ const handleSubmitOrder = async () => {
   if (enterpriseStatus !== 'approved') {
     messages.value.push({
       role: 'assistant',
-      content: '您尚未完成企业认证，无法正式提交订单。您的需求已自动保存为草稿，请先前往「个人设置」完成企业认证后再提交。',
+      content: '您尚未完成企业认证，无法正式提交订单。您的需求已自动保存为订单草稿，请先前往「个人设置」完成企业认证后再提交。',
       timestamp: getCurrentTime()
     })
     scrollToBottom()
@@ -3677,18 +3836,19 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 .welcome-bubble {
   background: #f7f7f8;
   border-radius: 16px;
-  padding: 20px 24px;
+  padding: 18px 20px 19px;
   border: none;
   box-shadow: none;
+  max-width: 660px;
 }
 
 .welcome-text {
-  font-size: 13px;
-  font-weight: 400;
+  font-size: 14px;
+  font-weight: 560;
   color: #1a1c1c;
-  margin: 0 0 16px 0;
+  margin: 0 0 12px;
   line-height: 1.6;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .bubble-text {
@@ -3750,40 +3910,6 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   padding-left: 10px;
   border-left: 3px solid rgba(0, 0, 0, 0.16);
   color: rgba(0, 0, 0, 0.68);
-}
-
-/* Stitch Welcome Options Layout */
-.stitched-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.stitch-card {
-  background: #ffffff;
-  border: 1px solid rgba(0,0,0,0.03);
-  border-radius: 12px;
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #1a1c1c;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
-}
-
-.stitch-card .emoji {
-  font-size: 14px;
-}
-
-.stitch-card:hover {
-  background: #ffffff;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-  border-color: rgba(0,0,0,0.06);
 }
 
 .message-actions {
@@ -3879,17 +4005,20 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   padding: 16px 32px;
   background: #ffffff;
   border-top: 1px solid rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .input-area.pill-style {
-  background: #f3f3f4; /* surface-container-low */
+  background: #f7f7f8; /* surface-container-low */
   border-radius: 22px;
   padding: 6px;
-  border: 2px solid transparent; 
+  border: 1px solid rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   min-height: 44px; 
   width: 100%;
   position: relative;
@@ -3907,7 +4036,74 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 }
 
 .input-area.pill-style:focus-within {
-  border-color: rgba(0,0,0,0.08); /* ringing effect */
+  background: #ffffff;
+  border-color: rgba(160, 82, 45, 0.22);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.composer-quick-starts-shell {
+  padding: 0 32px 10px;
+  background: #ffffff;
+  display: flex;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.composer-quick-starts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 100%;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 6px;
+}
+
+.composer-suggestion {
+  appearance: none;
+  width: auto;
+  border: 1px solid rgba(0, 0, 0, 0.11);
+  background: #ffffff;
+  border-radius: 999px;
+  color: #7a7d82;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 13px;
+  font-size: 12px;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.composer-suggestion .suggestion-icon {
+  flex: 0 0 auto;
+  color: #8d9095;
+  font-size: 15px;
+  transition: color 0.16s ease;
+}
+
+.composer-suggestion:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: rgba(160, 82, 45, 0.3);
+  color: #1f2020;
+  transform: translateY(-1px);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.06);
+}
+
+.composer-suggestion:hover:not(:disabled) .suggestion-icon {
+  color: var(--uv-ws-ai-chat-accent, #A0522D);
+}
+
+.composer-suggestion:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .composer-main-row {
@@ -4100,13 +4296,311 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   font-style: italic;
 }
 
-/* Hint flash on options when user tries to type without selecting */
+/* Hint flash on quick starts when user focuses the input before starting */
 @keyframes hint-flash {
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
-  50% { box-shadow: 0 0 0 3px rgba(0, 88, 188, 0.15); }
+  50% { box-shadow: 0 0 0 3px rgba(160, 82, 45, 0.14); }
 }
-.stitched-options.hint-flash .stitch-card {
+.composer-quick-starts.hint-flash .composer-suggestion {
   animation: hint-flash 0.3s ease 2;
+}
+
+@media screen and (max-width: 640px) {
+  .composer-quick-starts-shell {
+    justify-content: flex-start;
+    padding: 0 16px 10px;
+    overflow: hidden;
+  }
+
+  .input-area-container {
+    padding: 14px 16px;
+    gap: 8px;
+  }
+
+  .composer-quick-starts {
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    max-width: none;
+    margin: 0;
+    padding: 0 0 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .composer-quick-starts::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  :global(html.uv-ai-mobile-keyboard-open),
+  :global(html.uv-ai-mobile-keyboard-open body),
+  :global(body.uv-ai-mobile-keyboard-open),
+  :global(html.uv-ai-mobile-keyboard-open #app) {
+    height: var(--uv-ai-mobile-visual-height, 100svh);
+    min-height: var(--uv-ai-mobile-visual-height, 100svh);
+    overflow: hidden;
+  }
+
+  .ai-assistant-wrapper {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: #ffffff;
+    position: relative;
+  }
+
+  .ai-assistant-wrapper.is-mobile-keyboard-open {
+    position: fixed;
+    top: var(--uv-ai-mobile-visual-top, 0px);
+    left: 0;
+    right: 0;
+    bottom: auto;
+    width: 100%;
+    height: var(--uv-ai-mobile-visual-height, 100svh);
+    max-height: var(--uv-ai-mobile-visual-height, 100svh);
+    z-index: 1000;
+  }
+
+  .expanded-view {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .stitch-header {
+    height: 52px;
+    min-height: 52px;
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  .header-left {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .header-left .font-headline {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+
+  .header-center {
+    display: none;
+  }
+
+  .header-right {
+    flex-shrink: 0;
+    gap: 6px;
+  }
+
+  .header-right .icon-toggle[title="帮助"] {
+    display: none;
+  }
+
+  .icon-toggle {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    font-size: 18px;
+  }
+
+  .new-session-btn {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+  }
+
+  .chat-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .messages-container {
+    padding: 16px 12px 18px;
+    gap: 18px;
+  }
+
+  .message {
+    margin-bottom: 6px;
+  }
+
+  .assistant-wrapper,
+  .user-message-container {
+    max-width: 100%;
+  }
+
+  .user-content-row {
+    max-width: 100%;
+    gap: 8px;
+  }
+
+  .user-col {
+    min-width: 0;
+  }
+
+  .user-avatar {
+    width: 28px;
+    height: 28px;
+    margin-top: 22px;
+    font-size: 12px;
+  }
+
+  .message-bubble {
+    max-width: 100%;
+    padding: 9px 11px;
+    font-size: 13px;
+    line-height: 1.58;
+    letter-spacing: 0;
+  }
+
+  .welcome-bubble {
+    width: 100%;
+    max-width: 100%;
+    padding: 15px 16px;
+    border-radius: 14px;
+  }
+
+  .welcome-text {
+    font-size: 14px;
+    line-height: 1.62;
+  }
+
+  .welcome-sub {
+    font-size: 13px;
+    line-height: 1.68;
+  }
+
+  .message-attachment-grid {
+    max-width: 100%;
+  }
+
+  .inline-message-edit {
+    width: min(100%, 76vw);
+    min-width: 0;
+  }
+
+  .input-area-container {
+    flex-shrink: 0;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    gap: 8px;
+  }
+
+  .ai-assistant-wrapper.is-mobile-keyboard-open .composer-quick-starts-shell {
+    display: none;
+  }
+
+  .ai-assistant-wrapper.is-mobile-keyboard-open .input-area-container {
+    padding: 8px 10px 6px;
+    gap: 6px;
+  }
+
+  .ai-assistant-wrapper.is-mobile-keyboard-open .messages-container {
+    padding-bottom: 12px;
+  }
+
+  .composer-quick-starts-shell {
+    padding: 0 12px 8px;
+  }
+
+  .composer-main-row {
+    gap: 8px;
+  }
+
+  .input-area.pill-style {
+    border-radius: 18px;
+    padding: 6px;
+  }
+
+  .left-tools {
+    gap: 4px;
+    padding-left: 0;
+  }
+
+  .tool-icon {
+    width: 27px;
+    height: 27px;
+    font-size: 19px;
+  }
+
+  .chat-native-textarea {
+    min-height: 24px;
+    max-height: 118px;
+    font-size: 16px;
+    line-height: 1.42;
+    padding: 5px 0;
+  }
+
+  .header-search .search-input,
+  .inline-message-edit-textarea,
+  .field-input,
+  .field-textarea {
+    font-size: 16px;
+  }
+
+  .stitch-send-btn {
+    height: 32px;
+    padding: 0 12px;
+    letter-spacing: 0.08em;
+  }
+
+  .uploaded-files-strip {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 4px 2px 2px;
+    scrollbar-width: none;
+  }
+
+  .uploaded-files-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .uploaded-file-chip {
+    flex: 0 0 auto;
+    max-width: 190px;
+  }
+
+  .upload-more-hint {
+    flex: 0 0 auto;
+    margin-left: 0;
+  }
+
+  .composer-suggestion {
+    min-height: 32px;
+    padding: 7px 11px;
+    font-size: 12px;
+  }
+
+  .inline-form {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-form-actions,
+  .completion-btns,
+  .guide-btns {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .comp-btn {
+    width: 100%;
+    min-height: 36px;
+  }
+
+  .order-card-inline {
+    padding: 11px 12px;
+  }
+
+  .order-card-header {
+    align-items: flex-start;
+    gap: 8px;
+  }
 }
 
 /* ─── Responsive: expand breathing room on large monitors ─── */
@@ -4120,6 +4614,9 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   .input-area-container {
     padding: 20px 40px;
   }
+  .composer-quick-starts-shell {
+    padding: 0 40px 12px;
+  }
 }
 
 @media screen and (min-width: 2560px) {
@@ -4131,6 +4628,9 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   }
   .input-area-container {
     padding: 24px 56px;
+  }
+  .composer-quick-starts-shell {
+    padding: 0 56px 14px;
   }
 }
 
@@ -4286,36 +4786,10 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
 /* ===== 新欢迎区样式 ===== */
 .welcome-sub {
   font-size: 13px;
-  color: #86868b;
-  margin: 4px 0 16px 0;
-  line-height: 1.5;
-}
-
-.welcome-hint {
-  font-size: 12px;
-  color: #a0a0a5;
-  margin: 14px 0 0 0;
-  text-align: center;
-}
-
-.opt-icon {
-  font-size: 20px;
-  margin-bottom: 4px;
-}
-
-.opt-desc {
-  font-size: 11px;
-  color: #86868b;
-  margin-top: 2px;
-}
-
-.option-card.stitch-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 2px;
-  padding: 14px 12px;
+  color: #6f7175;
+  margin: 0;
+  line-height: 1.72;
+  white-space: pre-line;
 }
 
 /* ===== 订单卡片样式 ===== */

@@ -306,6 +306,7 @@ import { useAuthStore } from '@/stores/auth'
 import { orderApi } from '@/utils/api'
 import request from '@/utils/request'
 import { ensureEnterpriseApproved } from '@/utils/enterpriseGuard'
+import { orderDraftCopy } from '@/utils/orderDraftCopy'
 import { formatServerTime, parseServerTime } from '@/utils/time'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
@@ -553,7 +554,7 @@ const handleSubmitDraft = async () => {
   const approved = await ensureEnterpriseApproved(
     authStore,
     router,
-    '请先完成企业认证后再提交订单。当前草稿会继续保留在草稿箱中。'
+    orderDraftCopy.keepAfterAuth
   )
   if (!approved) return
 
@@ -570,7 +571,7 @@ const handleConfirmOrder = async (confirmData: { email: string; phone: string })
       confirmPhone: confirmData.phone
     }
     
-    // 更新订单数据并通过草稿状态提交
+    // 更新订单数据并通过订单草稿状态提交
     await orderStore.updateOrder(order.value.id, {
       orderType: order.value.orderType,
       ...finalData

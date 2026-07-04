@@ -274,6 +274,7 @@ class Settings(BaseSettings):
     AI_RESPONSES_BASE_URL: str = ""
     AI_MODEL_NAME: str = "gpt-3.5-turbo"
     AI_HTTP_TIMEOUT: float = 120.0
+    AI_REQUIREMENT_TEMPERATURE: float = 0.3
     AI_CREATIVE_DIRECTION_TIMEOUT: float = 120.0
     AI_CREATIVE_DIRECTION_RETRY_ATTEMPTS: int = 1
     DOCUMENT_EXTRACT_MODEL: str = "qwen3.7-max"

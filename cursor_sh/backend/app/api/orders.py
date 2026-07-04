@@ -60,13 +60,13 @@ async def create_order(
                 if status_val != 'approved':
                     raise HTTPException(
                         status_code=403,
-                        detail="请先完成企业认证后再提交订单。您可以先将订单保存为草稿。"
+                        detail="请先完成企业认证后再提交订单。您可以先将订单保存为订单草稿。"
                     )
         
         order = await OrderService.create_order(db, order_data, current_user, is_draft=is_draft)
         
         if is_draft:
-            message = "草稿保存成功"
+            message = "订单草稿保存成功"
         else:
             # 根据订单类型返回不同的提示消息
             messages = {

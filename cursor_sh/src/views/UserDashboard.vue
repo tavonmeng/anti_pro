@@ -1,5 +1,5 @@
 <template>
-  <div class="user-dashboard">
+  <div class="user-dashboard" :class="{ 'is-workspace-route': isWorkspaceRoute }">
     <SystemLeftSidebar />
     <SecondaryBusinessSidebar v-if="uiStore.isSecondarySidebarVisible" />
     <div class="dashboard-content">
@@ -14,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import SystemLeftSidebar from '@/components/SystemLeftSidebar.vue'
 import SecondaryBusinessSidebar from '@/components/SecondaryBusinessSidebar.vue'
@@ -23,6 +23,7 @@ import { useUiStore } from '@/stores/ui'
 
 const route = useRoute()
 const uiStore = useUiStore()
+const isWorkspaceRoute = computed(() => route.path.includes('/workspace'))
 
 watch(() => route.path, (newPath) => {
   if (
@@ -78,5 +79,28 @@ watch(() => route.path, (newPath) => {
 .page-fade-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+@media (max-width: 768px) {
+  .user-dashboard.is-workspace-route {
+    height: 100vh;
+    height: 100svh;
+    min-height: 100vh;
+    min-height: 100svh;
+    overflow: hidden;
+  }
+
+  .user-dashboard.is-workspace-route :deep(.system-sidebar),
+  .user-dashboard.is-workspace-route :deep(.secondary-sidebar) {
+    display: none !important;
+  }
+
+  .user-dashboard.is-workspace-route .dashboard-content {
+    width: 100%;
+    height: 100vh;
+    height: 100svh;
+    min-width: 0;
+    overflow: hidden;
+  }
 }
 </style>

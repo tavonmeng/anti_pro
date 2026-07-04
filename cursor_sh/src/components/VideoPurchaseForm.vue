@@ -1,5 +1,34 @@
 <template>
   <div class="video-purchase-form">
+    <div v-if="selectedLibraryItem" class="selected-library-item">
+      <div class="selected-media">
+        <img
+          v-if="selectedLibraryItem.media.type === 'image'"
+          :src="selectedLibraryItem.media.url"
+          :alt="selectedLibraryItem.title"
+        />
+        <video
+          v-else
+          :src="selectedLibraryItem.media.url"
+          :poster="selectedLibraryItem.media.poster"
+          controls
+          playsinline
+        ></video>
+      </div>
+      <div class="selected-copy">
+        <div class="selected-tags">
+          <el-tag size="small" effect="light" class="cat-tag">{{ selectedLibraryItem.type }}</el-tag>
+          <el-tag size="small" type="info">#{{ selectedLibraryItem.tag }}</el-tag>
+        </div>
+        <h2>{{ selectedLibraryItem.title }}</h2>
+        <p>{{ selectedLibraryItem.desc }}</p>
+        <div class="selected-price">
+          <span>{{ selectedLibraryItem.price.label }}</span>
+          <strong>{{ selectedLibraryItem.price.display }}</strong>
+        </div>
+      </div>
+    </div>
+
     <el-form
       ref="formRef"
       :model="formData"
@@ -14,10 +43,10 @@
           <el-radio-button value="custom">自定义</el-radio-button>
         </el-radio-group>
       </el-form-item>
-      
-      <el-form-item 
-        v-if="formData.industryType === 'custom'" 
-        label="自定义行业" 
+
+      <el-form-item
+        v-if="formData.industryType === 'custom'"
+        label="自定义行业"
         prop="customIndustry"
       >
         <el-input
@@ -26,7 +55,7 @@
           clearable
         />
       </el-form-item>
-      
+
       <el-form-item label="视觉风格" prop="visualStyle">
         <el-radio-group v-model="formData.visualStyle" size="large">
           <el-radio-button value="scifi">科幻</el-radio-button>
@@ -34,10 +63,10 @@
           <el-radio-button value="custom">自定义</el-radio-button>
         </el-radio-group>
       </el-form-item>
-      
-      <el-form-item 
-        v-if="formData.visualStyle === 'custom'" 
-        label="自定义风格" 
+
+      <el-form-item
+        v-if="formData.visualStyle === 'custom'"
+        label="自定义风格"
         prop="customStyle"
       >
         <el-input
@@ -46,7 +75,7 @@
           clearable
         />
       </el-form-item>
-      
+
       <el-form-item label="时长（秒）" prop="duration">
         <el-input-number
           v-model="formData.duration"
@@ -57,7 +86,7 @@
           style="width: 100%"
         />
       </el-form-item>
-      
+
       <el-form-item label="价格区间（元）" prop="priceRange">
         <div class="price-range-input">
           <el-input-number
@@ -77,7 +106,7 @@
           />
         </div>
       </el-form-item>
-      
+
       <el-form-item label="分辨率" prop="resolution">
         <el-select v-model="formData.resolution" placeholder="请选择分辨率" style="width: 100%">
           <el-option label="1920x1080 (Full HD)" value="1920x1080" />
@@ -87,10 +116,10 @@
           <el-option label="自定义" value="custom" />
         </el-select>
       </el-form-item>
-      
-      <el-form-item 
-        v-if="formData.resolution === 'custom'" 
-        label="自定义分辨率" 
+
+      <el-form-item
+        v-if="formData.resolution === 'custom'"
+        label="自定义分辨率"
         prop="customResolution"
       >
         <el-input
@@ -99,7 +128,7 @@
           clearable
         />
       </el-form-item>
-      
+
       <el-form-item label="屏幕尺寸" prop="size">
         <el-input
           v-model="formData.size"
@@ -107,7 +136,7 @@
           clearable
         />
       </el-form-item>
-      
+
       <el-form-item label="曲率（可选）" prop="curvature">
         <el-input
           v-model="formData.curvature"
@@ -116,22 +145,24 @@
         />
       </el-form-item>
     </el-form>
-    
+
     <div class="form-actions">
       <el-button @click="handleCancel">取消</el-button>
-      <el-button @click="handleSaveDraft">保存草稿</el-button>
+      <el-button @click="handleSaveDraft">保存为订单草稿</el-button>
       <el-button type="primary" @click="handleSubmit">确认提交</el-button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import type { VideoLibraryItem } from '@/data/videoMarketplace'
 import type { IndustryType, VisualStyle, Order } from '@/types'
 
 const props = defineProps<{
   order?: Order
+  selectedLibraryItem?: VideoLibraryItem | null
 }>()
 
 const emit = defineEmits<{
@@ -141,6 +172,7 @@ const emit = defineEmits<{
 }>()
 
 const formRef = ref<FormInstance>()
+const selectedLibraryItem = computed(() => props.selectedLibraryItem || null)
 const formData = reactive({
   industryType: 'movie' as IndustryType,
   customIndustry: '',
@@ -155,6 +187,19 @@ const formData = reactive({
   curvature: ''
 })
 
+const buildSelectedLibraryPayload = () => {
+  if (!selectedLibraryItem.value) return undefined
+  return {
+    id: selectedLibraryItem.value.id,
+    title: selectedLibraryItem.value.title,
+    type: selectedLibraryItem.value.type,
+    tag: selectedLibraryItem.value.tag,
+    desc: selectedLibraryItem.value.desc,
+    media: selectedLibraryItem.value.media,
+    price: selectedLibraryItem.value.price
+  }
+}
+
 // 编辑模式：填充表单数据
 onMounted(() => {
   if (props.order && props.order.orderType === 'video_purchase') {
@@ -166,8 +211,7 @@ onMounted(() => {
     formData.duration = order.duration || 60
     formData.priceMin = order.priceRange?.min
     formData.priceMax = order.priceRange?.max
-    // 处理分辨率：如果是自定义的，需要判断
-    if (order.resolution && !['3840x2160', '1920x1080', '2560x1440'].includes(order.resolution)) {
+    if (order.resolution && !['1920x1080', '2560x1440', '3840x2160', '7680x4320'].includes(order.resolution)) {
       formData.resolution = 'custom'
       formData.customResolution = order.resolution
     } else {
@@ -220,13 +264,13 @@ const formRules: FormRules = {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  
+
   await formRef.value.validate(async (valid) => {
     if (valid) {
       try {
         const isEdit = !!props.order
         await ElMessageBox.confirm(
-          isEdit 
+          isEdit
             ? '请确认您已核对所有修改信息，提交后订单将被更新。'
             : '请确认您已核对所有参数信息，提交后我们将为您适配专属的裸眼3D成片。',
           isEdit ? '确认修改' : '确认提交',
@@ -236,7 +280,7 @@ const handleSubmit = async () => {
             type: 'info'
           }
         )
-        
+
         const submitData = {
           industryType: formData.industryType,
           customIndustry: formData.industryType === 'custom' ? formData.customIndustry : undefined,
@@ -249,9 +293,10 @@ const handleSubmit = async () => {
           },
           resolution: formData.resolution === 'custom' ? formData.customResolution : formData.resolution,
           size: formData.size,
-          curvature: formData.curvature || undefined
+          curvature: formData.curvature || undefined,
+          selectedLibraryItem: buildSelectedLibraryPayload()
         }
-        
+
         emit('submit', submitData)
       } catch {
         // 用户取消
@@ -277,7 +322,8 @@ const handleSaveDraft = () => {
     } : undefined,
     resolution: formData.resolution === 'custom' ? formData.customResolution : formData.resolution,
     size: formData.size || undefined,
-    curvature: formData.curvature || undefined
+    curvature: formData.curvature || undefined,
+    selectedLibraryItem: buildSelectedLibraryPayload()
   }
   emit('save-draft', submitData)
 }
@@ -288,14 +334,99 @@ const handleSaveDraft = () => {
   padding: 24px;
 }
 
+.selected-library-item {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.95fr) minmax(0, 1.05fr);
+  gap: 20px;
+  align-items: stretch;
+  margin-bottom: 28px;
+  padding: 18px;
+  border: 1px solid #eceef0;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.selected-media {
+  min-height: 190px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #111;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.selected-media img,
+.selected-media video {
+  width: 100%;
+  height: 100%;
+  min-height: 190px;
+  object-fit: cover;
+  display: block;
+}
+
+.selected-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cat-tag {
+  background: var(--uv-ws-module-active-bg, #f3e7e1);
+  border-color: rgba(160, 82, 45, 0.24);
+  color: var(--uv-ws-action-button-bg, #a0522d);
+}
+
+.selected-copy h2 {
+  margin: 0 0 10px;
+  color: #1d1d1f;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.selected-copy p {
+  margin: 0;
+  color: #686b70;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.selected-price {
+  margin-top: auto;
+  padding-top: 18px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.selected-price span {
+  color: #86868b;
+  font-size: 13px;
+}
+
+.selected-price strong {
+  color: #ff4d4f;
+  font-size: 24px;
+  font-weight: 760;
+}
+
 .price-range-input {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  
+
   .separator {
-    color: #86868B;
+    color: #86868b;
     white-space: nowrap;
   }
 }
@@ -306,12 +437,12 @@ const handleSaveDraft = () => {
   gap: 12px;
   margin-top: 24px;
   padding-top: 24px;
-  border-top: 1px solid #E8E8ED;
+  border-top: 1px solid #e8e8ed;
 }
 
 :deep(.el-form-item__label) {
   font-weight: 600;
-  color: #1D1D1F;
+  color: #1d1d1f;
 }
 
 :deep(.el-radio-button__inner) {
@@ -320,9 +451,15 @@ const handleSaveDraft = () => {
 }
 
 :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
-  background: var(--uv-ws-action-button-bg, #A0522D);
-  border-color: var(--uv-ws-action-button-bg, #A0522D);
+  background: var(--uv-ws-action-button-bg, #a0522d);
+  border-color: var(--uv-ws-action-button-bg, #a0522d);
   color: var(--uv-ws-action-button-text, #ffffff);
   box-shadow: none;
+}
+
+@media (max-width: 720px) {
+  .selected-library-item {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

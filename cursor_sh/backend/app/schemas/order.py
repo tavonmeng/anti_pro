@@ -22,6 +22,7 @@ class VideoPurchaseOrderCreate(BaseModel):
     resolution: str
     size: str
     curvature: Optional[str] = None
+    selectedLibraryItem: Optional[Dict[str, Any]] = None
 
 
 class AI3DCustomOrderCreate(BaseModel):
@@ -101,6 +102,7 @@ class VideoPurchaseOrderResponse(BaseOrderResponse):
     resolution: str
     size: str
     curvature: Optional[str] = None
+    selectedLibraryItem: Optional[Dict[str, Any]] = None
 
 
 class AI3DCustomOrderResponse(BaseOrderResponse):
@@ -187,4 +189,3 @@ class AdminCancelOrder(BaseModel):
     phone: str
     smsCode: str
     reason: Optional[str] = None  # 取消原因
-

@@ -230,7 +230,7 @@ class OrderService:
         if isinstance(user, User) and OrderService._enterprise_status_value(user) != EnterpriseStatus.APPROVED.value:
             raise HTTPException(
                 status_code=403,
-                detail="请先完成企业认证后再提交订单。您可以先将订单保存为草稿。"
+                detail="请先完成企业认证后再提交订单。您可以先将订单保存为订单草稿。"
             )
     
     @staticmethod
@@ -409,7 +409,7 @@ class OrderService:
         if order.status != OrderStatus.DRAFT:
             raise HTTPException(
                 status_code=400,
-                detail=f"只有草稿状态的订单可以修改，当前状态：{order.status.value}"
+                detail=f"只有订单草稿状态的订单可以修改，当前状态：{order.status.value}"
             )
         
         # 验证订单类型不能改变
@@ -758,7 +758,7 @@ class OrderService:
         # 创建系统内消息通知
         # 1. 通知订单用户状态变更
         status_map = {
-            "draft": "草稿",
+            "draft": "订单草稿",
             "pending_assign": "待分配",
             "pending_contract": "合同与付款",
             "in_production": "制作中",
@@ -802,7 +802,7 @@ class OrderService:
                 admin_ids = [admin.id for admin in admins]
                 if admin_ids:
                     title = "新订单提交" if is_draft_submit else "订单状态更新"
-                    content = f"用户提交了草稿订单：{order.order_number}，请及时分配。" if is_draft_submit else f"订单 {order.order_number} 状态变更为 {new_status_text}。"
+                    content = f"用户提交了订单草稿：{order.order_number}，请及时分配。" if is_draft_submit else f"订单 {order.order_number} 状态变更为 {new_status_text}。"
                     await NotificationService.create_notification_for_multiple_users(
                         db=db,
                         user_ids=admin_ids,

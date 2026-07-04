@@ -7,6 +7,14 @@ def test_order_entry_reply_for_ai_custom_uses_opening_question():
     reply = intro_module._build_order_entry_reply("ai_3d_custom", "意向AI驱动3D OOH内容定制")
 
     assert "这次大概想做什么样的内容" in reply
+    assert "裸眼3D视频" in reply
+    assert "普通平面视频" in reply
+    assert "屏幕结构" in reply
+    assert "观看动线" in reply
+    assert "Brief" in reply
+    assert "不需要您一次准备完整资料" in reply
+    assert "三个维度" in reply
+    assert "基础信息、创意方向以及技术与交付" in reply
     assert "品牌或项目名称" not in reply
     assert "项目基础信息开始" not in reply
 

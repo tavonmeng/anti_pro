@@ -109,8 +109,8 @@ const steps: OnboardingStep[] = [
   {
     id: 'drafts-nav',
     target: '[data-onboarding-target="drafts-nav"]',
-    title: '草稿箱保存未完成需求',
-    description: '企业认证前或信息没填完时，需求可以先保存成草稿，之后再继续补充。',
+    title: '订单草稿保存未完成需求',
+    description: '企业认证前或信息没填完时，需求可以先保存为订单草稿，之后再继续补充。',
     route: '/user/workspace',
     prepare: () => resetToWorkspaceOverview()
   },
@@ -150,7 +150,7 @@ const steps: OnboardingStep[] = [
     id: 'enterprise-form',
     target: '[data-onboarding-target="enterprise-auth-section"]',
     title: '企业认证决定能否正式下单',
-    description: '个人中心里最重要的是企业认证。如果需要提交正式订单，请完成企业名称和营业执照认证；未认证时，需求会优先保存为草稿。',
+    description: '个人中心里最重要的是企业认证。如果需要提交正式订单，请完成企业名称和营业执照认证；未认证时，需求会优先保存为订单草稿。',
     route: '/user/profile',
     prepare: () => {
       uiStore.setIsAiExpanded(false)
@@ -197,7 +197,7 @@ const steps: OnboardingStep[] = [
     id: 'order-form',
     target: '[data-onboarding-target="order-form-surface"]',
     title: '手动填写是备用路径',
-    description: '如果需求已经很明确，也可以直接填写表单。这里主要用于补充项目信息、上传素材，或把未完成内容保存为草稿。',
+    description: '如果需求已经很明确，也可以直接填写表单。这里主要用于补充项目信息、上传素材，或把未完成内容保存为订单草稿。',
     primaryLabel: '回到智能体',
     route: '/user/create-order/ai_3d_custom',
     prepare: () => {

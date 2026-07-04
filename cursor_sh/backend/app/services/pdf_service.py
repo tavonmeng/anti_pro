@@ -280,7 +280,7 @@ ORDER_TYPE_MAP = {
 }
 
 STATUS_MAP = {
-    "draft": "草稿",
+    "draft": "订单草稿",
     "pending_assign": "待分配",
     "pending_contract": "合同与付款",
     "in_production": "制作中",

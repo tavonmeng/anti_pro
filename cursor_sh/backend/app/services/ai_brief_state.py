@@ -10,7 +10,13 @@ import re
 from typing import Any
 
 from app.config import settings
+from app.services.ai_context import (
+    append_agent_context_message,
+    ensure_agent_context_window,
+    sync_agent_context_window_from_history,
+)
 from app.services.ai_client import post_chat_completion
+from app.services.ai_upload_context import state_safe_upload_message, strip_generated_upload_context
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
 from app.utils.timezone import beijing_now
@@ -116,6 +122,15 @@ def _field_value(state: dict[str, Any], field: str) -> str:
     if isinstance(value, dict):
         return str(value.get("value") or "").strip()
     return str(value or "").strip()
+
+
+def _last_assistant_message(history: list | None) -> str:
+    for item in reversed(history or []):
+        if item.get("role") == "assistant":
+            content = str(item.get("content") or "").strip()
+            if content:
+                return content
+    return ""
 
 
 def _recompute_state_indexes(state: dict[str, Any]) -> dict[str, Any]:
@@ -248,15 +263,21 @@ def load_agent_state(session_id: str, user_id: str, business_type: str = "ai_3d_
             "stage": "brief_building",
             "business_type": business_type,
             "brief_state": create_empty_brief_state(business_type),
+            "agent_context_window": {},
             "pending_evaluation": None,
+            "pending_creative_direction": None,
             "creative_direction_offer": None,
+            "creative_evaluation_hint": None,
         }
     state.setdefault("business_type", business_type)
     state.setdefault("brief_state", create_empty_brief_state(business_type))
     state["brief_state"] = merge_brief_updates(state["brief_state"], {})
     state["brief_state"].setdefault("pending_confirmation", None)
+    state = ensure_agent_context_window(state)
     state.setdefault("pending_evaluation", None)
+    state.setdefault("pending_creative_direction", None)
     state.setdefault("creative_direction_offer", None)
+    state.setdefault("creative_evaluation_hint", None)
     return state
 
 
@@ -367,36 +388,6 @@ def save_agent_state(session_id: str, user_id: str, state: dict[str, Any]) -> No
         json.dump(state, f, ensure_ascii=False, indent=2)
 
 
-def deterministic_media_brief_updates(message: str) -> dict[str, str]:
-    text = message or ""
-    updates: dict[str, str] = {}
-    if re.search(r"北京|上海|深圳|广州|成都|杭州|重庆|南京|武汉|西安|商场|广场|机场|高铁|地铁|天幕|大屏|屏幕|点位", text):
-        updates["city_location"] = text[:120]
-    if re.search(r"受众|面向|年轻|游客|市民|亲子|家庭|商务|白领|消费者|招商", text):
-        updates["audience_scene"] = text[:160]
-    if re.search(r"主题|创意|故事|表达|元素|IP|logo|slogan|品牌露出|巨型|探出|破屏|冲出|猫|熊猫|鲸鱼|汽车", text, re.I):
-        updates["theme_concept"] = text[:180]
-    if re.search(r"风格|调性|写实|水墨|赛博|科技|未来|自然|生态|治愈|柔软|高级", text):
-        updates["art_direction"] = text[:140]
-    if re.search(r"\d{3,5}\s*[x×]\s*\d{3,5}|[248]k\s*(?:规格|分辨率|输出)?|宽|高|尺寸|分辨率|L型|转角屏|竖屏|长条屏", text, re.I):
-        updates["media_specs"] = text[:140]
-    if re.search(r"观看|视角|动线|仰视|平视|斜侧|距离|人流|最佳观看点", text):
-        updates["viewing_path"] = text[:180]
-    if re.search(r"预算|费用|报价|\d+\s*万", text):
-        updates["budget"] = text[:80]
-    if re.search(r"上线|上刊|投放时间|交付|月底|月初|下个月|\d{1,2}月", text):
-        updates["online_time"] = text[:100]
-    if re.search(r"审核|规范|安全区|禁忌|避免|不要|不能|限制|合规", text):
-        updates["content_review"] = text[:180]
-    if re.search(r"开业|招商|造势|引流|曝光|传播|商业体|媒体资源|客流|地标", text):
-        updates["resource_background"] = text[:180]
-    if re.search(r"品牌调性|媒体定位|适配品牌|高端|年轻化|城市地标", text):
-        updates["media_positioning"] = text[:140]
-    if re.search(r"已上传|上传文件|现场照片|现场实拍|屏幕照片|参考素材", text):
-        updates["site_photos"] = text[:160]
-    return updates
-
-
 def build_brief_update_messages(message: str, history: list, brief_state: dict[str, Any]) -> list[dict[str, str]]:
     field_list = ", ".join(MEDIA_3D_BRIEF_FIELDS)
     current_values = {
@@ -409,11 +400,18 @@ def build_brief_update_messages(message: str, history: list, brief_state: dict[s
         "你是媒体方裸眼3D项目 Brief 状态更新器，只做信息抽取和字段更新，不回答用户。\n"
         "只能返回 JSON object。updates/events 中只能使用以下字段："
         f"{field_list}。\n"
+        "Brief 固定分为三大类：基础信息、创意方向、技术与交付。"
+        "基础信息包括项目背景、受众、媒体定位、投放城市/媒体位置、观看动线；"
+        "创意方向包括主题概念、艺术方向、审核边界和特殊创意要求；"
+        "技术与交付包括屏幕规格、时长数量、技术交付、预算、上刊时间和现场素材。\n"
         "只抽取用户在当前消息中明确提供或明确修正的信息；不要把历史偏好、系统记忆或你的推测写入 Brief。\n"
-        "如果当前消息包含[图片理解摘要]，可以基于摘要更新 site_photos、theme_concept、art_direction、media_specs 等相关字段；"
-        "如果只有上传文件名而没有图片理解摘要，不要臆造图片内容。\n"
+        "图片、文件名、图片理解摘要和附件内容都不是 Brief 已确认信息；上传图片这个事实会由程序记录为 site_photos=已上传图片素材，"
+        "状态更新器不要因为图片或附件内容更新 site_photos、theme_concept、art_direction、media_specs、city_location 或其他字段。\n"
         "如果当前存在 pending_confirmation，且用户是在确认、否认或改写该候选，必须返回 events："
         "confirm_pending、reject_pending 或 update_field。\n"
+        "如果当前消息是短回答，必须结合 last_assistant_question 判断它是在回答哪个 Brief 字段。"
+        "短回答不能因为缺少主语就直接忽略；它可能是在确认格式、帧率、色彩空间、安全区、审核周期、预算、上刊时间、时长、规格、点位、受众或创意方向。"
+        "只有当上一轮问题与当前短回答无法建立明确字段关系时，才返回空 updates。\n"
         "如果用户明确改口，用新值覆盖旧值。没有新信息时返回 {\"updates\":{},\"events\":[]}。"
     )
     recent_history = [
@@ -424,6 +422,7 @@ def build_brief_update_messages(message: str, history: list, brief_state: dict[s
     payload = {
         "current_brief_values": current_values,
         "pending_confirmation": pending_confirmation,
+        "last_assistant_question": _last_assistant_message(history or []),
         "recent_history": recent_history,
         "current_user_message": message,
         "output_schema": {
@@ -454,21 +453,26 @@ async def update_agent_state_from_message(
     memory_hints: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     state = load_agent_state(session_id, user_id, business_type)
+    state_message = state_safe_upload_message(message)
+    extraction_message = strip_generated_upload_context(message)
+    has_uploaded_material = "[用户上传了图片素材]" in state_message
+    state = await sync_agent_context_window_from_history(state, history or [])
+    state, _context_message = await append_agent_context_message(
+        state,
+        role="user",
+        content=state_message,
+        source_message_id=source_message_id,
+    )
     brief_state = state.get("brief_state") or create_empty_brief_state(business_type)
-    rule_updates = deterministic_media_brief_updates(message)
-    pending = brief_state.get("pending_confirmation")
-    pending_field = str((pending or {}).get("field") or "") if isinstance(pending, dict) else ""
-    if pending_field:
-        rule_updates.pop(pending_field, None)
-    updates = dict(rule_updates)
+    updates: dict[str, str] = {}
     events: list[Any] = []
 
-    if settings.AI_API_KEY:
+    if settings.AI_API_KEY and extraction_message.strip():
         try:
             data = await post_chat_completion(
                 {
                     "model": settings.AI_MODEL_NAME,
-                    "messages": build_brief_update_messages(message, history or [], brief_state),
+                    "messages": build_brief_update_messages(extraction_message, history or [], brief_state),
                     "max_tokens": 320,
                     "temperature": 0,
                     "response_format": {"type": "json_object"},
@@ -493,6 +497,8 @@ async def update_agent_state_from_message(
             )
 
     event_updates, clear_pending = _event_updates_and_side_effects(brief_state, events)
+    if has_uploaded_material:
+        updates["site_photos"] = "已上传图片素材"
     merged_updates = {**updates, **event_updates}
     next_brief_state = merge_brief_updates(
         brief_state,

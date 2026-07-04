@@ -39,10 +39,10 @@ export const useOrderStore = defineStore('order', () => {
     try {
       const newOrder = await orderApi.createOrder(orderData, isDraft)
       orders.value.unshift(newOrder)
-      ElMessage.success(isDraft ? '草稿保存成功' : '订单创建成功')
+      ElMessage.success(isDraft ? '订单草稿保存成功' : '订单创建成功')
       return newOrder
     } catch (error: any) {
-      ElMessage.error(error.message || (isDraft ? '保存草稿失败' : '创建订单失败'))
+      ElMessage.error(error.message || (isDraft ? '保存订单草稿失败' : '创建订单失败'))
       throw error
     }
   }
@@ -191,4 +191,3 @@ export const useOrderStore = defineStore('order', () => {
     submitFeedback
   }
 })
-

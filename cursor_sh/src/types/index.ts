@@ -138,6 +138,23 @@ export interface VideoPurchaseOrder extends BaseOrder {
   resolution: string
   size: string
   curvature?: string
+  selectedLibraryItem?: {
+    id: string
+    title: string
+    type: string
+    tag: string
+    desc: string
+    media: {
+      type: 'image' | 'video'
+      url: string
+      poster?: string
+    }
+    price: {
+      label: string
+      display: string
+      note: string
+    }
+  }
 }
 
 // AI驱动3D OOH内容定制订单（兼容品牌方 & 媒体方）

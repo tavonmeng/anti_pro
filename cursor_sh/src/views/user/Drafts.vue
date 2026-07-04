@@ -2,14 +2,14 @@
   <div class="drafts-page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">草稿箱</h1>
-        <p class="page-subtitle">未提交的订单草稿，随时可以继续编辑或提交</p>
+        <h1 class="page-title">{{ orderDraftCopy.pageTitle }}</h1>
+        <p class="page-subtitle">{{ orderDraftCopy.pageSubtitle }}</p>
       </div>
     </div>
     
     <!-- 空状态 -->
     <div v-if="draftOrders.length === 0 && !orderStore.loading" class="empty-state">
-      <el-empty description="暂无草稿">
+      <el-empty :description="orderDraftCopy.emptyDescription">
         <el-button type="primary" @click="goToWorkspace">去创建订单</el-button>
       </el-empty>
     </div>
@@ -31,7 +31,7 @@
             <el-icon class="type-icon"><EditPen /></el-icon>
             <span class="type-text">{{ orderTypeMap[order.orderType] || order.orderType }}</span>
           </div>
-          <el-tag type="info" size="small" effect="plain">草稿</el-tag>
+          <el-tag type="info" size="small" effect="plain">订单草稿</el-tag>
         </div>
         
         <div class="draft-card-body">
@@ -75,6 +75,7 @@ import { useOrderStore } from '@/stores/order'
 import { useUiStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { ensureEnterpriseApproved } from '@/utils/enterpriseGuard'
+import { orderDraftCopy } from '@/utils/orderDraftCopy'
 import { formatServerMonthDayTime } from '@/utils/time'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 import type { Order } from '@/types'
@@ -132,7 +133,7 @@ const handleSubmit = async (order: Order) => {
   const approved = await ensureEnterpriseApproved(
     authStore,
     router,
-    '请先完成企业认证后再提交订单。草稿会继续保留在草稿箱中。'
+    orderDraftCopy.keepAfterAuth
   )
   if (!approved) {
     return
@@ -152,7 +153,7 @@ const handleConfirmOrder = async (confirmData: { email: string; phone: string })
       confirmPhone: confirmData.phone
     }
     
-    // 更新订单数据并通过草稿状态提交
+    // 更新订单数据并通过订单草稿状态提交
     await orderStore.updateOrder(selectedOrder.value.id, {
       orderType: selectedOrder.value.orderType,
       ...finalData
@@ -171,8 +172,8 @@ const handleConfirmOrder = async (confirmData: { email: string; phone: string })
 const handleDelete = async (order: Order) => {
   try {
     await ElMessageBox.confirm(
-      '确认删除此草稿？删除后不可恢复。',
-      '删除草稿',
+      orderDraftCopy.deleteConfirm,
+      orderDraftCopy.deleteTitle,
       {
         confirmButtonText: '确认删除',
         cancelButtonText: '取消',
@@ -181,7 +182,7 @@ const handleDelete = async (order: Order) => {
       }
     )
     await orderStore.updateOrderStatus(order.id, 'cancelled')
-    ElMessage.success('草稿已删除')
+    ElMessage.success(orderDraftCopy.deleted)
     await orderStore.fetchOrders()
   } catch {
     // 用户取消
