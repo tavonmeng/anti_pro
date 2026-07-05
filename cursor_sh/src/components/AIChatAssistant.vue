@@ -5,7 +5,7 @@
       <!-- Stitch Header -->
       <header class="stitch-header">
         <div class="header-left">
-          <h2 class="font-headline">Unique Vision 智能体为您服务</h2>
+          <h2 class="font-headline">创意提案总监｜Brief梳理、创意评估、方向生成与订单查询</h2>
         </div>
         
         <!-- Fused Search Bar -->
@@ -3177,7 +3177,7 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   flex: 1;
   display: flex;
   justify-content: center;
-  padding: 0 40px;
+  padding: 0 24px;
 }
 
 .header-search {
@@ -3185,9 +3185,9 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   align-items: center;
   background: #f3f3f4;
   border-radius: 999px;
-  padding: 6px 16px;
+  padding: 6px 12px;
   width: 100%;
-  max-width: 480px;
+  max-width: 260px;
   border: 1px solid transparent;
   transition: border-color 0.2s;
 }

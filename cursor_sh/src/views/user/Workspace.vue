@@ -11,11 +11,23 @@
             
             <!-- Hero Banner (AI 智能体) -->
             <div class="hero-banner" data-onboarding-target="ai-hero-entry">
-              <h1 class="hero-title">Unique Vision AI智能体 | 咨询·需求·下单，一站式协助</h1>
-              <div class="hero-input-area" @click="handleAiExpand(true)">
-                <input type="text" :placeholder="placeholderText" class="hero-input" readonly />
-                <div class="generate-btn">
-                  发送 <span class="sparkle" aria-hidden="true"></span>
+              <div class="hero-bg-stack" aria-hidden="true">
+                <transition name="hero-bg-fade">
+                  <div
+                    :key="activePromptBackground"
+                    class="hero-bg-image"
+                    :style="{ backgroundImage: `url(${activePromptBackground})` }"
+                  ></div>
+                </transition>
+                <div class="hero-bg-overlay"></div>
+              </div>
+              <div class="hero-content">
+                <h1 class="hero-title">Unique Vision AI智能体 | 咨询·需求·下单，一站式协助</h1>
+                <div class="hero-input-area" @click="handleAiExpand(true)">
+                  <input type="text" :placeholder="placeholderText" class="hero-input" readonly />
+                  <div class="generate-btn">
+                    发送 <span class="sparkle" aria-hidden="true"></span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -52,10 +64,6 @@
               </div>
               <div class="card-body">
                 <h3 class="service-title">{{ service.title }}</h3>
-                <p class="service-subtitle">{{ service.subtitle }}</p>
-                <p class="service-description">
-                  {{ service.description }}
-                </p>
                 <div class="service-features">
                   <span v-for="feature in service.features" :key="feature" class="outline-tag">{{ feature }}</span>
                 </div>
@@ -84,8 +92,6 @@
               <div class="service-focus-copy">
                 <div class="section-label">SERVICE DETAIL</div>
                 <h2 class="service-focus-title">{{ activeService.title }}</h2>
-                <p class="service-focus-subtitle">{{ activeService.subtitle }}</p>
-                <p class="service-focus-description">{{ activeService.description }}</p>
                 <div class="service-focus-features">
                   <span v-for="feature in activeService.features" :key="feature">{{ feature }}</span>
                 </div>
@@ -100,11 +106,23 @@
             </div>
             <div v-else class="overview-state">
               <div class="hero-banner" data-onboarding-target="ai-hero-entry">
-                <h1 class="hero-title">Unique Vision AI智能体 | 咨询·需求·下单，一站式协助</h1>
-                <div class="hero-input-area" @click="handleAiExpand(true)">
-                  <input type="text" :placeholder="placeholderText" class="hero-input" readonly />
-                  <div class="generate-btn">
-                    发送 <span class="sparkle" aria-hidden="true"></span>
+                <div class="hero-bg-stack" aria-hidden="true">
+                  <transition name="hero-bg-fade">
+                    <div
+                      :key="activePromptBackground"
+                      class="hero-bg-image"
+                      :style="{ backgroundImage: `url(${activePromptBackground})` }"
+                    ></div>
+                  </transition>
+                  <div class="hero-bg-overlay"></div>
+                </div>
+                <div class="hero-content">
+                  <h1 class="hero-title">Unique Vision AI智能体 | 咨询·需求·下单，一站式协助</h1>
+                  <div class="hero-input-area" @click="handleAiExpand(true)">
+                    <input type="text" :placeholder="placeholderText" class="hero-input" readonly />
+                    <div class="generate-btn">
+                      发送 <span class="sparkle" aria-hidden="true"></span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -142,18 +160,37 @@ const showInspiration = ref(true)
 const isMobileWorkspace = ref(false)
 const activeService = computed(() => getServiceByType(uiStore.activeModule))
 
-const promptTexts = [
-  "我想做一个关于蒙牛品牌推广的3D视频，主题是...",
-  "帮我设计一段赛博朋克风格的裸眼3D球鞋广告，要有超强的出屏效果...",
-  "我需要一个高端科技论坛的开场3D倒计时动画，充满未来科技感...",
-  "帮我生成一段大牌护肤品的新品发布3D视频，要求水珠材质特别逼真...",
-  "给我们的新款新能源汽车做个3D动态视频，让车穿梭在未来都市..."
+const promptSlides = [
+  {
+    text: "我想做一个关于蒙牛品牌推广的3D视频，主题是...",
+    background: "/background/milk.jpg"
+  },
+  {
+    text: "帮我设计一段赛博朋克风格的裸眼3D球鞋广告，要有超强的出屏效果...",
+    background: "/background/shose.jpg"
+  },
+  {
+    text: "想做一条毛绒质感猫狗互动的裸眼3D视频，治愈又有出屏感...",
+    background: "/background/dog.jpg"
+  },
+  {
+    text: "帮我生成一段大牌护肤品的新品发布3D视频，要求水珠材质特别逼真...",
+    background: "/background/makeup.jpg"
+  },
+  {
+    text: "给我们的新款新能源汽车做个3D动态视频，让车穿梭在未来都市...",
+    background: "/background/car.jpg"
+  }
 ]
 
+const promptTexts = promptSlides.map((slide) => slide.text)
 const placeholderText = ref("|")
+const currentPromptIndex = ref(0)
+const activePromptBackground = computed(() => {
+  return promptSlides[currentPromptIndex.value]?.background || promptSlides[0].background
+})
 let timer: ReturnType<typeof setTimeout> | null = null
 let blinkTimer: ReturnType<typeof setInterval> | null = null
-let currentPromptIndex = 0
 
 const updateMobileWorkspaceState = () => {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
@@ -175,7 +212,7 @@ onMounted(() => {
   const deletingSpeed = 60
   const pauseDuration = 10000 // 10 seconds
 
-  currentPromptIndex = Math.floor(Math.random() * promptTexts.length)
+  currentPromptIndex.value = Math.floor(Math.random() * promptTexts.length)
 
   const startBlinking = (baseText: string) => {
     if (blinkTimer) clearInterval(blinkTimer)
@@ -209,16 +246,16 @@ onMounted(() => {
     } else if (isDeleting && index < 0) {
       timer = setTimeout(() => {
         let nextIndex = Math.floor(Math.random() * promptTexts.length)
-        if (nextIndex === currentPromptIndex && promptTexts.length > 1) {
+        if (nextIndex === currentPromptIndex.value && promptTexts.length > 1) {
           nextIndex = (nextIndex + 1) % promptTexts.length
         }
-        currentPromptIndex = nextIndex
-        typeWriter(promptTexts[currentPromptIndex], 0, false)
+        currentPromptIndex.value = nextIndex
+        typeWriter(promptTexts[currentPromptIndex.value], 0, false)
       }, 500)
     }
   }
   
-  timer = setTimeout(() => typeWriter(promptTexts[currentPromptIndex], 0, false), 500)
+  timer = setTimeout(() => typeWriter(promptTexts[currentPromptIndex.value], 0, false), 500)
 })
 
 onUnmounted(() => {
@@ -415,6 +452,8 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
 
 /* Hero Banner */
 .hero-banner {
+  position: relative;
+  isolation: isolate;
   background: var(--uv-ws-ai-agent-bg, #E9D5BD);
   border-radius: 16px;
   padding: 32px 40px;
@@ -423,9 +462,10 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
   flex-direction: column;
   align-items: flex-start;
   transition: all 0.6s cubic-bezier(0.25, 1, 0.3, 1);
-  overflow: visible;
+  overflow: hidden;
   box-sizing: border-box;
   flex-shrink: 0;
+  min-height: 182px;
 }
 
 .hero-banner.is-fading-out {
@@ -433,29 +473,80 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
   transform: translateY(-20px);
 }
 
+.hero-bg-stack {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--uv-ws-ai-agent-bg, #E9D5BD);
+}
+
+.hero-bg-image {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  transform: scale(1.025);
+  filter: saturate(1.06) contrast(1.03);
+}
+
+.hero-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(8, 8, 10, 0.55) 0%, rgba(8, 8, 10, 0.28) 48%, rgba(8, 8, 10, 0.52) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(0, 0, 0, 0.18) 100%);
+}
+
+.hero-bg-fade-enter-active,
+.hero-bg-fade-leave-active {
+  transition: opacity 0.75s ease, transform 0.95s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.hero-bg-fade-enter-from,
+.hero-bg-fade-leave-to {
+  opacity: 0;
+  transform: scale(1.05);
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
 .hero-title {
   font-size: 24px;
   font-weight: 500;
-  color: var(--uv-ws-ai-agent-title, #1b1b1c);
+  color: rgba(255, 255, 255, 0.96);
   margin: 0 0 24px 0;
   letter-spacing: -0.01em;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.34);
 }
 
 .hero-input-area {
-  background: var(--uv-ws-ai-agent-input-bg, #ffffff);
+  background: rgba(255, 255, 255, 0.92);
   border-radius: 9999px;
   display: flex;
   align-items: center;
   padding: 4px 4px 4px 16px;
   width: 100%;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.46);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   cursor: pointer;
   transition: all 0.2s ease;
   box-sizing: border-box;
 }
 
 .hero-input-area:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.24);
 }
 
 .hero-input {
@@ -580,27 +671,13 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
   margin: 0 0 6px 0;
 }
 
-.service-subtitle {
-  color: var(--uv-ws-service-subtitle, #414754);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.35;
-  margin: 0 0 8px 0;
-}
-
-.service-description {
-  font-size: 12px;
-  color: var(--uv-ws-service-intro, #646a78);
-  line-height: 1.4;
-  margin: 0 0 12px 0;
-  flex: 1;
-}
-
 .service-features {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 12px;
+  flex: 1;
+  align-content: flex-start;
 }
 
 .outline-tag {
@@ -697,22 +774,6 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
   font-size: 28px;
   font-weight: 500;
   line-height: 1.2;
-}
-
-.service-focus-subtitle {
-  margin: 0 0 18px;
-  color: var(--uv-ws-service-subtitle, #414754);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.45;
-}
-
-.service-focus-description {
-  margin: 0 0 20px;
-  max-width: 680px;
-  color: var(--uv-ws-service-intro, #646a78);
-  font-size: 14px;
-  line-height: 1.7;
 }
 
 .service-focus-features {
@@ -829,9 +890,10 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
   }
 
   .hero-banner {
-    padding: 20px 16px;
+    padding: 24px 16px;
     margin-bottom: 18px;
     border-radius: 14px;
+    min-height: 188px;
   }
 
   .hero-title {
@@ -891,11 +953,6 @@ const triggerChoreography = async (targetType: ServiceType | null) => {
   .service-title {
     font-size: 16px;
     line-height: 1.35;
-  }
-
-  .service-description {
-    font-size: 12px;
-    line-height: 1.55;
   }
 
   .service-features {

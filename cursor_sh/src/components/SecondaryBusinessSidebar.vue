@@ -12,7 +12,7 @@
         @keydown.enter.self.prevent="goToService('ai_agent')"
         @keydown.space.self.prevent="goToService('ai_agent')"
       >
-        <h4 class="ai-banner-title">您的7×24小时AI创意合伙人</h4>
+        <h4 class="ai-banner-title">Unique Vision AI 智能体</h4>
         <div class="ai-banner-input-mock">
           <span class="ai-mock-placeholder">有什么想法...</span>
           <div class="ai-mock-btn">发送 <span class="ai-mock-dot" aria-hidden="true"></span></div>
@@ -21,12 +21,17 @@
     </div>
 
     <template v-if="recentSessions.length > 0">
-      <div class="figma-full-divider compact-divider"></div>
-      <div class="module-list recent-module-list">
+      <div v-show="isRecentListScrolled" class="figma-full-divider compact-divider"></div>
+      <div
+        ref="recentListRef"
+        class="module-list recent-module-list"
+        :class="{ 'is-expanded': showAllChats }"
+        @scroll.passive="updateRecentListScrollState"
+      >
         <div class="recent-chat-section">
           <div class="recent-chat-header">
             <span>最近对话</span>
-            <button v-if="recentSessions.length > 4" class="recent-chat-toggle" @click.stop="showAllChats = !showAllChats">
+            <button v-if="recentSessions.length > 4" class="recent-chat-toggle" @click.stop="toggleRecentChats">
               {{ showAllChats ? '收起' : '更多' }}
             </button>
           </div>
@@ -72,10 +77,6 @@
             <img class="intro-img" :src="service.image" :alt="service.title" />
             <div class="badge">{{ getServiceBadgeLabel(service.badge) }}</div>
           </div>
-          <div class="intro-subtitle">{{ service.subtitle }}</div>
-          <p class="intro-desc">
-            {{ service.description }}
-          </p>
           <div class="intro-tags">
             <span v-for="feature in service.features" :key="feature">{{ feature }}</span>
           </div>
@@ -86,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUiStore } from '@/stores/ui'
@@ -112,10 +113,30 @@ const authStore = useAuthStore()
 const currentModule = computed(() => uiStore.activeModule)
 const recentSessions = ref<AiChatSavedSession[]>([])
 const showAllChats = ref(false)
+const recentListRef = ref<HTMLElement | null>(null)
+const isRecentListScrolled = ref(false)
 
 const visibleRecentSessions = computed(() => {
   return showAllChats.value ? recentSessions.value : recentSessions.value.slice(0, 4)
 })
+
+const updateRecentListScrollState = () => {
+  const el = recentListRef.value
+  isRecentListScrolled.value = Boolean(el && el.scrollTop > 2)
+}
+
+const resetRecentListScrollState = async () => {
+  await nextTick()
+  if (recentListRef.value) {
+    recentListRef.value.scrollTop = 0
+  }
+  updateRecentListScrollState()
+}
+
+const toggleRecentChats = async () => {
+  showAllChats.value = !showAllChats.value
+  await resetRecentListScrollState()
+}
 
 const mergeRemoteSessions = (localSessions: AiChatSavedSession[], remoteSessions: AiChatSavedSession[]) => {
   const byId = new Map<string, AiChatSavedSession>()
@@ -160,12 +181,14 @@ const loadRecentSessions = async () => {
   const userId = authStore.user?.id || 'anonymous'
   const localSessions = loadAiChatSessions(userId)
   recentSessions.value = localSessions
+  await resetRecentListScrollState()
 
   try {
     const remoteSessions = await fetchRemoteRecentSessions()
     if (remoteSessions.length === 0) return
     const merged = mergeRemoteSessions(localSessions, remoteSessions).slice(0, 30)
     recentSessions.value = saveAiChatSessions(userId, merged, false)
+    await resetRecentListScrollState()
   } catch (error) {
     console.warn('[ChatHistory] 拉取后端历史失败:', error)
   }
@@ -342,6 +365,21 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
 .recent-chat-section {
   margin: 8px 4px 0;
   padding: 0 0 4px;
+}
+
+.recent-module-list {
+  flex-shrink: 0;
+}
+
+.recent-module-list.is-expanded {
+  max-height: min(340px, 42vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.recent-module-list.is-expanded::-webkit-scrollbar {
+  display: none;
 }
 
 .service-module-list {
@@ -534,20 +572,6 @@ const goToService = async (type: ServiceType | 'ai_agent') => {
 
 .intro-image .badge.creative { background: var(--uv-ws-service-badge-bg, #000000); }
 .intro-image .badge.art { background: var(--uv-ws-service-badge-bg, #000000); }
-
-.intro-subtitle {
-  color: var(--uv-ws-module-intro-title, #1f2329);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.intro-desc {
-  margin: 0;
-  font-size: 12px;
-  color: var(--uv-ws-module-intro-text, #6c707d);
-  line-height: 1.6;
-}
 
 .intro-tags {
   display: flex;
