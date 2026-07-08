@@ -837,6 +837,7 @@ import {
   getFileOpenActionText,
   getFilePreviewKind,
   getPreviewFileName,
+  getPreviewSignUrlParams,
   getPreviewFileUrl,
   isInlinePreviewableFile,
 } from '@/utils/filePreview'
@@ -909,7 +910,7 @@ const refreshSignedFileUrl = async (file: any) => {
 
   try {
     const result: any = await request.get('/upload/sign-url', {
-      params: { key: objectKey },
+      params: { key: objectKey, ...getPreviewSignUrlParams(file) },
       silent: true,
     })
     const freshUrl = result?.url || fileUrl(file)

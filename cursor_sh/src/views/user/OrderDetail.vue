@@ -308,6 +308,7 @@ import request from '@/utils/request'
 import { ensureEnterpriseApproved } from '@/utils/enterpriseGuard'
 import { orderDraftCopy } from '@/utils/orderDraftCopy'
 import { formatServerTime, parseServerTime } from '@/utils/time'
+import { getPreviewSignUrlParams } from '@/utils/filePreview'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
 import FilePreviewDialog from '@/components/FilePreviewDialog.vue'
@@ -389,7 +390,7 @@ const refreshSignedFileUrl = async (file: any) => {
 
   try {
     const result: any = await request.get('/upload/sign-url', {
-      params: { key: objectKey },
+      params: { key: objectKey, ...getPreviewSignUrlParams(file) },
       silent: true,
     })
     const freshUrl = result?.url || fileUrl(file)

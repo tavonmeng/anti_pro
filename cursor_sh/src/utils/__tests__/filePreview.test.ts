@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { getFileOpenActionText, getFilePreviewKind, isInlinePreviewableFile } from '../filePreview'
+import {
+  getFileOpenActionText,
+  getFilePreviewKind,
+  getPreviewSignUrlParams,
+  isInlinePreviewableFile,
+} from '../filePreview'
 
 describe('filePreview helpers', () => {
   it('treats uploaded PDFs as inline-previewable files', () => {
@@ -24,5 +29,19 @@ describe('filePreview helpers', () => {
     expect(getFilePreviewKind(file)).toBe('other')
     expect(isInlinePreviewableFile(file)).toBe(false)
     expect(getFileOpenActionText(file)).toBe('下载')
+  })
+
+  it('requests inline OSS headers for PDF preview URLs', () => {
+    const file = {
+      name: '需求确认.pdf',
+      type: 'application/pdf',
+      object_key: 'deliverables/user-1/demo.pdf',
+    }
+
+    expect(getPreviewSignUrlParams(file)).toEqual({
+      disposition: 'inline',
+      content_type: 'application/pdf',
+      filename: '需求确认.pdf',
+    })
   })
 })

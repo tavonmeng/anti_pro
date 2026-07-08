@@ -5,6 +5,7 @@ OSS_ENABLED=False 时自动回退到本地磁盘存储（开发环境）。
 """
 
 import os
+from typing import Mapping
 from urllib.parse import unquote, urlparse, urlunparse
 
 from app.config import settings
@@ -161,7 +162,11 @@ def upload_file(object_key: str, file_path: str, content_type: str = "") -> str:
     return object_key
 
 
-def get_signed_url(object_key: str, expires: int = 3600) -> str:
+def get_signed_url(
+    object_key: str,
+    expires: int = 3600,
+    response_params: Mapping[str, str] | None = None,
+) -> str:
     """
     生成带签名的临时访问 URL（私有 Bucket 专用）。
 
@@ -173,7 +178,8 @@ def get_signed_url(object_key: str, expires: int = 3600) -> str:
         带签名的完整 HTTPS URL
     """
     bucket = _get_bucket()
-    url = bucket.sign_url("GET", object_key, expires, slash_safe=True)
+    params = dict(response_params or {}) or None
+    url = bucket.sign_url("GET", object_key, expires, params=params, slash_safe=True)
 
     # sign_url 默认返回 http，强制改 https
     if url.startswith("http://"):

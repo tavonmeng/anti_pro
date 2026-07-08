@@ -9,6 +9,7 @@ OSS_ENABLED=False 时回退到本地磁盘存储（开发环境）。
 import os
 import uuid
 from typing import Optional
+from urllib.parse import quote
 import aiofiles
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -408,6 +409,9 @@ async def upload_generic_file(
 @router.get("/sign-url")
 async def get_signed_url(
     key: str = Query(..., description="OSS object key"),
+    disposition: Optional[str] = Query(None, pattern="^(inline|attachment)$"),
+    content_type: Optional[str] = Query(None, alias="content_type"),
+    filename: Optional[str] = Query(None),
     current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db),
 ):
@@ -429,7 +433,20 @@ async def get_signed_url(
         raise HTTPException(status_code=403, detail="无权访问此文件")
 
     try:
-        url = oss_sign(object_key, expires=3600)
+        response_params = {}
+        if content_type:
+            response_params["response-content-type"] = content_type
+        if disposition:
+            content_disposition = disposition
+            if filename:
+                safe_name = _safe_filename(filename, "file")
+                content_disposition = "%s; filename*=UTF-8''%s" % (
+                    disposition,
+                    quote(safe_name),
+                )
+            response_params["response-content-disposition"] = content_disposition
+
+        url = oss_sign(object_key, expires=3600, response_params=response_params or None)
         return {"code": 200, "message": "获取成功", "data": {"url": url, "object_key": object_key}}
     except Exception as e:
         raise HTTPException(status_code=500, detail="生成签名 URL 失败，请稍后重试") from e

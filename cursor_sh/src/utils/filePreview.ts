@@ -36,3 +36,13 @@ export const isInlinePreviewableFile = (file: PreviewableFile): boolean =>
 
 export const getFileOpenActionText = (file: PreviewableFile): '预览' | '下载' =>
   isInlinePreviewableFile(file) ? '预览' : '下载'
+
+export const getPreviewSignUrlParams = (file: PreviewableFile): Record<string, string> => {
+  if (getFilePreviewKind(file) !== 'pdf') return {}
+
+  return {
+    disposition: 'inline',
+    content_type: 'application/pdf',
+    filename: getPreviewFileName(file, 'preview.pdf'),
+  }
+}
