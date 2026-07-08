@@ -12,6 +12,7 @@ from typing import Optional
 from urllib.parse import quote
 import aiofiles
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,6 +93,38 @@ def _cleanup_temp_file(tmp_path: str):
         os.remove(tmp_path)
     except OSError:
         pass
+
+
+def _is_pdf_preview_target(object_key: str, filename: str | None = None) -> bool:
+    return (
+        os.path.splitext((object_key or "").split("?", 1)[0])[1].lower() == ".pdf"
+        or os.path.splitext(filename or "")[1].lower() == ".pdf"
+    )
+
+
+def _inline_pdf_headers(filename: str | None, object_key: str) -> dict[str, str]:
+    fallback_name = os.path.basename((object_key or "preview.pdf").split("?", 1)[0]) or "preview.pdf"
+    safe_name = _safe_filename(filename or fallback_name, "preview.pdf")
+    if not safe_name.lower().endswith(".pdf"):
+        safe_name = "%s.pdf" % (os.path.splitext(safe_name)[0] or "preview")
+
+    return {
+        "Content-Disposition": "inline; filename*=UTF-8''%s" % quote(safe_name),
+        "Cache-Control": "private, max-age=300",
+        "X-Content-Type-Options": "nosniff",
+    }
+
+
+def _local_upload_file_path(local_url: str) -> str:
+    if not local_url.startswith("/uploads/"):
+        raise HTTPException(status_code=400, detail="无效的本地文件地址")
+
+    upload_root = os.path.abspath(settings.UPLOAD_DIR)
+    relative_path = local_url[len("/uploads/"):].lstrip("/")
+    file_path = os.path.abspath(os.path.join(upload_root, relative_path))
+    if file_path != upload_root and not file_path.startswith(upload_root + os.sep):
+        raise HTTPException(status_code=400, detail="无效的本地文件地址")
+    return file_path
 
 
 def _role_value(user: AnyUser) -> str:
@@ -447,6 +480,46 @@ async def get_signed_url(
         return {"code": 200, "message": "获取成功", "data": {"url": url, "object_key": object_key}}
     except Exception as e:
         raise HTTPException(status_code=500, detail="生成签名 URL 失败，请稍后重试") from e
+
+
+@router.get("/preview")
+async def preview_pdf(
+    key: str = Query(..., description="OSS object key or local upload path"),
+    filename: Optional[str] = Query(None),
+    current_user: AnyUser = Depends(get_current_user_for_public_deployment),
+    db: AsyncSession = Depends(get_db),
+):
+    """以 inline PDF 响应代理预览私有文件，避开 OSS 强制下载响应头。"""
+    if not settings.OSS_ENABLED:
+        if not _is_pdf_preview_target(key, filename):
+            raise HTTPException(status_code=400, detail="仅支持 PDF 预览")
+        file_path = _local_upload_file_path(key)
+        if not os.path.isfile(file_path):
+            raise HTTPException(status_code=404, detail="文件不存在")
+        return FileResponse(
+            file_path,
+            media_type="application/pdf",
+            headers=_inline_pdf_headers(filename, key),
+        )
+
+    from app.services.oss_service import extract_object_key, iter_object_bytes
+
+    object_key = extract_object_key(key)
+    if not object_key:
+        raise HTTPException(status_code=400, detail="无效的 OSS 文件地址")
+    if not _is_pdf_preview_target(object_key, filename):
+        raise HTTPException(status_code=400, detail="仅支持 PDF 预览")
+    if not await _can_access_object_key(db, object_key, current_user):
+        raise HTTPException(status_code=403, detail="无权访问此文件")
+
+    try:
+        return StreamingResponse(
+            iter_object_bytes(object_key),
+            media_type="application/pdf",
+            headers=_inline_pdf_headers(filename, object_key),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="打开 PDF 预览失败，请稍后重试") from e
 
 
 @router.post("/showcase-video")

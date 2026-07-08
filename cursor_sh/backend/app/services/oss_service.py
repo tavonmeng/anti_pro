@@ -5,7 +5,7 @@ OSS_ENABLED=False 时自动回退到本地磁盘存储（开发环境）。
 """
 
 import os
-from typing import Mapping
+from typing import Iterable, Mapping
 from urllib.parse import unquote, urlparse, urlunparse
 
 from app.config import settings
@@ -304,6 +304,37 @@ def download_object_bytes(object_key: str) -> bytes:
         fields={"object_key": object_key},
         should_retry=_is_retryable_oss_exception,
     )
+
+
+def iter_object_bytes(object_key: str, chunk_size: int = 1024 * 1024) -> Iterable[bytes]:
+    """Open an OSS private object and yield bytes in chunks."""
+    bucket = _get_bucket()
+
+    def _open():
+        return bucket.get_object(object_key)
+
+    result = retry_sync(
+        _open,
+        logger=logger,
+        event="oss_open_object_stream",
+        attempts=settings.OSS_RETRY_ATTEMPTS,
+        fields={"object_key": object_key},
+        should_retry=_is_retryable_oss_exception,
+    )
+
+    def _iter():
+        try:
+            while True:
+                chunk = result.read(chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            close = getattr(result, "close", None)
+            if callable(close):
+                close()
+
+    return _iter()
 
 
 # ============ 工具方法 ============

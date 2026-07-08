@@ -58,3 +58,16 @@ export const getPreviewSignUrlParams = (file: PreviewableFile): Record<string, s
     filename: getPreviewFileName(file, 'preview.pdf'),
   }
 }
+
+export const getPdfPreviewProxyUrl = (file: PreviewableFile): string => {
+  if (getFilePreviewKind(file) !== 'pdf') return ''
+
+  const key = getPreviewFileSignKey(file)
+  if (!key) return ''
+
+  const params = new URLSearchParams({
+    key,
+    filename: getPreviewFileName(file, 'preview.pdf'),
+  })
+  return `/api/upload/preview?${params.toString()}`
+}

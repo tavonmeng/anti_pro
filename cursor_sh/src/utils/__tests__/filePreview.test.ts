@@ -4,6 +4,7 @@ import {
   getFileOpenActionText,
   getFilePreviewKind,
   getPreviewFileSignKey,
+  getPdfPreviewProxyUrl,
   getPreviewSignUrlParams,
   isInlinePreviewableFile,
 } from '../filePreview'
@@ -73,5 +74,14 @@ describe('filePreview helpers', () => {
       'deliverables/user-1/current.pdf',
     )
     expect(getPreviewFileSignKey({ url: ossUrl })).toBe(ossUrl)
+  })
+
+  it('builds backend proxy URLs for PDF preview blobs', () => {
+    expect(
+      getPdfPreviewProxyUrl({
+        object_key: 'site_photos/user-1/demo file.pdf',
+        filename: '演播说明.pdf',
+      }),
+    ).toBe('/api/upload/preview?key=site_photos%2Fuser-1%2Fdemo+file.pdf&filename=%E6%BC%94%E6%92%AD%E8%AF%B4%E6%98%8E.pdf')
   })
 })

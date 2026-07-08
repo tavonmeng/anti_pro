@@ -839,6 +839,7 @@ import {
   getFilePreviewKind,
   getPreviewFileName,
   getPreviewFileSignKey,
+  getPdfPreviewProxyUrl,
   getPreviewSignUrlParams,
   getPreviewFileUrl,
 } from '@/utils/filePreview'
@@ -928,6 +929,22 @@ const refreshSignedFileUrl = async (file: any) => {
   }
 }
 
+const fetchPdfPreviewBlobUrl = async (file: any) => {
+  const proxyUrl = getPdfPreviewProxyUrl(file)
+  if (!proxyUrl) return ''
+
+  const response = await fetch(proxyUrl, {
+    headers: getAuthHeaders(),
+  })
+  if (!response.ok) {
+    throw new Error(`PDF preview request failed: ${response.status}`)
+  }
+
+  const blob = await response.blob()
+  const pdfBlob = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' })
+  return URL.createObjectURL(pdfBlob)
+}
+
 const escapePreviewHtml = (value: string) =>
   value
     .replace(/&/g, '&amp;')
@@ -957,25 +974,42 @@ const openFileInNewTab = async (file: any) => {
   const previewTab = openNewPreviewTab()
   if (!previewTab) return
 
-  const url = await refreshSignedFileUrl(file)
-  if (!url) {
-    previewTab.close()
-    ElMessage.warning('文件地址为空，无法预览')
-    return
-  }
+  let objectUrl = ''
+  try {
+    const kind = getFilePreviewKind(file)
+    const url = kind === 'pdf' ? await fetchPdfPreviewBlobUrl(file) : await refreshSignedFileUrl(file)
+    if (!url) {
+      previewTab.close()
+      ElMessage.warning('文件地址为空，无法预览')
+      return
+    }
 
-  const safeUrl = escapePreviewHtml(url)
-  const safeName = escapePreviewHtml(fileName(file) || '文件')
-  previewTab.document.title = safeName
-  writePreviewTabBody(
-    previewTab,
-    `<div style="font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; padding: 24px; color: #1D1D1F; line-height: 1.6;">
-      <div style="font-weight: 600; margin-bottom: 8px;">正在打开预览...</div>
-      <div style="color: #6E6E73; margin-bottom: 12px;">如果浏览器下载了文件或没有自动跳转，请点击下面的链接重新打开。</div>
-      <a href="${safeUrl}" style="color: #0066CC; word-break: break-all;">${safeName}</a>
-    </div>`,
-  )
-  previewTab.location.replace(url)
+    if (url.startsWith('blob:')) {
+      objectUrl = url
+    }
+
+    const safeUrl = escapePreviewHtml(url)
+    const safeName = escapePreviewHtml(fileName(file) || '文件')
+    const hint = kind === 'pdf'
+      ? '如果没有自动跳转，请点击下面的链接重新打开。'
+      : '如果浏览器下载了文件或没有自动跳转，请点击下面的链接重新打开。'
+    previewTab.document.title = safeName
+    writePreviewTabBody(
+      previewTab,
+      `<div style="font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; padding: 24px; color: #1D1D1F; line-height: 1.6;">
+        <div style="font-weight: 600; margin-bottom: 8px;">正在打开预览...</div>
+        <div style="color: #6E6E73; margin-bottom: 12px;">${hint}</div>
+        <a href="${safeUrl}" style="color: #0066CC; word-break: break-all;">${safeName}</a>
+      </div>`,
+    )
+    previewTab.location.replace(url)
+  } catch (error) {
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl)
+    }
+    previewTab.close()
+    ElMessage.error('PDF预览打开失败，请稍后重试')
+  }
 }
 
 const openFilePreview = async (file: any) => {
@@ -1033,10 +1067,12 @@ const onWorkflowTypeChange = () => {
 const designPlan = ref<any>({ content: '', files: [], status: 'draft' })
 const savingPlan = ref(false)
 const isDesignPlanCompleted = computed(() => designPlan.value.status === 'completed')
-const uploadHeaders = computed(() => {
+const getAuthHeaders = () => {
   const token = localStorage.getItem('token')
   return token ? { Authorization: `Bearer ${token}` } : {}
-})
+}
+
+const uploadHeaders = computed(getAuthHeaders)
 
 // Memory 相关状态
 const memoryData = ref<any>(null)
