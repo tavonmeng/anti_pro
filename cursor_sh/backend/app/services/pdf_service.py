@@ -4,6 +4,7 @@ import io
 import os
 import platform
 from datetime import datetime, timedelta
+from xml.sax.saxutils import escape
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm, cm
@@ -43,13 +44,14 @@ def _draw_confirmation_watermark(canvas, doc):
     watermark_width = watermark_height * (466 / 831)
     watermark_y = (page_height - watermark_height) / 2
     watermark_alpha = 0.045
+    visible_width = watermark_width / 2
 
-    def draw_logo(x: float, flip_vertical: bool = False):
+    def draw_logo(image_x: float, flip_vertical: bool = False):
         canvas.saveState()
         canvas.setFillAlpha(watermark_alpha)
         canvas.setStrokeAlpha(watermark_alpha)
         if flip_vertical:
-            canvas.translate(x, watermark_y + watermark_height)
+            canvas.translate(image_x, watermark_y + watermark_height)
             canvas.scale(1, -1)
             canvas.drawImage(
                 logo_path,
@@ -62,7 +64,7 @@ def _draw_confirmation_watermark(canvas, doc):
         else:
             canvas.drawImage(
                 logo_path,
-                x,
+                image_x,
                 watermark_y,
                 width=watermark_width,
                 height=watermark_height,
@@ -70,8 +72,8 @@ def _draw_confirmation_watermark(canvas, doc):
             )
         canvas.restoreState()
 
-    draw_logo(-145 * mm, flip_vertical=True)
-    draw_logo(page_width - 45 * mm, flip_vertical=False)
+    draw_logo(-(watermark_width - visible_width), flip_vertical=True)
+    draw_logo(page_width - visible_width, flip_vertical=False)
 
 
 # ========== 中文字体注册 ==========
@@ -306,6 +308,12 @@ def _format_time(time_str: str) -> str:
         return beijing.strftime("%Y年%m月%d日 %H:%M")
     except Exception:
         return time_str
+
+
+def _pdf_paragraph_text(value) -> str:
+    """Escape arbitrary user text for ReportLab Paragraph and preserve line breaks."""
+    text = escape(str(value or ""))
+    return text.replace("\n", "<br/>")
 
 
 def _build_summary_rows(order_data: dict, order_type: str) -> list:
@@ -816,7 +824,29 @@ class PDFService:
         
         summary_rows = _build_summary_rows(order_data, order_type)
         if summary_rows:
-            summary_table = Table(summary_rows, colWidths=[120, 340])
+            label_style = ParagraphStyle(
+                "DetailSummaryLabel",
+                fontName=_FONT,
+                fontSize=9,
+                leading=13,
+                textColor=colors.HexColor("#86868b"),
+            )
+            value_style = ParagraphStyle(
+                "DetailSummaryValue",
+                fontName=_FONT,
+                fontSize=9,
+                leading=13,
+                textColor=colors.HexColor("#1a1c1c"),
+            )
+            wrapped_summary_rows = [
+                [
+                    Paragraph(_pdf_paragraph_text(label), label_style),
+                    Paragraph(_pdf_paragraph_text(value), value_style),
+                ]
+                for label, value in summary_rows
+            ]
+
+            summary_table = Table(wrapped_summary_rows, colWidths=[120, 340])
             summary_table.setStyle(TableStyle([
                 ("FONTNAME", (0, 0), (-1, -1), _FONT),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
@@ -905,7 +935,11 @@ class PDFService:
             styles["Footer"]
         ))
         
-        doc.build(elements)
+        doc.build(
+            elements,
+            onFirstPage=_draw_confirmation_watermark,
+            onLaterPages=_draw_confirmation_watermark,
+        )
         pdf_bytes = buffer.getvalue()
         buffer.close()
         return pdf_bytes

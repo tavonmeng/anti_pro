@@ -170,8 +170,8 @@ const promptSlides = [
     background: "/background/shose.jpg"
   },
   {
-    text: "想做一条毛绒质感猫狗互动的裸眼3D视频，治愈又有出屏感...",
-    background: "/background/dog.jpg"
+    text: "想做一条毛绒质感猫咪互动的裸眼3D视频，治愈又有出屏感...",
+    background: "/background/cat.jpg"
   },
   {
     text: "帮我生成一段大牌护肤品的新品发布3D视频，要求水珠材质特别逼真...",

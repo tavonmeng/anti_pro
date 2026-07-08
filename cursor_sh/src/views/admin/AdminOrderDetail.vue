@@ -214,10 +214,10 @@
                   class="file-item file-action"
                   @click="openFilePreview(file)"
                 >
-                  <el-icon><component :is="isPreviewImage(file) ? Picture : DocumentIcon" /></el-icon>
+                  <el-icon><component :is="fileIcon(file)" /></el-icon>
                   <span>{{ fileName(file) }}</span>
                   <span class="file-size">{{ formatFileSize(file.size) }}</span>
-                  <span class="file-open-text">{{ isPreviewImage(file) ? '预览' : '下载' }}</span>
+                  <span class="file-open-text">{{ fileOpenActionText(file) }}</span>
                 </button>
               </div>
             </div>
@@ -236,10 +236,10 @@
                   class="file-item file-action"
                   @click="openFilePreview(file)"
                 >
-                  <el-icon><component :is="isPreviewImage(file) ? Picture : DocumentIcon" /></el-icon>
+                  <el-icon><component :is="fileIcon(file)" /></el-icon>
                   <span>{{ fileName(file) }}</span>
                   <span class="file-size">{{ formatFileSize(file.size) }}</span>
-                  <span class="file-open-text">{{ isPreviewImage(file) ? '预览' : '下载' }}</span>
+                  <span class="file-open-text">{{ fileOpenActionText(file) }}</span>
                 </button>
               </div>
             </div>
@@ -271,7 +271,7 @@
                 <div class="preview-files">
                   <div v-for="(file, fileIndex) in history.files" :key="fileKey(file, fileIndex)" class="file-item">
                     <a :href="fileUrl(file)" target="_blank" class="file-link" @click.prevent="openFilePreview(file)">
-                      <el-icon><VideoPlay /></el-icon>
+                      <el-icon><component :is="fileIcon(file)" /></el-icon>
                       <span>{{ fileName(file) }}</span>
                       <span class="file-size">{{ formatFileSize(file.size) }}</span>
                     </a>
@@ -313,7 +313,7 @@
               class="file-item file-action preview-file"
               @click="openFilePreview(file)"
             >
-              <el-icon><VideoPlay /></el-icon>
+              <el-icon><component :is="fileIcon(file)" /></el-icon>
               <span>{{ fileName(file) }}</span>
               <span class="file-size">{{ formatFileSize(file.size) }}</span>
               <span class="file-time">{{ formatTime(file.uploadTime) }}</span>
@@ -833,6 +833,13 @@ import { useOrderStore } from '@/stores/order'
 import { orderApi, authApi, contractorAdminApi } from '@/utils/api'
 import request from '@/utils/request'
 import { formatServerTime, parseServerTime } from '@/utils/time'
+import {
+  getFileOpenActionText,
+  getFilePreviewKind,
+  getPreviewFileName,
+  getPreviewFileUrl,
+  isInlinePreviewableFile,
+} from '@/utils/filePreview'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import AssigneeDialog from '@/components/AssigneeDialog.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
@@ -883,21 +890,56 @@ const sortedDeliverables = (deliverables: any[] = []) => {
   return [...deliverables].sort((a, b) => deliverableSortTime(b) - deliverableSortTime(a))
 }
 
-const fileUrl = (file: any) => file?.url || file?.previewUrl || file?.file_url || file?.fileUrl || file?.href || ''
-const fileName = (file: any) => file?.name || file?.filename || file?.fileName || file?.originalName || file?.original_filename || '文件'
+const fileUrl = (file: any) => getPreviewFileUrl(file)
+const fileName = (file: any) => getPreviewFileName(file)
 const fileKey = (file: any, index = 0) =>
   file?.id || fileUrl(file) || file?.object_key || file?.filename || file?.name || index
-const isPreviewImage = (file: any) => {
-  const mime = String(file?.type || file?.mimeType || file?.mime_type || file?.content_type || '').toLowerCase()
-  return mime.startsWith('image/') || isImage(fileName(file)) || isImage(fileUrl(file).split('?')[0])
+const fileObjectKey = (file: any) => file?.object_key || file?.objectKey || ''
+const fileOpenActionText = (file: any) => getFileOpenActionText(file)
+const fileIcon = (file: any) => {
+  const kind = getFilePreviewKind(file)
+  if (kind === 'image') return Picture
+  if (kind === 'video') return VideoPlay
+  return DocumentIcon
 }
 
-const openFilePreview = (file: any) => {
-  if (!fileUrl(file)) {
+const refreshSignedFileUrl = async (file: any) => {
+  const objectKey = fileObjectKey(file)
+  if (!objectKey) return fileUrl(file)
+
+  try {
+    const result: any = await request.get('/upload/sign-url', {
+      params: { key: objectKey },
+      silent: true,
+    })
+    const freshUrl = result?.url || fileUrl(file)
+    if (freshUrl) {
+      file.url = freshUrl
+      file.file_url = freshUrl
+    }
+    if (result?.object_key) {
+      file.object_key = result.object_key
+    }
+    return freshUrl
+  } catch (error) {
+    return fileUrl(file)
+  }
+}
+
+const openFilePreview = async (file: any) => {
+  const url = await refreshSignedFileUrl(file)
+  if (!url) {
     ElMessage.warning('文件地址为空，无法预览')
     return
   }
-  previewingFile.value = file
+
+  const nextFile = { ...file, url, file_url: url }
+  if (!isInlinePreviewableFile(nextFile)) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+    return
+  }
+
+  previewingFile.value = nextFile
   filePreviewVisible.value = true
 }
 

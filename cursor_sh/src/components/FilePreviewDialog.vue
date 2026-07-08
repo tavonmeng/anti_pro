@@ -72,6 +72,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Document, Download, Picture, VideoPlay } from '@element-plus/icons-vue'
+import { getFilePreviewKind, getPreviewFileName, getPreviewFileUrl } from '@/utils/filePreview'
 
 const props = defineProps<{
   modelValue: boolean
@@ -82,36 +83,9 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
-const fileUrl = computed(() =>
-  props.file?.url || props.file?.file_url || props.file?.fileUrl || props.file?.href || ''
-)
-
-const fileName = computed(() => {
-  const name = props.file?.name || props.file?.filename || props.file?.fileName || props.file?.originalName || props.file?.original_filename || ''
-  return name || decodeURIComponent(String(fileUrl.value).split('/').pop()?.split('?')[0] || '交付文件')
-})
-
-const fileMime = computed(() => String(
-  props.file?.mime_type || props.file?.mimeType || props.file?.content_type || props.file?.type || ''
-).toLowerCase())
-
-const fileExtension = computed(() => {
-  const raw = `${fileName.value} ${String(fileUrl.value).split('?')[0]}`
-  const match = raw.toLowerCase().match(/\.([a-z0-9]+)(?:\s|$)/)
-  return match?.[1] || ''
-})
-
-const fileKind = computed<'image' | 'video' | 'pdf' | 'other'>(() => {
-  if (fileMime.value.startsWith('image/')) return 'image'
-  if (fileMime.value.startsWith('video/')) return 'video'
-  if (fileMime.value === 'application/pdf') return 'pdf'
-
-  const ext = fileExtension.value
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'avif'].includes(ext)) return 'image'
-  if (['mp4', 'webm', 'ogg', 'mov', 'm4v'].includes(ext)) return 'video'
-  if (ext === 'pdf') return 'pdf'
-  return 'other'
-})
+const fileUrl = computed(() => getPreviewFileUrl(props.file))
+const fileName = computed(() => getPreviewFileName(props.file, '交付文件'))
+const fileKind = computed(() => getFilePreviewKind(props.file))
 
 const previewIcon = computed(() => {
   if (fileKind.value === 'image') return Picture
