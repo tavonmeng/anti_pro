@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getFilePreviewOpenTarget,
   getFileOpenActionText,
   getFilePreviewKind,
+  getPreviewFileSignKey,
   getPreviewSignUrlParams,
   isInlinePreviewableFile,
 } from '../filePreview'
@@ -42,5 +44,21 @@ describe('filePreview helpers', () => {
       disposition: 'inline',
       filename: '需求确认.pdf',
     })
+  })
+
+  it('opens PDFs in a browser tab instead of the embedded preview dialog', () => {
+    expect(getFilePreviewOpenTarget({ name: '需求确认.pdf', type: 'application/pdf' })).toBe('new-tab')
+    expect(getFilePreviewOpenTarget({ name: '现场图.png', type: 'image/png' })).toBe('dialog')
+    expect(getFilePreviewOpenTarget({ name: '演示视频.mp4', type: 'video/mp4' })).toBe('dialog')
+    expect(getFilePreviewOpenTarget({ name: '项目说明.docx' })).toBe('new-tab')
+  })
+
+  it('uses existing URLs as sign-url keys for legacy uploaded files', () => {
+    const ossUrl = 'https://anti-pro-prod-assets.oss-cn-beijing.aliyuncs.com/deliverables/user-1/demo.pdf?Expires=3600'
+
+    expect(getPreviewFileSignKey({ object_key: 'deliverables/user-1/current.pdf', url: ossUrl })).toBe(
+      'deliverables/user-1/current.pdf',
+    )
+    expect(getPreviewFileSignKey({ url: ossUrl })).toBe(ossUrl)
   })
 })

@@ -1,8 +1,12 @@
 export type PreviewableFile = Record<string, any> | null | undefined
 export type FilePreviewKind = 'image' | 'video' | 'pdf' | 'other'
+export type FilePreviewOpenTarget = 'dialog' | 'new-tab'
 
 export const getPreviewFileUrl = (file: PreviewableFile): string =>
   file?.url || file?.previewUrl || file?.file_url || file?.fileUrl || file?.href || ''
+
+export const getPreviewFileSignKey = (file: PreviewableFile): string =>
+  file?.object_key || file?.objectKey || getPreviewFileUrl(file)
 
 export const getPreviewFileName = (file: PreviewableFile, fallback = '文件'): string => {
   const name = file?.name || file?.filename || file?.fileName || file?.originalName || file?.original_filename || ''
@@ -36,6 +40,11 @@ export const isInlinePreviewableFile = (file: PreviewableFile): boolean =>
 
 export const getFileOpenActionText = (file: PreviewableFile): '预览' | '下载' =>
   isInlinePreviewableFile(file) ? '预览' : '下载'
+
+export const getFilePreviewOpenTarget = (file: PreviewableFile): FilePreviewOpenTarget => {
+  const kind = getFilePreviewKind(file)
+  return kind === 'image' || kind === 'video' ? 'dialog' : 'new-tab'
+}
 
 export const getPreviewSignUrlParams = (file: PreviewableFile): Record<string, string> => {
   if (getFilePreviewKind(file) !== 'pdf') return {}

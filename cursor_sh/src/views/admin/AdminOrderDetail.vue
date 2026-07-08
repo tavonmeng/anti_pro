@@ -834,12 +834,13 @@ import { orderApi, authApi, contractorAdminApi } from '@/utils/api'
 import request from '@/utils/request'
 import { formatServerTime, parseServerTime } from '@/utils/time'
 import {
+  getFilePreviewOpenTarget,
   getFileOpenActionText,
   getFilePreviewKind,
   getPreviewFileName,
+  getPreviewFileSignKey,
   getPreviewSignUrlParams,
   getPreviewFileUrl,
-  isInlinePreviewableFile,
 } from '@/utils/filePreview'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import AssigneeDialog from '@/components/AssigneeDialog.vue'
@@ -895,7 +896,7 @@ const fileUrl = (file: any) => getPreviewFileUrl(file)
 const fileName = (file: any) => getPreviewFileName(file)
 const fileKey = (file: any, index = 0) =>
   file?.id || fileUrl(file) || file?.object_key || file?.filename || file?.name || index
-const fileObjectKey = (file: any) => file?.object_key || file?.objectKey || ''
+const fileObjectKey = (file: any) => getPreviewFileSignKey(file)
 const fileOpenActionText = (file: any) => getFileOpenActionText(file)
 const fileIcon = (file: any) => {
   const kind = getFilePreviewKind(file)
@@ -927,7 +928,40 @@ const refreshSignedFileUrl = async (file: any) => {
   }
 }
 
+const openNewPreviewTab = () => {
+  const previewTab = window.open('', '_blank')
+  if (!previewTab) {
+    ElMessage.warning('浏览器阻止了新标签页，请允许弹窗后重试')
+    return null
+  }
+
+  previewTab.document.title = '正在打开预览'
+  previewTab.document.body.style.margin = '0'
+  previewTab.document.body.innerHTML = '<div style="font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; padding: 24px; color: #1D1D1F;">正在打开预览...</div>'
+  return previewTab
+}
+
+const openFileInNewTab = async (file: any) => {
+  const previewTab = openNewPreviewTab()
+  if (!previewTab) return
+
+  const url = await refreshSignedFileUrl(file)
+  if (!url) {
+    previewTab.close()
+    ElMessage.warning('文件地址为空，无法预览')
+    return
+  }
+
+  previewTab.opener = null
+  previewTab.location.href = url
+}
+
 const openFilePreview = async (file: any) => {
+  if (getFilePreviewOpenTarget(file) === 'new-tab') {
+    await openFileInNewTab(file)
+    return
+  }
+
   const url = await refreshSignedFileUrl(file)
   if (!url) {
     ElMessage.warning('文件地址为空，无法预览')
@@ -935,11 +969,6 @@ const openFilePreview = async (file: any) => {
   }
 
   const nextFile = { ...file, url, file_url: url }
-  if (!isInlinePreviewableFile(nextFile)) {
-    window.open(url, '_blank', 'noopener,noreferrer')
-    return
-  }
-
   previewingFile.value = nextFile
   filePreviewVisible.value = true
 }
