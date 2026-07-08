@@ -46,6 +46,19 @@ describe('filePreview helpers', () => {
     })
   })
 
+  it('detects legacy PDFs from object keys even when metadata is incomplete', () => {
+    const file = {
+      name: '需求确认',
+      object_key: 'deliverables/user-1/demo.pdf',
+    }
+
+    expect(getFilePreviewKind(file)).toBe('pdf')
+    expect(getPreviewSignUrlParams(file)).toEqual({
+      disposition: 'inline',
+      filename: '需求确认',
+    })
+  })
+
   it('opens PDFs in a browser tab instead of the embedded preview dialog', () => {
     expect(getFilePreviewOpenTarget({ name: '需求确认.pdf', type: 'application/pdf' })).toBe('new-tab')
     expect(getFilePreviewOpenTarget({ name: '现场图.png', type: 'image/png' })).toBe('dialog')

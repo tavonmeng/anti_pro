@@ -928,6 +928,19 @@ const refreshSignedFileUrl = async (file: any) => {
   }
 }
 
+const escapePreviewHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+const writePreviewTabBody = (previewTab: Window, html: string) => {
+  previewTab.document.body.style.margin = '0'
+  previewTab.document.body.innerHTML = html
+}
+
 const openNewPreviewTab = () => {
   const previewTab = window.open('', '_blank')
   if (!previewTab) {
@@ -936,8 +949,7 @@ const openNewPreviewTab = () => {
   }
 
   previewTab.document.title = '正在打开预览'
-  previewTab.document.body.style.margin = '0'
-  previewTab.document.body.innerHTML = '<div style="font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; padding: 24px; color: #1D1D1F;">正在打开预览...</div>'
+  writePreviewTabBody(previewTab, '<div style="font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; padding: 24px; color: #1D1D1F;">正在准备预览...</div>')
   return previewTab
 }
 
@@ -952,8 +964,18 @@ const openFileInNewTab = async (file: any) => {
     return
   }
 
-  previewTab.opener = null
-  previewTab.location.href = url
+  const safeUrl = escapePreviewHtml(url)
+  const safeName = escapePreviewHtml(fileName(file) || '文件')
+  previewTab.document.title = safeName
+  writePreviewTabBody(
+    previewTab,
+    `<div style="font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; padding: 24px; color: #1D1D1F; line-height: 1.6;">
+      <div style="font-weight: 600; margin-bottom: 8px;">正在打开预览...</div>
+      <div style="color: #6E6E73; margin-bottom: 12px;">如果浏览器下载了文件或没有自动跳转，请点击下面的链接重新打开。</div>
+      <a href="${safeUrl}" style="color: #0066CC; word-break: break-all;">${safeName}</a>
+    </div>`,
+  )
+  previewTab.location.replace(url)
 }
 
 const openFilePreview = async (file: any) => {

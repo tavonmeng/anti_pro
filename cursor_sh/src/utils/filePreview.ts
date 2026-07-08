@@ -25,7 +25,11 @@ export const getFilePreviewKind = (file: PreviewableFile): FilePreviewKind => {
   if (mime.startsWith('video/')) return 'video'
   if (mime === 'application/pdf' || mime === 'application/x-pdf') return 'pdf'
 
-  const raw = `${getPreviewFileName(file, '')} ${String(getPreviewFileUrl(file)).split('?')[0]}`
+  const raw = [
+    getPreviewFileName(file, ''),
+    String(getPreviewFileUrl(file)).split('?')[0],
+    String(getPreviewFileSignKey(file)).split('?')[0],
+  ].join(' ')
   const match = raw.toLowerCase().match(/\.([a-z0-9]+)(?:\s|$)/)
   const ext = match?.[1] || ''
 
