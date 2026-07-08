@@ -1,7 +1,7 @@
 from app.services import oss_service
 
 
-def test_get_signed_url_passes_response_params_to_oss(monkeypatch):
+def test_get_signed_url_filters_unsupported_response_content_type(monkeypatch):
     captured = {}
 
     class FakeBucket:
@@ -35,7 +35,6 @@ def test_get_signed_url_passes_response_params_to_oss(monkeypatch):
         "key": "deliverables/demo.pdf",
         "expires": 600,
         "params": {
-            "response-content-type": "application/pdf",
             "response-content-disposition": "inline",
         },
         "slash_safe": True,

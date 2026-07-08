@@ -42,7 +42,6 @@ export const getPreviewSignUrlParams = (file: PreviewableFile): Record<string, s
 
   return {
     disposition: 'inline',
-    content_type: 'application/pdf',
     filename: getPreviewFileName(file, 'preview.pdf'),
   }
 }

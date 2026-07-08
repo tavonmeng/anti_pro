@@ -40,7 +40,6 @@ describe('filePreview helpers', () => {
 
     expect(getPreviewSignUrlParams(file)).toEqual({
       disposition: 'inline',
-      content_type: 'application/pdf',
       filename: '需求确认.pdf',
     })
   })

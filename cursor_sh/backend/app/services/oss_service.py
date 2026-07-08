@@ -178,7 +178,11 @@ def get_signed_url(
         带签名的完整 HTTPS URL
     """
     bucket = _get_bucket()
-    params = dict(response_params or {}) or None
+    params = {
+        key: value
+        for key, value in dict(response_params or {}).items()
+        if key != "response-content-type"
+    } or None
     url = bucket.sign_url("GET", object_key, expires, params=params, slash_safe=True)
 
     # sign_url 默认返回 http，强制改 https

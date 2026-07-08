@@ -410,7 +410,6 @@ async def upload_generic_file(
 async def get_signed_url(
     key: str = Query(..., description="OSS object key"),
     disposition: Optional[str] = Query(None, pattern="^(inline|attachment)$"),
-    content_type: Optional[str] = Query(None, alias="content_type"),
     filename: Optional[str] = Query(None),
     current_user: AnyUser = Depends(get_current_user_for_public_deployment),
     db: AsyncSession = Depends(get_db),
@@ -434,8 +433,6 @@ async def get_signed_url(
 
     try:
         response_params = {}
-        if content_type:
-            response_params["response-content-type"] = content_type
         if disposition:
             content_disposition = disposition
             if filename:
