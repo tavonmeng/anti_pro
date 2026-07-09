@@ -42,11 +42,11 @@
       <div class="static-overlay-layer">
         <div class="container">
           <div class="left-content static-left" ref="leftContentRef">
-            <h2 class="main-heading">
+            <h1 class="main-heading">
               我们是<br>
               <span class="desc-highlight">idea+AI驱动的</span><br>
-              3D OOH内容平台
-            </h2>
+              裸眼3D内容制作与3D OOH内容平台
+            </h1>
             <div class="description-block">
               <p class="desc-text">
                 高效率、低成本、提升视觉质量<br>

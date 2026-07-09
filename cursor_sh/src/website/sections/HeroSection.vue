@@ -3,16 +3,16 @@
     
     <!-- 背景图 -->
     <div class="video-container" ref="bgRef">
-      <img class="hero-video" src="/video-library-images/2.jpg" alt="" />
+      <img class="hero-video" src="/video-library-images/2.jpg" alt="Unique Vision 裸眼3D户外大屏内容制作案例" />
       <div class="video-overlay"></div>
     </div>
     
     <div class="hero-container">
       <div class="hero-content">
-        <h1 class="hero-title hover-target">
+        <div class="hero-title hover-target" aria-label="Unique Vision creative 3D OOH content platform">
           <span class="line-wrap"><span class="outline-text hover-target line-text" ref="textLine1">WE CREATE</span></span>
           <span class="line-wrap"><span class="hover-target line-text" ref="textLine2">EXTRAORDINARY</span></span>
-        </h1>
+        </div>
       </div>
     </div>
 

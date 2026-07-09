@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /contractor/
+Disallow: /user/
+Disallow: /login
+Disallow: /register
+
+Sitemap: https://uniquevisionx.com/sitemap.xml

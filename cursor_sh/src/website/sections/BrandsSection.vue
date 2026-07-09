@@ -5,10 +5,10 @@
       <div class="brands-container" ref="track1Ref">
         <div class="brands-track" ref="track1Inner">
           <div v-for="brand in brandsRow1" :key="brand" class="brand-item">
-            <img :src="brand" class="brand-logo" alt="Partner Logo" />
+            <img :src="brand" class="brand-logo" alt="Unique Vision 合作品牌 logo" />
           </div>
           <div v-for="brand in brandsRow1" :key="brand + '_dup'" class="brand-item">
-            <img :src="brand" class="brand-logo" alt="Partner Logo" />
+            <img :src="brand" class="brand-logo" alt="Unique Vision 合作品牌 logo" />
           </div>
         </div>
       </div>
@@ -17,10 +17,10 @@
       <div class="brands-container" ref="track2Ref">
         <div class="brands-track" ref="track2Inner">
           <div v-for="brand in brandsRow2" :key="brand" class="brand-item">
-            <img :src="brand" class="brand-logo" alt="Partner Logo" />
+            <img :src="brand" class="brand-logo" alt="Unique Vision 合作品牌 logo" />
           </div>
           <div v-for="brand in brandsRow2" :key="brand + '_dup'" class="brand-item">
-            <img :src="brand" class="brand-logo" alt="Partner Logo" />
+            <img :src="brand" class="brand-logo" alt="Unique Vision 合作品牌 logo" />
           </div>
         </div>
       </div>
