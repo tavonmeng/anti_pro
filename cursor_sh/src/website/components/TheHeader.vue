@@ -86,6 +86,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { authenticatedHomeForRole } from '@/utils/creatorAccess'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -182,13 +183,7 @@ const goToRegister = () => {
 }
 
 const goToWorkspace = () => {
-  if (authStore.isAdmin()) {
-    router.push('/admin')
-  } else if (authStore.isStaff()) {
-    router.push('/staff')
-  } else {
-    router.push('/user/workspace')
-  }
+  router.push(authenticatedHomeForRole(authStore.user?.role))
 }
 
 // ─── 滚动检测 ────────────────────────────────────────────────

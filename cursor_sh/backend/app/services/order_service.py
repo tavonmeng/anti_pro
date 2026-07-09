@@ -25,6 +25,7 @@ from app.services.file_service import FileService
 from app.services.email_service import EmailService
 from app.services.notification_service import NotificationService
 from app.services.pdf_service import PDFService
+from app.services.staff_creator_service import sync_staff_assignments_for_order
 from app.config import settings
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
@@ -116,6 +117,17 @@ class OrderStateMachine:
 
 class OrderService:
     """订单服务类"""
+
+    @staticmethod
+    def _ensure_order_detail_role_allowed(current_user: AnyUser) -> None:
+        if current_user.role == UserRole.CONTRACTOR:
+            raise HTTPException(status_code=403, detail="承包商请通过制作任务查看订单信息")
+
+    @staticmethod
+    def _ensure_assignment_design_plan_completed(order: Order) -> None:
+        design_plan = order.design_plan if isinstance(order.design_plan, dict) else {}
+        if design_plan.get("status") != "completed":
+            raise HTTPException(status_code=400, detail="请先完成AI方案设计")
 
     @staticmethod
     def _confirmation_pdf_filename(order: Order) -> str:
@@ -586,6 +598,8 @@ class OrderService:
         
         if not order:
             raise HTTPException(status_code=404, detail="订单不存在")
+
+        OrderService._ensure_order_detail_role_allowed(current_user)
         
         # 权限检查
         if current_user.role == UserRole.USER and order.user_id != current_user.id:
@@ -843,6 +857,8 @@ class OrderService:
         
         if not order:
             raise HTTPException(status_code=404, detail="订单不存在")
+
+        OrderService._ensure_assignment_design_plan_completed(order)
         
         if len(assignee_ids) != len(assignee_names):
             raise HTTPException(status_code=400, detail="负责人ID和名称数量不匹配")
@@ -882,6 +898,14 @@ class OrderService:
                 assignee_id=assignee_id
             )
             db.add(order_assignee)
+
+        await sync_staff_assignments_for_order(
+            db=db,
+            order_id=order_id,
+            old_staff_ids=old_assignee_ids,
+            new_staff_ids=new_assignee_ids,
+            assigned_by=current_user.id,
+        )
         
         old_status = order.status
         # 如果订单是旧的待分配状态，自动转为制作中（合同与付款状态下分配负责人不改变订单状态）
@@ -1657,6 +1681,9 @@ class OrderService:
         try:
             from app.models.contractor_deliverable import ContractorDeliverable
             from app.models.contractor_assignment import ContractorAssignment
+            from app.models.staff_deliverable import StaffDeliverable
+            from app.models.staff_assignment import StaffAssignment
+            from app.services.staff_creator_service import serialize_staff_deliverable_for_user
             
             published_dlv_result = await db.execute(
                 select(ContractorDeliverable)
@@ -1668,22 +1695,41 @@ class OrderService:
                 .order_by(ContractorDeliverable.published_at.desc(), ContractorDeliverable.created_at.desc())
             )
             published_deliverables = published_dlv_result.scalars().all()
+
+            staff_published_dlv_result = await db.execute(
+                select(StaffDeliverable)
+                .join(StaffAssignment, StaffDeliverable.assignment_id == StaffAssignment.id)
+                .where(
+                    StaffAssignment.order_id == order.id,
+                    StaffDeliverable.is_published_to_user == True
+                )
+                .order_by(StaffDeliverable.published_at.desc(), StaffDeliverable.created_at.desc())
+            )
+            staff_published_deliverables = staff_published_dlv_result.scalars().all()
             
-            if published_deliverables:
-                base_response["publishedDeliverables"] = []
-                for dlv in published_deliverables:
-                    dlv_item = {
-                        "id": dlv.id,
-                        "stageName": dlv.stage_name,
-                        "stageOrder": dlv.stage_order,
-                        "version": dlv.version,
-                        "files": dlv.files or [],
-                        "description": dlv.description,
-                        "publishedNote": dlv.published_note,
-                        "publishedAt": _iso_beijing(dlv.published_at),
-                        "createdAt": _iso_beijing(dlv.created_at),
-                    }
-                    base_response["publishedDeliverables"].append(dlv_item)
+            published_items = []
+            for dlv in published_deliverables:
+                published_items.append({
+                    "id": dlv.id,
+                    "creatorType": "contractor",
+                    "stageName": dlv.stage_name,
+                    "stageOrder": dlv.stage_order,
+                    "version": dlv.version,
+                    "files": dlv.files or [],
+                    "description": dlv.description,
+                    "publishedNote": dlv.published_note,
+                    "publishedAt": _iso_beijing(dlv.published_at),
+                    "createdAt": _iso_beijing(dlv.created_at),
+                })
+            for dlv in staff_published_deliverables:
+                published_items.append(serialize_staff_deliverable_for_user(dlv))
+
+            if published_items:
+                base_response["publishedDeliverables"] = sorted(
+                    published_items,
+                    key=lambda item: item.get("publishedAt") or item.get("createdAt") or "",
+                    reverse=True,
+                )
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"获取已发布交付物失败: {e}")

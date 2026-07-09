@@ -15,11 +15,18 @@ from app.models.contractor import Contractor
 from app.models.contractor_invitation import ContractorInvitation
 from app.models.contractor_assignment import ContractorAssignment, AssignmentStatus
 from app.models.contractor_deliverable import ContractorDeliverable, DeliverableStatus
+from app.models.staff_member import StaffMember
+from app.models.staff_assignment import StaffAssignment, StaffAssignmentStatus
+from app.models.staff_deliverable import StaffDeliverable
 from app.models.workflow import WorkflowStageConfig
 from app.models.order import Order
 from app.schemas.response import ApiResponse
 from app.utils.dependencies import require_admin, AnyUser
 from app.utils.validators import generate_id
+from app.services.staff_creator_service import (
+    serialize_staff_assignment_for_admin,
+    serialize_staff_deliverable_for_admin,
+)
 from app.config import settings
 from app.utils.business_log import log_business_event
 from app.utils.log_setup import get_module_logger
@@ -69,6 +76,67 @@ def _signed_design_plan(plan: dict | None) -> dict:
     signed = copy.deepcopy(plan or {})
     signed["files"] = _sign_file_items(signed.get("files"))
     return signed
+
+
+def _status_value(value) -> str:
+    return value.value if hasattr(value, "value") else str(value)
+
+
+def _serialize_contractor_deliverable_for_admin(d: ContractorDeliverable) -> dict:
+    return {
+        "id": d.id,
+        "creatorType": "contractor",
+        "assignmentId": d.assignment_id,
+        "stageConfigId": d.stage_config_id,
+        "stageName": d.stage_name,
+        "stageOrder": d.stage_order,
+        "version": d.version,
+        "parentId": d.parent_id,
+        "files": _sign_file_items(d.files),
+        "description": d.description,
+        "selfReviewChecks": d.self_review_checks or {},
+        "status": d.status.value,
+        "adminReviewNote": d.admin_review_note,
+        "adminReviewedBy": d.admin_reviewed_by,
+        "adminReviewedAt": _iso_beijing(d.admin_reviewed_at),
+        "isPublishedToUser": d.is_published_to_user,
+        "publishedNote": d.published_note,
+        "publishedBy": d.published_by,
+        "publishedAt": _iso_beijing(d.published_at),
+        "adminComments": _normalize_admin_comments(d.admin_comments),
+        "createdAt": _iso_beijing(d.created_at),
+    }
+
+
+def _serialize_staff_deliverable_for_admin_signed(d: StaffDeliverable) -> dict:
+    item = serialize_staff_deliverable_for_admin(d)
+    item["files"] = _sign_file_items(item.get("files"))
+    item["adminComments"] = _normalize_admin_comments(item.get("adminComments"))
+    return item
+
+
+async def _get_admin_deliverable_context(db: AsyncSession, deliverable_id: str):
+    result = await db.execute(
+        select(ContractorDeliverable).where(ContractorDeliverable.id == deliverable_id)
+    )
+    deliverable = result.scalar_one_or_none()
+    if deliverable:
+        assignment_result = await db.execute(
+            select(ContractorAssignment).where(ContractorAssignment.id == deliverable.assignment_id)
+        )
+        return "contractor", deliverable, assignment_result.scalar_one_or_none()
+
+    result = await db.execute(
+        select(StaffDeliverable).where(StaffDeliverable.id == deliverable_id)
+    )
+    deliverable = result.scalar_one_or_none()
+    if deliverable:
+        assignment_result = await db.execute(
+            select(StaffAssignment).where(StaffAssignment.id == deliverable.assignment_id)
+        )
+        return "staff", deliverable, assignment_result.scalar_one_or_none()
+
+    return None, None, None
 
 
 # ========== Schemas ==========
@@ -612,23 +680,15 @@ async def get_all_assignments(
 ):
     """查看所有派单记录"""
     try:
-        query = select(ContractorAssignment)
+        contractor_query = select(ContractorAssignment)
         
         if order_id:
-            query = query.where(ContractorAssignment.order_id == order_id)
+            contractor_query = contractor_query.where(ContractorAssignment.order_id == order_id)
         if status:
-            query = query.where(ContractorAssignment.status == status)
+            contractor_query = contractor_query.where(ContractorAssignment.status == status)
         
-        query = query.order_by(ContractorAssignment.assigned_at.desc())
-        
-        # 总数
-        count_query = select(func.count()).select_from(query.subquery())
-        total_result = await db.execute(count_query)
-        total = total_result.scalar()
-        
-        # 分页
-        query = query.offset((page - 1) * pageSize).limit(pageSize)
-        result = await db.execute(query)
+        contractor_query = contractor_query.order_by(ContractorAssignment.assigned_at.desc())
+        result = await db.execute(contractor_query)
         assignments = result.scalars().all()
         
         items = []
@@ -655,6 +715,9 @@ async def get_all_assignments(
             
             items.append({
                 "id": a.id,
+                "creatorType": "contractor",
+                "creatorId": a.contractor_id,
+                "creatorName": contractor.username if contractor else None,
                 "orderId": a.order_id,
                 "orderNumber": order.order_number if order else None,
                 "contractorId": a.contractor_id,
@@ -669,6 +732,54 @@ async def get_all_assignments(
                 "respondedAt": beijing_iso(a.responded_at),
                 "completedAt": beijing_iso(a.completed_at),
             })
+
+        staff_query = select(StaffAssignment)
+        include_staff = True
+        if order_id:
+            staff_query = staff_query.where(StaffAssignment.order_id == order_id)
+        if status:
+            try:
+                staff_status = StaffAssignmentStatus(status)
+            except ValueError:
+                include_staff = False
+            else:
+                staff_query = staff_query.where(StaffAssignment.status == staff_status)
+
+        if include_staff:
+            staff_query = staff_query.order_by(StaffAssignment.assigned_at.desc())
+            staff_result = await db.execute(staff_query)
+            staff_assignments = staff_result.scalars().all()
+
+            for a in staff_assignments:
+                staff_result = await db.execute(
+                    select(StaffMember).where(StaffMember.id == a.staff_id)
+                )
+                staff = staff_result.scalar_one_or_none()
+
+                order_result = await db.execute(
+                    select(Order).where(Order.id == a.order_id)
+                )
+                order = order_result.scalar_one_or_none()
+
+                dlv_result = await db.execute(
+                    select(StaffDeliverable).where(StaffDeliverable.assignment_id == a.id)
+                )
+                deliverables = dlv_result.scalars().all()
+                pending_review = sum(1 for d in deliverables if d.status == DeliverableStatus.SUBMITTED)
+                staff_name = (staff.real_name or staff.username) if staff else a.staff_id
+
+                items.append(serialize_staff_assignment_for_admin(
+                    a,
+                    staff_name=staff_name,
+                    order_number=order.order_number if order else None,
+                    pending_review_count=pending_review,
+                    total_deliverables=len(deliverables),
+                ))
+
+        items.sort(key=lambda item: item.get("assignedAt") or "", reverse=True)
+        total = len(items)
+        start = (page - 1) * pageSize
+        items = items[start:start + pageSize]
         
         return ApiResponse(code=200, message="获取成功", data={"data": items, "total": total})
     except Exception as e:
@@ -685,6 +796,22 @@ async def get_assignment_deliverables(
 ):
     """管理员获取某个派单的所有交付物"""
     try:
+        staff_assignment_result = await db.execute(
+            select(StaffAssignment).where(StaffAssignment.id == assignment_id)
+        )
+        staff_assignment = staff_assignment_result.scalar_one_or_none()
+        if staff_assignment:
+            result = await db.execute(
+                select(StaffDeliverable)
+                .where(StaffDeliverable.assignment_id == assignment_id)
+                .order_by(StaffDeliverable.created_at.desc(), StaffDeliverable.stage_order.asc(), StaffDeliverable.version.desc())
+            )
+            items = [
+                _serialize_staff_deliverable_for_admin_signed(d)
+                for d in result.scalars().all()
+            ]
+            return ApiResponse(code=200, message="获取成功", data=items)
+
         result = await db.execute(
             select(ContractorDeliverable)
             .where(ContractorDeliverable.assignment_id == assignment_id)
@@ -692,32 +819,10 @@ async def get_assignment_deliverables(
         )
         deliverables = result.scalars().all()
         
-        items = []
-        for d in deliverables:
-            files = _sign_file_items(d.files)
-            
-            items.append({
-                "id": d.id,
-                "assignmentId": d.assignment_id,
-                "stageConfigId": d.stage_config_id,
-                "stageName": d.stage_name,
-                "stageOrder": d.stage_order,
-                "version": d.version,
-                "parentId": d.parent_id,
-                "files": files,
-                "description": d.description,
-                "selfReviewChecks": d.self_review_checks or {},
-                "status": d.status.value,
-                "adminReviewNote": d.admin_review_note,
-                "adminReviewedBy": d.admin_reviewed_by,
-                "adminReviewedAt": _iso_beijing(d.admin_reviewed_at),
-                "isPublishedToUser": d.is_published_to_user,
-                "publishedNote": d.published_note,
-                "publishedBy": d.published_by,
-                "publishedAt": _iso_beijing(d.published_at),
-                "adminComments": _normalize_admin_comments(d.admin_comments),
-                "createdAt": _iso_beijing(d.created_at),
-            })
+        items = [
+            _serialize_contractor_deliverable_for_admin(d)
+            for d in deliverables
+        ]
         
         return ApiResponse(code=200, message="获取成功", data=items)
     except Exception as e:
@@ -733,10 +838,7 @@ async def review_deliverable(
 ):
     """管理员审核承包商提交的交付物"""
     try:
-        result = await db.execute(
-            select(ContractorDeliverable).where(ContractorDeliverable.id == deliverable_id)
-        )
-        deliverable = result.scalar_one_or_none()
+        creator_type, deliverable, assignment = await _get_admin_deliverable_context(db, deliverable_id)
         
         if not deliverable:
             raise HTTPException(status_code=404, detail="交付物不存在")
@@ -759,7 +861,7 @@ async def review_deliverable(
         await db.refresh(deliverable)
         log_business_event(
             logger,
-            "contractor_deliverable_reviewed",
+            f"{creator_type}_deliverable_reviewed",
             admin_id=current_user.id,
             deliverable_id=deliverable.id,
             assignment_id=deliverable.assignment_id,
@@ -769,16 +871,9 @@ async def review_deliverable(
             status=deliverable.status,
         )
         
-        # 通知承包商审核结果
+        # 通知制作者审核结果
         try:
             from app.models.notification import Notification, NotificationType
-            from app.models.order import Order
-            
-            # 获取订单编号
-            assignment_result = await db.execute(
-                select(ContractorAssignment).where(ContractorAssignment.id == deliverable.assignment_id)
-            )
-            assignment = assignment_result.scalar_one_or_none()
             
             if assignment:
                 order_result = await db.execute(
@@ -791,13 +886,15 @@ async def review_deliverable(
                 stage_name = deliverable.stage_name or '未知环节'
                 status_str = "已通过" if data.approved else "被驳回"
                 notif_type = NotificationType.PREVIEW_REVIEW_APPROVED if data.approved else NotificationType.PREVIEW_REVIEW_REJECTED
+                recipient_id = assignment.staff_id if creator_type == "staff" else assignment.contractor_id
+                creator_label = "内部制作者" if creator_type == "staff" else "承包商"
                 
                 notif = Notification(
-                    user_id=assignment.contractor_id,
+                    user_id=recipient_id,
                     order_id=assignment.order_id,
                     type=notif_type,
                     title=f"交付物审核{status_str} - {order_number}",
-                    content=f"您提交的「{stage_name}」环节交付物（V{deliverable.version}）审核{status_str}。{f'备注：{data.review_note}' if data.review_note else ''}"
+                    content=f"{creator_label}提交的「{stage_name}」环节交付物（V{deliverable.version}）审核{status_str}。{f'备注：{data.review_note}' if data.review_note else ''}"
                 )
                 db.add(notif)
                 await db.commit()
@@ -828,10 +925,7 @@ async def publish_deliverable_to_user(
 ):
     """管理员将审核通过的交付物推送给用户"""
     try:
-        result = await db.execute(
-            select(ContractorDeliverable).where(ContractorDeliverable.id == deliverable_id)
-        )
-        deliverable = result.scalar_one_or_none()
+        creator_type, deliverable, assignment = await _get_admin_deliverable_context(db, deliverable_id)
         
         if not deliverable:
             raise HTTPException(status_code=404, detail="交付物不存在")
@@ -849,7 +943,7 @@ async def publish_deliverable_to_user(
         await db.refresh(deliverable)
         log_business_event(
             logger,
-            "contractor_deliverable_published",
+            f"{creator_type}_deliverable_published",
             admin_id=current_user.id,
             deliverable_id=deliverable.id,
             assignment_id=deliverable.assignment_id,
@@ -863,12 +957,6 @@ async def publish_deliverable_to_user(
         try:
             from app.models.notification import Notification, NotificationType
             from app.models.user import User
-            
-            # 获取订单信息
-            assignment_result = await db.execute(
-                select(ContractorAssignment).where(ContractorAssignment.id == deliverable.assignment_id)
-            )
-            assignment = assignment_result.scalar_one_or_none()
             
             if assignment:
                 order_result = await db.execute(
@@ -921,6 +1009,139 @@ async def publish_deliverable_to_user(
         raise HTTPException(status_code=500, detail="服务器内部错误，请稍后重试") from e
 
 
+async def _advance_staff_assignment_to_next_stage(
+    assignment_id: str,
+    current_user: AnyUser,
+    db: AsyncSession,
+) -> ApiResponse:
+    result = await db.execute(
+        select(StaffAssignment).where(StaffAssignment.id == assignment_id)
+    )
+    assignment = result.scalar_one_or_none()
+
+    if not assignment:
+        raise HTTPException(status_code=404, detail="派单记录不存在")
+
+    if assignment.status != StaffAssignmentStatus.IN_PROGRESS:
+        raise HTTPException(status_code=400, detail="当前派单状态不可推进")
+
+    schedule = assignment.schedule or []
+    if not schedule:
+        raise HTTPException(status_code=400, detail="当前派单未配置工作流排期")
+
+    try:
+        current_order = int(assignment.current_stage_order or "1")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="当前派单工作流状态异常")
+
+    def _is_current_stage(stage: dict) -> bool:
+        try:
+            return int(stage.get("display_order")) == current_order
+        except (TypeError, ValueError):
+            return False
+
+    current_stage = next((s for s in schedule if _is_current_stage(s)), None)
+    if not current_stage:
+        raise HTTPException(status_code=400, detail="当前工作流环节不存在")
+
+    approved_result = await db.execute(
+        select(func.count()).select_from(StaffDeliverable).where(
+            StaffDeliverable.assignment_id == assignment.id,
+            StaffDeliverable.stage_config_id == current_stage.get("stage_config_id"),
+            StaffDeliverable.stage_order == current_order,
+            StaffDeliverable.status == DeliverableStatus.ADMIN_APPROVED,
+        )
+    )
+    if (approved_result.scalar() or 0) < 1:
+        raise HTTPException(status_code=400, detail="当前环节需要至少一个已审核通过的交付物才能推进")
+
+    for stage in schedule:
+        if stage.get("display_order") == current_order:
+            stage["status"] = "completed"
+
+    next_order = current_order + 1
+    has_next = any(s.get("display_order") == next_order for s in schedule)
+
+    if has_next:
+        for stage in schedule:
+            if stage.get("display_order") == next_order:
+                stage["status"] = "active"
+        assignment.current_stage_order = str(next_order)
+        message = f"已推进到第 {next_order} 环节"
+    else:
+        assignment.status = StaffAssignmentStatus.COMPLETED
+        assignment.completed_at = beijing_now()
+        message = "所有环节已完成"
+
+        order_result = await db.execute(
+            select(Order).where(Order.id == assignment.order_id)
+        )
+        order = order_result.scalar_one_or_none()
+        from app.models.order import OrderStatus
+        if order and order.status == OrderStatus.IN_PRODUCTION:
+            order.status = OrderStatus.PREVIEW_READY
+            message += "，订单已推进到「初稿交付」"
+
+    assignment.schedule = schedule
+    flag_modified(assignment, "schedule")
+
+    await db.commit()
+    await db.refresh(assignment)
+    log_business_event(
+        logger,
+        "staff_assignment_advanced",
+        admin_id=current_user.id,
+        assignment_id=assignment.id,
+        order_id=assignment.order_id,
+        staff_id=assignment.staff_id,
+        stage_from=current_order,
+        stage_to=next_order if has_next else None,
+        has_next=has_next,
+        assignment_status=assignment.status,
+    )
+
+    try:
+        from app.models.notification import Notification, NotificationType
+
+        order_result = await db.execute(
+            select(Order).where(Order.id == assignment.order_id)
+        )
+        order = order_result.scalar_one_or_none()
+        order_number = order.order_number if order else "未知订单"
+
+        if has_next:
+            next_stage_name = next((s.get("name", "") for s in schedule if s.get("display_order") == next_order), "")
+            notif = Notification(
+                user_id=assignment.staff_id,
+                order_id=assignment.order_id,
+                type=NotificationType.CONTRACTOR_ASSIGNMENT,
+                title=f"环节推进 - {order_number}",
+                content=f"订单 {order_number} 已推进到下一环节「{next_stage_name}」，请继续完成交付。",
+            )
+        else:
+            notif = Notification(
+                user_id=assignment.staff_id,
+                order_id=assignment.order_id,
+                type=NotificationType.ORDER_COMPLETED,
+                title=f"制作任务完成 - {order_number}",
+                content=f"订单 {order_number} 的所有工作环节已完成，感谢您的工作。",
+            )
+        db.add(notif)
+        await db.commit()
+    except Exception as notify_err:
+        import logging
+        logging.getLogger(__name__).warning(f"发送内部制作者环节推进通知失败: {notify_err}")
+
+    return ApiResponse(code=200, message=message, data={
+        "id": assignment.id,
+        "status": assignment.status.value,
+        "currentStageOrder": assignment.current_stage_order,
+        "schedule": assignment.schedule,
+        "advancedAt": beijing_now_iso(),
+        "completedAt": _iso_beijing(assignment.completed_at),
+    })
+
+
 @router.put("/assignments/{assignment_id}/advance")
 async def advance_to_next_stage(
     assignment_id: str,
@@ -935,7 +1156,7 @@ async def advance_to_next_stage(
         assignment = result.scalar_one_or_none()
         
         if not assignment:
-            raise HTTPException(status_code=404, detail="派单记录不存在")
+            return await _advance_staff_assignment_to_next_stage(assignment_id, current_user, db)
         
         if assignment.status not in [AssignmentStatus.ACCEPTED, AssignmentStatus.IN_PROGRESS]:
             raise HTTPException(status_code=400, detail="当前派单状态不可推进")
@@ -1085,10 +1306,7 @@ async def add_admin_comment(
 ):
     """管理员对交付物添加评论（Contractor 可见，随时可添加）"""
     try:
-        result = await db.execute(
-            select(ContractorDeliverable).where(ContractorDeliverable.id == deliverable_id)
-        )
-        deliverable = result.scalar_one_or_none()
+        creator_type, deliverable, assignment = await _get_admin_deliverable_context(db, deliverable_id)
         
         if not deliverable:
             raise HTTPException(status_code=404, detail="交付物不存在")
@@ -1117,21 +1335,16 @@ async def add_admin_comment(
         await db.refresh(deliverable)
         log_business_event(
             logger,
-            "contractor_deliverable_commented",
+            f"{creator_type}_deliverable_commented",
             admin_id=current_user.id,
             deliverable_id=deliverable.id,
             assignment_id=deliverable.assignment_id,
             comment_count=len(deliverable.admin_comments or []),
         )
         
-        # 通知承包商有新评论
+        # 通知制作者有新评论
         try:
             from app.models.notification import Notification, NotificationType
-            
-            assignment_result = await db.execute(
-                select(ContractorAssignment).where(ContractorAssignment.id == deliverable.assignment_id)
-            )
-            assignment = assignment_result.scalar_one_or_none()
             
             if assignment:
                 order_result = await db.execute(
@@ -1140,9 +1353,10 @@ async def add_admin_comment(
                 order = order_result.scalar_one_or_none()
                 order_number = order.order_number if order else "未知订单"
                 stage_name = deliverable.stage_name or '未知环节'
+                recipient_id = assignment.staff_id if creator_type == "staff" else assignment.contractor_id
                 
                 notif = Notification(
-                    user_id=assignment.contractor_id,
+                    user_id=recipient_id,
                     order_id=assignment.order_id,
                     type=NotificationType.NEW_FEEDBACK,
                     title=f"管理员评论 - {order_number}",

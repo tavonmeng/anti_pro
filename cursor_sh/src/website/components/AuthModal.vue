@@ -140,6 +140,7 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { Lock, Iphone, Key, User, Message } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/utils/api'
+import { authenticatedHomeForRole } from '@/utils/creatorAccess'
 import type { UserRole } from '@/types'
 import Captcha from '@/components/Captcha.vue'
 
@@ -324,9 +325,7 @@ const handleSendSms = async (scene: 'login' | 'register') => {
 // ========== 登录成功 ==========
 function handleLoginSuccess() {
   emit('close')
-  if (authStore.isAdmin()) router.push('/admin')
-  else if (authStore.isStaff()) router.push('/staff')
-  else router.push('/user/workspace')
+  router.push(authenticatedHomeForRole(authStore.user?.role))
 }
 </script>
 

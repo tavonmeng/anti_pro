@@ -24,8 +24,8 @@ export function loginPathForRoute(path: string): string {
 }
 
 export function loginPathForRole(role?: string | null): string {
-  if (role === 'contractor') return '/contractor/login'
-  if (role === 'admin' || role === 'staff') return '/admin/login'
+  if (role === 'contractor' || role === 'staff') return '/contractor/login'
+  if (role === 'admin') return '/admin/login'
   return loginPath
 }
 

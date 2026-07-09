@@ -8,6 +8,8 @@ from app.models.contractor_invitation import ContractorInvitation
 from app.models.user_invitation import UserInvitation
 from app.models.contractor_assignment import ContractorAssignment, AssignmentStatus
 from app.models.contractor_deliverable import ContractorDeliverable, DeliverableStatus
+from app.models.staff_assignment import StaffAssignment, StaffAssignmentStatus
+from app.models.staff_deliverable import StaffDeliverable
 from app.models.workflow import WorkflowStageConfig
 from app.models.order import Order, OrderAssignee
 from app.models.file import File
@@ -30,6 +32,7 @@ __all__ = [
     "UserInvitation",
     "ContractorAssignment", "AssignmentStatus",
     "ContractorDeliverable", "DeliverableStatus",
+    "StaffAssignment", "StaffAssignmentStatus", "StaffDeliverable",
     "WorkflowStageConfig",
     "Order", "OrderAssignee",
     "File", "Feedback", "Notification",

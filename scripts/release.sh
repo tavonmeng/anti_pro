@@ -126,7 +126,7 @@ deploy_one() {
 
 deploy_staging() {
   deploy_one "staging external" "$STAGING_EXTERNAL_HOST" external "$STAGING_EXTERNAL_ENV" yes "${STAGING_EXTERNAL_FRONTEND_PORT_BIND:-80:8080}" "${STAGING_EXTERNAL_HEALTH_URL:-http://127.0.0.1/api/health}"
-  deploy_one "staging internal" "$STAGING_INTERNAL_HOST" internal "$STAGING_INTERNAL_ENV" no "${STAGING_INTERNAL_FRONTEND_PORT_BIND:-127.0.0.1:8080:8080}" "${STAGING_INTERNAL_HEALTH_URL:-http://127.0.0.1:8080/api/health}"
+  deploy_one "staging internal" "$STAGING_INTERNAL_HOST" internal "$STAGING_INTERNAL_ENV" no "${STAGING_INTERNAL_FRONTEND_PORT_BIND:-80:8080}" "${STAGING_INTERNAL_HEALTH_URL:-http://127.0.0.1/api/health}"
 }
 
 deploy_production() {
@@ -146,7 +146,7 @@ health_env() {
   case "$1" in
     staging)
       health_one "staging external" "$STAGING_EXTERNAL_HOST" "${STAGING_EXTERNAL_HEALTH_URL:-http://127.0.0.1/api/health}"
-      health_one "staging internal" "$STAGING_INTERNAL_HOST" "${STAGING_INTERNAL_HEALTH_URL:-http://127.0.0.1:8080/api/health}"
+      health_one "staging internal" "$STAGING_INTERNAL_HOST" "${STAGING_INTERNAL_HEALTH_URL:-http://127.0.0.1/api/health}"
       ;;
     production)
       health_one "production external" "$PRODUCTION_EXTERNAL_HOST" "${PRODUCTION_EXTERNAL_HEALTH_URL:-http://127.0.0.1:8080/api/health}"

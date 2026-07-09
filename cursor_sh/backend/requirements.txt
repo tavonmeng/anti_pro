@@ -6,6 +6,7 @@ python-multipart==0.0.20
 
 # 数据库
 sqlalchemy==2.0.41
+greenlet==3.2.3
 aiosqlite==0.21.0
 aiomysql==0.2.0
 cryptography==45.0.3

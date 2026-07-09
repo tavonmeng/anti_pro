@@ -6,17 +6,44 @@ from sqlalchemy import select, func, or_
 from typing import Optional
 
 from app.database import get_db
+from app.models.admin import Admin
+from app.models.contractor import Contractor
 from app.models.user import UserRole
 from app.models.staff_member import StaffMember
 from app.models.order import Order, OrderAssignee
 from app.schemas.user import UserCreate, UserUpdate
 from app.schemas.response import ApiResponse
+from app.services.staff_phone_service import validate_staff_phone_for_active_staff
 from app.utils.dependencies import get_current_user, require_admin, AnyUser
 from app.utils.security import get_password_hash
 from app.utils.validators import generate_id
 from app.utils.timezone import beijing_iso
 
 router = APIRouter(prefix="/staff", tags=["负责人"])
+
+
+async def _ensure_staff_phone_unique(
+    db: AsyncSession,
+    phone: Optional[str],
+    exclude_staff_id: Optional[str] = None
+) -> None:
+    if not phone:
+        return
+
+    staff_query = select(StaffMember).where(StaffMember.phone == phone)
+    if exclude_staff_id:
+        staff_query = staff_query.where(StaffMember.id != exclude_staff_id)
+    staff_result = await db.execute(staff_query)
+    if staff_result.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="手机号已被其他负责人使用")
+
+    admin_result = await db.execute(select(Admin).where(Admin.phone == phone))
+    if admin_result.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="手机号已被管理员使用")
+
+    contractor_result = await db.execute(select(Contractor).where(Contractor.phone == phone))
+    if contractor_result.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="手机号已被承包商使用")
 
 
 @router.get("")
@@ -40,7 +67,8 @@ async def get_staff_list(
                 or_(
                     StaffMember.username.ilike(f"%{keyword}%"),
                     StaffMember.real_name.ilike(f"%{keyword}%"),
-                    StaffMember.email.ilike(f"%{keyword}%")
+                    StaffMember.email.ilike(f"%{keyword}%"),
+                    StaffMember.phone.ilike(f"%{keyword}%")
                 )
             )
         
@@ -78,6 +106,7 @@ async def get_staff_list(
                 "id": staff.id,
                 "username": staff.username,
                 "email": staff.email,
+                "phone": staff.phone,
                 "realName": staff.real_name,
                 "role": "staff",
                 "isActive": staff.is_active,
@@ -116,14 +145,19 @@ async def add_staff(
         if existing_user:
             raise HTTPException(status_code=409, detail="用户名已存在")
         
+        is_active = user_data.isActive if user_data.isActive is not None else True
+        phone = validate_staff_phone_for_active_staff(user_data.phone, is_active=is_active)
+        await _ensure_staff_phone_unique(db, phone)
+
         # 创建负责人账户（到 staff_members 表）
         new_staff = StaffMember(
             id=generate_id("staff"),
             username=user_data.username,
             email=user_data.email,
+            phone=phone,
             real_name=user_data.realName,
             password_hash=get_password_hash(user_data.password),
-            is_active=user_data.isActive if user_data.isActive is not None else True
+            is_active=is_active
         )
         
         db.add(new_staff)
@@ -134,6 +168,7 @@ async def add_staff(
             "id": new_staff.id,
             "username": new_staff.username,
             "email": new_staff.email,
+            "phone": new_staff.phone,
             "realName": new_staff.real_name,
             "role": "staff",
             "isActive": new_staff.is_active,
@@ -166,9 +201,16 @@ async def update_staff(
         if not staff:
             raise HTTPException(status_code=404, detail="负责人不存在")
         
+        next_is_active = user_data.isActive if user_data.isActive is not None else staff.is_active
+        next_phone = user_data.phone if user_data.phone is not None else staff.phone
+        normalized_phone = validate_staff_phone_for_active_staff(next_phone, is_active=next_is_active)
+        await _ensure_staff_phone_unique(db, normalized_phone, exclude_staff_id=staff.id)
+
         # 更新字段
         if user_data.email is not None:
             staff.email = user_data.email
+        if user_data.phone is not None:
+            staff.phone = normalized_phone
         if user_data.realName is not None:
             staff.real_name = user_data.realName
         if user_data.isActive is not None:
@@ -194,6 +236,7 @@ async def update_staff(
             "id": staff.id,
             "username": staff.username,
             "email": staff.email,
+            "phone": staff.phone,
             "realName": staff.real_name,
             "role": "staff",
             "isActive": staff.is_active,

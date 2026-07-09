@@ -1,11 +1,11 @@
 <template>
   <div class="contractor-profile">
-    <section class="profile-overview">
+    <section class="profile-overview" :class="{ 'is-internal': isInternalCreator }">
       <div class="profile-heading">
-        <h1 class="page-title">承包商资料</h1>
+        <h1 class="page-title">{{ isInternalCreator ? '内部制作者资料' : '承包商资料' }}</h1>
         <p class="breadcrumb">工作台 <span></span> 个人设置</p>
       </div>
-      <div class="profile-meter-card">
+      <div v-if="!isInternalCreator" class="profile-meter-card">
         <div class="meter-copy">
           <span>资料完整度</span>
           <strong>{{ profileCompletion }}%</strong>
@@ -44,6 +44,7 @@
           </el-form-item>
         </div>
 
+        <template v-if="!isInternalCreator">
         <div class="section-title">公司信息</div>
         <div class="form-grid">
           <el-form-item label="公司名称">
@@ -54,7 +55,9 @@
             <el-input v-model="form.address" placeholder="联系地址" />
           </el-form-item>
         </div>
+        </template>
 
+        <template v-if="!isInternalCreator">
         <div class="section-title">专业能力</div>
         <div class="form-grid">
           <el-form-item label="专业方向">
@@ -66,14 +69,15 @@
             <div v-if="!form.expertise" class="field-hint">🔴 未填写</div>
           </el-form-item>
         </div>
+        </template>
 
         <!-- 优秀案例 -->
-        <div class="section-title">
+        <div v-if="!isInternalCreator" class="section-title">
           优秀案例
           <span class="section-subtitle">（最多上传 2 个视频，每个不超过 200MB）</span>
         </div>
 
-        <div class="showcase-grid">
+        <div v-if="!isInternalCreator" class="showcase-grid">
           <div
             v-for="(item, index) in showcaseCases"
             :key="index"
@@ -135,6 +139,7 @@
         </div>
 
         <input
+          v-if="!isInternalCreator"
           ref="fileInputRef"
           type="file"
           accept="video/*"
@@ -154,6 +159,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { InfoFilled, Plus, Loading } from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
 import request from '@/utils/request'
 import axios from 'axios'
 
@@ -171,6 +177,8 @@ const formRef = ref()
 const fileInputRef = ref<HTMLInputElement>()
 const saving = ref(false)
 const loaded = ref(false)
+const authStore = useAuthStore()
+const isInternalCreator = computed(() => authStore.isStaff())
 
 const form = reactive({
   username: '',
@@ -194,8 +202,11 @@ const missingFields = computed(() => {
   return fields
 })
 
-const showIncompleteAlert = computed(() => loaded.value && missingFields.value.length > 0)
+const showIncompleteAlert = computed(() =>
+  !isInternalCreator.value && loaded.value && missingFields.value.length > 0
+)
 const profileCompletion = computed(() => {
+  if (isInternalCreator.value) return 100
   const fields = [form.realName, form.company, form.specialty, form.expertise, form.email, form.address]
   const fieldScore = fields.filter(Boolean).length
   const showcaseScore = Math.min(showcaseCases.value.filter(c => c.url && !c.uploading).length, 2)
@@ -316,16 +327,23 @@ const handleSave = async () => {
         filename: c.filename,
         size: c.size,
       }))
+    const normalizedEmail = form.email.trim() || null
 
-    await request.put('/contractor/profile', {
-      email: form.email,
+    const payload = isInternalCreator.value ? {
+      email: normalizedEmail,
+      real_name: form.realName,
+    } : {
+      email: normalizedEmail,
       real_name: form.realName,
       company: form.company,
       address: form.address,
       specialty: form.specialty,
       expertise: form.expertise,
       showcase_cases: casesToSave,
-    })
+    }
+
+    await request.put('/contractor/profile', payload)
+    await authStore.refreshCurrentUser({ force: true }).catch(() => null)
     window.dispatchEvent(new CustomEvent('contractor-profile-updated'))
     ElMessage.success('保存成功')
   } catch (e: any) {
@@ -351,6 +369,11 @@ onMounted(fetchProfile)
   border-radius: 34px;
   background: #ECEAE7;
   margin-bottom: 20px;
+}
+
+.profile-overview.is-internal {
+  min-height: 160px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .profile-heading {

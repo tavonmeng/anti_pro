@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
 import { isExternalDeployment, isInternalDeployment, isInternalRoute, isUserRoute, loginPathForRoute } from '@/utils/deployment'
+import { authenticatedHomeForRole, isRouteRoleAllowed } from '@/utils/creatorAccess'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -167,26 +168,25 @@ const router = createRouter({
     },
     {
       path: '/staff',
-      component: () => import('../views/StaffDashboard.vue'),
       meta: { requiresAuth: true, role: 'staff' },
-      redirect: '/staff/orders',
+      redirect: '/contractor/assignments',
       children: [
         {
           path: 'orders',
-          name: 'StaffOrders',
-          component: () => import('../views/staff/OrderList.vue'),
+          name: 'StaffOrdersRedirect',
+          redirect: '/contractor/assignments',
           meta: { requiresAuth: true, role: 'staff' }
         },
         {
           path: 'orders/:id',
-          name: 'StaffOrderDetail',
-          component: () => import('../views/staff/OrderDetail.vue'),
+          name: 'StaffOrderDetailRedirect',
+          redirect: '/contractor/assignments',
           meta: { requiresAuth: true, role: 'staff' }
         },
         {
           path: 'profile',
-          name: 'StaffProfile',
-          component: () => import('../views/staff/Profile.vue'),
+          name: 'StaffProfileRedirect',
+          redirect: '/contractor/profile',
           meta: { requiresAuth: true, role: 'staff' }
         }
       ]
@@ -209,26 +209,26 @@ const router = createRouter({
     {
       path: '/contractor',
       component: () => import('../views/ContractorDashboard.vue'),
-      meta: { requiresAuth: true, role: 'contractor' },
+      meta: { requiresAuth: true, role: ['contractor', 'staff'] },
       redirect: '/contractor/assignments',
       children: [
         {
           path: 'assignments',
           name: 'ContractorAssignments',
           component: () => import('../views/contractor/AssignmentList.vue'),
-          meta: { requiresAuth: true, role: 'contractor' }
+          meta: { requiresAuth: true, role: ['contractor', 'staff'] }
         },
         {
           path: 'assignments/:id',
           name: 'ContractorAssignmentDetail',
           component: () => import('../views/contractor/AssignmentDetail.vue'),
-          meta: { requiresAuth: true, role: 'contractor' }
+          meta: { requiresAuth: true, role: ['contractor', 'staff'] }
         },
         {
           path: 'profile',
           name: 'ContractorProfile',
           component: () => import('../views/contractor/ContractorProfile.vue'),
-          meta: { requiresAuth: true, role: 'contractor' }
+          meta: { requiresAuth: true, role: ['contractor', 'staff'] }
         }
       ]
     },
@@ -244,10 +244,10 @@ router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
   const authenticatedHome = () => {
-    if (authStore.isAdmin()) return '/admin'
-    if (authStore.isStaff()) return '/staff'
-    if (authStore.isContractor()) return '/contractor'
-    return isInternalDeployment ? '/admin/login' : '/user/workspace'
+    return authenticatedHomeForRole(
+      authStore.user?.role,
+      isInternalDeployment ? '/admin/login' : '/user/workspace'
+    )
   }
 
   if (isExternalDeployment && isInternalRoute(to.path)) {
@@ -290,47 +290,9 @@ router.beforeEach(async (to, from, next) => {
   
   // 检查角色权限
   if (to.meta.role) {
-    const requiredRole = to.meta.role as string
-    if (requiredRole === 'admin' && !authStore.isAdmin()) {
+    if (!isRouteRoleAllowed(to.meta.role as any, authStore.user?.role)) {
       ElMessage.error('您没有权限访问此页面')
-      if (authStore.isStaff()) {
-        next('/staff')
-      } else {
-        next('/user')
-      }
-      return
-    }
-    if (requiredRole === 'staff' && !authStore.isStaff()) {
-      ElMessage.error('您没有权限访问此页面')
-      if (authStore.isAdmin()) {
-        next('/admin')
-      } else {
-        next('/user')
-      }
-      return
-    }
-    if (requiredRole === 'user' && !authStore.isUser()) {
-      ElMessage.error('您没有权限访问此页面')
-      if (authStore.isAdmin()) {
-        next('/admin')
-      } else if (authStore.isStaff()) {
-        next('/staff')
-      } else if (authStore.isContractor()) {
-        next('/contractor')
-      } else {
-        next(loginPathForRoute(to.path))
-      }
-      return
-    }
-    if (requiredRole === 'contractor' && !authStore.isContractor()) {
-      ElMessage.error('您没有权限访问此页面')
-      if (authStore.isAdmin()) {
-        next('/admin')
-      } else if (authStore.isStaff()) {
-        next('/staff')
-      } else {
-        next(loginPathForRoute(to.path))
-      }
+      next(authStore.isAuthenticated() ? authenticatedHome() : loginPathForRoute(to.path))
       return
     }
   }
@@ -339,28 +301,12 @@ router.beforeEach(async (to, from, next) => {
   if (authStore.isAuthenticated()) {
     if (to.name === 'Login' || to.name === 'Register') {
       // 用户登录页 -> 根据角色跳转
-      if (authStore.isAdmin()) {
-        next('/admin')
-      } else if (authStore.isStaff()) {
-        next('/staff')
-      } else if (authStore.isContractor()) {
-        next('/contractor')
-      } else {
-        next('/user/workspace')
-      }
+      next(authenticatedHome())
       return
     }
     if (to.name === 'AdminLogin' || to.name === 'ContractorLogin') {
-      // 管理员/承包商登录页 -> 根据角色跳转
-      if (authStore.isAdmin()) {
-        next('/admin')
-      } else if (authStore.isStaff()) {
-        next('/staff')
-      } else if (authStore.isContractor()) {
-        next('/contractor')
-      } else {
-        next('/user/workspace')
-      }
+      // 管理员/制作者登录页 -> 根据角色跳转
+      next(authenticatedHome())
       return
     }
   }

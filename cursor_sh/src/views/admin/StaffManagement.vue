@@ -65,7 +65,7 @@
         <el-form-item label="搜索">
           <el-input 
             v-model="filterForm.keyword" 
-            placeholder="搜索用户名/姓名/邮箱"
+            placeholder="搜索用户名/姓名/邮箱/手机号"
             clearable
             @clear="handleSearch"
           >
@@ -117,6 +117,14 @@
         <el-table-column label="邮箱" min-width="200">
           <template #default="{ row }">
             {{ row.email || '-' }}
+          </template>
+        </el-table-column>
+
+        <el-table-column label="手机号" width="170">
+          <template #default="{ row }">
+            <span v-if="row.phone">{{ row.phone }}</span>
+            <el-tag v-else-if="row.isActive" type="warning" size="small">未填写，无法登录</el-tag>
+            <span v-else>-</span>
           </template>
         </el-table-column>
 

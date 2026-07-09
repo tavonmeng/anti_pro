@@ -119,6 +119,19 @@ async def require_contractor(
     return current_user
 
 
+async def require_creator(
+    current_user: AnyUser = Depends(get_current_user)
+) -> AnyUser:
+    """要求制作端权限（外部承包商或内部负责人）。"""
+    role_value = _role_value(current_user)
+    if role_value not in ["contractor", "staff"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足，仅制作者可执行此操作"
+        )
+    return current_user
+
+
 async def require_internal_user(
     current_user: AnyUser = Depends(get_current_user)
 ) -> AnyUser:

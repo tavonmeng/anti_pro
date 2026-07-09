@@ -26,7 +26,7 @@
         </div>
         <h2>{{ currentStageName }}</h2>
         <p>当前交付阶段</p>
-        <div class="stage-actions" v-if="assignment.status === 'pending'">
+        <div class="stage-actions" v-if="canAcceptAssignment">
           <button type="button" class="dark-pill" @click="handleAccept">接受派单</button>
         </div>
       </article>
@@ -128,8 +128,29 @@
               </div>
               <div v-if="assignment.order.designPlan.files?.length" class="plan-files">
                 <h4 class="sub-title">参考文件</h4>
-                <div v-for="(file, idx) in assignment.order.designPlan.files" :key="idx" class="plan-file-item">
-                  <a :href="file.url" target="_blank" class="plan-file-link">{{ file.filename || '文件' }}</a>
+                <div class="asset-grid">
+                  <button
+                    v-for="(file, idx) in assignment.order.designPlan.files"
+                    :key="fileKey(file, idx)"
+                    type="button"
+                    class="asset-card"
+                    @click="openPreviewAttachment(file)"
+                  >
+                    <span class="asset-thumb" :class="`is-${previewAttachmentKind(file)}`">
+                      <img
+                        v-if="previewAttachmentKind(file) === 'image' && fileUrl(file)"
+                        :src="fileUrl(file)"
+                        :alt="previewAttachmentName(file, `方案附件 ${idx + 1}`)"
+                        loading="lazy"
+                      />
+                      <el-icon v-else :size="22"><component :is="previewAttachmentIcon(file)" /></el-icon>
+                    </span>
+                    <span class="asset-info">
+                      <strong>{{ previewAttachmentName(file, `方案附件 ${idx + 1}`) }}</strong>
+                      <small>{{ assetKindLabel(previewAttachmentKind(file)) }}</small>
+                    </span>
+                    <span class="asset-action">{{ previewAttachmentActionText(file) }}</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -141,10 +162,73 @@
               <h3 class="card-title" style="margin: 0; width: 100%;">现场实拍图</h3>
             </template>
             <div class="site-photos" style="margin-top: 16px;">
-              <a v-for="(photo, idx) in assignment.order.site_photos" :key="idx"
-                :href="photo.url || photo.file_url" target="_blank" class="photo-link">
-                {{ photo.name || photo.filename || `照片 ${idx + 1}` }}
-              </a>
+              <div class="asset-grid">
+                <button
+                  v-for="(photo, idx) in assignment.order.site_photos"
+                  :key="fileKey(photo, idx)"
+                  type="button"
+                  class="asset-card"
+                  @click="openPreviewAttachment(photo)"
+                >
+                  <span class="asset-thumb" :class="`is-${previewAttachmentKind(photo)}`">
+                    <img
+                      v-if="previewAttachmentKind(photo) === 'image' && fileUrl(photo)"
+                      :src="fileUrl(photo)"
+                      :alt="previewAttachmentName(photo, `现场文件 ${idx + 1}`)"
+                      loading="lazy"
+                    />
+                    <el-icon v-else :size="22"><component :is="previewAttachmentIcon(photo)" /></el-icon>
+                  </span>
+                  <span class="asset-info">
+                    <strong>{{ previewAttachmentName(photo, `现场文件 ${idx + 1}`) }}</strong>
+                    <small>{{ assetKindLabel(previewAttachmentKind(photo)) }}</small>
+                  </span>
+                  <span class="asset-action">{{ previewAttachmentActionText(photo) }}</span>
+                </button>
+              </div>
+            </div>
+          </el-collapse-item>
+
+          <!-- 制作素材 -->
+          <el-collapse-item name="assets" class="info-card" v-if="productionAssetGroups.length">
+            <template #title>
+              <h3 class="card-title" style="margin: 0; width: 100%;">需求素材</h3>
+            </template>
+            <div class="production-assets" style="margin-top: 16px;">
+              <div
+                v-for="group in productionAssetGroups"
+                :key="group.label"
+                class="asset-group"
+              >
+                <div class="asset-group-title">
+                  <span>{{ group.label }}</span>
+                  <el-tag size="small" effect="plain">{{ group.assets.length }} 个</el-tag>
+                </div>
+                <div class="asset-grid">
+                  <button
+                    v-for="asset in group.assets"
+                    :key="assetKey(asset)"
+                    type="button"
+                    class="asset-card"
+                    @click="openProductionAssetPreview(asset)"
+                  >
+                    <span class="asset-thumb" :class="`is-${previewAttachmentKind(asset)}`">
+                      <img
+                        v-if="previewAttachmentKind(asset) === 'image' && fileUrl(asset)"
+                        :src="fileUrl(asset)"
+                        :alt="assetName(asset)"
+                        loading="lazy"
+                      />
+                      <el-icon v-else :size="22"><component :is="assetIcon(asset)" /></el-icon>
+                    </span>
+                    <span class="asset-info">
+                      <strong>{{ assetName(asset) }}</strong>
+                      <small>{{ assetKindLabel(previewAttachmentKind(asset)) }}</small>
+                    </span>
+                    <span class="asset-action">{{ productionAssetActionText(asset) }}</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </el-collapse-item>
 
@@ -153,7 +237,7 @@
 
       <!-- 右栏：交付物上传 -->
       <div class="detail-right">
-        <div class="info-card" v-if="assignment.status === 'in_progress'">
+        <div class="info-card" v-if="canSubmitDeliverable">
           <h3 class="card-title">
             交付环节 — {{ currentStageName }}
             <el-tag type="info" size="small" style="margin-left:8px">第 {{ currentStageOrder }} 环节</el-tag>
@@ -335,7 +419,7 @@
         </div>
 
         <!-- 非进行中状态提示 -->
-        <div class="info-card" v-else-if="assignment.status === 'pending'">
+        <div class="info-card" v-else-if="canAcceptAssignment">
           <div class="pending-notice">
             <el-icon :size="40" color="#E6A23C"><InfoFilled /></el-icon>
             <h3>请先接受此派单</h3>
@@ -364,18 +448,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   ArrowLeft, Check, UploadFilled, WarningFilled,
   InfoFilled, CircleCheckFilled, Loading, Lock,
-  Calendar, Document, Timer
+  Calendar, Document, Picture, Timer, VideoPlay
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import { formatServerTime, parseServerTime } from '@/utils/time'
 import FilePreviewDialog from '@/components/FilePreviewDialog.vue'
+import {
+  getFilePreviewKind,
+  getFilePreviewOpenTarget,
+  getPdfPreviewProxyUrl,
+  getPreviewFileName,
+  getPreviewFileUrl,
+} from '@/utils/filePreview'
+import {
+  assetKindLabel,
+  groupProductionAssets,
+  productionAssetActionText,
+  productionAssetKind,
+  productionAssetPreviewTarget,
+  type ProductionAsset,
+} from '@/utils/productionAssets'
 
 const route = useRoute()
 const router = useRouter()
@@ -390,6 +489,7 @@ const uploadedFiles = ref<any[]>([])
 const currentDeliverableId = ref<string | null>(null)
 const filePreviewVisible = ref(false)
 const previewingFile = ref<Record<string, any> | null>(null)
+const previewBlobUrl = ref<string | null>(null)
 
 const deliverableForm = reactive({
   description: '',
@@ -397,7 +497,7 @@ const deliverableForm = reactive({
 })
 
 // 卡片折叠状态
-const activeNames = ref<string[]>(['requirements', 'schedule', 'aiPlan', 'photos'])
+const activeNames = ref<string[]>(['requirements', 'schedule', 'aiPlan', 'photos', 'assets'])
 
 // 当前环节
 const currentStageOrder = computed(() => parseInt(assignment.value?.currentStageOrder || '1'))
@@ -490,13 +590,125 @@ const fileUrl = (file: any) => file?.url || file?.file_url || file?.fileUrl || f
 const fileKey = (file: any, index = 0) =>
   file?.id || file?.url || file?.file_url || file?.fileUrl || file?.href || file?.object_key || file?.filename || file?.name || index
 
-const openFilePreview = (file: any) => {
-  if (!fileUrl(file)) {
+const revokePreviewBlobUrl = () => {
+  if (previewBlobUrl.value) {
+    URL.revokeObjectURL(previewBlobUrl.value)
+    previewBlobUrl.value = null
+  }
+}
+
+const openAuthenticatedPdfPreview = async (file: any, targetUrl: string) => {
+  try {
+    const response = await fetch(targetUrl, { headers: uploadHeaders.value })
+    if (!response.ok) {
+      throw new Error(`PDF preview failed: ${response.status}`)
+    }
+    const blob = await response.blob()
+    revokePreviewBlobUrl()
+    const pdfBlob = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' })
+    const blobUrl = URL.createObjectURL(pdfBlob)
+    previewBlobUrl.value = blobUrl
+    previewingFile.value = {
+      ...file,
+      url: blobUrl,
+      previewUrl: blobUrl,
+      file_url: blobUrl,
+      type: 'application/pdf',
+      mime_type: 'application/pdf',
+      kind: 'pdf',
+    }
+    filePreviewVisible.value = true
+  } catch (error) {
+    console.error('PDF preview failed:', error)
+    ElMessage.error('PDF 预览失败，请稍后重试')
+  }
+}
+
+const openFilePreview = async (
+  file: any,
+  options: { forceDialog?: boolean; authenticatedPdf?: boolean } = {},
+) => {
+  const kind = file?.kind === 'pdf' ? 'pdf' : getFilePreviewKind(file)
+  const targetUrl = kind === 'pdf'
+    ? (getPdfPreviewProxyUrl(file) || getPreviewFileUrl(file))
+    : getPreviewFileUrl(file)
+
+  if (!targetUrl) {
     ElMessage.warning('文件地址为空，无法预览')
     return
   }
+
+  if (kind === 'pdf' && options.authenticatedPdf) {
+    await openAuthenticatedPdfPreview(file, targetUrl)
+    return
+  }
+
+  if (!options.forceDialog && (kind === 'pdf' || getFilePreviewOpenTarget(file) === 'new-tab')) {
+    window.open(targetUrl, '_blank', 'noopener,noreferrer')
+    return
+  }
+
   previewingFile.value = file
   filePreviewVisible.value = true
+}
+
+const previewAttachmentKind = (file: ProductionAsset) => productionAssetKind(file)
+
+const previewAttachmentName = (file: ProductionAsset, fallback = '文件') =>
+  getPreviewFileName(file, fallback)
+
+const previewAttachmentActionText = (file: ProductionAsset) =>
+  productionAssetActionText(file)
+
+const previewAttachmentIcon = (file: ProductionAsset) => {
+  const kind = previewAttachmentKind(file)
+  if (kind === 'image') return Picture
+  if (kind === 'video') return VideoPlay
+  return Document
+}
+
+const openPreviewAttachment = (file: ProductionAsset) => {
+  const kind = previewAttachmentKind(file)
+  const inferredType = kind === 'pdf'
+    ? 'application/pdf'
+    : kind === 'image'
+      ? 'image/*'
+      : kind === 'video'
+        ? 'video/*'
+        : file.type
+  const normalized = { ...file, kind, type: file.type || inferredType, mime_type: file.mime_type || inferredType }
+  const target = productionAssetPreviewTarget(normalized)
+  openFilePreview(normalized, {
+    forceDialog: target === 'dialog',
+    authenticatedPdf: kind === 'pdf',
+  })
+}
+
+const openProductionAssetPreview = (asset: ProductionAsset) => openPreviewAttachment(asset)
+
+const productionAssetGroups = computed(() =>
+  groupProductionAssets(assignment.value?.order?.productionAssets || [])
+)
+
+const canAcceptAssignment = computed(() =>
+  assignment.value?.canAccept === true || (
+    assignment.value?.creatorType !== 'staff' && assignment.value?.status === 'pending'
+  )
+)
+
+const canSubmitDeliverable = computed(() =>
+  assignment.value?.canSubmitDeliverable === true || (
+    assignment.value?.canSubmitDeliverable !== false && assignment.value?.status === 'in_progress'
+  )
+)
+
+const assetKey = (asset: ProductionAsset) =>
+  asset.id || asset.object_key || asset.url || asset.file_url || asset.fileUrl || asset.name || asset.filename || JSON.stringify(asset)
+
+const assetName = (asset: ProductionAsset) => getPreviewFileName(asset, '制作素材')
+
+const assetIcon = (asset: ProductionAsset) => {
+  return previewAttachmentIcon(asset)
 }
 
 // 订单信息展示
@@ -535,7 +747,7 @@ const uploadHeaders = computed(() => ({
 }))
 
 const statusLabel = (s: string) => ({
-  pending: '待处理', in_progress: '进行中', completed: '已完成', rejected: '已拒绝',
+  pending: '待处理', accepted: '已接单', in_progress: '进行中', completed: '已完成', rejected: '已拒绝', cancelled: '已取消',
 }[s] || s)
 
 const deliverableStatusLabel = (s: string) => ({
@@ -572,6 +784,11 @@ const fetchDetail = async () => {
 }
 
 const handleAccept = async () => {
+  if (!canAcceptAssignment.value) {
+    ElMessage.warning('当前任务无需接单')
+    return
+  }
+
   try {
     await request.put(`/contractor/assignments/${assignment.value.id}/accept`)
     ElMessage.success('接单成功')
@@ -721,6 +938,7 @@ const submitDeliverable = async () => {
 }
 
 onMounted(fetchDetail)
+onBeforeUnmount(revokePreviewBlobUrl)
 </script>
 
 <style lang="scss" scoped>
@@ -989,17 +1207,119 @@ onMounted(fetchDetail)
   border-left: 3px solid #8B5E3C;
 }
 .plan-text { margin: 0; font-size: 14px; color: #1D1D1F; line-height: 1.7; white-space: pre-wrap; }
-.plan-files { margin-top: 8px; }
-.plan-file-item { margin-bottom: 6px; }
-.plan-file-link {
-  font-size: 13px; color: #8B5E3C; text-decoration: none;
-  &:hover { text-decoration: underline; }
+.plan-files { margin-top: 12px; }
+.site-photos { display: block; }
+
+.production-assets {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
-.site-photos { display: flex; flex-wrap: wrap; gap: 8px; }
-.photo-link {
-  font-size: 13px; color: #8B5E3C; padding: 7px 13px;
-  background: #F4F1ED; border-radius: 14px; text-decoration: none;
-  &:hover { background: #E8DDD4; }
+
+.asset-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.asset-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #4B4640;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.asset-card {
+  min-width: 0;
+  min-height: 66px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #ECE7E1;
+  border-radius: 8px;
+  background: #FBFAF8;
+  color: #1D1D1F;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+
+  &:hover {
+    border-color: #D8C9BC;
+    background: #F6F1EC;
+    transform: translateY(-1px);
+  }
+}
+
+.asset-thumb {
+  width: 46px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #EFEAE4;
+  color: #8B5E3C;
+  overflow: hidden;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  &.is-pdf {
+    background: #FFF0EC;
+    color: #C14B32;
+  }
+
+  &.is-video {
+    background: #EEF3FF;
+    color: #315EAA;
+  }
+}
+
+.asset-info {
+  min-width: 0;
+
+  strong,
+  small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  strong {
+    color: #24211F;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.3;
+  }
+
+  small {
+    margin-top: 4px;
+    color: #8B837C;
+    font-size: 12px;
+  }
+}
+
+.asset-action {
+  color: #8B5E3C;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 /* 时间线 */

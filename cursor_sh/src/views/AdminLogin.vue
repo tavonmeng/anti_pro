@@ -124,8 +124,9 @@ import { User, Warning, InfoFilled, Message } from '@element-plus/icons-vue'
 import { gsap } from 'gsap'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/utils/api'
+import { adminLoginRoles } from '@/utils/creatorAccess'
 import { platformServices } from '@/data/platformServices'
-import type { LoginRequest, UserRole } from '@/types'
+import type { LoginRequest } from '@/types'
 import Captcha from '@/components/Captcha.vue'
 
 const router = useRouter()
@@ -215,7 +216,7 @@ const routeAfterInternalLogin = () => {
   if (authStore.isAdmin()) {
     router.push(redirect || '/admin')
   } else if (authStore.isStaff()) {
-    router.push(redirect || '/staff')
+    router.push(redirect || '/contractor')
   } else if (authStore.isContractor()) {
     router.push(redirect || '/contractor')
   } else {
@@ -225,7 +226,7 @@ const routeAfterInternalLogin = () => {
 }
 
 const tryInternalLogin = async (payload: Omit<LoginRequest, 'role'>) => {
-  const roles: UserRole[] = ['admin', 'staff', 'contractor']
+  const roles = adminLoginRoles()
 
   for (const role of roles) {
     try {

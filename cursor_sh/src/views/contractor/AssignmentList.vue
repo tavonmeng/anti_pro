@@ -45,7 +45,7 @@
             <div class="main-order-actions">
               <button type="button" class="dark-button" @click="goToDetail(featuredAssignment.id)">打开</button>
               <button
-                v-if="featuredAssignment.status === 'pending'"
+                v-if="canAcceptAssignment(featuredAssignment)"
                 type="button"
                 class="light-button"
                 @click.stop="handleAccept(featuredAssignment.id)"
@@ -227,9 +227,9 @@
 
         <div class="card-footer">
           <span class="time">订单号：{{ privacyText(item.order?.orderNumber || '—') }} · 当前：{{ privacyText(currentStageName(item)) }}</span>
-          <div class="actions" v-if="item.status === 'pending'" @click.stop>
-            <el-button size="small" type="primary" @click="handleAccept(item.id)">接单</el-button>
-            <el-button size="small" @click="showRejectDialog(item.id)">拒绝</el-button>
+          <div class="actions" v-if="canAcceptAssignment(item) || canRejectAssignment(item)" @click.stop>
+            <el-button v-if="canAcceptAssignment(item)" size="small" type="primary" @click="handleAccept(item.id)">接单</el-button>
+            <el-button v-if="canRejectAssignment(item)" size="small" @click="showRejectDialog(item.id)">拒绝</el-button>
           </div>
           <div class="actions" v-else @click.stop>
             <el-button size="small" type="primary" @click="goToDetail(item.id)">查看详情</el-button>
@@ -263,8 +263,11 @@ import {
   Location, Lock, MagicStick, Monitor, SetUp
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useAuthStore } from '@/stores/auth'
+import { shouldCheckContractorProfile } from '@/utils/creatorAccess'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const activeTab = ref('all')
 const loading = ref(false)
 const assignments = ref<any[]>([])
@@ -362,6 +365,11 @@ const stageSummary = computed(() => {
 })
 
 const checkProfile = async () => {
+  if (!shouldCheckContractorProfile(authStore.user?.role)) {
+    profileIncomplete.value = false
+    return
+  }
+
   try {
     const d: any = await request.get('/contractor/profile')
     const missing = !d?.realName && !d?.real_name || !d?.company || !d?.specialty || !d?.expertise
@@ -563,6 +571,12 @@ const privacyCalendarClasses = (day: { label: string; classes: Record<string, bo
 }
 
 const statusClass = (status: string) => `is-${status || 'unknown'}`
+
+const canAcceptAssignment = (item: any) =>
+  item?.canAccept === true || (item?.creatorType !== 'staff' && item?.status === 'pending')
+
+const canRejectAssignment = (item: any) =>
+  item?.canReject === true || (item?.creatorType !== 'staff' && item?.status === 'pending')
 
 const fetchAssignments = async () => {
   loading.value = true

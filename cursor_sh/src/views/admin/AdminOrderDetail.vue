@@ -13,20 +13,35 @@
       <div class="page-header">
         <el-button :icon="ArrowLeft" @click="goBack">返回订单列表</el-button>
         <div class="header-actions">
-          <el-button 
-            :icon="User" 
-            @click="handleAssign"
-            :disabled="order.status === 'completed' || order.status === 'cancelled'"
+          <el-tooltip
+            :content="creatorAssignDisabledReason"
+            :disabled="!creatorAssignDisabledReason"
+            placement="top"
           >
-            {{ (order.assignees && order.assignees.length > 0) ? '重新分配负责人' : '分配负责人' }}
-          </el-button>
-          <el-button
-            @click="showContractorAssignDialog = true"
-            :disabled="order.status === 'completed' || order.status === 'cancelled' || !isDesignPlanCompleted"
-            :title="!isDesignPlanCompleted ? '请先完成AI方案设计' : ''"
+            <span class="action-tooltip-wrapper">
+              <el-button
+                :icon="User"
+                @click="handleAssign"
+                :disabled="isCreatorAssignDisabled"
+              >
+                {{ (order.assignees && order.assignees.length > 0) ? '重新分配负责人' : '分配负责人' }}
+              </el-button>
+            </span>
+          </el-tooltip>
+          <el-tooltip
+            :content="creatorAssignDisabledReason"
+            :disabled="!creatorAssignDisabledReason"
+            placement="top"
           >
-            派单给承包商
-          </el-button>
+            <span class="action-tooltip-wrapper">
+              <el-button
+                @click="showContractorAssignDialog = true"
+                :disabled="isCreatorAssignDisabled"
+              >
+                派单给承包商
+              </el-button>
+            </span>
+          </el-tooltip>
           <el-button 
             :icon="Upload" 
             type="primary"
@@ -382,13 +397,14 @@
           </div>
         </div>
 
-        <!-- 承包商派单记录 -->
+        <!-- 制作分配记录 -->
         <div v-if="contractorAssignments.length > 0" class="contractor-section">
-          <h3>承包商派单记录</h3>
+          <h3>制作分配记录</h3>
           <div v-for="assignment in contractorAssignments" :key="assignment.id" class="contractor-assignment-card">
             <div class="ca-header">
               <div>
-                <strong>{{ assignment.contractorName }}</strong>
+                <strong>{{ assignmentCreatorName(assignment) }}</strong>
+                <el-tag size="small" effect="plain" style="margin-left:8px">{{ assignmentCreatorLabel(assignment.creatorType) }}</el-tag>
                 <el-tag :type="caStatusType(assignment.status)" size="small" style="margin-left:8px">{{ caStatusLabel(assignment.status) }}</el-tag>
                 <!-- 待审核提示 -->
                 <el-badge v-if="assignment.pendingReviewCount > 0" :value="assignment.pendingReviewCount" type="danger" style="margin-left:8px">
@@ -482,7 +498,7 @@
                 </div>
                 <!-- 管理员评论历史 -->
                 <div v-if="d.adminComments && d.adminComments.length > 0" class="ca-dlv-admin-comments">
-                  <strong style="font-size: 13px; color: #409EFF;">💬 管理员评论（Contractor可见）：</strong>
+                  <strong style="font-size: 13px; color: #409EFF;">💬 管理员评论（{{ assignmentCreatorLabel(d.creatorType || assignment.creatorType) }}可见）：</strong>
                   <div v-for="comment in d.adminComments" :key="comment.id" class="ca-admin-comment-item">
                     <span class="ca-comment-content">{{ comment.content }}</span>
                     <span class="ca-comment-meta">{{ comment.createdByName }} · {{ formatTime(comment.createdAt) }}</span>
@@ -493,7 +509,7 @@
                   <el-input
                     v-model="dlvCommentInputs[d.id]"
                     size="small"
-                    placeholder="写评论给 Contractor..."
+                    :placeholder="deliverableCommentPlaceholder(d.creatorType || assignment.creatorType)"
                     @keyup.enter="handleAddComment(d.id)"
                   >
                     <template #append>
@@ -847,6 +863,12 @@ import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import AssigneeDialog from '@/components/AssigneeDialog.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
 import FilePreviewDialog from '@/components/FilePreviewDialog.vue'
+import {
+  assignmentCreatorLabel,
+  assignmentCreatorName,
+  creatorAssignmentDisabledReason,
+  deliverableCommentPlaceholder,
+} from '@/utils/creatorAccess'
 import type { Order, OrderStatus, VideoPurchaseOrder, DigitalArtOrder, UploadedFile } from '@/types'
 
 const router = useRouter()
@@ -1067,6 +1089,10 @@ const onWorkflowTypeChange = () => {
 const designPlan = ref<any>({ content: '', files: [], status: 'draft' })
 const savingPlan = ref(false)
 const isDesignPlanCompleted = computed(() => designPlan.value.status === 'completed')
+const creatorAssignDisabledReason = computed(() =>
+  creatorAssignmentDisabledReason(order.value?.status, isDesignPlanCompleted.value)
+)
+const isCreatorAssignDisabled = computed(() => !!creatorAssignDisabledReason.value)
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token')
   return token ? { Authorization: `Bearer ${token}` } : {}
@@ -1712,6 +1738,10 @@ const handleAdminCancel = async () => {
   gap: 12px;
 }
 
+.action-tooltip-wrapper {
+  display: inline-flex;
+}
+
 .detail-card {
   border-radius: 12px;
   
@@ -2111,6 +2141,8 @@ const handleAdminCancel = async () => {
 
   .page-header > .el-button,
   .header-actions > .el-button,
+  .header-actions > .action-tooltip-wrapper,
+  .header-actions > .action-tooltip-wrapper :deep(.el-button),
   .header-actions :deep(.el-dropdown),
   .header-actions :deep(.el-dropdown .el-button) {
     width: 100%;

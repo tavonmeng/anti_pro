@@ -2,22 +2,22 @@
   <el-menu
     :default-active="activeMenu"
     class="sidebar-menu"
-    :class="{ 'contractor-menu': isContractor }"
+    :class="{ 'contractor-menu': isCreator }"
     :collapse="isCollapse"
     @select="handleMenuSelect"
   >
-    <div class="sidebar-header" :class="{ 'contractor-header': isContractor }">
-      <template v-if="isContractor">
+    <div class="sidebar-header" :class="{ 'contractor-header': isCreator }">
+      <template v-if="isCreator">
         <div class="contractor-brand-mark">
           <img src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
         </div>
         <div class="contractor-brand-copy">
-          <h2 class="sidebar-title">承包商中心</h2>
-          <p>交付工作台</p>
+          <h2 class="sidebar-title">{{ creatorSidebarTitle(authStore.user?.role) }}</h2>
+          <p>{{ creatorWorkspaceSubtitle(authStore.user?.role) }}</p>
         </div>
       </template>
       <h2 v-else class="sidebar-title">{{ isAdmin ? 'unique vision后端管理系统' : isStaff ? '服务工作台' : '用户工作台' }}</h2>
-      <NotificationBell v-if="!isContractor" class="notification-bell-sidebar" />
+      <NotificationBell v-if="!isCreator" class="notification-bell-sidebar" />
     </div>
 
     <!-- 管理员菜单 -->
@@ -74,32 +74,43 @@
       
     </template>
     
-    <!-- 负责人菜单 -->
-    <template v-else-if="isStaff">
-      <el-menu-item index="orders">
-        <el-icon><Document /></el-icon>
-        <template #title>我的订单</template>
-      </el-menu-item>
-      
-      <el-menu-item index="profile">
-        <el-icon><Setting /></el-icon>
-        <template #title>个人设置</template>
-      </el-menu-item>
-    </template>
-    
-    <!-- 承包商菜单 -->
-    <template v-else-if="isContractor">
+    <!-- 制作者菜单（外部承包商 / 内部制作者共用） -->
+    <template v-else-if="isCreator">
       <div class="menu-section-label">工作</div>
       <el-menu-item index="assignments" class="assignment-nav-item">
         <el-icon><Document /></el-icon>
         <template #title>我的派单</template>
       </el-menu-item>
 
-      <div class="menu-section-label">账户</div>
-      <el-menu-item index="profile">
-        <el-icon><Setting /></el-icon>
-        <template #title>个人设置</template>
-      </el-menu-item>
+      <div class="creator-account-menu">
+        <div class="menu-section-label">账户</div>
+        <el-menu-item index="profile">
+          <el-icon><Setting /></el-icon>
+          <template #title>个人设置</template>
+        </el-menu-item>
+
+        <div
+          v-if="isContractor && profileCardVisible"
+          class="contractor-profile-card"
+          @click="router.push('/contractor/profile')"
+        >
+          <div class="profile-progress-row">
+            <div class="profile-pie" :style="{ '--progress': `${profileCompletion}%` }">
+              <span>{{ profileCompletion }}%</span>
+            </div>
+            <div>
+              <strong>完善资料</strong>
+              <p>补充案例与专业方向，提升接单匹配度。</p>
+            </div>
+          </div>
+          <button type="button">查看资料</button>
+        </div>
+
+        <el-menu-item index="logout" class="logout-item">
+          <el-icon><SwitchButton /></el-icon>
+          <template #title>退出登录</template>
+        </el-menu-item>
+      </div>
     </template>
     
     <!-- 用户菜单 -->
@@ -128,24 +139,7 @@
       </el-menu-item>
     </template>
     
-    <div
-      v-if="isContractor && profileCardVisible"
-      class="contractor-profile-card"
-      @click="router.push('/contractor/profile')"
-    >
-      <div class="profile-progress-row">
-        <div class="profile-pie" :style="{ '--progress': `${profileCompletion}%` }">
-          <span>{{ profileCompletion }}%</span>
-        </div>
-        <div>
-          <strong>完善资料</strong>
-          <p>补充案例与专业方向，提升接单匹配度。</p>
-        </div>
-      </div>
-      <button type="button">查看资料</button>
-    </div>
-
-    <el-menu-item index="logout" class="logout-item">
+    <el-menu-item v-if="!isCreator" index="logout" class="logout-item">
       <el-icon><SwitchButton /></el-icon>
       <template #title>退出登录</template>
     </el-menu-item>
@@ -158,6 +152,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { Grid, Document, User, Setting, SwitchButton, EditPen, ChatDotRound, OfficeBuilding, Suitcase, SetUp, ChatLineSquare, UserFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useOrderStore } from '@/stores/order'
+import {
+  creatorMenuRoute,
+  creatorSidebarTitle,
+  creatorWorkspaceSubtitle,
+  isCreatorRole,
+} from '@/utils/creatorAccess'
 import { loginPathForRole } from '@/utils/deployment'
 import { orderDraftCopy } from '@/utils/orderDraftCopy'
 import request from '@/utils/request'
@@ -182,6 +182,7 @@ const orderStore = useOrderStore()
 const isAdmin = computed(() => authStore.isAdmin())
 const isStaff = computed(() => authStore.isStaff())
 const isContractor = computed(() => authStore.isContractor())
+const isCreator = computed(() => isCreatorRole(authStore.user?.role))
 const draftCount = computed(() => orderStore.orderStats.draft)
 const profileLoaded = ref(false)
 const profileCompletion = ref(0)
@@ -259,7 +260,7 @@ const activeMenu = computed(() => {
     return 'customers'
   } else if (path.includes('/creative-agent') && isAdmin.value) {
     return 'creative-agent'
-  } else if (path.includes('/assignments') && isContractor.value) {
+  } else if (path.includes('/assignments') && isCreator.value) {
     return 'assignments'
   } else if (path.includes('/admin')) {
     return 'orders'
@@ -280,16 +281,15 @@ const handleMenuSelect = (index: string) => {
   } else if (index === 'orders') {
     if (authStore.isAdmin()) {
       router.push('/admin/orders')
-    } else if (authStore.isStaff()) {
-      router.push('/staff/orders')
+    } else if (isCreatorRole(authStore.user?.role)) {
+      router.push(creatorMenuRoute(index, authStore.user?.role))
     } else {
       router.push('/user/orders')
     }
   } else if (index === 'profile') {
-    if (authStore.isStaff()) {
-      router.push('/staff/profile')
-    } else if (authStore.isContractor()) {
-      router.push('/contractor/profile')
+    const creatorRoute = creatorMenuRoute(index, authStore.user?.role)
+    if (creatorRoute) {
+      router.push(creatorRoute)
     } else {
       router.push('/user/profile')
     }
@@ -314,7 +314,7 @@ const handleMenuSelect = (index: string) => {
   } else if (index === 'creative-agent') {
     router.push('/admin/creative-agent')
   } else if (index === 'assignments') {
-    router.push('/contractor/assignments')
+    router.push(creatorMenuRoute(index, authStore.user?.role) || '/contractor/assignments')
   }
 }
 
@@ -498,6 +498,16 @@ onBeforeUnmount(() => {
   letter-spacing: 0;
 }
 
+.creator-account-menu {
+  width: 204px;
+  margin-top: auto;
+  padding-top: 18px;
+
+  .menu-section-label {
+    margin-top: 0;
+  }
+}
+
 .notification-bell-sidebar {
   flex-shrink: 0;
 }
@@ -512,8 +522,7 @@ onBeforeUnmount(() => {
 .contractor-profile-card {
   width: 204px;
   box-sizing: border-box;
-  margin-top: auto;
-  margin-bottom: 18px;
+  margin: 14px 0 12px;
   padding: 16px;
   border-radius: 24px;
   background: #F4F1ED;

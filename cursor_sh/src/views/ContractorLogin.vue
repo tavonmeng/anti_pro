@@ -28,10 +28,10 @@
             <img src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
             <span>Unique Vision</span>
           </div>
-          <h1 class="contractor-title">承包商登录</h1>
+          <h1 class="contractor-title">制作者登录</h1>
           <div class="security-notice">
             <el-icon><Warning /></el-icon>
-            <span>仅限授权承包商访问</span>
+            <span>仅限授权制作者访问</span>
           </div>
         </div>
 
@@ -107,7 +107,7 @@
         <div class="contractor-login-footer">
           <p class="security-tips">
             <el-icon><InfoFilled /></el-icon>
-            使用邀请链接注册后可通过手机号登录
+            内部制作者由管理员添加，外部承包商使用邀请链接注册后登录
           </p>
         </div>
       </section>
@@ -246,9 +246,26 @@ const handleLogin = async () => {
     if (!valid) return
     loading.value = true
     try {
-      const success = await authStore.login(loginForm)
-      if (success) {
-        router.push('/contractor')
+      const roleMismatchDetail = '尚未注册或角色不匹配'
+      const creatorRoles: UserRole[] = ['staff', 'contractor']
+
+      for (const role of creatorRoles) {
+        try {
+          const success = await authStore.login({ ...loginForm, role }, role === 'staff')
+          if (success) {
+            router.push('/contractor')
+            return
+          }
+        } catch (error: any) {
+          const detail = error?.response?.data?.detail
+          if (role === 'staff' && detail === roleMismatchDetail) {
+            continue
+          }
+          if (role === 'staff') {
+            ElMessage.error(detail || '登录失败')
+          }
+          throw error
+        }
       }
     } catch (error: any) {
       console.error('登录失败:', error)

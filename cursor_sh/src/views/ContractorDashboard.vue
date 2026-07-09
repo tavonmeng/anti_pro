@@ -15,7 +15,7 @@
               <span class="avatar-mark">{{ userInitial }}</span>
               <span>
                 <strong>{{ displayName }}</strong>
-                <small>承包商伙伴</small>
+                <small>{{ creatorRoleLabel }}</small>
               </span>
             </button>
           </div>
@@ -48,8 +48,9 @@ const displayName = computed(() =>
   authStore.user?.realName ||
   authStore.user?.username ||
   authStore.user?.phone ||
-  '承包商'
+  '制作者'
 )
+const creatorRoleLabel = computed(() => authStore.isStaff() ? '内部制作者' : '承包商伙伴')
 const userInitial = computed(() => displayName.value.slice(0, 1).toUpperCase())
 </script>
 

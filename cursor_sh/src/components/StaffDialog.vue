@@ -63,6 +63,17 @@
         </div>
       </el-form-item>
 
+      <el-form-item label="手机号" prop="phone">
+        <el-input
+          v-model="formData.phone"
+          placeholder="请输入手机号"
+          maxlength="20"
+        />
+        <div class="form-tip">
+          用于登录制作者工作台；启用负责人必须填写
+        </div>
+      </el-form-item>
+
       <el-form-item label="角色" prop="role">
         <el-select v-model="formData.role" placeholder="请选择角色" style="width: 100%">
           <el-option label="管理员" value="admin">
@@ -107,6 +118,7 @@
 import { ref, computed, watch } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { staffApi } from '@/utils/api'
+import { isValidStaffPhone, normalizeStaffPhone } from '@/utils/staffPhone'
 import type { User } from '@/types'
 
 // Props
@@ -138,6 +150,7 @@ const defaultFormData = {
   confirmPassword: '',
   realName: '',
   email: '',
+  phone: '',
   role: 'staff' as 'admin' | 'staff',
   isActive: true
 }
@@ -184,6 +197,17 @@ const validateEmail = (rule: any, value: any, callback: any) => {
   }
 }
 
+const validatePhone = (rule: any, value: any, callback: any) => {
+  const normalized = normalizeStaffPhone(value)
+  if (formData.value.isActive && !normalized) {
+    callback(new Error('启用负责人必须填写手机号'))
+  } else if (normalized && !isValidStaffPhone(normalized)) {
+    callback(new Error('请输入有效的11位手机号'))
+  } else {
+    callback()
+  }
+}
+
 const formRules = computed<FormRules>(() => ({
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
@@ -203,6 +227,9 @@ const formRules = computed<FormRules>(() => ({
   email: [
     { validator: validateEmail, trigger: 'blur' }
   ],
+  phone: [
+    { validator: validatePhone, trigger: 'blur' }
+  ],
   role: [
     { required: true, message: '请选择角色', trigger: 'change' }
   ]
@@ -221,6 +248,7 @@ async function handleSubmit() {
       await staffApi.updateStaff(props.staff.id, {
         realName: formData.value.realName,
         email: formData.value.email,
+        phone: normalizeStaffPhone(formData.value.phone),
         role: formData.value.role,
         isActive: formData.value.isActive
       })
@@ -232,6 +260,7 @@ async function handleSubmit() {
         password: formData.value.password,
         realName: formData.value.realName,
         email: formData.value.email,
+        phone: normalizeStaffPhone(formData.value.phone),
         role: formData.value.role,
         isActive: formData.value.isActive
       })
@@ -266,6 +295,7 @@ watch(() => props.staff, (newStaff) => {
       confirmPassword: '',
       realName: newStaff.realName || '',
       email: newStaff.email || '',
+      phone: newStaff.phone || '',
       role: newStaff.role as 'admin' | 'staff',
       isActive: newStaff.isActive ?? true
     }
@@ -304,4 +334,3 @@ watch(() => props.staff, (newStaff) => {
   padding-top: 20px;
 }
 </style>
-
