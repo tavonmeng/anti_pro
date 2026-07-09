@@ -36,6 +36,11 @@
         <el-icon><EditPen /></el-icon>
         <template #title>创意 Agent</template>
       </el-menu-item>
+
+      <el-menu-item index="business-data">
+        <el-icon><DataAnalysis /></el-icon>
+        <template #title>业务数据看板</template>
+      </el-menu-item>
       
       <el-menu-item index="staff">
         <el-icon><User /></el-icon>
@@ -149,7 +154,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Grid, Document, User, Setting, SwitchButton, EditPen, ChatDotRound, OfficeBuilding, Suitcase, SetUp, ChatLineSquare, UserFilled } from '@element-plus/icons-vue'
+import { Grid, Document, User, Setting, SwitchButton, EditPen, ChatDotRound, OfficeBuilding, Suitcase, SetUp, ChatLineSquare, UserFilled, DataAnalysis } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useOrderStore } from '@/stores/order'
 import {
@@ -260,6 +265,8 @@ const activeMenu = computed(() => {
     return 'customers'
   } else if (path.includes('/creative-agent') && isAdmin.value) {
     return 'creative-agent'
+  } else if (path.includes('/business-data') && isAdmin.value) {
+    return 'business-data'
   } else if (path.includes('/assignments') && isCreator.value) {
     return 'assignments'
   } else if (path.includes('/admin')) {
@@ -313,6 +320,8 @@ const handleMenuSelect = (index: string) => {
     router.push('/admin/customers')
   } else if (index === 'creative-agent') {
     router.push('/admin/creative-agent')
+  } else if (index === 'business-data') {
+    router.push('/admin/business-data')
   } else if (index === 'assignments') {
     router.push(creatorMenuRoute(index, authStore.user?.role) || '/contractor/assignments')
   }

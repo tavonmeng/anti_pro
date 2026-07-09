@@ -16,6 +16,7 @@ from app.api import contractor as contractor_api
 from app.api import contractor_admin as contractor_admin_api
 from app.api import workflow_config as workflow_config_api
 from app.api import homepage_bar as homepage_bar_api
+from app.api import website_analytics as website_analytics_api
 from app.middleware.cors import setup_cors
 from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
 from app.middleware.audit_logger import (
@@ -82,6 +83,8 @@ app.include_router(logs.router, prefix="/api")
 app.include_router(enterprise.router, prefix="/api")
 # 官网顶部运营条（官网公开读取，管理员编辑）
 app.include_router(homepage_bar_api.router, prefix="/api")
+# 官网访问统计（官网公开上报，管理员内部读取汇总）
+app.include_router(website_analytics_api.router, prefix="/api")
 
 if deploy_mode in ("all", "external"):
     # 用户端专属：AI 聊天（挂载没有 api 前缀）

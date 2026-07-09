@@ -46,6 +46,7 @@ const mobileMenuVisible = ref(false)
 const pageTitleMap: Record<string, string> = {
   '/admin/orders': '订单管理',
   '/admin/customers': '客户 Memory',
+  '/admin/business-data': '业务数据看板',
   '/admin/staff': '负责人管理',
   '/admin/announcements': '公告管理',
   '/admin/enterprise-review': '企业认证审核',

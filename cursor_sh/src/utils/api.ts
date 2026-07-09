@@ -118,6 +118,42 @@ export interface HomepageBarConfig {
   updated_at: string
 }
 
+export interface WebsiteVisitSummary {
+  totals: {
+    today_pv: number
+    today_uv: number
+    yesterday_pv: number
+    yesterday_uv: number
+    range_pv: number
+    range_uv: number
+    days: number
+  }
+  daily: Array<{
+    date: string
+    pv: number
+    uv: number
+  }>
+  paths: Array<{
+    path: string
+    pv: number
+    uv: number
+  }>
+  recent_events: Array<{
+    id: string
+    visited_at: string
+    ip_address: string
+    path: string
+    referrer?: string
+    user_agent?: string
+    counted_for_pv: boolean
+    deduped: boolean
+    country?: string
+    province?: string
+    city?: string
+    geo_status: string
+  }>
+}
+
 export const authApi = {
   // 获取当前登录用户资料
   async getMe(): Promise<User> {
@@ -1133,6 +1169,12 @@ export const homepageBarApi = {
   }>): Promise<HomepageBarConfig> {
     return request.put('/homepage-bar', data)
   }
+}
+
+export const businessDataApi = {
+  async getWebsiteVisits(days = 7): Promise<WebsiteVisitSummary> {
+    return request.get('/website-analytics/admin/website-visits', { params: { days } })
+  },
 }
 
 // 企业认证 API 接口

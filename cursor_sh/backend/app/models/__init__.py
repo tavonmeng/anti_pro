@@ -23,6 +23,7 @@ from app.models.ai_chat import AIChatSession, AIChatMessage
 from app.models.human_handoff import HumanHandoff
 from app.models.homepage_bar import HomepageBar
 from app.models.customer_document import CustomerDocument, CustomerDocumentExtraction
+from app.models.website_analytics import WebsiteVisitDailyStat, WebsiteVisitEvent, WebsiteVisitPathDailyStat, WebsiteVisitUnique
 
 __all__ = [
     "User", "UserRole",
@@ -43,4 +44,5 @@ __all__ = [
     "AIChatSession", "AIChatMessage", "HumanHandoff",
     "HomepageBar",
     "CustomerDocument", "CustomerDocumentExtraction",
+    "WebsiteVisitDailyStat", "WebsiteVisitEvent", "WebsiteVisitPathDailyStat", "WebsiteVisitUnique",
 ]

@@ -49,6 +49,7 @@ import BrandsSection from './sections/BrandsSection.vue'
 import ContactSection from './sections/ContactSection.vue'
 import TheFooter from './sections/TheFooter.vue'
 import { authApi } from '@/utils/api'
+import { trackWebsiteVisit } from './analytics'
 
 // 状态
 const isMarketingBarVisible = ref(true)
@@ -88,6 +89,7 @@ const handleLoadComplete = () => {
 onMounted(() => {
   // 设置官网专属背景色
   document.body.classList.add('landing-active')
+  trackWebsiteVisit()
   handleInviteLink()
 })
 

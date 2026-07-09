@@ -35,6 +35,14 @@ _db_enabled = False
 _audit_queue: asyncio.Queue | None = None
 _audit_workers: list[asyncio.Task] = []
 _dropped_audit_logs = 0
+_audit_skip_paths = {
+    "/api/website-analytics/visit",
+}
+
+
+def should_skip_audit_logging(path: str) -> bool:
+    """Return whether a high-frequency endpoint should bypass audit logging."""
+    return path in _audit_skip_paths
 
 
 def _init_config():
@@ -138,7 +146,7 @@ class AuditLoggerMiddleware(BaseHTTPMiddleware):
     """全链路审计日志中间件"""
 
     async def dispatch(self, request: Request, call_next):
-        if not settings.LOG_ENABLED:
+        if should_skip_audit_logging(request.url.path) or not settings.LOG_ENABLED:
             return await call_next(request)
 
         # 初始化配置（仅首次）
