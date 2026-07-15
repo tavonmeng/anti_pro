@@ -32,8 +32,24 @@ router = APIRouter(prefix="/upload", tags=["文件上传"])
 logger = get_module_logger("order")
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024
-UPLOAD_MAX_SIZE = 200 * 1024 * 1024
-UPLOAD_MAX_SIZE_MESSAGE = "文件大小不能超过200MB"
+UPLOAD_MAX_SIZE = settings.MAX_FILE_SIZE
+UPLOAD_MAX_SIZE_MB = UPLOAD_MAX_SIZE // (1024 * 1024)
+UPLOAD_MAX_SIZE_MESSAGE = f"文件大小不能超过{UPLOAD_MAX_SIZE_MB}MB"
+
+GENERIC_UPLOAD_ALLOWED_EXTENSIONS = {
+    # 图片
+    '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.svg',
+    # 视频
+    '.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm',
+    # 文档
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.key', '.txt',
+    # 设计文件
+    '.psd', '.ai', '.eps', '.sketch', '.fig',
+    # 3D 文件
+    '.fbx', '.obj', '.max', '.blend', '.c4d',
+    # 压缩包
+    '.zip', '.rar', '.7z',
+}
 
 
 def _safe_filename(filename: str | None, fallback: str) -> str:
@@ -357,23 +373,9 @@ async def upload_generic_file(
     用于承包商交付物上传等场景。
     """
     # 允许的文件类型
-    allowed_ext = {
-        # 图片
-        '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.svg',
-        # 视频
-        '.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm',
-        # 文档
-        '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.key', '.txt',
-        # 设计文件
-        '.psd', '.ai', '.eps', '.sketch', '.fig',
-        # 3D 文件
-        '.fbx', '.obj', '.max', '.blend', '.c4d',
-        # 压缩包
-        '.zip', '.rar', '.7z',
-    }
     ext = os.path.splitext(file.filename or '')[1].lower()
     user_id = current_user.id
-    if ext not in allowed_ext:
+    if ext not in GENERIC_UPLOAD_ALLOWED_EXTENSIONS:
         _log_upload_rejected("generic_file", user_id, file.filename, ext, "unsupported_ext")
         raise HTTPException(status_code=400, detail="不支持的文件类型: %s" % ext)
 

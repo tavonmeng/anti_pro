@@ -35,7 +35,17 @@ from app.services.ai_image_understanding import (
     summarize_uploaded_images,
 )
 from app.services.ai_opening_copy import build_ai_3d_custom_brief_opening
-from app.services.ai_upload_context import is_upload_only_material_message, strip_generated_upload_context
+from app.services.ai_upload_context import (
+    PDF_BRIEF_CONTEXT_MARKER,
+    is_upload_only_material_message,
+    strip_generated_upload_context,
+)
+from app.services.ai_brief_document_service import (
+    BriefDocumentExtraction,
+    build_brief_document_confirmation_reply,
+    build_brief_document_revision_reply,
+    extract_uploaded_brief_documents,
+)
 from app.services.platform_service_catalog import (
     get_business_type_label,
     get_consultation_intro,
@@ -230,6 +240,8 @@ async def _update_agent_state_for_message(
     history: list | None = None,
     source_message_id: str | None = None,
     memory_hints: dict[str, str] | None = None,
+    document_updates: dict[str, str] | None = None,
+    document_filenames: list[str] | None = None,
 ) -> dict:
     if not _should_maintain_media_brief_state(business_type):
         return load_agent_state(session_id, user_id, business_type)
@@ -241,6 +253,8 @@ async def _update_agent_state_for_message(
         history=history or [],
         source_message_id=source_message_id,
         memory_hints=memory_hints or {},
+        document_updates=document_updates,
+        document_filenames=document_filenames,
     )
 
 
@@ -955,8 +969,49 @@ async def _request_with_image_context(request: ChatRequest | OrchestrateRequest)
     )
 
 
+async def _request_with_upload_context(
+    request: ChatRequest | OrchestrateRequest,
+    *,
+    user_id: str,
+) -> tuple[ChatRequest | OrchestrateRequest, BriefDocumentExtraction]:
+    """Prepare image context and extract Brief fields from uploaded PDFs."""
+    processing_request = await _request_with_image_context(request)
+    document = await extract_uploaded_brief_documents(
+        processing_request.attachments,
+        user_id=user_id,
+    )
+    if not document.context:
+        return processing_request, document
+    message = f"{processing_request.message}\n\n{document.context}".strip()
+    return processing_request.model_copy(update={"message": message}), document
+
+
+def _document_brief_confirmation_status(agent_state: dict | None, source_message_id: str | None) -> str:
+    if not source_message_id:
+        return ""
+    confirmation = (agent_state or {}).get("document_brief_confirmation") or {}
+    if confirmation.get("source_message_id") != source_message_id:
+        return ""
+    return str(confirmation.get("status") or "")
+
+
+def _document_brief_revised_reply(agent_state: dict | None) -> str:
+    confirmation = (agent_state or {}).get("document_brief_confirmation") or {}
+    return build_brief_document_revision_reply(dict(confirmation.get("updates") or {}))
+
+
+def _document_brief_revision_details_reply() -> str:
+    return "已收到需要调整的反馈，请直接告诉我对应字段的新内容，我会更新本次 Brief。"
+
+
+def _document_brief_rejected_reply() -> str:
+    return "好的，这份 PDF 中提取的信息不会纳入本次 Brief。"
+
+
 def _sanitize_upload_reply(current_message: str, reply: str) -> str:
     """文件上传消息只带文件名时，避免模型假装看过图片内容。"""
+    if PDF_BRIEF_CONTEXT_MARKER in (current_message or ""):
+        return reply
     file_names = _uploaded_file_names(current_message)
     if not file_names:
         return reply
@@ -1031,6 +1086,12 @@ def _build_requirement_llm_messages(
     image_feedback_instruction = build_image_feedback_reply_instruction(request.message)
     if image_feedback_instruction:
         system_prompt += image_feedback_instruction
+    if PDF_BRIEF_CONTEXT_MARKER in (request.message or ""):
+        system_prompt += (
+            "\n\n【PDF Brief 资料】\n"
+            "当前消息包含从用户 PDF 中提取的 Brief 内容。请直接基于其中明确出现的信息承接对话，"
+            "简要说明已经识别到的关键内容，并只追问一个最重要的缺口；不要向用户暴露内部标记或解析过程。\n"
+        )
 
     llm_messages = [{"role": "system", "content": system_prompt}]
     for h in agent_context_messages(
@@ -1578,7 +1639,7 @@ async def ai_chat(
         )
         return {"message": _INTERNAL_DISCLOSURE_REPLY, "handoff": False}
 
-    processing_request = await _request_with_image_context(request)
+    processing_request, document = await _request_with_upload_context(request, user_id=user_id)
 
     # ── 加载用户 Memory ──
     memory_hints: dict[str, str] = {}
@@ -1612,6 +1673,8 @@ async def ai_chat(
         history=processing_request.history,
         source_message_id=processing_request.user_message_id,
         memory_hints=memory_hints,
+        document_updates=document.updates,
+        document_filenames=document.filenames,
     )
 
     existing_handoff = await _append_handoff_message(
@@ -1689,6 +1752,54 @@ async def ai_chat(
         )
         return {"message": reply, "handoff": False, "business_type": request.business_type}
 
+    if document.filenames:
+        reply, handoff, handoff_meta, control_action = await _finalize_ai_chat_reply(
+            request=processing_request,
+            user_id=user_id,
+            username=username,
+            reply=build_brief_document_confirmation_reply(document),
+            agent_state=agent_state,
+            memory_hints=memory_hints,
+        )
+        return {"message": reply, "handoff": handoff, "agent_state": agent_state, "control_action": control_action, **handoff_meta}
+
+    document_confirmation_status = _document_brief_confirmation_status(
+        agent_state,
+        processing_request.user_message_id,
+    )
+    if document_confirmation_status == "revised":
+        reply, handoff, handoff_meta, control_action = await _finalize_ai_chat_reply(
+            request=processing_request,
+            user_id=user_id,
+            username=username,
+            reply=_document_brief_revised_reply(agent_state),
+            agent_state=agent_state,
+            memory_hints=memory_hints,
+        )
+        return {"message": reply, "handoff": handoff, "agent_state": agent_state, "control_action": control_action, **handoff_meta}
+
+    if document_confirmation_status == "needs_revision":
+        reply, handoff, handoff_meta, control_action = await _finalize_ai_chat_reply(
+            request=processing_request,
+            user_id=user_id,
+            username=username,
+            reply=_document_brief_revision_details_reply(),
+            agent_state=agent_state,
+            memory_hints=memory_hints,
+        )
+        return {"message": reply, "handoff": handoff, "agent_state": agent_state, "control_action": control_action, **handoff_meta}
+
+    if document_confirmation_status == "rejected":
+        reply, handoff, handoff_meta, control_action = await _finalize_ai_chat_reply(
+            request=processing_request,
+            user_id=user_id,
+            username=username,
+            reply=_document_brief_rejected_reply(),
+            agent_state=agent_state,
+            memory_hints=memory_hints,
+        )
+        return {"message": reply, "handoff": handoff, "agent_state": agent_state, "control_action": control_action, **handoff_meta}
+
     if not settings.AI_API_KEY:
         if settings.is_production:
             _raise_ai_key_missing()
@@ -1761,7 +1872,7 @@ async def ai_chat_stream(
 ):
     """流式需求收集对话。保留 /chat 作为非流式兼容入口。"""
     user_id, username = _current_user_identity(current_user)
-    processing_request = await _request_with_image_context(request)
+    processing_request, document = await _request_with_upload_context(request, user_id=user_id)
 
     memory_hints: dict[str, str] = {}
     try:
@@ -1792,6 +1903,8 @@ async def ai_chat_stream(
         history=processing_request.history,
         source_message_id=processing_request.user_message_id,
         memory_hints=memory_hints,
+        document_updates=document.updates,
+        document_filenames=document.filenames,
     )
 
     async def one_shot(payload: dict):
@@ -1896,6 +2009,58 @@ async def ai_chat_stream(
             assistant_message_id=request.assistant_message_id,
         )
         payload = {"message": reply, "handoff": False, "business_type": request.business_type}
+        return StreamingResponse(one_shot(payload), media_type="text/event-stream", headers=stream_headers)
+
+    if document.filenames:
+        reply, handoff, handoff_meta, control_action = await _finalize_ai_chat_reply(
+            request=processing_request,
+            user_id=user_id,
+            username=username,
+            reply=build_brief_document_confirmation_reply(document),
+            agent_state=agent_state,
+            memory_hints=memory_hints,
+        )
+        payload = {"message": reply, "handoff": handoff, "agent_state": agent_state, "control_action": control_action, **handoff_meta}
+        return StreamingResponse(one_shot(payload), media_type="text/event-stream", headers=stream_headers)
+
+    document_confirmation_status = _document_brief_confirmation_status(
+        agent_state,
+        processing_request.user_message_id,
+    )
+    if document_confirmation_status == "revised":
+        reply, handoff, handoff_meta, control_action = await _finalize_ai_chat_reply(
+            request=processing_request,
+            user_id=user_id,
+            username=username,
+            reply=_document_brief_revised_reply(agent_state),
+            agent_state=agent_state,
+            memory_hints=memory_hints,
+        )
+        payload = {"message": reply, "handoff": handoff, "agent_state": agent_state, "control_action": control_action, **handoff_meta}
+        return StreamingResponse(one_shot(payload), media_type="text/event-stream", headers=stream_headers)
+
+    if document_confirmation_status == "needs_revision":
+        reply, handoff, handoff_meta, control_action = await _finalize_ai_chat_reply(
+            request=processing_request,
+            user_id=user_id,
+            username=username,
+            reply=_document_brief_revision_details_reply(),
+            agent_state=agent_state,
+            memory_hints=memory_hints,
+        )
+        payload = {"message": reply, "handoff": handoff, "agent_state": agent_state, "control_action": control_action, **handoff_meta}
+        return StreamingResponse(one_shot(payload), media_type="text/event-stream", headers=stream_headers)
+
+    if document_confirmation_status == "rejected":
+        reply, handoff, handoff_meta, control_action = await _finalize_ai_chat_reply(
+            request=processing_request,
+            user_id=user_id,
+            username=username,
+            reply=_document_brief_rejected_reply(),
+            agent_state=agent_state,
+            memory_hints=memory_hints,
+        )
+        payload = {"message": reply, "handoff": handoff, "agent_state": agent_state, "control_action": control_action, **handoff_meta}
         return StreamingResponse(one_shot(payload), media_type="text/event-stream", headers=stream_headers)
 
     if not settings.AI_API_KEY:

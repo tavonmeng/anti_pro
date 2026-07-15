@@ -519,7 +519,7 @@ server {
         proxy_set_header Connection "upgrade";
 
         # 上传文件大小限制
-        client_max_body_size 50m;
+        client_max_body_size 201m;
     }
 
     # AI 聊天接口代理

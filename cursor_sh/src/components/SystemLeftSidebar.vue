@@ -305,14 +305,17 @@ const handleStackClick = (order: any) => {
 
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
-    'draft': '订单草稿',
-    'pending_assign': '等待接单',
+    'draft': '需求确认',
+    'pending_assign': '需求确认',
     'pending_contract': '合同与付款',
-    'in_production': '制作生产中',
-    'pending_review': '内部待审核',
-    'preview_ready': '初稿待您确认',
-    'revision_needed': '修改中',
-    'final_preview': '终稿确认'
+    'in_production': '内容制作',
+    'pending_review': '初稿交付',
+    'preview_ready': '初稿交付',
+    'review_rejected': '初稿交付',
+    'revision_needed': '初稿交付',
+    'final_preview': '终稿交付',
+    'completed': '项目完成',
+    'cancelled': '已取消'
   }
   return map[status] || status
 }

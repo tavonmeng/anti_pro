@@ -29,7 +29,7 @@
           </div>
           <div class="stat-info">
             <div class="stat-value">{{ orderStore.orderStats.inProduction }}</div>
-            <div class="stat-label">制作中</div>
+            <div class="stat-label">内容制作</div>
           </div>
         </div>
       </el-card>
@@ -41,7 +41,7 @@
           </div>
           <div class="stat-info">
             <div class="stat-value">{{ orderStore.orderStats.pendingReview }}</div>
-            <div class="stat-label">待审核</div>
+            <div class="stat-label">交付待审核</div>
           </div>
         </div>
       </el-card>
@@ -53,7 +53,7 @@
           </div>
           <div class="stat-info">
             <div class="stat-value">{{ orderStore.orderStats.preview }}</div>
-            <div class="stat-label">待预览</div>
+            <div class="stat-label">初稿/终稿交付</div>
           </div>
         </div>
       </el-card>
@@ -65,7 +65,7 @@
           </div>
           <div class="stat-info">
             <div class="stat-value">{{ orderStore.orderStats.reviewRejected }}</div>
-            <div class="stat-label">审核拒绝</div>
+            <div class="stat-label">交付审核拒绝</div>
           </div>
         </div>
       </el-card>
@@ -77,7 +77,7 @@
           </div>
           <div class="stat-info">
             <div class="stat-value">{{ orderStore.orderStats.completed }}</div>
-            <div class="stat-label">已完成</div>
+            <div class="stat-label">项目完成</div>
           </div>
         </div>
       </el-card>
@@ -98,14 +98,13 @@
         <el-form-item label="订单状态">
           <el-select v-model="filters.status" placeholder="全部状态" clearable style="width: 180px" @change="handleFilter">
             <el-option label="全部" value="" />
-            <el-option label="合同与付款" value="pending_contract" />
-            <el-option label="制作中" value="in_production" />
-            <el-option label="待审核" value="pending_review" />
-            <el-option label="初稿预览" value="preview_ready" />
-            <el-option label="审核拒绝" value="review_rejected" />
-            <el-option label="需要修改" value="revision_needed" />
-            <el-option label="终稿预览" value="final_preview" />
-            <el-option label="已完成" value="completed" />
+            <el-option
+              v-for="status in ORDER_WORKFLOW_STATES"
+              :key="status.value"
+              :label="status.label"
+              :value="status.value"
+            />
+            <el-option label="已取消" value="cancelled" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -187,6 +186,7 @@ import { Refresh, Document, Loading, View, CircleCheck, CircleClose, ChatLineSqu
 import { useOrderStore } from '@/stores/order'
 import { formatServerTime } from '@/utils/time'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
+import { ORDER_WORKFLOW_STATES } from '@/utils/orderWorkflow'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
 import type { Order, OrderType, OrderStatus, UploadedFile } from '@/types'
 
@@ -452,4 +452,3 @@ const viewDetail = (order: Order) => {
   font-weight: 600;
 }
 </style>
-

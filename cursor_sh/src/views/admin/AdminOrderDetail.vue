@@ -68,12 +68,12 @@
         <!-- 订单进度条 -->
         <div class="order-progress" style="margin-bottom: 30px; padding: 20px 10px; background: #fafafa; border-radius: 8px;">
           <el-steps :active="activeStep" :process-status="order.status === 'cancelled' ? 'error' : 'process'" finish-status="success" align-center>
-            <el-step title="需求确认" description="收到订单" />
-            <el-step title="合同与付款" description="签订合同、收取首付款" />
-            <el-step title="内容制作" description="开发与设计环节" />
-            <el-step title="初稿交付" description="内部审核与客户反馈" />
-            <el-step title="终稿交付" description="内部审核与定稿" />
-            <el-step title="项目完成" description="订单已结束" />
+            <el-step
+              v-for="step in ORDER_WORKFLOW_STATES"
+              :key="step.value"
+              :title="step.label"
+              :description="step.description"
+            />
           </el-steps>
         </div>
         
@@ -418,15 +418,16 @@
                 </template>
               </div>
               <div class="ca-actions">
-                <el-tooltip :content="canAdvanceStage(assignment) ? '进入下一环节' : '需先审批通过当前环节的交付物'" placement="top">
+                <el-tooltip :content="creatorStageAdvanceTooltip(assignment)" placement="top">
                   <span>
                     <el-button 
                       v-if="['accepted','in_progress'].includes(assignment.status)" 
                       size="small" 
                       type="primary" 
                       :disabled="!canAdvanceStage(assignment)"
-                      @click="handleAdvanceStage(assignment.id)">
-                      推进到下一环节
+                      :data-testid="`advance-stage-${assignment.creatorType}-${assignment.id}`"
+                      @click="handleAdvanceStage(assignment)">
+                      {{ creatorStageAdvanceButtonLabel(assignment) }}
                     </el-button>
                   </span>
                 </el-tooltip>
@@ -866,9 +867,19 @@ import FilePreviewDialog from '@/components/FilePreviewDialog.vue'
 import {
   assignmentCreatorLabel,
   assignmentCreatorName,
+  canAdvanceCreatorStage,
   creatorAssignmentDisabledReason,
+  creatorStageAdvanceButtonLabel,
+  creatorStageAdvanceDialog,
+  creatorStageAdvanceTooltip,
   deliverableCommentPlaceholder,
 } from '@/utils/creatorAccess'
+import {
+  ORDER_WORKFLOW_STATES,
+  getNextOrderStatus,
+  getOrderStatusLabel,
+  getOrderWorkflowStep,
+} from '@/utils/orderWorkflow'
 import type { Order, OrderStatus, VideoPurchaseOrder, DigitalArtOrder, UploadedFile } from '@/types'
 
 const router = useRouter()
@@ -1170,23 +1181,7 @@ const previewHistoryList = computed(() => {
 
 const activeStep = computed(() => {
   if (!order.value) return 0
-  const status = order.value.status
-  switch(status) {
-    case 'draft': return 0
-    case 'pending_assign': return 0
-    case 'pending_contract': return 1
-    case 'in_production': return 2
-    case 'pending_review': 
-    case 'review_rejected':
-    case 'preview_ready':
-    case 'revision_needed':
-      const isFinal = previewHistoryList.value.some(h => h.previewType === 'final')
-      return isFinal ? 4 : 3
-    case 'final_preview': return 4
-    case 'completed': return 6
-    case 'cancelled': return 0
-    default: return 0
-  }
+  return getOrderWorkflowStep(order.value.status, previewHistoryList.value)
 })
 
 onMounted(async () => {
@@ -1340,10 +1335,23 @@ const handleContractorAssign = async () => {
   }
 }
 
-const handleAdvanceStage = async (assignmentId: string) => {
+const handleAdvanceStage = async (assignment: any) => {
   try {
-    await ElMessageBox.confirm('确认推进到下一工作流环节？', '确认推进', { type: 'warning' })
-    const res = await contractorAdminApi.advanceStage(assignmentId)
+    const dialog = creatorStageAdvanceDialog(assignment)
+    if (dialog.action === 'info') {
+      await ElMessageBox.alert(dialog.message, dialog.title, {
+        type: 'info',
+        confirmButtonText: dialog.confirmButtonText,
+      })
+      return
+    }
+
+    await ElMessageBox.confirm(dialog.message, dialog.title, {
+      type: 'warning',
+      confirmButtonText: dialog.confirmButtonText,
+      cancelButtonText: '取消',
+    })
+    const res = await contractorAdminApi.advanceStage(assignment.id)
     ElMessage.success(res?.message || '已推进')
     if (order.value) loadContractorData(order.value.id)
   } catch { /* cancelled */ }
@@ -1373,12 +1381,7 @@ const handlePublishDlv = async (deliverableId: string) => {
   } catch { /* cancelled */ }
 }
 
-const canAdvanceStage = (assignment: any) => {
-  if (!['accepted', 'in_progress'].includes(assignment.status)) return false
-  const currentStageOrder = parseInt(assignment.currentStageOrder || '1')
-  const dlvs = assignment.deliverables || []
-  return dlvs.some((d: any) => d.stageOrder === currentStageOrder && d.status === 'admin_approved')
-}
+const canAdvanceStage = canAdvanceCreatorStage
 
 const caStatusLabel = (s: string) => ({
   pending: '待接单', accepted: '已接单', in_progress: '进行中',
@@ -1572,47 +1575,15 @@ const handleStatusChange = async (status: OrderStatus) => {
   }
 }
 
-// 与后端 OrderStateMachine.ALLOWED_TRANSITIONS 完全对齐
-const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-  draft: ['pending_contract', 'cancelled'],
-  pending_assign: ['in_production', 'pending_contract', 'cancelled'],
-  pending_contract: ['in_production', 'cancelled'],
-  in_production: ['pending_review', 'preview_ready', 'final_preview', 'cancelled'],
-  pending_review: ['preview_ready', 'final_preview', 'review_rejected', 'cancelled'],
-  preview_ready: ['revision_needed', 'in_production', 'pending_review', 'cancelled'],
-  review_rejected: ['in_production', 'pending_review', 'cancelled'],
-  revision_needed: ['in_production', 'pending_review', 'preview_ready', 'final_preview', 'cancelled'],
-  final_preview: ['revision_needed', 'pending_review', 'completed', 'cancelled'],
-  completed: [],
-  cancelled: [],
-}
+const getStatusText = getOrderStatusLabel
 
-// 状态标签（与流程步骤条对齐）
-const getStatusText = (status: OrderStatus): string => {
-  const map: Record<OrderStatus, string> = {
-    draft: '草稿',
-    pending_assign: '待分配',
-    pending_contract: '合同与付款',
-    in_production: '内容制作',
-    pending_review: '内部审核',
-    preview_ready: '初稿交付',
-    review_rejected: '审核驳回',
-    revision_needed: '需要修改',
-    final_preview: '终稿交付',
-    completed: '项目完成',
-    cancelled: '已取消'
-  }
-  return map[status] || status
-}
-
-// 动态计算当前状态下可用的转换选项（排除 cancelled，因为有独立的取消按钮）
+// 管理员只能选择唯一的下一阶段；取消订单使用独立按钮。
 const availableTransitions = computed(() => {
   if (!order.value) return []
-  const current = order.value.status
-  const allowed = ALLOWED_TRANSITIONS[current] || []
-  return allowed
-    .filter(s => s !== 'cancelled')  // 取消按钮已独立
-    .map(s => ({ value: s, label: getStatusText(s as OrderStatus) }))
+  const nextStatus = getNextOrderStatus(order.value.status, previewHistoryList.value)
+  return nextStatus
+    ? [{ value: nextStatus, label: getStatusText(nextStatus) }]
+    : []
 })
 
 const reviewStatusText = (status: 'pending' | 'approved' | 'rejected') => {

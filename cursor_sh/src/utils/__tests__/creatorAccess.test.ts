@@ -4,9 +4,13 @@ import {
   assignmentCreatorLabel,
   assignmentCreatorName,
   authenticatedHomeForRole,
+  canAdvanceCreatorStage,
   creatorAssignmentDisabledReason,
   creatorMenuRoute,
   creatorSidebarTitle,
+  creatorStageAdvanceButtonLabel,
+  creatorStageAdvanceDialog,
+  creatorStageAdvanceTooltip,
   creatorWorkspaceSubtitle,
   deliverableCommentPlaceholder,
   isCreatorRole,
@@ -68,8 +72,74 @@ describe('creator access helpers', () => {
 
   it('requires a completed design plan before assigning any creator', () => {
     expect(creatorAssignmentDisabledReason('in_production', false)).toBe('请先完成AI方案设计')
+    expect(creatorAssignmentDisabledReason('pending_contract', true)).toBe('请先将订单推进到「内容制作」阶段')
+    expect(creatorAssignmentDisabledReason('preview_ready', true)).toBe('')
     expect(creatorAssignmentDisabledReason('completed', true)).toBe('订单已结束，无法分配制作者')
     expect(creatorAssignmentDisabledReason('cancelled', true)).toBe('订单已结束，无法分配制作者')
     expect(creatorAssignmentDisabledReason('in_production', true)).toBe('')
+  })
+
+  it('explains that internal creator tasks do not use manual stage advancement', () => {
+    const assignment = {
+      creatorType: 'staff',
+      status: 'in_progress',
+      currentStageOrder: '1',
+      schedule: [{ display_order: 1, name: '制作交付' }],
+      deliverables: [{ stageOrder: 1, status: 'admin_approved' }],
+    }
+
+    expect(canAdvanceCreatorStage(assignment)).toBe(true)
+    expect(creatorStageAdvanceTooltip(assignment)).toContain('内部负责人任务无需使用')
+    expect(creatorStageAdvanceDialog(assignment)).toMatchObject({
+      action: 'info',
+      title: '内部负责人任务无需操作',
+    })
+  })
+
+  it('does not advance single-stage contractor tasks', () => {
+    const dialog = creatorStageAdvanceDialog({
+      creatorType: 'contractor',
+      schedule: [{ display_order: 1, name: '制作交付' }],
+      currentStageOrder: '1',
+    })
+
+    expect(dialog.action).toBe('info')
+    expect(dialog.message).toContain('仅用于多环节承包商任务')
+  })
+
+  it('confirms the exact transition for multi-stage contractor tasks', () => {
+    const assignment = {
+      creatorType: 'contractor',
+      status: 'in_progress',
+      currentStageOrder: '1',
+      schedule: [
+        { display_order: 1, name: 'Demo上传' },
+        { display_order: 2, name: '最终稿交付' },
+      ],
+      deliverables: [{ stageOrder: 1, status: 'admin_approved' }],
+    }
+
+    expect(canAdvanceCreatorStage(assignment)).toBe(true)
+    expect(creatorStageAdvanceDialog(assignment)).toMatchObject({
+      action: 'advance',
+      title: '推进承包商制作环节',
+      confirmButtonText: '确认推进',
+    })
+    expect(creatorStageAdvanceDialog(assignment).message).toContain('从「Demo上传」进入「最终稿交付」')
+    expect(creatorStageAdvanceButtonLabel(assignment)).toBe('推进到下一环节')
+  })
+
+  it('labels the last contractor stage as completing the production task', () => {
+    const assignment = {
+      creatorType: 'contractor',
+      currentStageOrder: '2',
+      schedule: [
+        { display_order: 1, name: 'Demo上传' },
+        { display_order: 2, name: '最终稿交付' },
+      ],
+    }
+
+    expect(creatorStageAdvanceDialog(assignment).action).toBe('complete')
+    expect(creatorStageAdvanceButtonLabel(assignment)).toBe('完成承包商制作任务')
   })
 })

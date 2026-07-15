@@ -7,15 +7,23 @@ import re
 from app.services.ai_image_understanding import IMAGE_CONTEXT_MARKER
 
 
+PDF_BRIEF_CONTEXT_MARKER = "[PDF Brief解析内容]"
 _UPLOAD_SUMMARY_RE = re.compile(r"\[已上传(?:\s*\d+\s*个)?文件:\s*[^\]]+\]")
 
 
-def strip_generated_upload_context(message: str) -> str:
+def strip_generated_upload_context(message: str, *, preserve_document_context: bool = False) -> str:
     """Return only user-authored text after removing upload markers and image summaries."""
     text = str(message or "")
+    document_context = ""
+    if preserve_document_context and PDF_BRIEF_CONTEXT_MARKER in text:
+        document_context = PDF_BRIEF_CONTEXT_MARKER + text.split(PDF_BRIEF_CONTEXT_MARKER, 1)[1]
     if IMAGE_CONTEXT_MARKER in text:
         text = text.split(IMAGE_CONTEXT_MARKER, 1)[0]
     text = _UPLOAD_SUMMARY_RE.sub("", text)
+    if not preserve_document_context and PDF_BRIEF_CONTEXT_MARKER in text:
+        text = text.split(PDF_BRIEF_CONTEXT_MARKER, 1)[0]
+    elif preserve_document_context and document_context:
+        text = f"{text.strip()}\n\n{document_context}".strip()
     return text.strip()
 
 
@@ -32,10 +40,18 @@ def state_safe_upload_message(message: str) -> str:
     """Return a persistence-safe message that removes generated upload details."""
     text = str(message or "")
     has_upload_signal = bool(_UPLOAD_SUMMARY_RE.search(text) or IMAGE_CONTEXT_MARKER in text)
+    has_document_context = PDF_BRIEF_CONTEXT_MARKER in text
     if not has_upload_signal:
-        return text.strip()
+        if not has_document_context:
+            return text.strip()
 
     user_text = strip_generated_upload_context(text)
+    if IMAGE_CONTEXT_MARKER in text:
+        upload_label = "[用户上传了图片素材]"
+    elif has_document_context:
+        upload_label = "[用户上传了 PDF 资料]"
+    else:
+        upload_label = "[用户上传了文件素材]"
     if user_text:
-        return f"{user_text}\n[用户上传了图片素材]"
-    return "[用户上传了图片素材]"
+        return f"{user_text}\n{upload_label}"
+    return upload_label

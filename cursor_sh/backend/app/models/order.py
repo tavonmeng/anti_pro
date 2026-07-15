@@ -19,13 +19,13 @@ class OrderStatus(str, enum.Enum):
     DRAFT = "draft"                        # 草稿
     PENDING_ASSIGN = "pending_assign"      # 待分配（旧状态，保留兼容）
     PENDING_CONTRACT = "pending_contract"  # 合同与付款
-    IN_PRODUCTION = "in_production"        # 制作中
-    PENDING_REVIEW = "pending_review"      # 待审核
-    PREVIEW_READY = "preview_ready"        # 初稿预览
-    REVIEW_REJECTED = "review_rejected"    # 审核拒绝
-    REVISION_NEEDED = "revision_needed"    # 需要修改
-    FINAL_PREVIEW = "final_preview"        # 终稿预览
-    COMPLETED = "completed"                # 已完成
+    IN_PRODUCTION = "in_production"        # 内容制作
+    PENDING_REVIEW = "pending_review"      # 旧状态：交付待审核
+    PREVIEW_READY = "preview_ready"        # 初稿交付
+    REVIEW_REJECTED = "review_rejected"    # 旧状态：交付审核拒绝
+    REVISION_NEEDED = "revision_needed"    # 旧状态：交付需要修改
+    FINAL_PREVIEW = "final_preview"        # 终稿交付
+    COMPLETED = "completed"                # 项目完成
     CANCELLED = "cancelled"                # 已取消
 
 

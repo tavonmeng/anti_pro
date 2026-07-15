@@ -39,12 +39,12 @@
         <!-- 订单进度条 -->
         <div class="order-progress" style="margin-bottom: 30px; padding: 20px 10px; background: #fafafa; border-radius: 8px;">
           <el-steps :active="activeStep" :process-status="order.status === 'cancelled' ? 'error' : 'process'" finish-status="success" align-center>
-            <el-step title="需求确认" description="收到订单" />
-            <el-step title="合同与付款" description="签订合同、收取首付款" />
-            <el-step title="内容制作" description="开发与设计环节" />
-            <el-step title="初稿交付" description="内部审核与客户反馈" />
-            <el-step title="终稿交付" description="内部审核与定稿" />
-            <el-step title="项目完成" description="订单已结束" />
+            <el-step
+              v-for="step in ORDER_WORKFLOW_STATES"
+              :key="step.value"
+              :title="step.label"
+              :description="step.description"
+            />
           </el-steps>
         </div>
         
@@ -56,31 +56,6 @@
             </div>
             <div class="header-right">
               <OrderStatusBadge :status="order.status" size="large" />
-              <el-dropdown 
-                @command="handleStatusChange" 
-                v-if="order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'pending_review' && order.status !== 'pending_contract'"
-              >
-                <el-button>
-                  更改状态
-                  <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="in_production" :disabled="order.status === 'in_production'">
-                      制作中
-                    </el-dropdown-item>
-                    <el-dropdown-item command="preview_ready" :disabled="order.status === 'preview_ready'">
-                      初稿预览
-                    </el-dropdown-item>
-                    <el-dropdown-item command="final_preview" :disabled="order.status === 'final_preview'">
-                      终稿预览
-                    </el-dropdown-item>
-                    <el-dropdown-item command="completed">
-                      已完成
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
             </div>
           </div>
         </template>
@@ -278,14 +253,15 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ArrowLeft, Upload, ArrowDown, Picture, Document as DocumentIcon, VideoPlay, View, Download } from '@element-plus/icons-vue'
-import { ElMessageBox, ElMessage } from 'element-plus'
+import { ArrowLeft, Upload, Picture, VideoPlay, View, Download } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { useOrderStore } from '@/stores/order'
 import { orderApi } from '@/utils/api'
 import { formatServerTime, parseServerTime } from '@/utils/time'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import UploadPreviewDialog from '@/components/UploadPreviewDialog.vue'
-import type { Order, OrderStatus, VideoPurchaseOrder, DigitalArtOrder, UploadedFile, TimelineItem } from '@/types'
+import { ORDER_WORKFLOW_STATES, getOrderWorkflowStep } from '@/utils/orderWorkflow'
+import type { Order, VideoPurchaseOrder, DigitalArtOrder, UploadedFile, TimelineItem } from '@/types'
 
 const router = useRouter()
 const route = useRoute()
@@ -303,14 +279,6 @@ const orderTypeMap: Record<string, string> = {
 
 const orderTypeText = computed(() => {
   return order.value ? orderTypeMap[order.value.orderType] || order.value.orderType : ''
-})
-
-const hasPreviewFiles = computed(() => {
-  if (!order.value) return false
-  if (order.value.orderType === 'ai_3d_custom' || order.value.orderType === 'digital_art') {
-    return order.value.previewFiles && order.value.previewFiles.length > 0
-  }
-  return false
 })
 
 // 合并预览历史和反馈记录，按时间排序
@@ -343,23 +311,7 @@ const timelineItems = computed<TimelineItem[]>(() => {
 
 const activeStep = computed(() => {
   if (!order.value) return 0
-  const status = order.value.status
-  switch(status) {
-    case 'draft': return 0
-    case 'pending_assign': return 0
-    case 'pending_contract': return 1
-    case 'in_production': return 2
-    case 'pending_review': 
-    case 'review_rejected':
-    case 'preview_ready':
-    case 'revision_needed':
-      const isFinal = timelineItems.value.some(item => item.type === 'preview' && item.data.previewType === 'final')
-      return isFinal ? 4 : 3
-    case 'final_preview': return 4
-    case 'completed': return 6
-    case 'cancelled': return 0
-    default: return 0
-  }
+  return getOrderWorkflowStep(order.value.status, order.value.previewHistory || [])
 })
 
 onMounted(async () => {
@@ -436,41 +388,6 @@ const handleUploadConfirm = async (files: UploadedFile[], previewType: string, n
   
   await orderStore.uploadPreview(order.value.id, files, previewType === 'final' ? 'final' : 'initial', note)
   order.value = await orderStore.getOrderDetail(order.value.id)
-}
-
-const handleStatusChange = async (status: OrderStatus) => {
-  if (!order.value) return
-  
-  try {
-    await ElMessageBox.confirm(
-      `确定要将订单状态更改为"${getStatusText(status)}"吗？`,
-      '确认更改',
-      {
-        type: 'warning'
-      }
-    )
-    
-    await orderStore.updateOrderStatus(order.value.id, status)
-    order.value = await orderStore.getOrderDetail(order.value.id)
-  } catch {
-    // 用户取消
-  }
-}
-
-const getStatusText = (status: OrderStatus): string => {
-  const map: Record<OrderStatus, string> = {
-    pending_assign: '待分配',
-    pending_contract: '合同与付款',
-    in_production: '制作中',
-    pending_review: '待审核',
-    preview_ready: '初稿预览',
-    review_rejected: '审核拒绝',
-    revision_needed: '需要修改',
-    final_preview: '终稿预览',
-    completed: '已完成',
-    cancelled: '已取消'
-  }
-  return map[status] || status
 }
 
 const reviewStatusText = (status: 'pending' | 'approved' | 'rejected') => {

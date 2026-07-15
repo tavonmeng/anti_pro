@@ -904,8 +904,8 @@ const formatTime = (ts: string) => {
 
 const statusLabel = (s: string) => {
   const m: Record<string, string> = {
-    completed: '已完成', in_production: '制作中',
-    pending_assign: '待确认', cancelled: '已取消',
+    completed: '项目完成', in_production: '内容制作',
+    pending_assign: '需求确认', cancelled: '已取消',
   }
   return m[s] || s || '-'
 }

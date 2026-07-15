@@ -656,8 +656,8 @@ def build_memory_context(memory: UserMemory | None) -> str:
                 if part
             )
             status_map = {
-                "completed": "已完成", "in_production": "制作中",
-                "pending_assign": "待确认", "cancelled": "已取消",
+                "completed": "项目完成", "in_production": "内容制作",
+                "pending_assign": "需求确认", "cancelled": "已取消",
             }
             status = status_map.get(p.get("status", ""), p.get("status", ""))
             extra = f"｜{creative}" if creative else ""

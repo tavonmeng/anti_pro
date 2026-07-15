@@ -4,6 +4,7 @@ import { orderApi } from '@/utils/api'
 import type { Order, OrderStatus, OrderType } from '@/types'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from './auth'
+import { isOrderPendingReview, isOrderReviewRejected } from '@/utils/orderReviewStatus'
 
 export const useOrderStore = defineStore('order', () => {
   const orders = ref<Order[]>([])
@@ -166,8 +167,8 @@ export const useOrderStore = defineStore('order', () => {
       pendingAssign: orders.value.filter(o => o.status === 'pending_assign').length,
       pendingContract: orders.value.filter(o => o.status === 'pending_contract').length,
       inProduction: orders.value.filter(o => o.status === 'in_production').length,
-      pendingReview: orders.value.filter(o => o.status === 'pending_review').length,
-      reviewRejected: orders.value.filter(o => o.status === 'review_rejected').length,
+      pendingReview: orders.value.filter(isOrderPendingReview).length,
+      reviewRejected: orders.value.filter(isOrderReviewRejected).length,
       preview: orders.value.filter(o => o.status === 'preview_ready' || o.status === 'final_preview').length,
       revisionNeeded: orders.value.filter(o => o.status === 'revision_needed').length,
       completed: orders.value.filter(o => o.status === 'completed').length,

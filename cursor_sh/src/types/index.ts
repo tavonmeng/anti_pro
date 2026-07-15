@@ -20,16 +20,16 @@ export type NotificationType =
 
 // 订单状态
 export type OrderStatus = 
-  | 'draft'                // 草稿
-  | 'pending_assign'       // 待分配（旧状态）
+  | 'draft'                // 需求确认
+  | 'pending_assign'       // 旧状态：需求确认
   | 'pending_contract'     // 合同与付款
-  | 'in_production'        // 制作中
-  | 'pending_review'       // 待审核
-  | 'preview_ready'        // 初稿预览
-  | 'review_rejected'      // 审核拒绝
-  | 'revision_needed'      // 需要修改
-  | 'final_preview'        // 终稿预览
-  | 'completed'            // 已完成
+  | 'in_production'        // 内容制作
+  | 'pending_review'       // 旧状态：交付待审核
+  | 'preview_ready'        // 初稿交付
+  | 'review_rejected'      // 旧状态：交付审核拒绝
+  | 'revision_needed'      // 旧状态：交付需要修改
+  | 'final_preview'        // 终稿交付
+  | 'completed'            // 项目完成
   | 'cancelled'            // 已取消
 
 // 行业类型
@@ -123,6 +123,7 @@ export interface BaseOrder {
   feedbacks: OrderFeedback[]   // 客户反馈记录
   previewHistory?: PreviewHistory[]  // 预览历史记录
   pendingReviewPreviewIds?: string[]
+  creatorReviewStatus?: 'pending_review' | 'review_rejected' | null  // 制作者最新交付物的管理员审核状态
   revisionCount: number        // 修改次数
 }
 

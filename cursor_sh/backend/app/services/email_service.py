@@ -2,6 +2,7 @@
 
 import aiosmtplib
 import ssl
+from html import escape
 from email.header import Header
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -193,15 +194,16 @@ class EmailService:
     ) -> bool:
         """发送订单状态变更通知"""
         status_names = {
-            "pending_assign": "待分配",
+            "draft": "需求确认",
+            "pending_assign": "需求确认",
             "pending_contract": "合同与付款",
-            "in_production": "制作中",
-            "pending_review": "待审核",
-            "preview_ready": "初稿预览",
-            "review_rejected": "审核拒绝",
-            "revision_needed": "需要修改",
-            "final_preview": "终稿预览",
-            "completed": "已完成",
+            "in_production": "内容制作",
+            "pending_review": "初稿交付",
+            "preview_ready": "初稿交付",
+            "review_rejected": "初稿交付",
+            "revision_needed": "初稿交付",
+            "final_preview": "终稿交付",
+            "completed": "项目完成",
             "cancelled": "已取消"
         }
         
@@ -286,6 +288,75 @@ class EmailService:
         """
         
         return await EmailService.send_email([user_email], subject, html_content)
+
+    @staticmethod
+    async def send_deliverable_published_notification(
+        user_email: str,
+        order_number: str,
+        stage_name: str,
+        published_note: Optional[str] = None,
+    ) -> bool:
+        """管理员向用户发布交付物后发送邮件通知。"""
+        subject = f"新交付物已发布 - {order_number}"
+        safe_order_number = escape(order_number)
+        safe_stage_name = escape(stage_name)
+        note_html = ""
+        note_text = ""
+        if published_note:
+            note_html = f"""
+                <div style="background-color: #f0f7ff; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p style="margin: 0 0 8px; color: #7f8c8d;">管理员备注：</p>
+                    <p style="margin: 0; white-space: pre-wrap;">{escape(published_note)}</p>
+                </div>
+            """
+            note_text = f"\n管理员备注：{published_note}\n"
+
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+                <h2 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px;">
+                    新交付物已发布
+                </h2>
+                <p>您好，</p>
+                <p>您的订单 <strong>{safe_order_number}</strong> 有新的交付物可查看。</p>
+                <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p style="margin: 0;">
+                        交付环节：<strong>{safe_stage_name}</strong>
+                    </p>
+                </div>
+                {note_html}
+                <p>请登录系统查看交付物详情。</p>
+                <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+                <p style="color: #7f8c8d; font-size: 12px;">
+                    此邮件由系统自动发送，请勿回复。<br>
+                    Unique Vision AI
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""
+        新交付物已发布
+
+        您好，
+
+        您的订单 {order_number} 有新的交付物可查看。
+        交付环节：{stage_name}
+        {note_text}
+        请登录系统查看交付物详情。
+
+        此邮件由系统自动发送，请勿回复。
+        Unique Vision AI
+        """
+
+        return await EmailService.send_email(
+            [user_email],
+            subject,
+            html_content,
+            text_content,
+        )
 
     @staticmethod
     async def send_assignment_notification(

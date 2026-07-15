@@ -20,6 +20,7 @@ class Feedback(Base):
     id = Column(String(50), primary_key=True, index=True)
     order_id = Column(String(50), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
     deliverable_id = Column(String(50), ForeignKey("contractor_deliverables.id", ondelete="SET NULL"), nullable=True, index=True)
+    staff_deliverable_id = Column(String(50), ForeignKey("staff_deliverables.id", ondelete="SET NULL"), nullable=True, index=True)
     content = Column(Text, nullable=False)
     type = Column(Enum(FeedbackType), nullable=False)
     created_by = Column(String(50), ForeignKey("users.id"), nullable=False)

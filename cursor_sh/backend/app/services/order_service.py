@@ -8,8 +8,10 @@ from typing import List, Optional, Union
 from datetime import datetime
 
 from app.models.order import Order, OrderType, OrderStatus, OrderAssignee
-from app.models.contractor_assignment import ContractorAssignment
-from app.models.contractor_deliverable import ContractorDeliverable
+from app.models.contractor_assignment import ContractorAssignment, AssignmentStatus
+from app.models.contractor_deliverable import ContractorDeliverable, DeliverableStatus
+from app.models.staff_assignment import StaffAssignment, StaffAssignmentStatus
+from app.models.staff_deliverable import StaffDeliverable
 from app.models.user import EnterpriseStatus, User, UserRole
 from app.utils.dependencies import AnyUser
 from app.models.admin import Admin
@@ -58,57 +60,228 @@ def _iso_beijing(dt: datetime | None) -> str | None:
     return beijing_iso(dt)
 
 
+def _feedback_deliverable_id(feedback: Feedback) -> str | None:
+    """返回反馈实际关联的交付物 ID，兼容承包商和内部负责人历史数据。"""
+    return feedback.deliverable_id or feedback.staff_deliverable_id
+
+
+def _can_view_customer_feedback(current_user: AnyUser) -> bool:
+    """客户原始反馈只对客户本人和管理员开放。"""
+    return current_user.role in (UserRole.USER, UserRole.ADMIN)
+
+
+def _derive_creator_review_statuses(rows: list[tuple]) -> dict[str, str]:
+    """按订单当前制作环节的最新交付版本，计算管理员审核队列状态。"""
+    latest_by_stage = {}
+
+    for order_id, current_stage_order, deliverable in rows:
+        try:
+            current_order = int(current_stage_order or "1")
+        except (TypeError, ValueError):
+            continue
+
+        if deliverable.stage_order != current_order:
+            continue
+
+        key = (order_id, deliverable.assignment_id, deliverable.stage_order)
+        latest = latest_by_stage.get(key)
+        if latest is None or (deliverable.version or 0) > (latest.version or 0):
+            latest_by_stage[key] = deliverable
+
+    statuses_by_order: dict[str, list] = {}
+    for (order_id, _assignment_id, _stage_order), deliverable in latest_by_stage.items():
+        statuses_by_order.setdefault(order_id, []).append(deliverable)
+
+    result: dict[str, str] = {}
+    for order_id, deliverables in statuses_by_order.items():
+        if any(d.status == DeliverableStatus.SUBMITTED for d in deliverables):
+            result[order_id] = "pending_review"
+            continue
+
+        if any(
+            d.status == DeliverableStatus.ADMIN_REJECTED
+            or (d.status == DeliverableStatus.DRAFT and bool(d.parent_id))
+            for d in deliverables
+        ):
+            result[order_id] = "review_rejected"
+
+    return result
+
+
+async def _get_creator_review_statuses(
+    db: AsyncSession,
+    order_ids: list[str],
+) -> dict[str, str]:
+    """批量读取承包商/内部负责人当前交付物状态，避免订单列表逐单查询。"""
+    if not order_ids:
+        return {}
+
+    contractor_result = await db.execute(
+        select(
+            ContractorAssignment.order_id,
+            ContractorAssignment.current_stage_order,
+            ContractorDeliverable,
+        )
+        .join(
+            ContractorDeliverable,
+            ContractorDeliverable.assignment_id == ContractorAssignment.id,
+        )
+        .where(
+            ContractorAssignment.order_id.in_(order_ids),
+            ContractorAssignment.status.in_([
+                AssignmentStatus.ACCEPTED,
+                AssignmentStatus.IN_PROGRESS,
+            ]),
+        )
+    )
+    staff_result = await db.execute(
+        select(
+            StaffAssignment.order_id,
+            StaffAssignment.current_stage_order,
+            StaffDeliverable,
+        )
+        .join(
+            StaffDeliverable,
+            StaffDeliverable.assignment_id == StaffAssignment.id,
+        )
+        .where(
+            StaffAssignment.order_id.in_(order_ids),
+            StaffAssignment.status == StaffAssignmentStatus.IN_PROGRESS,
+        )
+    )
+
+    return _derive_creator_review_statuses(
+        [*contractor_result.all(), *staff_result.all()]
+    )
+
+
+async def _resolve_published_feedback_deliverable(
+    db: AsyncSession,
+    order_id: str,
+    deliverable_id: str,
+) -> str | None:
+    """确认客户反馈目标属于当前订单且已发布，返回制作者类型。"""
+    contractor_result = await db.execute(
+        select(ContractorDeliverable.id)
+        .join(ContractorAssignment, ContractorDeliverable.assignment_id == ContractorAssignment.id)
+        .where(
+            ContractorDeliverable.id == deliverable_id,
+            ContractorAssignment.order_id == order_id,
+            ContractorDeliverable.is_published_to_user == True,  # noqa: E712
+        )
+    )
+    if contractor_result.scalar_one_or_none():
+        return "contractor"
+
+    staff_result = await db.execute(
+        select(StaffDeliverable.id)
+        .join(StaffAssignment, StaffDeliverable.assignment_id == StaffAssignment.id)
+        .where(
+            StaffDeliverable.id == deliverable_id,
+            StaffAssignment.order_id == order_id,
+            StaffDeliverable.is_published_to_user == True,  # noqa: E712
+        )
+    )
+    if staff_result.scalar_one_or_none():
+        return "staff"
+
+    return None
+
+
 class OrderStateMachine:
-    """订单状态机"""
-    
-    # 允许的状态转换
-    ALLOWED_TRANSITIONS = {
-        OrderStatus.DRAFT: [OrderStatus.PENDING_CONTRACT, OrderStatus.CANCELLED],
-        OrderStatus.PENDING_ASSIGN: [OrderStatus.IN_PRODUCTION, OrderStatus.PENDING_CONTRACT, OrderStatus.CANCELLED],  # 旧状态兼容
-        OrderStatus.PENDING_CONTRACT: [OrderStatus.IN_PRODUCTION, OrderStatus.CANCELLED],
-        OrderStatus.IN_PRODUCTION: [
-            OrderStatus.PENDING_REVIEW,
-            OrderStatus.PREVIEW_READY,
-            OrderStatus.FINAL_PREVIEW,
-            OrderStatus.CANCELLED
-        ],
-        OrderStatus.PENDING_REVIEW: [
-            OrderStatus.PREVIEW_READY,
-            OrderStatus.FINAL_PREVIEW,
-            OrderStatus.REVIEW_REJECTED,
-            OrderStatus.CANCELLED
-        ],
-        OrderStatus.PREVIEW_READY: [OrderStatus.REVISION_NEEDED, OrderStatus.IN_PRODUCTION, OrderStatus.PENDING_REVIEW, OrderStatus.CANCELLED],
-        OrderStatus.REVIEW_REJECTED: [
-            OrderStatus.IN_PRODUCTION,
-            OrderStatus.PENDING_REVIEW,
-            OrderStatus.CANCELLED
-        ],
-        OrderStatus.REVISION_NEEDED: [
-            OrderStatus.IN_PRODUCTION,
-            OrderStatus.PENDING_REVIEW,
-            OrderStatus.PREVIEW_READY,
-            OrderStatus.FINAL_PREVIEW,
-            OrderStatus.CANCELLED
-        ],
-        OrderStatus.FINAL_PREVIEW: [OrderStatus.REVISION_NEEDED, OrderStatus.PENDING_REVIEW, OrderStatus.COMPLETED, OrderStatus.CANCELLED],
-        OrderStatus.COMPLETED: [],
-        OrderStatus.CANCELLED: []
+    """六阶段订单状态机；审核、驳回和修改是交付物子状态。"""
+
+    ORDERED_STATUSES = (
+        OrderStatus.DRAFT,
+        OrderStatus.PENDING_CONTRACT,
+        OrderStatus.IN_PRODUCTION,
+        OrderStatus.PREVIEW_READY,
+        OrderStatus.FINAL_PREVIEW,
+        OrderStatus.COMPLETED,
+    )
+    NEXT_STATUS = {
+        OrderStatus.DRAFT: OrderStatus.PENDING_CONTRACT,
+        OrderStatus.PENDING_CONTRACT: OrderStatus.IN_PRODUCTION,
+        OrderStatus.IN_PRODUCTION: OrderStatus.PREVIEW_READY,
+        OrderStatus.PREVIEW_READY: OrderStatus.FINAL_PREVIEW,
+        OrderStatus.FINAL_PREVIEW: OrderStatus.COMPLETED,
     }
+
+    @classmethod
+    def canonical_status(
+        cls,
+        order_status: OrderStatus,
+        *,
+        has_final_preview: bool = False,
+    ) -> OrderStatus:
+        """将历史状态映射到六阶段，不修改数据库中的历史记录。"""
+        if order_status == OrderStatus.PENDING_ASSIGN:
+            return OrderStatus.DRAFT
+        if order_status in (
+            OrderStatus.PENDING_REVIEW,
+            OrderStatus.REVIEW_REJECTED,
+            OrderStatus.REVISION_NEEDED,
+        ):
+            return OrderStatus.FINAL_PREVIEW if has_final_preview else OrderStatus.PREVIEW_READY
+        return order_status
+
+    @classmethod
+    def next_status(
+        cls,
+        order_status: OrderStatus,
+        *,
+        has_final_preview: bool = False,
+    ) -> OrderStatus | None:
+        """返回唯一可推进的下一状态；历史状态先原位归一化。"""
+        if order_status == OrderStatus.PENDING_ASSIGN:
+            return OrderStatus.PENDING_CONTRACT
+        if order_status in (
+            OrderStatus.PENDING_REVIEW,
+            OrderStatus.REVIEW_REJECTED,
+            OrderStatus.REVISION_NEEDED,
+        ):
+            return cls.canonical_status(
+                order_status,
+                has_final_preview=has_final_preview,
+            )
+        return cls.NEXT_STATUS.get(order_status)
     
     @classmethod
-    def can_transition(cls, from_status: OrderStatus, to_status: OrderStatus) -> bool:
+    def can_transition(
+        cls,
+        from_status: OrderStatus,
+        to_status: OrderStatus,
+        *,
+        has_final_preview: bool = False,
+    ) -> bool:
         """检查是否可以进行状态转换"""
-        return to_status in cls.ALLOWED_TRANSITIONS.get(from_status, [])
+        if from_status in (OrderStatus.COMPLETED, OrderStatus.CANCELLED):
+            return False
+        if to_status == OrderStatus.CANCELLED:
+            return True
+        return to_status == cls.next_status(
+            from_status,
+            has_final_preview=has_final_preview,
+        )
     
     @classmethod
-    def validate_transition(cls, from_status: OrderStatus, to_status: OrderStatus):
+    def validate_transition(
+        cls,
+        from_status: OrderStatus,
+        to_status: OrderStatus,
+        *,
+        has_final_preview: bool = False,
+    ):
         """验证状态转换"""
         # 如果状态相同，允许（用于重复操作）
         if from_status == to_status:
             return
         
-        if not cls.can_transition(from_status, to_status):
+        if not cls.can_transition(
+            from_status,
+            to_status,
+            has_final_preview=has_final_preview,
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"非法的状态转换: {from_status.value} -> {to_status.value}"
@@ -577,11 +750,20 @@ class OrderService:
         # 执行查询
         result = await db.execute(query.order_by(Order.created_at.desc()))
         orders = result.scalars().all()
+
+        creator_review_statuses = {}
+        if current_user.role == UserRole.ADMIN:
+            creator_review_statuses = await _get_creator_review_statuses(
+                db,
+                [order.id for order in orders],
+            )
         
         # 构造响应
         order_responses = []
         for order in orders:
             order_response = await OrderService._build_order_response(db, order, current_user)
+            if current_user.role == UserRole.ADMIN:
+                order_response["creatorReviewStatus"] = creator_review_statuses.get(order.id)
             order_responses.append(order_response)
         
         return order_responses
@@ -684,26 +866,20 @@ class OrderService:
             if current_user.role != UserRole.ADMIN:
                 raise HTTPException(status_code=403, detail="签订确认函后，只有管理员可以取消订单")
         
-        if not is_draft_submit and not is_draft_delete and current_user.role not in [UserRole.ADMIN, UserRole.STAFF]:
+        if not is_draft_submit and not is_draft_delete and current_user.role != UserRole.ADMIN:
             raise HTTPException(status_code=403, detail="权限不足")
         
-        if current_user.role == UserRole.STAFF:
-            # Staff 不能取消订单
-            if new_status == OrderStatus.CANCELLED:
-                raise HTTPException(status_code=403, detail="负责人无权取消订单，请联系管理员")
-            # 检查当前用户是否是订单的任一负责人
-            assignee_result = await db.execute(
-                select(OrderAssignee).where(
-                    OrderAssignee.order_id == order_id,
-                    OrderAssignee.assignee_id == current_user.id
-                )
-            )
-            assignee = assignee_result.scalar_one_or_none()
-            if not assignee:
-                raise HTTPException(status_code=403, detail="您不是此订单的负责人")
-        
         # 验证状态转换
-        OrderStateMachine.validate_transition(order.status, new_status)
+        has_final_preview = any(
+            item.get("previewType") == "final"
+            for item in (order.order_data or {}).get("previewHistory", [])
+            if isinstance(item, dict)
+        )
+        OrderStateMachine.validate_transition(
+            order.status,
+            new_status,
+            has_final_preview=has_final_preview,
+        )
         
         old_status = order.status
         order.status = new_status
@@ -772,16 +948,16 @@ class OrderService:
         # 创建系统内消息通知
         # 1. 通知订单用户状态变更
         status_map = {
-            "draft": "订单草稿",
-            "pending_assign": "待分配",
+            "draft": "需求确认",
+            "pending_assign": "需求确认",
             "pending_contract": "合同与付款",
-            "in_production": "制作中",
-            "pending_review": "待审核",
-            "preview_ready": "初稿预览",
-            "review_rejected": "审核拒绝",
-            "revision_needed": "需要修改",
-            "final_preview": "终稿预览",
-            "completed": "已完成",
+            "in_production": "内容制作",
+            "pending_review": "初稿交付",
+            "preview_ready": "初稿交付",
+            "review_rejected": "初稿交付",
+            "revision_needed": "初稿交付",
+            "final_preview": "终稿交付",
+            "completed": "项目完成",
             "cancelled": "已取消"
         }
         new_status_text = status_map.get(new_status.value, new_status.value)
@@ -858,6 +1034,20 @@ class OrderService:
         if not order:
             raise HTTPException(status_code=404, detail="订单不存在")
 
+        assignable_statuses = {
+            OrderStatus.IN_PRODUCTION,
+            OrderStatus.PENDING_REVIEW,
+            OrderStatus.PREVIEW_READY,
+            OrderStatus.REVIEW_REJECTED,
+            OrderStatus.REVISION_NEEDED,
+            OrderStatus.FINAL_PREVIEW,
+        }
+        if assignee_ids and order.status not in assignable_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail="订单进入「内容制作」后才可以分配内部负责人",
+            )
+
         OrderService._ensure_assignment_design_plan_completed(order)
         
         if len(assignee_ids) != len(assignee_names):
@@ -877,6 +1067,22 @@ class OrderService:
             assignee = assignee_dict.get(assignee_id)
             if not assignee:
                 raise HTTPException(status_code=400, detail=f"无效的负责人: {assignee_id}")
+
+        if assignee_ids:
+            active_contractor_result = await db.execute(
+                select(ContractorAssignment.id)
+                .where(
+                    ContractorAssignment.order_id == order_id,
+                    ContractorAssignment.status.in_([
+                        AssignmentStatus.PENDING,
+                        AssignmentStatus.ACCEPTED,
+                        AssignmentStatus.IN_PROGRESS,
+                    ]),
+                )
+                .limit(1)
+            )
+            if active_contractor_result.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="该订单已派给承包商，不能再分配内部负责人")
         
         # 获取旧的负责人ID列表（用于判断是新分配还是重新分配）
         old_assignees_result = await db.execute(
@@ -907,11 +1113,6 @@ class OrderService:
             assigned_by=current_user.id,
         )
         
-        old_status = order.status
-        # 如果订单是旧的待分配状态，自动转为制作中（合同与付款状态下分配负责人不改变订单状态）
-        if order.status == OrderStatus.PENDING_ASSIGN:
-            order.status = OrderStatus.IN_PRODUCTION
-        
         await db.commit()
         await db.refresh(order)
         log_business_event(
@@ -922,7 +1123,7 @@ class OrderService:
             user_id=order.user_id,
             actor_id=current_user.id,
             actor_role=current_user.role,
-            status_from=old_status,
+            status_from=order.status,
             status_to=order.status,
             old_assignee_ids=sorted(old_assignee_ids),
             new_assignee_ids=sorted(new_assignee_ids),
@@ -1062,11 +1263,28 @@ class OrderService:
             order_data["previewNote"] = note
         
         old_status = order.status
-        # 验证状态转换
-        OrderStateMachine.validate_transition(order.status, OrderStatus.PENDING_REVIEW)
-        
+        has_final_preview = any(
+            item.get("previewType") == "final"
+            for item in order_data.get("previewHistory", [])
+            if isinstance(item, dict)
+        )
+        current_stage = OrderStateMachine.canonical_status(
+            order.status,
+            has_final_preview=has_final_preview,
+        )
+        allowed_upload_stages = (
+            (OrderStatus.IN_PRODUCTION, OrderStatus.PREVIEW_READY)
+            if preview_type_value == "initial"
+            else (OrderStatus.PREVIEW_READY, OrderStatus.FINAL_PREVIEW)
+        )
+        if current_stage not in allowed_upload_stages:
+            preview_label = "初稿" if preview_type_value == "initial" else "终稿"
+            raise HTTPException(
+                status_code=400,
+                detail=f"当前订单阶段不能上传{preview_label}",
+            )
+
         order.order_data = order_data
-        order.status = OrderStatus.PENDING_REVIEW
         
         await db.commit()
         await db.refresh(order)
@@ -1163,13 +1381,26 @@ class OrderService:
                 preview_files = preview_files + approved_files
                 order_data["previewFiles"] = preview_files
             
-            # 根据预览类型更新订单状态
+            # 审核结果保存在预览记录中；通过时只向前推进到对应交付阶段。
             target_status = OrderStatus.FINAL_PREVIEW if target_preview.get("previewType") == "final" else OrderStatus.PREVIEW_READY
-            OrderStateMachine.validate_transition(order.status, target_status)
-            order.status = target_status
-        else:
-            OrderStateMachine.validate_transition(order.status, OrderStatus.REVIEW_REJECTED)
-            order.status = OrderStatus.REVIEW_REJECTED
+            has_final_preview = any(
+                item.get("previewType") == "final"
+                for item in preview_history
+                if isinstance(item, dict)
+            )
+            current_stage = OrderStateMachine.canonical_status(
+                order.status,
+                has_final_preview=has_final_preview,
+            )
+            if current_stage != target_status:
+                OrderStateMachine.validate_transition(
+                    order.status,
+                    target_status,
+                    has_final_preview=has_final_preview,
+                )
+                order.status = target_status
+            elif order.status != target_status:
+                order.status = target_status
         
         order.order_data = order_data
         
@@ -1245,7 +1476,7 @@ class OrderService:
                     order_id=order.id
                 )
         
-        # 如果状态发生变化并且不是审核拒绝，可继续使用状态变更邮件
+        # 如果审核通过并推进了主状态，发送状态变更邮件。
         if review_data.action == "approve" and order.status != old_status:
             user_result = await db.execute(select(User).where(User.id == order.user_id))
             user = user_result.scalar_one_or_none()
@@ -1278,17 +1509,14 @@ class OrderService:
             raise HTTPException(status_code=403, detail="只有订单创建者可以提交反馈")
 
         # 交付物反馈必须指向当前订单下已经推送给客户的交付物。
+        deliverable_creator_type = None
         if feedback_data.deliverableId:
-            deliverable_result = await db.execute(
-                select(ContractorDeliverable)
-                .join(ContractorAssignment, ContractorDeliverable.assignment_id == ContractorAssignment.id)
-                .where(
-                    ContractorDeliverable.id == feedback_data.deliverableId,
-                    ContractorAssignment.order_id == order_id,
-                    ContractorDeliverable.is_published_to_user == True,  # noqa: E712
-                )
+            deliverable_creator_type = await _resolve_published_feedback_deliverable(
+                db,
+                order_id,
+                feedback_data.deliverableId,
             )
-            if not deliverable_result.scalar_one_or_none():
+            if not deliverable_creator_type:
                 raise HTTPException(status_code=404, detail="交付物不存在或尚未对客户发布")
 
         target_status = None
@@ -1296,10 +1524,9 @@ class OrderService:
             if feedback_data.type == FeedbackType.REVISION:
                 if order.status not in [OrderStatus.PREVIEW_READY, OrderStatus.FINAL_PREVIEW]:
                     raise HTTPException(status_code=400, detail="当前订单状态不能提交修改反馈")
-                target_status = OrderStatus.REVISION_NEEDED
             elif feedback_data.type == FeedbackType.APPROVAL:
                 if order.status == OrderStatus.PREVIEW_READY:
-                    target_status = OrderStatus.IN_PRODUCTION
+                    target_status = OrderStatus.FINAL_PREVIEW
                 elif order.status == OrderStatus.FINAL_PREVIEW:
                     target_status = OrderStatus.COMPLETED
                 else:
@@ -1312,7 +1539,16 @@ class OrderService:
         feedback = Feedback(
             id=generate_id("feedback"),
             order_id=order_id,
-            deliverable_id=feedback_data.deliverableId,
+            deliverable_id=(
+                feedback_data.deliverableId
+                if deliverable_creator_type == "contractor"
+                else None
+            ),
+            staff_deliverable_id=(
+                feedback_data.deliverableId
+                if deliverable_creator_type == "staff"
+                else None
+            ),
             content=feedback_data.content,
             type=feedback_data.type,
             created_by=current_user.id
@@ -1321,12 +1557,10 @@ class OrderService:
         
         # 仅订单级别反馈时才更新订单状态（交付物级别反馈不影响订单状态）
         old_status = order.status
+        if not feedback_data.deliverableId and feedback_data.type == FeedbackType.REVISION:
+            order.revision_count += 1
         if target_status:
-            if feedback_data.type == FeedbackType.REVISION:
-                order.status = target_status
-                order.revision_count += 1
-            elif feedback_data.type == FeedbackType.APPROVAL:
-                order.status = target_status
+            order.status = target_status
         
         await db.commit()
         await db.refresh(feedback)
@@ -1340,7 +1574,7 @@ class OrderService:
             actor_role=current_user.role,
             feedback_id=feedback.id,
             feedback_type=feedback.type,
-            deliverable_id=feedback.deliverable_id,
+            deliverable_id=_feedback_deliverable_id(feedback),
             status_from=old_status,
             status_to=order.status,
             revision_count=order.revision_count,
@@ -1352,19 +1586,7 @@ class OrderService:
         if feedback_data.deliverableId:
             deliverable_hint = "（针对交付物）"
         
-        # 创建系统内消息通知 - 通知所有负责该订单的staff
-        assignee_ids = await _get_order_assignee_ids(db, order.id)
-        if assignee_ids:
-            await NotificationService.create_notification_for_multiple_users(
-                db=db,
-                user_ids=assignee_ids,
-                notification_type=NotificationType.NEW_FEEDBACK,
-                title=f"新反馈提交",
-                content=f"订单 {order.order_number} 收到新的反馈{deliverable_hint}：{feedback_type_text}",
-                order_id=order.id
-            )
-            
-        # 通知所有管理员有新反馈
+        # 客户原始反馈只通知管理员，由管理员整理后再反馈给制作者。
         try:
             from app.models.admin import Admin
             admin_result = await db.execute(select(Admin))
@@ -1394,7 +1616,7 @@ class OrderService:
         return {
             "id": feedback.id,
             "orderId": feedback.order_id,
-            "deliverableId": feedback.deliverable_id,
+            "deliverableId": _feedback_deliverable_id(feedback),
             "content": feedback.content,
             "type": feedback.type.value,
             "createdAt": beijing_iso(feedback.created_at),
@@ -1630,27 +1852,28 @@ class OrderService:
                 "name": assignee_staff.real_name or assignee_staff.username
             })
         
-        # 获取反馈记录
-        feedbacks_result = await db.execute(
-            select(Feedback).where(Feedback.order_id == order.id).order_by(Feedback.created_at.asc())
-        )
-        feedbacks = feedbacks_result.scalars().all()
-        
         feedback_responses = []
-        for feedback in feedbacks:
-            creator_result = await db.execute(select(User).where(User.id == feedback.created_by))
-            creator = creator_result.scalar_one_or_none()
-            
-            feedback_responses.append({
-                "id": feedback.id,
-                "orderId": feedback.order_id,
-                "deliverableId": feedback.deliverable_id,
-                "content": feedback.content,
-                "type": feedback.type.value,
-                "createdAt": beijing_iso(feedback.created_at),
-                "createdBy": feedback.created_by,
-                "createdByName": creator.username if creator else None
-            })
+        # 客户原始反馈仅客户本人和管理员可见，制作者只接收管理员整理后的意见。
+        if _can_view_customer_feedback(current_user):
+            feedbacks_result = await db.execute(
+                select(Feedback).where(Feedback.order_id == order.id).order_by(Feedback.created_at.asc())
+            )
+            feedbacks = feedbacks_result.scalars().all()
+
+            for feedback in feedbacks:
+                creator_result = await db.execute(select(User).where(User.id == feedback.created_by))
+                creator = creator_result.scalar_one_or_none()
+
+                feedback_responses.append({
+                    "id": feedback.id,
+                    "orderId": feedback.order_id,
+                    "deliverableId": _feedback_deliverable_id(feedback),
+                    "content": feedback.content,
+                    "type": feedback.type.value,
+                    "createdAt": beijing_iso(feedback.created_at),
+                    "createdBy": feedback.created_by,
+                    "createdByName": creator.username if creator else None
+                })
         
         # 基础响应数据
         base_response = {

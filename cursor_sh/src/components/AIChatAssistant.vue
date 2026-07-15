@@ -2025,11 +2025,11 @@ const getCurrentTime = () => {
 // ===== 订单展示辅助函数 =====
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
-    draft: '订单草稿', pending_assign: '待分配', pending_contract: '合同与付款',
-    in_production: '制作中',
-    pending_review: '待审核', review_rejected: '审核驳回',
-    preview_ready: '初稿就绪', final_preview: '终稿就绪',
-    revision_needed: '需修改', completed: '已完成', cancelled: '已取消'
+    draft: '需求确认', pending_assign: '需求确认', pending_contract: '合同与付款',
+    in_production: '内容制作',
+    pending_review: '初稿交付', review_rejected: '初稿交付',
+    preview_ready: '初稿交付', final_preview: '终稿交付',
+    revision_needed: '初稿交付', completed: '项目完成', cancelled: '已取消'
   }
   return map[status] || status
 }

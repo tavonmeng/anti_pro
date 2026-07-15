@@ -131,6 +131,7 @@ import {
 import { useOrderStore } from '@/stores/order'
 import { useStaffStore } from '@/stores/staff'
 import { formatServerTime } from '@/utils/time'
+import { isOrderPendingReview, isOrderReviewRejected } from '@/utils/orderReviewStatus'
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue'
 import type { Order, OrderType, OrderStatus } from '@/types'
 
@@ -149,10 +150,10 @@ const filters = ref({
 const statItems = computed(() => [
   { label: '全部订单', value: orderStore.orderStats.total, icon: Document, iconBg: '#EEF2FF', iconColor: '#6366F1', filterValue: '' },
   { label: '合同与付款', value: orderStore.orderStats.pendingContract, icon: Clock, iconBg: '#FFF7ED', iconColor: '#F59E0B', filterValue: 'pending_contract' },
-  { label: '制作中', value: orderStore.orderStats.inProduction, icon: Loading, iconBg: '#F3E8FF', iconColor: '#8B5CF6', filterValue: 'in_production' },
-  { label: '待审核', value: orderStore.orderStats.pendingReview, icon: View, iconBg: '#FEF9C3', iconColor: '#CA8A04', filterValue: 'pending_review' },
-  { label: '审核拒绝', value: orderStore.orderStats.reviewRejected, icon: CircleClose, iconBg: '#FEE2E2', iconColor: '#EF4444', filterValue: 'review_rejected' },
-  { label: '已完成', value: orderStore.orderStats.completed, icon: CircleCheck, iconBg: '#DCFCE7', iconColor: '#22C55E', filterValue: 'completed' },
+  { label: '内容制作', value: orderStore.orderStats.inProduction, icon: Loading, iconBg: '#F3E8FF', iconColor: '#8B5CF6', filterValue: 'in_production' },
+  { label: '交付待审核', value: orderStore.orderStats.pendingReview, icon: View, iconBg: '#FEF9C3', iconColor: '#CA8A04', filterValue: 'pending_review' },
+  { label: '交付审核拒绝', value: orderStore.orderStats.reviewRejected, icon: CircleClose, iconBg: '#FEE2E2', iconColor: '#EF4444', filterValue: 'review_rejected' },
+  { label: '项目完成', value: orderStore.orderStats.completed, icon: CircleCheck, iconBg: '#DCFCE7', iconColor: '#22C55E', filterValue: 'completed' },
 ])
 
 const toggleStatusFilter = (val: string) => {
@@ -166,7 +167,13 @@ const filteredOrders = computed(() => {
     result = result.filter(o => o.orderType === filters.value.orderType)
   }
   if (filters.value.status) {
-    result = result.filter(o => o.status === filters.value.status)
+    if (filters.value.status === 'pending_review') {
+      result = result.filter(isOrderPendingReview)
+    } else if (filters.value.status === 'review_rejected') {
+      result = result.filter(isOrderReviewRejected)
+    } else {
+      result = result.filter(o => o.status === filters.value.status)
+    }
   }
   if (filters.value.assigneeId) {
     if (filters.value.assigneeId === 'unassigned') {

@@ -294,6 +294,7 @@
                 ref="uploadRef"
                 action="/api/upload/file"
                 :headers="uploadHeaders"
+                :accept="DELIVERABLE_ACCEPT"
                 :on-success="handleUploadSuccess"
                 :on-error="handleUploadError"
                 :before-upload="beforeUpload"
@@ -304,7 +305,7 @@
                 <el-icon class="el-icon--upload" :size="40"><UploadFilled /></el-icon>
                 <div class="el-upload__text">拖拽文件到此处或 <em>点击上传</em></div>
                 <template #tip>
-                  <div class="el-upload__tip">支持图片、视频、文档，单个文件不超过 50MB</div>
+                  <div class="el-upload__tip">支持图片、视频、文档、设计、3D及压缩文件，单个文件不超过 {{ DELIVERABLE_MAX_FILE_SIZE_MB }}MB</div>
                 </template>
               </el-upload>
             </div>
@@ -458,6 +459,11 @@ import {
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
+import {
+  DELIVERABLE_ACCEPT,
+  DELIVERABLE_MAX_FILE_SIZE_MB,
+  isDeliverableFileSizeAllowed,
+} from '@/utils/deliverableUpload'
 import { formatServerTime, parseServerTime } from '@/utils/time'
 import FilePreviewDialog from '@/components/FilePreviewDialog.vue'
 import {
@@ -799,9 +805,8 @@ const handleAccept = async () => {
 }
 
 const beforeUpload = (file: File) => {
-  const maxSize = 50 * 1024 * 1024
-  if (file.size > maxSize) {
-    ElMessage.error('文件大小不能超过 50MB')
+  if (!isDeliverableFileSizeAllowed(file.size)) {
+    ElMessage.error(`文件大小不能超过 ${DELIVERABLE_MAX_FILE_SIZE_MB}MB`)
     return false
   }
   return true

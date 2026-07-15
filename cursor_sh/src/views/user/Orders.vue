@@ -22,14 +22,13 @@
         <el-form-item label="订单状态">
           <el-select v-model="filters.status" placeholder="全部状态" clearable style="width: 200px" @change="handleFilter">
             <el-option label="全部" value="" />
-            <el-option label="订单草稿" value="draft" />
-            <el-option label="合同与付款" value="pending_contract" />
-            <el-option label="待分配" value="pending_assign" />
-            <el-option label="制作中" value="in_production" />
-            <el-option label="初稿预览" value="preview_ready" />
-            <el-option label="需要修改" value="revision_needed" />
-            <el-option label="终稿预览" value="final_preview" />
-            <el-option label="已完成" value="completed" />
+            <el-option
+              v-for="status in ORDER_WORKFLOW_STATES"
+              :key="status.value"
+              :label="status.label"
+              :value="status.value"
+            />
+            <el-option label="已取消" value="cancelled" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -56,6 +55,7 @@ import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOrderStore } from '@/stores/order'
 import OrderCard from '@/components/OrderCard.vue'
+import { ORDER_WORKFLOW_STATES, canonicalOrderStatus } from '@/utils/orderWorkflow'
 import type { Order, OrderType, OrderStatus } from '@/types'
 
 const router = useRouter()
@@ -66,15 +66,13 @@ const filters = ref({
   status: '' as OrderStatus | ''
 })
 
-// 将用户不应看到的状态映射为制作中
-const mapUserVisibleStatus = (status: OrderStatus): OrderStatus => {
-  if (status === 'pending_review' || status === 'review_rejected') return 'in_production'
-  return status
-}
+// 历史订单状态只做展示层归一化，不修改原订单或交付记录。
+const mapUserVisibleStatus = (order: Order): OrderStatus =>
+  canonicalOrderStatus(order.status, order.previewHistory || []) as OrderStatus
 
 const filteredOrders = computed(() => {
   // 先做状态映射，再做筛选
-  let result = orderStore.orders.map(o => ({ ...o, status: mapUserVisibleStatus(o.status) as OrderStatus }))
+  let result = orderStore.orders.map(o => ({ ...o, status: mapUserVisibleStatus(o) }))
   
   if (filters.value.orderType) {
     result = result.filter(o => o.orderType === filters.value.orderType)
@@ -107,7 +105,7 @@ const viewOrder = (order: Order) => {
 
 // 传递给卡片的订单对象，做显示层面的状态掩蔽
 const maskOrderForUser = (order: Order): Order => {
-  return { ...order, status: mapUserVisibleStatus(order.status) as OrderStatus }
+  return { ...order, status: mapUserVisibleStatus(order) }
 }
 </script>
 

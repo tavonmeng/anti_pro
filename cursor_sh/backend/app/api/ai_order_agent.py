@@ -34,11 +34,11 @@ class QueryOrdersRequest(BaseModel):
 # ───────────────────────────────────────────────────────
 
 _STATUS_MAP = {
-    "draft": "订单草稿", "pending_assign": "待分配", "pending_contract": "合同与付款",
-    "in_production": "制作中",
-    "pending_review": "待审核", "review_rejected": "审核驳回",
-    "preview_ready": "初稿就绪", "final_preview": "终稿就绪",
-    "revision_needed": "需修改", "completed": "已完成", "cancelled": "已取消"
+    "draft": "需求确认", "pending_assign": "需求确认", "pending_contract": "合同与付款",
+    "in_production": "内容制作",
+    "pending_review": "初稿交付", "review_rejected": "初稿交付",
+    "preview_ready": "初稿交付", "final_preview": "终稿交付",
+    "revision_needed": "初稿交付", "completed": "项目完成", "cancelled": "已取消"
 }
 
 _TYPE_MAP = {
@@ -49,12 +49,13 @@ _TYPE_MAP = {
 
 # 状态关键词 → 状态值的双向映射
 _STATUS_KW_MAP = {
+    "需求确认": "draft", "收到订单": "draft",
     "待分配": "pending_assign", "合同": "pending_contract", "付款": "pending_contract",
     "签合同": "pending_contract", "首付": "pending_contract", "预付": "pending_contract", "合同与付款": "pending_contract",
-    "制作中": "in_production",
+    "制作中": "in_production", "内容制作": "in_production",
     "待审核": "pending_review", "审核驳回": "review_rejected",
-    "初稿": "preview_ready", "终稿": "final_preview",
-    "需修改": "revision_needed", "已完成": "completed",
+    "初稿": "preview_ready", "初稿交付": "preview_ready", "终稿": "final_preview", "终稿交付": "final_preview",
+    "需修改": "revision_needed", "已完成": "completed", "项目完成": "completed",
     "草稿": "draft",
     "订单草稿": "draft",
 }
@@ -350,7 +351,7 @@ def _build_status_overview(orders: list) -> str:
         st = _get_status_text(o)
         counts[st] = counts.get(st, 0) + 1
 
-    priority = ["制作中", "待审核", "需修改", "合同与付款", "待分配", "初稿就绪", "终稿就绪", "审核驳回", "已完成", "订单草稿"]
+    priority = ["需求确认", "合同与付款", "内容制作", "初稿交付", "终稿交付", "项目完成", "已取消"]
     parts = [f"{counts[s]}个{s}" for s in priority if counts.get(s, 0) > 0]
     for s, c in counts.items():
         if s not in priority and c > 0:

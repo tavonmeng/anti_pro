@@ -19,7 +19,7 @@ from app.models.staff_member import StaffMember
 from app.models.staff_assignment import StaffAssignment, StaffAssignmentStatus
 from app.models.staff_deliverable import StaffDeliverable
 from app.models.workflow import WorkflowStageConfig
-from app.models.order import Order
+from app.models.order import Order, OrderStatus
 from app.schemas.response import ApiResponse
 from app.utils.dependencies import require_admin, AnyUser
 from app.utils.validators import generate_id
@@ -471,6 +471,19 @@ async def assign_order_to_contractor(
         order = order_result.scalar_one_or_none()
         if not order:
             raise HTTPException(status_code=404, detail="订单不存在")
+        assignable_statuses = {
+            OrderStatus.IN_PRODUCTION,
+            OrderStatus.PENDING_REVIEW,
+            OrderStatus.PREVIEW_READY,
+            OrderStatus.REVIEW_REJECTED,
+            OrderStatus.REVISION_NEEDED,
+            OrderStatus.FINAL_PREVIEW,
+        }
+        if order.status not in assignable_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail="订单进入「内容制作」后才可以派给承包商",
+            )
         
         # 2. 验证承包商存在且活跃
         contractor_result = await db.execute(
@@ -496,6 +509,17 @@ async def assign_order_to_contractor(
         existing = existing_result.scalar_one_or_none()
         if existing:
             raise HTTPException(status_code=400, detail="该订单已有进行中的派单记录")
+
+        active_staff_result = await db.execute(
+            select(StaffAssignment.id)
+            .where(
+                StaffAssignment.order_id == data.order_id,
+                StaffAssignment.status == StaffAssignmentStatus.IN_PROGRESS,
+            )
+            .limit(1)
+        )
+        if active_staff_result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="该订单已分配给内部负责人，不能再派给承包商")
         
         # 4. 根据工作流类型生成排期
         schedule = []
@@ -580,15 +604,8 @@ async def assign_order_to_contractor(
         
         db.add(assignment)
         
-        # 6. 更新订单状态为「制作中」
-        from app.models.order import OrderStatus
+        # 派单只建立制作者关系，不修改六阶段订单主状态。
         old_order_status = order.status
-        if order.status in (
-            OrderStatus.DRAFT,
-            OrderStatus.PENDING_ASSIGN,
-            OrderStatus.PENDING_CONTRACT,
-        ):
-            order.status = OrderStatus.IN_PRODUCTION
         
         await db.commit()
         await db.refresh(assignment)
@@ -706,7 +723,6 @@ async def get_all_assignments(
             order = o_result.scalar_one_or_none()
             
             # 查交付物统计
-            from app.models.contractor_deliverable import ContractorDeliverable, DeliverableStatus
             dlv_result = await db.execute(
                 select(ContractorDeliverable).where(ContractorDeliverable.assignment_id == a.id)
             )
@@ -953,48 +969,75 @@ async def publish_deliverable_to_user(
             has_published_note=bool(data.published_note),
         )
         
-        # 通知用户有新的交付物可查看
-        try:
-            from app.models.notification import Notification, NotificationType
-            from app.models.user import User
-            
-            if assignment:
+        # 站内信和邮件分别发送：任一渠道失败都不影响交付物已经发布的结果。
+        order = None
+        if assignment:
+            try:
                 order_result = await db.execute(
                     select(Order).where(Order.id == assignment.order_id)
                 )
                 order = order_result.scalar_one_or_none()
-                
-                if order:
-                    order_number = order.order_number
-                    stage_name = deliverable.stage_name or '未知环节'
-                    
-                    # 站内信通知用户
-                    notif = Notification(
+            except Exception as order_err:
+                logger.warning("查询交付物所属订单失败: %s", order_err)
+
+        if order:
+            order_number = order.order_number
+            stage_name = deliverable.stage_name or "未知环节"
+
+            try:
+                from app.models.notification import Notification, NotificationType
+
+                notif = Notification(
+                    user_id=order.user_id,
+                    order_id=order.id,
+                    type=NotificationType.PREVIEW_READY,
+                    title=f"新交付物 - {order_number}",
+                    content=f"您的订单 {order_number}「{stage_name}」环节的交付物已发布，请查看。",
+                )
+                db.add(notif)
+                await db.commit()
+            except Exception as notification_err:
+                await db.rollback()
+                logger.warning("发送交付物站内通知失败: %s", notification_err)
+
+            try:
+                from app.models.user import User
+                from app.services.email_service import EmailService
+
+                user_result = await db.execute(
+                    select(User).where(User.id == order.user_id)
+                )
+                user = user_result.scalar_one_or_none()
+                if user and user.email:
+                    email_sent = await EmailService.send_deliverable_published_notification(
+                        user.email,
+                        order_number,
+                        stage_name,
+                        data.published_note,
+                    )
+                    log_business_event(
+                        logger,
+                        "deliverable_publish_email_sent" if email_sent else "deliverable_publish_email_failed",
+                        level="info" if email_sent else "warning",
+                        admin_id=current_user.id,
                         user_id=order.user_id,
                         order_id=order.id,
-                        type=NotificationType.PREVIEW_READY,
-                        title=f"新交付物 - {order_number}",
-                        content=f"您的订单 {order_number}「{stage_name}」环节的交付物已发布，请查看。",
+                        deliverable_id=deliverable.id,
+                        creator_type=creator_type,
                     )
-                    db.add(notif)
-                    await db.commit()
-                    
-                    # 邮件通知用户
-                    user_result = await db.execute(
-                        select(User).where(User.id == order.user_id)
+                else:
+                    log_business_event(
+                        logger,
+                        "deliverable_publish_email_skipped",
+                        level="warning",
+                        admin_id=current_user.id,
+                        user_id=order.user_id,
+                        order_id=order.id,
+                        deliverable_id=deliverable.id,
+                        reason="user_email_missing",
                     )
-                    user = user_result.scalar_one_or_none()
-                    if user and user.email:
-                        from app.services.email_service import EmailService
-                        await EmailService.send_order_status_notification(
-                            user.email,
-                            order_number,
-                            "in_production",
-                            "preview_ready"
-                        )
-        except Exception as notify_err:
-            import logging
-            logging.getLogger(__name__).warning(f"发送交付物推送通知失败: {notify_err}")
+            except Exception as email_err:
+                logger.warning("发送交付物邮件通知失败: %s", email_err)
         
         return ApiResponse(code=200, message="交付物已推送给用户", data={
             "id": deliverable.id,
