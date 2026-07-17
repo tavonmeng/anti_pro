@@ -164,7 +164,7 @@ async def test_extract_uploaded_docx_brief_fields(monkeypatch, tmp_path):
     }
     assert result.filenames == ["brief.docx"]
     assert document_module.BRIEF_DOCUMENT_CONTEXT_MARKER in result.context
-    assert "已从文档提取的 Brief 内容" in result.context
+    assert "已从上传资料提取的 Brief 内容" in result.context
 
 
 @pytest.mark.asyncio

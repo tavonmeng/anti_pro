@@ -29,10 +29,11 @@ from app.services.ai_context import (
 )
 from app.services.ai_image_understanding import (
     IMAGE_CONTEXT_MARKER,
+    ImageUnderstandingResult,
     UploadedAttachment,
     append_image_context_to_message,
     build_image_feedback_reply_instruction,
-    summarize_uploaded_images,
+    understand_uploaded_images,
 )
 from app.services.ai_opening_copy import build_ai_3d_custom_brief_opening
 from app.services.ai_upload_context import (
@@ -45,6 +46,7 @@ from app.services.ai_brief_document_service import (
     build_brief_document_confirmation_reply,
     build_brief_document_revision_reply,
     extract_uploaded_brief_documents,
+    merge_brief_material_extraction,
 )
 from app.services.platform_service_catalog import (
     get_business_type_label,
@@ -954,19 +956,22 @@ def _uploaded_file_names(message: str) -> list[str]:
     return list(dict.fromkeys(names))
 
 
-async def _request_with_image_context(request: ChatRequest | OrchestrateRequest) -> ChatRequest | OrchestrateRequest:
+async def _request_with_image_understanding(
+    request: ChatRequest | OrchestrateRequest,
+) -> tuple[ChatRequest | OrchestrateRequest, ImageUnderstandingResult]:
     if not getattr(request, "attachments", None):
-        return request
+        return request, ImageUnderstandingResult()
 
-    image_context = await summarize_uploaded_images(
+    image_result = await understand_uploaded_images(
         message=request.message,
         attachments=request.attachments,
     )
-    if not image_context:
-        return request
-    return request.model_copy(
-        update={"message": append_image_context_to_message(request.message, image_context)}
+    if not image_result.context:
+        return request, image_result
+    processing_request = request.model_copy(
+        update={"message": append_image_context_to_message(request.message, image_result.context)}
     )
+    return processing_request, image_result
 
 
 async def _request_with_upload_context(
@@ -975,11 +980,17 @@ async def _request_with_upload_context(
     user_id: str,
 ) -> tuple[ChatRequest | OrchestrateRequest, BriefDocumentExtraction]:
     """Prepare image context and extract Brief fields from uploaded documents."""
-    processing_request = await _request_with_image_context(request)
+    processing_request, image_result = await _request_with_image_understanding(request)
     document = await extract_uploaded_brief_documents(
         processing_request.attachments,
         user_id=user_id,
     )
+    if image_result.brief_updates:
+        merge_brief_material_extraction(
+            document,
+            image_result.brief_updates,
+            filenames=image_result.brief_filenames,
+        )
     if not document.context:
         return processing_request, document
     message = f"{processing_request.message}\n\n{document.context}".strip()
@@ -1088,8 +1099,8 @@ def _build_requirement_llm_messages(
         system_prompt += image_feedback_instruction
     if BRIEF_DOCUMENT_CONTEXT_MARKER in (request.message or ""):
         system_prompt += (
-            "\n\n【文档 Brief 资料】\n"
-            "当前消息包含从用户 PDF 或 Word 文档中提取的 Brief 内容。请直接基于其中明确出现的信息承接对话，"
+            "\n\n【上传资料 Brief】\n"
+            "当前消息包含从用户 PDF、Word 或图片文字材料中提取的 Brief 内容。请直接基于其中明确出现的信息承接对话，"
             "简要说明已经识别到的关键内容，并只追问一个最重要的缺口；不要向用户暴露内部标记或解析过程。\n"
         )
 

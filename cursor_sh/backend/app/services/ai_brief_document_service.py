@@ -123,7 +123,7 @@ async def extract_uploaded_brief_documents(
 def build_brief_document_context(result: BriefDocumentExtraction) -> str:
     lines = [BRIEF_DOCUMENT_CONTEXT_MARKER, f"文件：{'、'.join(result.filenames)}"]
     if result.updates:
-        lines.append("已从文档提取的 Brief 内容（仅包含文件中明确出现的信息）：")
+        lines.append("已从上传资料提取的 Brief 内容（仅包含资料中明确出现的信息）：")
         for field in MEDIA_3D_BRIEF_FIELDS:
             value = result.updates.get(field)
             if value:
@@ -145,7 +145,7 @@ def build_brief_document_confirmation_reply(result: BriefDocumentExtraction) -> 
             "请上传带可提取文字的 PDF、DOC 或 DOCX，或直接在对话中补充项目需求。"
         )
 
-    lines = ["我已经从您上传的文档中整理出以下项目需求，并纳入本次 Brief：", ""]
+    lines = ["我已经从您上传的资料中整理出以下项目需求，并纳入本次 Brief：", ""]
     for field in MEDIA_3D_BRIEF_FIELDS:
         value = result.updates.get(field)
         if value:
@@ -167,6 +167,25 @@ def build_brief_document_revision_reply(updates: dict[str, str]) -> str:
         if value:
             lines.append(f"- **{FIELD_LABELS.get(field, field)}**：{value}")
     return "\n".join(lines)
+
+
+def merge_brief_material_extraction(
+    result: BriefDocumentExtraction,
+    updates: dict[str, str] | None,
+    *,
+    filenames: list[str] | None = None,
+) -> BriefDocumentExtraction:
+    """Merge grounded Brief fields from another uploaded material into the document result."""
+    normalized = _normalize_updates(updates)
+    if not normalized:
+        return result
+    _merge_updates(result.updates, normalized)
+    for filename in filenames or []:
+        clean_name = os.path.basename(str(filename or "").strip())
+        if clean_name and clean_name not in result.filenames:
+            result.filenames.append(clean_name)
+    result.context = build_brief_document_context(result)
+    return result
 
 
 async def _extract_brief_updates(chunks: list[str], filename: str) -> dict[str, str]:
