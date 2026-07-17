@@ -140,7 +140,7 @@
             <span class="bubble-role">{{ msg.role === 'user' ? '👤 客户' : '🤖 AI 助手' }}</span>
             <span class="bubble-time">{{ formatTime(msg.timestamp) }}</span>
           </div>
-          <div class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
+          <div class="bubble-content chat-markdown" v-html="renderChatMarkdown(msg.content)"></div>
         </div>
 
         <div v-if="activeMessages.length === 0" class="empty-msg">
@@ -155,6 +155,7 @@
 import { ref, onMounted } from 'vue'
 import { Search, Loading } from '@element-plus/icons-vue'
 import { chatHistoryApi } from '@/utils/api'
+import { renderChatMarkdown } from '@/utils/chatMarkdown'
 import { formatServerMonthDayTime } from '@/utils/time'
 
 const sessions = ref<any[]>([])
@@ -222,15 +223,6 @@ const bizTypeTag = (t: string) => {
     digital_art: 'warning',
   }
   return m[t] || 'info'
-}
-
-const renderMarkdown = (text: string) => {
-  if (!text) return ''
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br>')
 }
 
 onMounted(() => {
@@ -360,6 +352,146 @@ onMounted(() => {
   word-break: break-word;
 }
 
+.chat-markdown {
+  white-space: normal;
+}
+
+.chat-markdown :deep(p) {
+  margin: 0 0 10px;
+}
+
+.chat-markdown :deep(p:last-child),
+.chat-markdown :deep(ul:last-child),
+.chat-markdown :deep(ol:last-child),
+.chat-markdown :deep(blockquote:last-child),
+.chat-markdown :deep(pre:last-child),
+.chat-markdown :deep(table:last-child) {
+  margin-bottom: 0;
+}
+
+.chat-markdown :deep(h1),
+.chat-markdown :deep(h2),
+.chat-markdown :deep(h3),
+.chat-markdown :deep(h4),
+.chat-markdown :deep(h5),
+.chat-markdown :deep(h6) {
+  margin: 14px 0 8px;
+  color: #1f2329;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.chat-markdown :deep(h1:first-child),
+.chat-markdown :deep(h2:first-child),
+.chat-markdown :deep(h3:first-child),
+.chat-markdown :deep(h4:first-child),
+.chat-markdown :deep(h5:first-child),
+.chat-markdown :deep(h6:first-child) {
+  margin-top: 0;
+}
+
+.chat-markdown :deep(h1) {
+  font-size: 18px;
+}
+
+.chat-markdown :deep(h2) {
+  font-size: 16px;
+}
+
+.chat-markdown :deep(h3),
+.chat-markdown :deep(h4),
+.chat-markdown :deep(h5),
+.chat-markdown :deep(h6) {
+  font-size: 15px;
+}
+
+.chat-markdown :deep(strong) {
+  color: #1f2329;
+  font-weight: 650;
+}
+
+.chat-markdown :deep(ul),
+.chat-markdown :deep(ol) {
+  margin: 6px 0 12px;
+  padding-left: 1.45em;
+}
+
+.chat-markdown :deep(li) {
+  margin: 4px 0;
+  padding-left: 2px;
+}
+
+.chat-markdown :deep(li > p) {
+  margin: 0;
+}
+
+.chat-markdown :deep(a) {
+  color: #1f5fbf;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-markdown :deep(code) {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(31, 35, 41, 0.08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9em;
+}
+
+.chat-markdown :deep(pre) {
+  max-width: 100%;
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  background: #f7f8fa;
+}
+
+.chat-markdown :deep(pre code) {
+  padding: 0;
+  background: transparent;
+  white-space: pre;
+}
+
+.chat-markdown :deep(blockquote) {
+  margin: 8px 0 12px;
+  padding: 2px 0 2px 10px;
+  border-left: 3px solid #b8c5d9;
+  color: #606266;
+}
+
+.chat-markdown :deep(blockquote p) {
+  margin-bottom: 6px;
+}
+
+.chat-markdown :deep(hr) {
+  margin: 14px 0;
+  border: 0;
+  border-top: 1px solid #dcdfe6;
+}
+
+.chat-markdown :deep(table) {
+  width: 100%;
+  margin: 8px 0 12px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.chat-markdown :deep(th),
+.chat-markdown :deep(td) {
+  padding: 7px 9px;
+  border: 1px solid #dcdfe6;
+  text-align: left;
+  vertical-align: top;
+}
+
+.chat-markdown :deep(th) {
+  background: #eef1f6;
+  font-weight: 600;
+}
+
 .empty-msg {
   text-align: center;
   padding: 40px 0;
@@ -482,26 +614,27 @@ onMounted(() => {
     white-space: nowrap;
   }
 
-  :deep(.chat-record-drawer.el-drawer.rtl),
-  :deep(.chat-record-drawer .el-drawer.rtl) {
+  :global(.chat-record-drawer.el-drawer.rtl),
+  :global(.chat-record-drawer .el-drawer.rtl) {
     width: 100% !important;
+    max-width: 100vw;
   }
 
-  :deep(.chat-record-drawer .el-drawer__header) {
+  :global(.chat-record-drawer .el-drawer__header) {
     margin-bottom: 8px;
     padding: 14px 14px 8px;
     align-items: flex-start;
     gap: 10px;
   }
 
-  :deep(.chat-record-drawer .el-drawer__title) {
+  :global(.chat-record-drawer .el-drawer__title) {
     min-width: 0;
     font-size: 15px;
     line-height: 1.35;
     word-break: break-word;
   }
 
-  :deep(.chat-record-drawer .el-drawer__body) {
+  :global(.chat-record-drawer .el-drawer__body) {
     padding: 0 10px 12px;
     overflow-x: hidden;
   }
