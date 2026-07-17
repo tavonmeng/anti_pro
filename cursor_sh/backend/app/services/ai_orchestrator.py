@@ -53,39 +53,6 @@ def _is_order_flow_agent(agent: str | None) -> bool:
     return normalize_agent(agent) in ORDER_FLOW_AGENTS
 
 
-def _creative_diagnosis_intent(message: str) -> bool:
-    text = re.sub(r"\s+", "", message or "")
-    if not text:
-        return False
-    has_creative_subject = re.search(r"创意|方案|方向|想法|概念|裸眼3d|裸眼3D", text)
-    has_diagnosis_action = re.search(r"评估|判断|诊断|打分|评分|成立|风险|适不适合|可不可行|值不值得|帮我看|看看", text)
-    return bool(has_creative_subject and has_diagnosis_action)
-
-
-def _creative_direction_intent(message: str) -> bool:
-    text = re.sub(r"\s+", "", message or "")
-    if not text:
-        return False
-    if _creative_diagnosis_intent(text):
-        return False
-    explicit_creative_object = r"创意方案|创意方向|方向草案|设计方案|策划方案|策划方向|视觉方案"
-    return bool(
-        re.search(rf"(生成|出|写|来|设计|策划).*?({explicit_creative_object})", text)
-        or re.search(rf"(做一版|做一个|做个).*?({explicit_creative_object})", text)
-        or re.search(rf"({explicit_creative_object}).*?(生成|出|写|来一版|做一版|设计|策划)", text)
-        or re.search(rf"(给我|帮我|能不能|可以).*?(一版|一个|个)({explicit_creative_object})", text)
-    )
-
-
-def _order_flow_support_intent(message: str) -> str | None:
-    text = re.sub(r"\s+", "", message or "")
-    if not text:
-        return None
-    if re.search(r"预算|报价|费用|周期|工期|成本|投入", text):
-        return "budget_diagnosis"
-    return None
-
-
 def _explicit_order_query_intent(message: str) -> bool:
     text = re.sub(r"\s+", "", message or "")
     if not text:
@@ -106,11 +73,6 @@ def _pending_creative_diagnosis_status(pending_evaluation: dict[str, Any] | None
     if status in {"awaiting_target", "awaiting_evaluation_target"}:
         return "awaiting_target"
     return status
-
-
-def _explicit_business_intro_intent(message: str) -> bool:
-    text = re.sub(r"\s+", "", message or "")
-    return bool(text and re.search(r"了解|介绍|业务|服务|案例|作品|你们做什么|什么公司", text))
 
 
 @dataclass(frozen=True)
@@ -213,43 +175,6 @@ def _rule_route(context: OrchestratorContext) -> RouteDecision | None:
             "creative_diagnosis",
             context.business_type,
             reason="pending_creative_diagnosis_target",
-            source="rule",
-        )
-
-    if _explicit_business_intro_intent(text) and current_agent != "business_intro_agent":
-        return RouteDecision("switch", "business_intro", "business_intro_agent", "business_intro", context.business_type, reason="explicit_business_intro", source="rule")
-
-    if _is_order_flow_agent(current_agent) and _creative_direction_intent(text):
-        return RouteDecision(
-            "switch",
-            "creative_direction",
-            "creative_direction_agent",
-            "creative_direction",
-            context.business_type,
-            reason="explicit_creative_direction",
-            source="rule",
-        )
-
-    if _is_order_flow_agent(current_agent) and _creative_diagnosis_intent(text):
-        return RouteDecision(
-            "switch",
-            "creative_diagnosis",
-            "creative_diagnosis_agent",
-            "creative_diagnosis",
-            context.business_type,
-            reason="explicit_creative_diagnosis",
-            source="rule",
-        )
-
-    support_intent = _order_flow_support_intent(text)
-    if _is_order_flow_agent(current_agent) and support_intent:
-        return RouteDecision(
-            "stay",
-            support_intent,
-            "brief_agent",
-            "brief_building",
-            context.business_type,
-            reason="order_flow_support_stays_in_brief",
             source="rule",
         )
 

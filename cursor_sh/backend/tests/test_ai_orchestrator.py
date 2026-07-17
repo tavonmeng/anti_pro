@@ -121,7 +121,8 @@ async def test_brief_flow_routes_creative_direction_generation_to_direction_agen
                     "message": {
                         "content": (
                             '{"action":"switch","intent":"creative_direction",'
-                            '"target_agent":"creative_direction_agent","reason":"用户要生成创意方向"}'
+                            '"target_agent":"creative_direction_agent","stage":"creative_direction",'
+                            '"reason":"用户要生成创意方向"}'
                         )
                     }
                 }
@@ -146,6 +147,45 @@ async def test_brief_flow_routes_creative_direction_generation_to_direction_agen
     assert route.target_agent == "creative_direction_agent"
     assert route.stage == "creative_direction"
     assert route.intent == "creative_direction"
+    assert route.source == "llm_router"
+
+
+@pytest.mark.asyncio
+async def test_business_intro_request_routes_via_llm_router(monkeypatch):
+    async def _mock_completion(payload, *, timeout=None):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"action":"switch","intent":"business_intro",'
+                            '"target_agent":"business_intro_agent","stage":"business_intro",'
+                            '"reason":"用户要了解公司业务"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.services.ai_orchestrator.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_orchestrator.post_chat_completion", _mock_completion)
+
+    route = await decide_route(
+        OrchestratorContext(
+            session_id="session-test",
+            message="介绍一下你们可以提供哪些服务",
+            history=[],
+            current_agent="brief_agent",
+            stage="brief_building",
+            business_type="ai_3d_custom",
+        )
+    )
+
+    assert route.action == "switch"
+    assert route.target_agent == "business_intro_agent"
+    assert route.stage == "business_intro"
+    assert route.intent == "business_intro"
+    assert route.source == "llm_router"
 
 
 @pytest.mark.asyncio
@@ -446,7 +486,7 @@ async def test_pending_creative_direction_image_upload_routes_through_llm_router
 
 
 @pytest.mark.asyncio
-async def test_upload_image_summary_does_not_trigger_business_intro_rule(monkeypatch):
+async def test_upload_image_summary_does_not_route_to_business_intro(monkeypatch):
     captured_payload = {}
 
     async def _mock_completion(payload, *, timeout=None):
@@ -542,6 +582,54 @@ async def test_brief_flow_uses_llm_router_for_initial_3d_video_brief_kickoff(mon
 
 
 @pytest.mark.asyncio
+async def test_mixed_brief_with_budget_routes_through_llm_router(monkeypatch):
+    captured_payload = {}
+
+    async def _mock_completion(payload, *, timeout=None):
+        captured_payload.update(payload)
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"action":"stay","intent":"brief_building",'
+                            '"target_agent":"brief_agent","stage":"brief_building",'
+                            '"reason":"用户是在梳理包含预算约束的完整项目需求"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.services.ai_orchestrator.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_orchestrator.post_chat_completion", _mock_completion)
+
+    message = (
+        "你好，我们是一个新茶饮品牌，想在上海商圈的大屏做一支裸眼3D视频，"
+        "主要是新品上市造势。现在只有大概方向：想要一杯饮品从屏幕里冲出来，"
+        "有冰块、水花和品牌杯。预算和屏幕尺寸还没完全确定，"
+        "你先帮我判断这个需求应该怎么拆。"
+    )
+    route = await decide_route(
+        OrchestratorContext(
+            session_id="session-test",
+            message=message,
+            history=[],
+            current_agent="brief_agent",
+            stage="brief_building",
+            business_type="ai_3d_custom",
+        )
+    )
+
+    assert route.action == "stay"
+    assert route.target_agent == "brief_agent"
+    assert route.intent == "brief_building"
+    assert route.reason == "用户是在梳理包含预算约束的完整项目需求"
+    assert route.source == "llm_router"
+    assert message in captured_payload["messages"][1]["content"]
+
+
+@pytest.mark.asyncio
 async def test_brief_flow_routes_explicit_creative_evaluation_to_diagnosis_agent(monkeypatch):
     async def _mock_completion(payload, *, timeout=None):
         return {
@@ -550,7 +638,8 @@ async def test_brief_flow_routes_explicit_creative_evaluation_to_diagnosis_agent
                     "message": {
                         "content": (
                             '{"action":"switch","intent":"creative_diagnosis",'
-                            '"target_agent":"creative_diagnosis_agent","reason":"用户要评估创意"}'
+                            '"target_agent":"creative_diagnosis_agent","stage":"creative_diagnosis",'
+                            '"reason":"用户要评估创意"}'
                         )
                     }
                 }
@@ -563,7 +652,7 @@ async def test_brief_flow_routes_explicit_creative_evaluation_to_diagnosis_agent
     route = await decide_route(
         OrchestratorContext(
             session_id="session-test",
-            message="预算30万，这个巨型猫创意适不适合裸眼3D？",
+            message="这个巨型猫创意适不适合裸眼3D？",
             history=[{"role": "assistant", "content": "这次主要想做什么内容？"}],
             current_agent="brief_agent",
             stage="brief_building",
