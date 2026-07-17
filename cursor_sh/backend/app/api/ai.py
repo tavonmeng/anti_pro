@@ -36,7 +36,7 @@ from app.services.ai_image_understanding import (
 )
 from app.services.ai_opening_copy import build_ai_3d_custom_brief_opening
 from app.services.ai_upload_context import (
-    PDF_BRIEF_CONTEXT_MARKER,
+    BRIEF_DOCUMENT_CONTEXT_MARKER,
     is_upload_only_material_message,
     strip_generated_upload_context,
 )
@@ -974,7 +974,7 @@ async def _request_with_upload_context(
     *,
     user_id: str,
 ) -> tuple[ChatRequest | OrchestrateRequest, BriefDocumentExtraction]:
-    """Prepare image context and extract Brief fields from uploaded PDFs."""
+    """Prepare image context and extract Brief fields from uploaded documents."""
     processing_request = await _request_with_image_context(request)
     document = await extract_uploaded_brief_documents(
         processing_request.attachments,
@@ -1005,12 +1005,12 @@ def _document_brief_revision_details_reply() -> str:
 
 
 def _document_brief_rejected_reply() -> str:
-    return "好的，这份 PDF 中提取的信息不会纳入本次 Brief。"
+    return "好的，这份文档中提取的信息不会纳入本次 Brief。"
 
 
 def _sanitize_upload_reply(current_message: str, reply: str) -> str:
     """文件上传消息只带文件名时，避免模型假装看过图片内容。"""
-    if PDF_BRIEF_CONTEXT_MARKER in (current_message or ""):
+    if BRIEF_DOCUMENT_CONTEXT_MARKER in (current_message or ""):
         return reply
     file_names = _uploaded_file_names(current_message)
     if not file_names:
@@ -1086,10 +1086,10 @@ def _build_requirement_llm_messages(
     image_feedback_instruction = build_image_feedback_reply_instruction(request.message)
     if image_feedback_instruction:
         system_prompt += image_feedback_instruction
-    if PDF_BRIEF_CONTEXT_MARKER in (request.message or ""):
+    if BRIEF_DOCUMENT_CONTEXT_MARKER in (request.message or ""):
         system_prompt += (
-            "\n\n【PDF Brief 资料】\n"
-            "当前消息包含从用户 PDF 中提取的 Brief 内容。请直接基于其中明确出现的信息承接对话，"
+            "\n\n【文档 Brief 资料】\n"
+            "当前消息包含从用户 PDF 或 Word 文档中提取的 Brief 内容。请直接基于其中明确出现的信息承接对话，"
             "简要说明已经识别到的关键内容，并只追问一个最重要的缺口；不要向用户暴露内部标记或解析过程。\n"
         )
 

@@ -1,9 +1,10 @@
 """客户资料解析服务。
 
-MVP 支持可提取文本的 PDF / DOCX / PPTX，不做 OCR。
+MVP 支持可提取文本的 PDF / DOC / DOCX / PPTX，不做 OCR。
 """
 
 import os
+import subprocess
 from dataclasses import dataclass
 
 
@@ -20,6 +21,7 @@ class ParsedSection:
 
 MAX_SECTION_CHARS = 3500
 MAX_TOTAL_CHARS = 60000
+LEGACY_DOC_PARSE_TIMEOUT_SECONDS = 60
 
 
 def parse_document(file_path: str, filename: str = "") -> list[ParsedSection]:
@@ -29,6 +31,8 @@ def parse_document(file_path: str, filename: str = "") -> list[ParsedSection]:
         return _parse_pdf(file_path)
     if ext == ".docx":
         return _parse_docx(file_path)
+    if ext == ".doc":
+        return _parse_doc(file_path)
     if ext == ".pptx":
         return _parse_pptx(file_path)
     raise DocumentParseError(f"不支持的文件类型: {ext}")
@@ -122,6 +126,34 @@ def _parse_docx(file_path: str) -> list[ParsedSection]:
         return [ParsedSection(label="Word正文", page=None, text="\n".join(lines))]
     except Exception as exc:
         raise DocumentParseError(f"Word 解析失败: {exc}") from exc
+
+
+def _parse_doc(file_path: str) -> list[ParsedSection]:
+    """Extract text from a legacy Word 97-2003 binary document."""
+    try:
+        result = subprocess.run(
+            ["antiword", "-m", "UTF-8.txt", file_path],
+            check=False,
+            capture_output=True,
+            timeout=LEGACY_DOC_PARSE_TIMEOUT_SECONDS,
+        )
+    except FileNotFoundError as exc:
+        raise DocumentParseError("缺少旧版 Word 解析依赖 antiword") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise DocumentParseError("旧版 Word 解析超时") from exc
+    except OSError as exc:
+        raise DocumentParseError("旧版 Word 解析器启动失败") from exc
+
+    if result.returncode != 0:
+        error = result.stderr.decode("utf-8", errors="replace").strip()
+        detail = f": {error[:240]}" if error else ""
+        raise DocumentParseError(f"旧版 Word 解析失败{detail}")
+
+    text = result.stdout.decode("utf-8", errors="replace")
+    text = text.replace("\x00", "").strip()
+    if not text:
+        raise DocumentParseError("旧版 Word 没有可提取的文字")
+    return [ParsedSection(label="Word正文", page=None, text=text)]
 
 
 def _parse_pptx(file_path: str) -> list[ParsedSection]:

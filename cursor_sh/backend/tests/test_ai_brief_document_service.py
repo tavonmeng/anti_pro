@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.services import ai_brief_document_service as document_module
-from app.services.document_parser_service import ParsedSection
+from app.services.document_parser_service import DocumentParseError, ParsedSection
 
 
 def test_pdf_confirmation_reply_lists_extracted_fields_without_saving_them():
@@ -81,7 +81,7 @@ async def test_extract_uploaded_pdf_brief_fields(monkeypatch, tmp_path):
         "project_name": "春季发布会",
         "city_location": "杭州湖滨银泰",
     }
-    assert document_module.PDF_BRIEF_CONTEXT_MARKER in result.context
+    assert document_module.BRIEF_DOCUMENT_CONTEXT_MARKER in result.context
     assert "项目名称：春季发布会" in result.context
 
 
@@ -108,6 +108,259 @@ async def test_extract_uploaded_pdf_rejects_other_user_path(monkeypatch, tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_extract_uploaded_docx_brief_fields(monkeypatch, tmp_path):
+    from docx import Document
+
+    upload_dir = tmp_path / "uploads"
+    docx_dir = upload_dir / "site_photos" / "user-test"
+    docx_dir.mkdir(parents=True)
+    docx_path = docx_dir / "brief.docx"
+
+    document = Document()
+    document.add_paragraph("项目名称：夏季冰饮新品发布")
+    table = document.add_table(rows=1, cols=2)
+    table.rows[0].cells[0].text = "投放城市"
+    table.rows[0].cells[1].text = "上海南京西路"
+    document.save(docx_path)
+
+    monkeypatch.setattr(document_module.settings, "UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setattr(document_module.settings, "OSS_ENABLED", False)
+    monkeypatch.setattr(document_module.settings, "AI_API_KEY", "test-key")
+
+    async def _mock_completion(payload, *, timeout=None, attempts=None):
+        content = payload["messages"][1]["content"]
+        assert "夏季冰饮新品发布" in content
+        assert "投放城市 | 上海南京西路" in content
+        assert "文档文本" in content
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"project_name":"夏季冰饮新品发布",'
+                            '"city_location":"上海南京西路","remarks":""}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(document_module, "post_chat_completion", _mock_completion)
+    result = await document_module.extract_uploaded_brief_documents(
+        [
+            SimpleNamespace(
+                name="brief.docx",
+                url="/uploads/site_photos/user-test/brief.docx",
+                type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                object_key="",
+            )
+        ],
+        user_id="user-test",
+    )
+
+    assert result.updates == {
+        "project_name": "夏季冰饮新品发布",
+        "city_location": "上海南京西路",
+    }
+    assert result.filenames == ["brief.docx"]
+    assert document_module.BRIEF_DOCUMENT_CONTEXT_MARKER in result.context
+    assert "已从文档提取的 Brief 内容" in result.context
+
+
+@pytest.mark.asyncio
+async def test_extract_uploaded_docx_from_oss_preserves_word_extension(monkeypatch):
+    from app.services import oss_service
+
+    monkeypatch.setattr(document_module.settings, "OSS_ENABLED", True)
+    monkeypatch.setattr(document_module.settings, "AI_API_KEY", "test-key")
+
+    def _mock_download(object_key, target_path):
+        assert object_key == "site_photos/user-test/brief.docx"
+        assert target_path.endswith(".docx")
+        with open(target_path, "wb") as target:
+            target.write(b"mock-docx")
+
+    def _mock_parse(path, filename):
+        assert path.endswith(".docx")
+        assert filename == "brief.docx"
+        return [ParsedSection(label="Word正文", page=None, text="项目名称：OSS Word Brief")]
+
+    async def _mock_completion(payload, *, timeout=None, attempts=None):
+        assert "OSS Word Brief" in payload["messages"][1]["content"]
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"project_name":"OSS Word Brief","remarks":""}'
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(oss_service, "download_object_to_file", _mock_download)
+    monkeypatch.setattr(document_module, "parse_document", _mock_parse)
+    monkeypatch.setattr(document_module, "post_chat_completion", _mock_completion)
+
+    result = await document_module.extract_uploaded_brief_documents(
+        [
+            SimpleNamespace(
+                name="brief.docx",
+                url="https://example.invalid/brief.docx",
+                type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                object_key="site_photos/user-test/brief.docx",
+            )
+        ],
+        user_id="user-test",
+    )
+
+    assert result.updates == {"project_name": "OSS Word Brief"}
+
+
+@pytest.mark.asyncio
+async def test_extract_mixed_pdf_and_docx_merges_brief_fields(monkeypatch, tmp_path):
+    upload_dir = tmp_path / "uploads"
+    document_dir = upload_dir / "site_photos" / "user-test"
+    document_dir.mkdir(parents=True)
+    (document_dir / "project.pdf").write_bytes(b"%PDF-test")
+    (document_dir / "budget.docx").write_bytes(b"mock-docx")
+
+    monkeypatch.setattr(document_module.settings, "UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setattr(document_module.settings, "OSS_ENABLED", False)
+    monkeypatch.setattr(document_module.settings, "AI_API_KEY", "test-key")
+
+    def _mock_parse(_path, filename):
+        text = "项目名称：夏季发布会" if filename.endswith(".pdf") else "预算：30-50万"
+        return [ParsedSection(label="正文", page=None, text=text)]
+
+    async def _mock_completion(payload, *, timeout=None, attempts=None):
+        content = payload["messages"][1]["content"]
+        if "夏季发布会" in content:
+            reply = '{"project_name":"夏季发布会"}'
+        else:
+            reply = '{"budget":"30-50万"}'
+        return {"choices": [{"message": {"content": reply}}]}
+
+    monkeypatch.setattr(document_module, "parse_document", _mock_parse)
+    monkeypatch.setattr(document_module, "post_chat_completion", _mock_completion)
+
+    result = await document_module.extract_uploaded_brief_documents(
+        [
+            SimpleNamespace(
+                name="project.pdf",
+                url="/uploads/site_photos/user-test/project.pdf",
+                type="application/pdf",
+                object_key="",
+            ),
+            SimpleNamespace(
+                name="budget.docx",
+                url="/uploads/site_photos/user-test/budget.docx",
+                type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                object_key="",
+            ),
+        ],
+        user_id="user-test",
+    )
+
+    assert result.updates == {
+        "project_name": "夏季发布会",
+        "budget": "30-50万",
+    }
+    assert result.filenames == ["project.pdf", "budget.docx"]
+
+
+@pytest.mark.asyncio
+async def test_extract_uploaded_legacy_doc_brief_fields(monkeypatch, tmp_path):
+    upload_dir = tmp_path / "uploads"
+    doc_dir = upload_dir / "site_photos" / "user-test"
+    doc_dir.mkdir(parents=True)
+    (doc_dir / "legacy-brief.doc").write_bytes(b"mock-legacy-doc")
+
+    monkeypatch.setattr(document_module.settings, "UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setattr(document_module.settings, "OSS_ENABLED", False)
+    monkeypatch.setattr(document_module.settings, "AI_API_KEY", "test-key")
+
+    def _mock_parse(path, filename):
+        assert path.endswith(".doc")
+        assert filename == "legacy-brief.doc"
+        return [
+            ParsedSection(
+                label="Word正文",
+                page=None,
+                text="项目名称：旧版 Word Brief；预算：30-50万",
+            )
+        ]
+
+    async def _mock_completion(payload, *, timeout=None, attempts=None):
+        content = payload["messages"][1]["content"]
+        assert "旧版 Word Brief" in content
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"project_name":"旧版 Word Brief",'
+                            '"budget":"30-50万","remarks":""}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(document_module, "parse_document", _mock_parse)
+    monkeypatch.setattr(document_module, "post_chat_completion", _mock_completion)
+    result = await document_module.extract_uploaded_brief_documents(
+        [
+            SimpleNamespace(
+                name="legacy-brief.doc",
+                url="/uploads/site_photos/user-test/legacy-brief.doc",
+                type="application/msword",
+                object_key="",
+            )
+        ],
+        user_id="user-test",
+    )
+
+    assert result.updates == {
+        "project_name": "旧版 Word Brief",
+        "budget": "30-50万",
+    }
+    assert result.failures == []
+
+
+@pytest.mark.asyncio
+async def test_legacy_doc_parse_failure_returns_word_message(monkeypatch, tmp_path):
+    upload_dir = tmp_path / "uploads"
+    doc_dir = upload_dir / "site_photos" / "user-test"
+    doc_dir.mkdir(parents=True)
+    (doc_dir / "broken.doc").write_bytes(b"broken-legacy-doc")
+
+    monkeypatch.setattr(document_module.settings, "UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setattr(document_module.settings, "OSS_ENABLED", False)
+    monkeypatch.setattr(document_module.settings, "AI_API_KEY", "test-key")
+    monkeypatch.setattr(
+        document_module,
+        "parse_document",
+        lambda *_args: (_ for _ in ()).throw(
+            DocumentParseError("旧版 Word 解析失败")
+        ),
+    )
+
+    result = await document_module.extract_uploaded_brief_documents(
+        [
+            SimpleNamespace(
+                name="broken.doc",
+                url="/uploads/site_photos/user-test/broken.doc",
+                type="application/msword",
+                object_key="",
+            )
+        ],
+        user_id="user-test",
+    )
+
+    assert result.failures == ["broken.doc：Word 解析失败"]
+
+
+@pytest.mark.asyncio
 async def test_document_updates_require_confirmation_before_writing_brief_state(monkeypatch, tmp_path):
     from app.services.ai_brief_state import update_agent_state_from_message
 
@@ -115,7 +368,7 @@ async def test_document_updates_require_confirmation_before_writing_brief_state(
     monkeypatch.setattr("app.services.ai_brief_state.settings.AI_API_KEY", "test-key")
 
     async def _mock_confirmation(payload, **_kwargs):
-        assert "pending_pdf_brief" in payload["messages"][1]["content"]
+        assert "pending_document_brief" in payload["messages"][1]["content"]
         return {"choices": [{"message": {"content": '{"action":"confirmed","updates":{}}'}}]}
 
     monkeypatch.setattr("app.services.ai_brief_state.post_chat_completion", _mock_confirmation)
@@ -142,7 +395,7 @@ async def test_document_updates_require_confirmation_before_writing_brief_state(
     assert state["brief_state"]["fields"]["site_photos"]["value"] == ""
     assert state["pending_document_brief"]["updates"] == {"city_location": "杭州湖滨银泰"}
     context_message = state["agent_context_window"]["messages"][-1]["content"]
-    assert "用户上传了 PDF 资料" in context_message
+    assert "用户上传了文档资料" in context_message
     assert "杭州湖滨银泰" not in context_message
 
     reviewed = await update_agent_state_from_message(

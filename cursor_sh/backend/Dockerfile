@@ -10,6 +10,7 @@ RUN sed -i 's|http://deb.debian.org|https://mirrors.aliyun.com|g' /etc/apt/sourc
     && apt-get install -y --no-install-recommends \
     tzdata \
     fonts-wqy-zenhei \
+    antiword \
     && rm -rf /var/lib/apt/lists/* \
     && fc-cache -f
 
