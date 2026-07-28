@@ -32,6 +32,23 @@ class WebsiteVisitEvent(Base):
     created_at = Column(DateTime(timezone=True), default=beijing_now)
 
 
+class WebsiteIpGeoCache(Base):
+    """A terminal, reusable IP-to-region lookup result for website analytics."""
+
+    __tablename__ = "website_ip_geo_cache"
+
+    id = Column(String(50), primary_key=True, index=True)
+    ip_address = Column(String(64), nullable=False, unique=True, index=True)
+    country = Column(String(80), nullable=True)
+    province = Column(String(120), nullable=True)
+    city = Column(String(120), nullable=True)
+    status = Column(String(20), nullable=False)
+    provider = Column(String(40), nullable=False, default="ip2region")
+    checked_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=beijing_now)
+    updated_at = Column(DateTime(timezone=True), default=beijing_now, onupdate=beijing_now)
+
+
 class WebsiteVisitDailyStat(Base):
     """Daily homepage PV/UV aggregate."""
 

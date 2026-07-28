@@ -14,6 +14,16 @@ class WebsiteVisitTrackResponse(BaseModel):
     path: str
 
 
+class WebsiteIpGeoResolveResponse(BaseModel):
+    candidate_unique_ips: int
+    processed_unique_ips: int
+    cache_hits: int
+    resolved: int
+    unavailable: int
+    failed: int
+    updated_events: int
+
+
 class WebsiteVisitTotalsResponse(BaseModel):
     today_pv: int
     today_uv: int

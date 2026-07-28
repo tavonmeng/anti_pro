@@ -78,6 +78,13 @@
       <template #header>
         <div class="section-header">
           <h2>最近原始访问日志</h2>
+          <el-button
+            size="small"
+            :loading="geoResolving"
+            @click="resolveTodayUnresolvedGeos"
+          >
+            解析今日未识别地域
+          </el-button>
         </div>
       </template>
       <el-table :data="summary.recent_events" stripe style="width: 100%">
@@ -118,6 +125,7 @@ import { businessDataApi, type WebsiteVisitSummary } from '@/utils/api'
 import { formatServerTime } from '@/utils/time'
 
 const loading = ref(false)
+const geoResolving = ref(false)
 const days = ref(7)
 const numberFormatter = new Intl.NumberFormat('zh-CN')
 
@@ -146,12 +154,14 @@ const visitGeoText = (row: WebsiteVisitSummary['recent_events'][number]) => {
 
 const geoStatusLabel = (status: string) => {
   if (status === 'done') return '已解析'
+  if (status === 'unavailable') return '未识别'
   if (status === 'failed') return '失败'
   return '待解析'
 }
 
 const geoStatusType = (status: string) => {
   if (status === 'done') return 'success'
+  if (status === 'unavailable') return 'warning'
   if (status === 'failed') return 'danger'
   return 'info'
 }
@@ -165,6 +175,22 @@ const loadWebsiteVisits = async () => {
     ElMessage.error(error?.message || '获取官网访问统计失败')
   } finally {
     loading.value = false
+  }
+}
+
+const resolveTodayUnresolvedGeos = async () => {
+  geoResolving.value = true
+  try {
+    const result = await businessDataApi.resolveTodayUnresolvedVisitGeos()
+    ElMessage.success(
+      `已处理 ${result.processed_unique_ips}/${result.candidate_unique_ips} 个唯一 IP：`
+      + `缓存 ${result.cache_hits}，解析 ${result.resolved}，未识别 ${result.unavailable}`,
+    )
+    await loadWebsiteVisits()
+  } catch (error: any) {
+    ElMessage.error(error?.message || 'IP 属地解析失败')
+  } finally {
+    geoResolving.value = false
   }
 }
 

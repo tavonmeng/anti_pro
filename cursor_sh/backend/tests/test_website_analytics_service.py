@@ -6,7 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.database import Base
-from app.models.website_analytics import WebsiteVisitEvent
+from app.models.website_analytics import WebsiteIpGeoCache, WebsiteVisitEvent
+from app.services.ip_geolocation_service import IpGeoResult
 from app.services.website_analytics_service import (
     WebsiteAnalyticsService,
     WebsiteVisitInput,
@@ -96,3 +97,63 @@ def test_normalize_visit_path_strips_host_query_and_hash():
     assert normalize_visit_path("https://www.uniquevisionx.com/cases?utm_source=a#intro") == "/cases"
     assert normalize_visit_path("/workspace?invite=secret") == "/workspace"
     assert normalize_visit_path("") == "/"
+
+
+class FakeIpGeolocation:
+    def __init__(self, result: IpGeoResult):
+        self.result = result
+        self.calls: list[str] = []
+
+    def lookup(self, ip_address: str) -> IpGeoResult:
+        self.calls.append(ip_address)
+        return self.result
+
+
+@pytest.mark.asyncio
+async def test_manual_geo_resolution_deduplicates_today_and_reuses_cache(analytics_db):
+    service = WebsiteAnalyticsService(debounce_seconds=10)
+    now = datetime(2026, 7, 9, 10, 0, 0)
+    geo = FakeIpGeolocation(IpGeoResult("中国", "广东省", "深圳市", "done"))
+
+    for path in ("/", "/cases"):
+        await service.track_visit(
+            analytics_db,
+            WebsiteVisitInput(path=path, ip_address="113.118.113.77"),
+            now=now,
+        )
+
+    first = await service.resolve_today_unresolved_geos(analytics_db, geolocation=geo, now=now)
+
+    assert first.candidate_unique_ips == 1
+    assert first.processed_unique_ips == 1
+    assert first.cache_hits == 0
+    assert first.resolved == 1
+    assert first.updated_events == 2
+    assert geo.calls == ["113.118.113.77"]
+
+    await service.track_visit(
+        analytics_db,
+        WebsiteVisitInput(path="/contact", ip_address="113.118.113.77"),
+        now=now + timedelta(seconds=11),
+    )
+    second = await service.resolve_today_unresolved_geos(
+        analytics_db,
+        geolocation=geo,
+        now=now + timedelta(seconds=11),
+    )
+
+    assert second.cache_hits == 1
+    assert second.resolved == 0
+    assert second.updated_events == 1
+    assert geo.calls == ["113.118.113.77"]
+
+    cache_result = await analytics_db.execute(select(WebsiteIpGeoCache))
+    cache = cache_result.scalars().all()
+    assert [(item.ip_address, item.country, item.city, item.status) for item in cache] == [
+        ("113.118.113.77", "中国", "深圳市", "done")
+    ]
+
+    events_result = await analytics_db.execute(select(WebsiteVisitEvent).order_by(WebsiteVisitEvent.path))
+    events = events_result.scalars().all()
+    assert all(event.geo_status == "done" for event in events)
+    assert all(event.province == "广东省" for event in events)

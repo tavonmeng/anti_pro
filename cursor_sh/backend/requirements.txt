@@ -54,6 +54,7 @@ loguru==0.7.3
 pytest==8.3.5
 pytest-asyncio==0.26.0
 httpx==0.28.1
+py-ip2region==3.0.3
 
 # 公司官网爬取（Agent Memory）
 beautifulsoup4==4.13.4

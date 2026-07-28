@@ -10,6 +10,7 @@ from app.database import get_db
 from app.middleware.rate_limit import get_client_ip
 from app.schemas.response import ApiResponse
 from app.schemas.website_analytics import (
+    WebsiteIpGeoResolveResponse,
     WebsiteVisitSummaryResponse,
     WebsiteVisitTrackRequest,
     WebsiteVisitTrackResponse,
@@ -70,6 +71,21 @@ async def get_website_visit_summary(
     _ = current_user
     summary = await analytics_service.get_summary(db, days=days)
     return ApiResponse(code=200, message="获取成功", data=summary.to_dict())
+
+
+@router.post("/admin/website-visits/resolve-geo", response_model=ApiResponse[WebsiteIpGeoResolveResponse])
+async def resolve_today_website_visit_geos(
+    current_user: AnyUser = Depends(require_internal_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually resolve only today's missing website visit regions."""
+    _ = current_user
+    result = await analytics_service.resolve_today_unresolved_geos(db)
+    return ApiResponse(
+        code=200,
+        message="属地解析完成",
+        data=WebsiteIpGeoResolveResponse(**result.__dict__),
+    )
 
 
 def _is_allowed_tracking_origin(request: Request) -> bool:

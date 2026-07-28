@@ -154,6 +154,16 @@ export interface WebsiteVisitSummary {
   }>
 }
 
+export interface WebsiteIpGeoResolveResult {
+  candidate_unique_ips: number
+  processed_unique_ips: number
+  cache_hits: number
+  resolved: number
+  unavailable: number
+  failed: number
+  updated_events: number
+}
+
 export const authApi = {
   // 获取当前登录用户资料
   async getMe(): Promise<User> {
@@ -1174,6 +1184,10 @@ export const homepageBarApi = {
 export const businessDataApi = {
   async getWebsiteVisits(days = 7): Promise<WebsiteVisitSummary> {
     return request.get('/website-analytics/admin/website-visits', { params: { days } })
+  },
+
+  async resolveTodayUnresolvedVisitGeos(): Promise<WebsiteIpGeoResolveResult> {
+    return request.post('/website-analytics/admin/website-visits/resolve-geo')
   },
 }
 

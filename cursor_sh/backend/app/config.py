@@ -180,6 +180,10 @@ class Settings(BaseSettings):
     
     # CORS 配置
     CORS_ORIGINS: Union[List[str], str] = ["http://localhost:5173", "http://localhost:3000"]
+
+    # 官网访问 IP 属地（离线 ip2region 数据库）
+    IP_GEO_DATABASE_PATH: str = "data/ip2region_v4.xdb"
+    IP_GEO_MANUAL_BATCH_LIMIT: int = 200
     
     @compat_validator('CORS_ORIGINS')
     @classmethod

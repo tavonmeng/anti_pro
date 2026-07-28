@@ -7,18 +7,20 @@ import hmac
 from typing import Any
 from urllib.parse import urlsplit
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.website_analytics import (
+    WebsiteIpGeoCache,
     WebsiteVisitDailyStat,
     WebsiteVisitEvent,
     WebsiteVisitPathDailyStat,
     WebsiteVisitUnique,
 )
+from app.services.ip_geolocation_service import OfflineIpGeolocationService
 from app.utils.timezone import beijing_now
 from app.utils.validators import generate_id
 
@@ -94,6 +96,17 @@ class WebsiteVisitSummary:
                 for row in self.recent_events
             ],
         }
+
+
+@dataclass(frozen=True)
+class WebsiteIpGeoResolveResult:
+    candidate_unique_ips: int
+    processed_unique_ips: int
+    cache_hits: int
+    resolved: int
+    unavailable: int
+    failed: int
+    updated_events: int
 
 
 class WebsiteVisitDebouncer:
@@ -299,6 +312,104 @@ class WebsiteAnalyticsService:
             daily=daily_rows,
             paths=path_rows,
             recent_events=recent_events,
+        )
+
+    async def resolve_today_unresolved_geos(
+        self,
+        db: AsyncSession,
+        *,
+        geolocation: OfflineIpGeolocationService | None = None,
+        now: datetime | None = None,
+    ) -> WebsiteIpGeoResolveResult:
+        """Resolve today's missing regions once per unique IP, using permanent cache results."""
+        current_time = now or beijing_now()
+        visit_date = current_time.date()
+        unresolved = and_(
+            WebsiteVisitEvent.country.is_(None),
+            WebsiteVisitEvent.province.is_(None),
+            WebsiteVisitEvent.city.is_(None),
+            WebsiteVisitEvent.geo_status.in_(("pending", "failed")),
+        )
+        events_result = await db.execute(
+            select(WebsiteVisitEvent)
+            .where(WebsiteVisitEvent.visit_date == visit_date)
+            .where(unresolved)
+            .order_by(WebsiteVisitEvent.visited_at.asc())
+        )
+        candidate_events = list(events_result.scalars().all())
+        unique_ips = list(dict.fromkeys(event.ip_address for event in candidate_events if event.ip_address))
+        batch_limit = max(1, settings.IP_GEO_MANUAL_BATCH_LIMIT)
+        selected_ips = unique_ips[:batch_limit]
+        if not selected_ips:
+            return WebsiteIpGeoResolveResult(
+                candidate_unique_ips=0,
+                processed_unique_ips=0,
+                cache_hits=0,
+                resolved=0,
+                unavailable=0,
+                failed=0,
+                updated_events=0,
+            )
+
+        cache_result = await db.execute(
+            select(WebsiteIpGeoCache).where(WebsiteIpGeoCache.ip_address.in_(selected_ips))
+        )
+        cache_by_ip = {item.ip_address: item for item in cache_result.scalars().all()}
+        lookup = geolocation or OfflineIpGeolocationService()
+        cache_hits = 0
+        resolved = 0
+        unavailable = 0
+        failed = 0
+
+        for ip_address in selected_ips:
+            cached = cache_by_ip.get(ip_address)
+            if cached:
+                cache_hits += 1
+                continue
+
+            result = lookup.lookup(ip_address)
+            cached = WebsiteIpGeoCache(
+                id=generate_id("wig"),
+                ip_address=ip_address,
+                country=result.country,
+                province=result.province,
+                city=result.city,
+                status=result.status,
+                provider=result.provider,
+                checked_at=current_time,
+                created_at=current_time,
+                updated_at=current_time,
+            )
+            db.add(cached)
+            cache_by_ip[ip_address] = cached
+            if result.status == "done":
+                resolved += 1
+            elif result.status == "unavailable":
+                unavailable += 1
+            else:
+                failed += 1
+
+        selected_ip_set = set(selected_ips)
+        updated_events = 0
+        for event in candidate_events:
+            if event.ip_address not in selected_ip_set:
+                continue
+            cached = cache_by_ip[event.ip_address]
+            event.country = cached.country
+            event.province = cached.province
+            event.city = cached.city
+            event.geo_status = cached.status
+            updated_events += 1
+
+        await db.commit()
+        return WebsiteIpGeoResolveResult(
+            candidate_unique_ips=len(unique_ips),
+            processed_unique_ips=len(selected_ips),
+            cache_hits=cache_hits,
+            resolved=resolved,
+            unavailable=unavailable,
+            failed=failed,
+            updated_events=updated_events,
         )
 
     async def _insert_unique(
