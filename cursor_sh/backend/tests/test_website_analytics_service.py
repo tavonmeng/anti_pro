@@ -93,6 +93,6 @@ async def test_track_visit_counts_later_pv_without_repeating_uv(analytics_db):
 
 
 def test_normalize_visit_path_strips_host_query_and_hash():
-    assert normalize_visit_path("https://uniquevisionx.com/cases?utm_source=a#intro") == "/cases"
+    assert normalize_visit_path("https://www.uniquevisionx.com/cases?utm_source=a#intro") == "/cases"
     assert normalize_visit_path("/workspace?invite=secret") == "/workspace"
     assert normalize_visit_path("") == "/"

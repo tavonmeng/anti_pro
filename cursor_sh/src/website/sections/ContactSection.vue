@@ -1,5 +1,6 @@
 <template>
-  <section id="contact" class="contact-section" ref="sectionRef">
+  <section id="contact" class="contact-section" ref="sectionRef" aria-labelledby="contact-heading">
+    <h2 id="contact-heading" class="visually-hidden">联系 Unique Vision 获取裸眼3D与3D OOH项目方案</h2>
     <!-- 顶部朦胧渐变遮罩 -->
     <div class="fade-overlay" ref="overlayRef"></div>
     <!-- 确保下方背景为白色的底图 -->

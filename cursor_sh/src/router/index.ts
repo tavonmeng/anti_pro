@@ -3,6 +3,7 @@ import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
 import { isExternalDeployment, isInternalDeployment, isInternalRoute, isUserRoute, loginPathForRoute } from '@/utils/deployment'
 import { authenticatedHomeForRole, isRouteRoleAllowed } from '@/utils/creatorAccess'
+import { applySeoForRoute } from '@/website/seo'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -318,6 +319,13 @@ router.beforeEach(async (to, from, next) => {
   }
   
   next()
+})
+
+router.afterEach((to) => {
+  applySeoForRoute({
+    path: to.path,
+    name: to.name
+  })
 })
 
 export default router

@@ -1,9 +1,18 @@
 <template>
   <section id="hero" class="hero-section">
+    <h1 class="visually-hidden">裸眼3D内容制作与AI驱动3D OOH创意平台</h1>
     
     <!-- 背景图 -->
     <div class="video-container" ref="bgRef">
-      <img class="hero-video" src="/video-library-images/2.jpg" alt="Unique Vision 裸眼3D户外大屏内容制作案例" />
+      <img
+        class="hero-video"
+        src="/video-library-images/2.jpg"
+        alt="Unique Vision 裸眼3D户外大屏内容制作案例"
+        width="1691"
+        height="930"
+        fetchpriority="high"
+        decoding="async"
+      />
       <div class="video-overlay"></div>
     </div>
     

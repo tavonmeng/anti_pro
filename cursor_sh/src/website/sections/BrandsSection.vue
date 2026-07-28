@@ -1,14 +1,15 @@
 <template>
-  <section id="brands" class="brands-section" ref="sectionRef">
+  <section id="brands" class="brands-section" ref="sectionRef" aria-labelledby="brands-heading">
+    <h2 id="brands-heading" class="visually-hidden">Unique Vision 合作品牌</h2>
     <div class="brands-wrapper" ref="wrapperRef">
       <!-- 第一行品牌 -->
       <div class="brands-container" ref="track1Ref">
         <div class="brands-track" ref="track1Inner">
           <div v-for="brand in brandsRow1" :key="brand" class="brand-item">
-            <img :src="brand" class="brand-logo" alt="Unique Vision 合作品牌 logo" />
+            <img :src="brand" class="brand-logo" alt="" loading="lazy" decoding="async" />
           </div>
-          <div v-for="brand in brandsRow1" :key="brand + '_dup'" class="brand-item">
-            <img :src="brand" class="brand-logo" alt="Unique Vision 合作品牌 logo" />
+          <div v-for="brand in brandsRow1" :key="brand + '_dup'" class="brand-item" aria-hidden="true">
+            <img :src="brand" class="brand-logo" alt="" loading="lazy" decoding="async" />
           </div>
         </div>
       </div>
@@ -17,10 +18,10 @@
       <div class="brands-container" ref="track2Ref">
         <div class="brands-track" ref="track2Inner">
           <div v-for="brand in brandsRow2" :key="brand" class="brand-item">
-            <img :src="brand" class="brand-logo" alt="Unique Vision 合作品牌 logo" />
+            <img :src="brand" class="brand-logo" alt="" loading="lazy" decoding="async" />
           </div>
-          <div v-for="brand in brandsRow2" :key="brand + '_dup'" class="brand-item">
-            <img :src="brand" class="brand-logo" alt="Unique Vision 合作品牌 logo" />
+          <div v-for="brand in brandsRow2" :key="brand + '_dup'" class="brand-item" aria-hidden="true">
+            <img :src="brand" class="brand-logo" alt="" loading="lazy" decoding="async" />
           </div>
         </div>
       </div>

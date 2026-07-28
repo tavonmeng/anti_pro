@@ -1,16 +1,18 @@
 <template>
-  <section id="intro" class="intro-section" ref="sectionRef">
+  <section id="intro" class="intro-section" ref="sectionRef" aria-labelledby="services-heading">
+    <h2 id="services-heading" class="visually-hidden">Unique Vision 裸眼3D与3D OOH核心服务</h2>
     <!-- 包裹层用于入场淡入动画 -->
     <div class="intro-contents-wrapper" ref="wrapperRef">
       
       <!-- 1. 全屏动态背景和改变的服务介绍 -->
       <div class="full-screen-slides">
-        <div
+        <article
           v-for="(service, index) in platformServices"
           :key="service.title"
           class="slide"
           :class="{ first: index === 0 }"
           :ref="el => setSlideRef(el, index)"
+          :aria-labelledby="`${service.id}-title`"
         >
           <div class="outer">
             <div class="inner">
@@ -22,7 +24,7 @@
                     <div class="right-content relative-box">
                       <div class="service-block">
                         <div class="service-header">
-                          <h3 class="service-title section-heading">{{ service.title }}</h3>
+                          <h3 :id="`${service.id}-title`" class="service-title section-heading">{{ service.title }}</h3>
                         </div>
                         <p class="service-desc section-heading">
                           {{ service.line1 }}<br/>
@@ -35,18 +37,18 @@
               </div>
             </div>
           </div>
-        </div>
+        </article>
       </div>
 
       <!-- 2. 全局静态覆盖层（左侧文本 + 右侧团队说明） -->
       <div class="static-overlay-layer">
         <div class="container">
           <div class="left-content static-left" ref="leftContentRef">
-            <h1 class="main-heading">
+            <p class="main-heading">
               我们是<br>
               <span class="desc-highlight">idea+AI驱动的</span><br>
               裸眼3D内容制作与3D OOH内容平台
-            </h1>
+            </p>
             <div class="description-block">
               <p class="desc-text">
                 高效率、低成本、提升视觉质量<br>
@@ -64,7 +66,7 @@
                 国内最早的裸眼3D项目核心团队，具有完善的AI数字艺术全流程项目环节，成员多毕业于海外TOP级艺术学院，专业覆盖创意广告学、公共艺术设计、雕塑、影视导演、动画、三维特效设计、视觉传达等领域
               </p>
               <p class="team-desc static-heading">
-                对户外媒体的艺术表现与内容营销具有丰富的经验，项目涉及三维CG、AIGC、实拍、数字艺术、艺术家联名、创意IP开发、室内互动屏项目、各地异形屏、AI视觉系统运用等......................
+                对户外媒体的艺术表现与内容营销具有丰富经验，项目涉及三维CG、AIGC、实拍、数字艺术、艺术家联名、创意IP开发、室内互动屏、异形屏与AI视觉系统运用等多种内容形态。
               </p>
             </div>
           </div>
@@ -89,36 +91,42 @@ const slideRefs = ref([])
 
 const platformServices = [
   {
+    id: 'content-library',
     title: '3D OOH数字内容资源库',
     line1: '即用型裸眼3D数字内容资产',
     line2: '多屏适配内容方案 / 全球地标大屏内容规格适配',
     bgClass: 'slide-bg-1'
   },
   {
+    id: 'ai-3d-ooh',
     title: 'AI驱动3D OOH内容定制',
     line1: 'AI创意内容开发 / 场景化裸眼3D空间适配',
     line2: '真实环境播放模拟 / 一站式DOOH内容制作',
     bgClass: 'slide-bg-2'
   },
   {
+    id: 'immersive-visual',
     title: '数字艺术与沉浸式视觉设计',
     line1: '艺术指导与视觉设计 / 虚拟装置艺术',
     line2: '沉浸式空间视觉 / 实验性数字艺术内容',
     bgClass: 'slide-bg-3'
   },
   {
+    id: 'motion-production',
     title: '广告视觉与动态影像制作',
     line1: '平面广告视觉设计 / TVC广告影片制作 / FOOH数字传播内容',
     line2: 'VJ视觉演出内容 / 动态视觉设计',
     bgClass: 'slide-bg-4'
   },
   {
+    id: 'post-production',
     title: '户外媒体后期制作服务',
     line1: '高端精修图像处理 / 电影级视频精修 / CGI视觉增强',
     line2: '商业摄影与视频拍摄 / 航拍影像制作',
     bgClass: 'slide-bg-5'
   },
   {
+    id: 'campaign-analysis',
     title: '广告投放分析与效果报告',
     line1: 'DOOH广告投放数据分析 / 受众效果分析报告',
     line2: '视觉传播效果评估 / 可下载数据报告系统',

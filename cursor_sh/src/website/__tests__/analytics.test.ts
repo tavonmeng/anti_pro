@@ -10,7 +10,7 @@ describe('website analytics tracking', () => {
     const payload = buildWebsiteVisitPayload({
       pathname: '/cases',
       search: '?invite=secret&utm_source=test',
-      href: 'https://uniquevisionx.com/cases?invite=secret',
+      href: 'https://www.uniquevisionx.com/cases?invite=secret',
     } as Location)
 
     expect(payload).toEqual({
@@ -28,7 +28,7 @@ describe('website analytics tracking', () => {
     })
 
     trackWebsiteVisit({
-      location: { pathname: '/', search: '', href: 'https://uniquevisionx.com/' } as Location,
+      location: { pathname: '/', search: '', href: 'https://www.uniquevisionx.com/' } as Location,
       documentReferrer: 'https://example.com/link',
     })
 
@@ -48,7 +48,7 @@ describe('website analytics tracking', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
 
     trackWebsiteVisit({
-      location: { pathname: '/intro', search: '', href: 'https://uniquevisionx.com/intro' } as Location,
+      location: { pathname: '/intro', search: '', href: 'https://www.uniquevisionx.com/intro' } as Location,
       documentReferrer: '',
     })
 

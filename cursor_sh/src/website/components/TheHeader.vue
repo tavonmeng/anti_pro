@@ -7,15 +7,18 @@
     @mouseleave="onHeaderLeave"
   >
     <!-- 左：Logo 区域 -->
-    <div class="header-logo" @click="scrollToTop">
+    <a href="/" class="header-logo" aria-label="Unique Vision 首页" @click.prevent="scrollToTop">
       <img
         class="logo-icon"
         :class="{ 'is-inverted': !isLightMode }"
         src="/landing/logo/official-mark-black.svg"
         alt="Unique Vision"
+        width="24"
+        height="38"
+        decoding="async"
       />
       <span class="logo-text">Unique Vision</span>
-    </div>
+    </a>
 
     <!-- 中间竖线 -->
     <div class="divider"></div>
@@ -32,7 +35,7 @@
             <a
               v-for="item in menuItems"
               :key="item.id"
-              href="#"
+              :href="`#${item.id}`"
               class="menu-link"
               :class="{
                 'is-dim': hoveredItem && hoveredItem !== item.id
@@ -281,6 +284,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   cursor: pointer;
+  text-decoration: none;
   flex-shrink: 0;
   padding: 0 24px; /* 稍微收紧 logo 的横向间距 */
   height: 100%;

@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset
+  xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+  xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+>
   <url>
-    <loc>https://uniquevisionx.com/</loc>
-    <lastmod>2026-07-09</lastmod>
+    <loc>https://www.uniquevisionx.com/</loc>
+    <lastmod>2026-07-16</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://www.uniquevisionx.com/video-library-images/2.jpg</image:loc>
+      <image:title>Unique Vision 裸眼3D户外大屏视觉案例</image:title>
+      <image:caption>裸眼3D内容制作与AI驱动3D OOH创意视觉案例</image:caption>
+    </image:image>
   </url>
 </urlset>

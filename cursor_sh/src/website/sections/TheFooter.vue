@@ -12,7 +12,15 @@
         <!-- 左侧：Logo + 口号 + 社交图标 -->
         <div class="footer-left">
           <div class="footer-logo">
-            <img class="logo-icon" src="/landing/logo/official-mark-black.svg" alt="Unique Vision" />
+            <img
+              class="logo-icon"
+              src="/landing/logo/official-mark-black.svg"
+              alt="Unique Vision"
+              width="32"
+              height="48"
+              loading="lazy"
+              decoding="async"
+            />
             <div class="logo-text">
               <span class="logo-line">Unique</span>
               <span class="logo-line">Vision</span>
@@ -30,39 +38,39 @@
           <!-- 社交图标：抖音、邮箱、微信、知乎、小红书、快手 -->
           <div class="footer-socials">
             <!-- TikTok -->
-            <a href="#" class="social-icon" aria-label="TikTok" title="TikTok">
-              <img src="/landing/icon/Tiktok_icon.svg" alt="TikTok" class="social-img" />
-            </a>
+            <span class="social-icon is-placeholder" aria-label="TikTok 即将上线" title="TikTok 即将上线">
+              <img src="/landing/icon/Tiktok_icon.svg" alt="" class="social-img" loading="lazy" decoding="async" />
+            </span>
             <!-- 邮箱 -->
             <a href="mailto:support@uniquevisionx.com" class="social-icon" aria-label="邮箱" title="邮箱">
-              <img src="/landing/icon/email-download-svgrepo-com.svg" alt="邮箱" class="social-img" />
+              <img src="/landing/icon/email-download-svgrepo-com.svg" alt="" class="social-img" loading="lazy" decoding="async" />
             </a>
             <!-- 微信 -->
-            <a href="#" class="social-icon" aria-label="微信" title="微信">
-              <img src="/landing/icon/wechat-logo-svgrepo-com.svg" alt="微信" class="social-img" />
-            </a>
+            <span class="social-icon is-placeholder" aria-label="微信即将上线" title="微信即将上线">
+              <img src="/landing/icon/wechat-logo-svgrepo-com.svg" alt="" class="social-img" loading="lazy" decoding="async" />
+            </span>
             <!-- 知乎 -->
-            <a href="#" class="social-icon" aria-label="知乎" title="知乎">
-              <img src="/landing/icon/Zhihu_logo.svg" alt="知乎" class="social-img" />
-            </a>
+            <span class="social-icon is-placeholder" aria-label="知乎即将上线" title="知乎即将上线">
+              <img src="/landing/icon/Zhihu_logo.svg" alt="" class="social-img" loading="lazy" decoding="async" />
+            </span>
             <!-- 小红书 -->
-            <a href="#" class="social-icon" aria-label="小红书" title="小红书">
-              <img src="/landing/icon/xiaohongshu-seeklogo.svg" alt="小红书" class="social-img" />
-            </a>
+            <span class="social-icon is-placeholder" aria-label="小红书即将上线" title="小红书即将上线">
+              <img src="/landing/icon/xiaohongshu-seeklogo.svg" alt="" class="social-img" loading="lazy" decoding="async" />
+            </span>
             <!-- 快手 -->
-            <a href="#" class="social-icon" aria-label="快手" title="快手">
-              <img src="/landing/icon/Kuaishou-OyH26YzFs_brandlogos.net.svg" alt="快手" class="social-img" />
-            </a>
+            <span class="social-icon is-placeholder" aria-label="快手即将上线" title="快手即将上线">
+              <img src="/landing/icon/Kuaishou-OyH26YzFs_brandlogos.net.svg" alt="" class="social-img" loading="lazy" decoding="async" />
+            </span>
           </div>
         </div>
 
         <!-- 右侧：导航链接三列 -->
         <nav class="footer-nav">
           <div class="nav-col">
-            <h5 class="nav-title">
+            <h2 class="nav-title">
               <span class="nav-dot">■</span>
               业务合作
-            </h5>
+            </h2>
             <ul>
               <li><a href="#intro">3D OOH数字内容资源库</a></li>
               <li><a href="#intro">AI驱动3D OOH内容定制</a></li>
@@ -73,22 +81,22 @@
             </ul>
           </div>
           <div class="nav-col">
-            <h5 class="nav-title">
+            <h2 class="nav-title">
               <span class="nav-dot">■</span>
               著作/专利
-            </h5>
+            </h2>
             <ul>
-              <li><a href="#">数字艺术</a></li>
-              <li><a href="#">裸眼3D</a></li>
-              <li><a href="#">AI-3D</a></li>
-              <li><a href="#">数字光影</a></li>
+              <li><span>数字艺术</span></li>
+              <li><span>裸眼3D</span></li>
+              <li><span>AI-3D</span></li>
+              <li><span>数字光影</span></li>
             </ul>
           </div>
           <div class="nav-col">
-            <h5 class="nav-title">
+            <h2 class="nav-title">
               <span class="nav-dot">■</span>
               邮件联系
-            </h5>
+            </h2>
             <ul>
               <li><a href="mailto:support@uniquevisionx.com">support@uniquevisionx.com</a></li>
             </ul>
@@ -102,10 +110,19 @@
     <div class="footer-inner">
       <!-- 底部版权栏 -->
       <div class="footer-bottom">
-        <span class="copyright">© 2025 Unique Vision. All rights reserved.</span>
+        <span class="copyright">© 2026 Unique Vision. All rights reserved.</span>
+        <a
+          class="icp-record"
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="前往工业和信息化部备案管理系统查询京ICP备2026029893号-1"
+        >
+          京ICP备2026029893号-1
+        </a>
         <div class="footer-legal">
-          <a href="#">使用条款</a>
-          <a href="#">隐私政策</a>
+          <span>使用条款</span>
+          <span>隐私政策</span>
         </div>
       </div>
 
@@ -249,6 +266,11 @@
   transform: scale(1.15);
 }
 
+.social-icon.is-placeholder {
+  cursor: default;
+  opacity: 0.7;
+}
+
 /* ======= 右侧导航 ======= */
 .footer-nav {
   display: flex;
@@ -296,7 +318,8 @@
   line-height: 1;
 }
 
-.nav-col ul a {
+.nav-col ul a,
+.nav-col ul span {
   font-size: 13px;
   color: #666;
   text-decoration: none;
@@ -317,23 +340,39 @@
 
 .footer-bottom {
   padding: 16px 0 24px;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
+  gap: 24px;
 }
 
 .copyright {
   font-size: 11px;
   color: #999;
   letter-spacing: 0.02em;
+  justify-self: start;
+}
+
+.icp-record {
+  color: #777;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.icp-record:hover {
+  color: #111;
 }
 
 .footer-legal {
   display: flex;
   gap: 20px;
+  justify-self: end;
 }
 
-.footer-legal a {
+.footer-legal a,
+.footer-legal span {
   font-size: 11px;
   color: #999;
   text-decoration: none;
@@ -368,6 +407,17 @@
   .footer-nav {
     flex-wrap: wrap;
     gap: 24px;
+  }
+
+  .footer-bottom {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+  }
+
+  .footer-legal {
+    justify-content: center;
   }
 }
 </style>
