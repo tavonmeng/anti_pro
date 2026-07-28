@@ -107,6 +107,7 @@ class WebsiteIpGeoResolveResult:
     unavailable: int
     failed: int
     updated_events: int
+    evicted_cache_entries: int
 
 
 class WebsiteVisitDebouncer:
@@ -349,6 +350,7 @@ class WebsiteAnalyticsService:
                 unavailable=0,
                 failed=0,
                 updated_events=0,
+                evicted_cache_entries=0,
             )
 
         cache_result = await db.execute(
@@ -360,11 +362,13 @@ class WebsiteAnalyticsService:
         resolved = 0
         unavailable = 0
         failed = 0
+        new_cache_records: list[WebsiteIpGeoCache] = []
 
         for ip_address in selected_ips:
             cached = cache_by_ip.get(ip_address)
             if cached:
                 cache_hits += 1
+                cached.updated_at = current_time
                 continue
 
             result = lookup.lookup(ip_address)
@@ -380,14 +384,35 @@ class WebsiteAnalyticsService:
                 created_at=current_time,
                 updated_at=current_time,
             )
-            db.add(cached)
             cache_by_ip[ip_address] = cached
+            new_cache_records.append(cached)
             if result.status == "done":
                 resolved += 1
             elif result.status == "unavailable":
                 unavailable += 1
             else:
                 failed += 1
+
+        cache_count = int(
+            (await db.execute(select(func.count()).select_from(WebsiteIpGeoCache))).scalar_one()
+            or 0
+        )
+        cache_limit = max(1, settings.IP_GEO_CACHE_LIMIT)
+        overflow = max(0, cache_count + len(new_cache_records) - cache_limit)
+        evicted_cache_entries = 0
+        if overflow:
+            eviction_result = await db.execute(
+                select(WebsiteIpGeoCache)
+                .order_by(WebsiteIpGeoCache.updated_at.asc(), WebsiteIpGeoCache.id.asc())
+                .limit(overflow)
+            )
+            for stale_cache in eviction_result.scalars().all():
+                await db.delete(stale_cache)
+                evicted_cache_entries += 1
+
+        available_slots = max(0, cache_limit - cache_count + evicted_cache_entries)
+        for cache_record in new_cache_records[:available_slots]:
+            db.add(cache_record)
 
         selected_ip_set = set(selected_ips)
         updated_events = 0
@@ -410,6 +435,7 @@ class WebsiteAnalyticsService:
             unavailable=unavailable,
             failed=failed,
             updated_events=updated_events,
+            evicted_cache_entries=evicted_cache_entries,
         )
 
     async def _insert_unique(

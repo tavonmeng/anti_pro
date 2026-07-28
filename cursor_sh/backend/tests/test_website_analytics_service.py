@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.database import Base
+from app.config import settings
 from app.models.website_analytics import WebsiteIpGeoCache, WebsiteVisitEvent
 from app.services.ip_geolocation_service import IpGeoResult
 from app.services.website_analytics_service import (
@@ -157,3 +158,34 @@ async def test_manual_geo_resolution_deduplicates_today_and_reuses_cache(analyti
     events = events_result.scalars().all()
     assert all(event.geo_status == "done" for event in events)
     assert all(event.province == "广东省" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_manual_geo_resolution_evicts_least_recent_cache_when_full(analytics_db, monkeypatch):
+    monkeypatch.setattr(settings, "IP_GEO_CACHE_LIMIT", 1)
+    service = WebsiteAnalyticsService(debounce_seconds=10)
+    now = datetime(2026, 7, 9, 10, 0, 0)
+    geo = FakeIpGeolocation(IpGeoResult("中国", "广东省", "深圳市", "done"))
+
+    await service.track_visit(
+        analytics_db,
+        WebsiteVisitInput(path="/", ip_address="113.118.113.77"),
+        now=now,
+    )
+    await service.resolve_today_unresolved_geos(analytics_db, geolocation=geo, now=now)
+
+    await service.track_visit(
+        analytics_db,
+        WebsiteVisitInput(path="/cases", ip_address="8.8.8.8"),
+        now=now + timedelta(seconds=11),
+    )
+    result = await service.resolve_today_unresolved_geos(
+        analytics_db,
+        geolocation=geo,
+        now=now + timedelta(seconds=11),
+    )
+
+    assert result.evicted_cache_entries == 1
+    cache_result = await analytics_db.execute(select(WebsiteIpGeoCache))
+    cache = cache_result.scalars().all()
+    assert [item.ip_address for item in cache] == ["8.8.8.8"]

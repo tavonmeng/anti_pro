@@ -184,6 +184,7 @@ class Settings(BaseSettings):
     # 官网访问 IP 属地（离线 ip2region 数据库）
     IP_GEO_DATABASE_PATH: str = "data/ip2region_v4.xdb"
     IP_GEO_MANUAL_BATCH_LIMIT: int = 200
+    IP_GEO_CACHE_LIMIT: int = 10_000
     
     @compat_validator('CORS_ORIGINS')
     @classmethod

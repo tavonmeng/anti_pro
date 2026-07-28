@@ -184,7 +184,8 @@ const resolveTodayUnresolvedGeos = async () => {
     const result = await businessDataApi.resolveTodayUnresolvedVisitGeos()
     ElMessage.success(
       `已处理 ${result.processed_unique_ips}/${result.candidate_unique_ips} 个唯一 IP：`
-      + `缓存 ${result.cache_hits}，解析 ${result.resolved}，未识别 ${result.unavailable}`,
+      + `缓存 ${result.cache_hits}，解析 ${result.resolved}，未识别 ${result.unavailable}`
+      + (result.evicted_cache_entries ? `，淘汰旧缓存 ${result.evicted_cache_entries}` : ''),
     )
     await loadWebsiteVisits()
   } catch (error: any) {

@@ -162,6 +162,7 @@ export interface WebsiteIpGeoResolveResult {
   unavailable: number
   failed: number
   updated_events: number
+  evicted_cache_entries: number
 }
 
 export const authApi = {

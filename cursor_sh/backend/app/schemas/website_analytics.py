@@ -22,6 +22,7 @@ class WebsiteIpGeoResolveResponse(BaseModel):
     unavailable: int
     failed: int
     updated_events: int
+    evicted_cache_entries: int
 
 
 class WebsiteVisitTotalsResponse(BaseModel):
