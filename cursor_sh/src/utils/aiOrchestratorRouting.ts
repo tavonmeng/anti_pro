@@ -10,11 +10,14 @@ export type RouterAgent =
   | 'general_agent'
 
 export type RouterState = {
-  current_agent: RouterAgent
+  current_agent: RouterAgent | null
   stage: string
 }
 
 export const getRouterStateForMode = (mode: AssistantMode): RouterState => {
+  if (mode === null) {
+    return { current_agent: null, stage: 'intent_routing' }
+  }
   if (mode === 'order_query') {
     return { current_agent: 'order_agent', stage: 'order_query' }
   }

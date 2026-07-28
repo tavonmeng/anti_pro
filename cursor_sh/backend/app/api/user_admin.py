@@ -26,7 +26,7 @@ logger = get_module_logger("auth")
 
 
 def _user_site_base_url() -> str:
-    return (settings.USER_SITE_BASE_URL or "https://uniquevisionx.com").rstrip("/")
+    return (settings.USER_SITE_BASE_URL or "https://www.uniquevisionx.com").rstrip("/")
 
 
 def _user_invite_url(token: str) -> str:

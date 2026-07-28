@@ -2,8 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { getModeForTargetAgent, getRouterStateForMode } from '../aiOrchestratorRouting'
 
 describe('aiOrchestratorRouting', () => {
-  it('starts a blank conversation in the main brief flow', () => {
+  it('starts a blank conversation without preselecting a subagent', () => {
     expect(getRouterStateForMode(null)).toEqual({
+      current_agent: null,
+      stage: 'intent_routing',
+    })
+  })
+
+  it('keeps an established requirement conversation in the brief flow', () => {
+    expect(getRouterStateForMode('order_create')).toEqual({
       current_agent: 'brief_agent',
       stage: 'brief_building',
     })

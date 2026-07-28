@@ -16,6 +16,8 @@ logger = get_module_logger("ai")
 AGENT_CONTEXT_MAX_MESSAGES = 8
 AGENT_CONTEXT_MAX_MESSAGE_CHARS = 700
 AGENT_CONTEXT_SUMMARY_CHARS = 620
+AGENT_CONTEXT_PRESERVE_LATEST_MESSAGES = 2
+AGENT_CONTEXT_WINDOW_VERSION = 2
 
 
 def _clean_text(value: Any) -> str:
@@ -29,9 +31,10 @@ def _message_fingerprint(role: str, content: str) -> str:
 
 def empty_agent_context_window() -> dict[str, Any]:
     return {
-        "version": 1,
+        "version": AGENT_CONTEXT_WINDOW_VERSION,
         "max_messages": AGENT_CONTEXT_MAX_MESSAGES,
         "max_chars_per_message": AGENT_CONTEXT_MAX_MESSAGE_CHARS,
+        "preserve_latest_messages": AGENT_CONTEXT_PRESERVE_LATEST_MESSAGES,
         "messages": [],
     }
 
@@ -49,6 +52,7 @@ def ensure_agent_context_window(state: dict[str, Any] | None) -> dict[str, Any]:
     window.setdefault("version", 1)
     window.setdefault("max_messages", AGENT_CONTEXT_MAX_MESSAGES)
     window.setdefault("max_chars_per_message", AGENT_CONTEXT_MAX_MESSAGE_CHARS)
+    window.setdefault("preserve_latest_messages", AGENT_CONTEXT_PRESERVE_LATEST_MESSAGES)
     return next_state
 
 
@@ -56,7 +60,15 @@ def _limit_context_text(text: str, max_chars: int = AGENT_CONTEXT_MAX_MESSAGE_CH
     text = _clean_text(text)
     if len(text) <= max_chars:
         return text
-    return text[: max_chars - 3].rstrip(" ，,；;。") + "..."
+    marker = "\n……（中间内容已压缩）……\n"
+    available_chars = max(0, max_chars - len(marker))
+    head_size = available_chars // 2
+    tail_size = available_chars - head_size
+    return (
+        f"{text[:head_size].rstrip()}\n"
+        "……（中间内容已压缩）……\n"
+        f"{text[-tail_size:].lstrip()}"
+    )
 
 
 async def _summarize_long_context_message(role: str, content: str) -> str:
@@ -102,6 +114,7 @@ def _find_existing_window_message(
         for item in messages:
             if item.get("source_message_id") == source_message_id:
                 return item
+        return None
     for item in messages:
         if item.get("fingerprint") == fingerprint:
             return item
@@ -124,51 +137,115 @@ async def append_agent_context_message(
     window = next_state["agent_context_window"]
     messages = window.setdefault("messages", [])
     fingerprint = _message_fingerprint(role, raw_content)
-    existing = _find_existing_window_message(
-        messages,
-        source_message_id=source_message_id,
-        fingerprint=fingerprint,
+    existing = (
+        _find_existing_window_message(
+            messages,
+            source_message_id=source_message_id,
+            fingerprint=fingerprint,
+        )
+        if source_message_id
+        else None
     )
     if existing:
         return next_state, str(existing.get("content") or "")
 
-    compacted = len(raw_content) > AGENT_CONTEXT_MAX_MESSAGE_CHARS
-    context_content = (
-        await _summarize_long_context_message(role, raw_content)
-        if compacted
-        else _limit_context_text(raw_content)
-    )
     messages.append(
         {
             "role": role,
-            "content": context_content,
+            "content": raw_content,
             "source_message_id": source_message_id,
             "fingerprint": fingerprint,
-            "compacted": compacted,
+            "compacted": False,
             "original_chars": len(raw_content),
         }
     )
     del messages[:-AGENT_CONTEXT_MAX_MESSAGES]
-    return next_state, context_content
+
+    compact_before = max(0, len(messages) - AGENT_CONTEXT_PRESERVE_LATEST_MESSAGES)
+    for item in messages[:compact_before]:
+        if item.get("compacted"):
+            continue
+        original_chars = int(item.get("original_chars") or len(str(item.get("content") or "")))
+        if original_chars <= AGENT_CONTEXT_MAX_MESSAGE_CHARS:
+            continue
+        item["content"] = await _summarize_long_context_message(
+            str(item.get("role") or ""),
+            str(item.get("content") or ""),
+        )
+        item["compacted"] = True
+
+    window["version"] = AGENT_CONTEXT_WINDOW_VERSION
+    window["preserve_latest_messages"] = AGENT_CONTEXT_PRESERVE_LATEST_MESSAGES
+    return next_state, raw_content
 
 
 async def sync_agent_context_window_from_history(
     state: dict[str, Any] | None,
     history: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
+    """Rebuild the bounded context window from the authoritative request history.
+
+    A context window is an ordered suffix, not a deduplicated set. Repeated
+    replies such as two separate ``user: 没有`` messages must remain separate
+    because they can answer different assistant questions.
+    """
     next_state = ensure_agent_context_window(state)
     recent = [
         item
-        for item in (history or [])[-AGENT_CONTEXT_MAX_MESSAGES:]
+        for item in (history or [])
         if item.get("role") in {"user", "assistant"} and str(item.get("content") or "").strip()
-    ]
-    for item in recent:
-        next_state, _ = await append_agent_context_message(
-            next_state,
-            role=str(item.get("role") or ""),
-            content=str(item.get("content") or ""),
-            source_message_id=str(item.get("client_message_id") or item.get("id") or "") or None,
+    ][-AGENT_CONTEXT_MAX_MESSAGES:]
+    if not recent:
+        return next_state
+
+    existing_messages = list((next_state.get("agent_context_window") or {}).get("messages") or [])
+    rebuilt_messages: list[dict[str, Any]] = []
+    preserve_from = max(0, len(recent) - AGENT_CONTEXT_PRESERVE_LATEST_MESSAGES)
+    for index, item in enumerate(recent):
+        role = str(item.get("role") or "")
+        raw_content = str(item.get("content") or "").strip()
+        source_message_id = str(item.get("client_message_id") or item.get("id") or "") or None
+        fingerprint = _message_fingerprint(role, raw_content)
+        preserve_full = index >= preserve_from
+        compacted = not preserve_full and len(raw_content) > AGENT_CONTEXT_MAX_MESSAGE_CHARS
+        existing = _find_existing_window_message(
+            existing_messages,
+            source_message_id=source_message_id,
+            fingerprint=fingerprint,
         )
+        can_reuse = bool(
+            existing
+            and existing.get("fingerprint") == fingerprint
+            and bool(existing.get("compacted")) == compacted
+        )
+        context_content = (
+            raw_content
+            if preserve_full
+            else (
+                str(existing.get("content") or "")
+                if can_reuse
+                else (
+                    await _summarize_long_context_message(role, raw_content)
+                    if compacted
+                    else _limit_context_text(raw_content)
+                )
+            )
+        )
+        rebuilt_messages.append(
+            {
+                "role": role,
+                "content": context_content,
+                "source_message_id": source_message_id,
+                "fingerprint": fingerprint,
+                "compacted": compacted,
+                "original_chars": len(raw_content),
+            }
+        )
+
+    window = next_state["agent_context_window"]
+    window["version"] = AGENT_CONTEXT_WINDOW_VERSION
+    window["preserve_latest_messages"] = AGENT_CONTEXT_PRESERVE_LATEST_MESSAGES
+    window["messages"] = rebuilt_messages
     return next_state
 
 
@@ -190,10 +267,25 @@ def agent_context_messages(
     if messages:
         return messages[-AGENT_CONTEXT_MAX_MESSAGES:]
 
-    return [
-        {"role": item["role"], "content": _limit_context_text(str(item.get("content") or ""))}
-        for item in (fallback_history or [])[-AGENT_CONTEXT_MAX_MESSAGES:]
+    fallback_messages = [
+        {
+            "role": item["role"],
+            "content": str(item.get("content") or "").strip(),
+        }
+        for item in (fallback_history or [])
         if item.get("role") in {"user", "assistant"} and item.get("content")
+    ][-AGENT_CONTEXT_MAX_MESSAGES:]
+    preserve_from = max(0, len(fallback_messages) - AGENT_CONTEXT_PRESERVE_LATEST_MESSAGES)
+    return [
+        {
+            "role": item["role"],
+            "content": (
+                item["content"]
+                if index >= preserve_from
+                else _limit_context_text(item["content"])
+            ),
+        }
+        for index, item in enumerate(fallback_messages)
     ]
 
 
@@ -213,4 +305,4 @@ def latest_user_context_message(
         content = str(item.get("content") or "").strip()
         if content:
             return content
-    return _limit_context_text(fallback_message)
+    return str(fallback_message or "").strip()

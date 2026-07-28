@@ -247,6 +247,10 @@
                     </div>
                   </div>
                 </div>
+                <BriefProgressPanel
+                  v-if="shouldShowBriefProgress(msg, index)"
+                  :agent-state="agentState"
+                />
                 <span class="msg-time ai-time" v-if="msg.timestamp">{{ msg.timestamp }}</span>
               </div>
             </template>
@@ -301,94 +305,107 @@
         <div
           class="input-area pill-style"
           data-onboarding-target="ai-chat-input"
-          :class="{ 'is-voice-recording': isRecording || isTranscribing }"
+          :class="{
+            'is-voice-recording': isRecording || isTranscribing,
+            'is-choice-mode': hasComposerInteraction && !isRecording && !isTranscribing,
+          }"
         >
           <template v-if="!isRecording && !isTranscribing">
-            <!-- 已上传文件预览条 -->
-            <div v-if="uploadedFiles.length > 0" class="uploaded-files-strip">
-              <div v-for="(file, idx) in uploadedFiles" :key="idx" class="uploaded-file-chip">
-                <img
-                  v-if="file.isImage && file.url && !file.previewFailed"
-                  :src="file.url"
-                  class="file-thumb"
-                  @error="markPreviewFailed(file)"
-                />
-                <el-icon v-else class="file-icon-placeholder"><PictureRounded /></el-icon>
-                <span class="file-name">{{ file.name }}</span>
-                <span class="file-status">待发送</span>
-                <span class="file-remove" @click="removeUploadedFile(idx)">&times;</span>
-              </div>
-              <span class="upload-more-hint">可继续上传更多文件或图片，完成后点击发送</span>
-            </div>
+            <AgentInteractionComposer
+              v-if="hasComposerInteraction"
+              :interaction="agentInteraction"
+              :disabled="isLoading || isTyping || isUploadingFiles"
+              @submit="handleAgentInteractionSubmit"
+              @skip="handleAgentInteractionSkip"
+            />
 
-            <div class="composer-main-row">
-              <!-- Left icons mock -->
-              <div class="left-tools">
-                <el-icon class="tool-icon" @click="triggerGenericFileUpload" title="上传参考文件（PDF、Word、压缩包等）"><CirclePlusFilled /></el-icon>
-                <el-icon class="tool-icon" @click="triggerFileUpload" title="上传现场实拍图或参考文件"><PictureRounded /></el-icon>
-                <input
-                  type="file"
-                  ref="fileInputRef"
-                  multiple
-                  :accept="supportingFileAccept"
-                  style="display: none;"
-                  @change="handleFileSelected"
-                />
-                <input
-                  type="file"
-                  ref="genericFileInputRef"
-                  multiple
-                  :accept="supportingFileAccept"
-                  style="display: none;"
-                  @change="handleFileSelected"
-                />
+            <template v-else>
+              <!-- 已上传文件预览条 -->
+              <div v-if="uploadedFiles.length > 0" class="uploaded-files-strip">
+                <div v-for="(file, idx) in uploadedFiles" :key="idx" class="uploaded-file-chip">
+                  <img
+                    v-if="file.isImage && file.url && !file.previewFailed"
+                    :src="file.url"
+                    class="file-thumb"
+                    @error="markPreviewFailed(file)"
+                  />
+                  <el-icon v-else class="file-icon-placeholder"><PictureRounded /></el-icon>
+                  <span class="file-name">{{ file.name }}</span>
+                  <span class="file-status">待发送</span>
+                  <span class="file-remove" @click="removeUploadedFile(idx)">&times;</span>
+                </div>
+                <span class="upload-more-hint">可继续上传更多文件或图片，完成后点击发送</span>
               </div>
 
-              <textarea
-                ref="textareaRef"
-                v-model="inputMsg"
-                placeholder="描述您的需求，或直接输入问题..."
-                class="chat-native-textarea"
-                @input="adjustTextareaHeight"
-                @keydown.enter="handleEnterKey"
-                @compositionstart="isComposing = true"
-                @compositionend="isComposing = false"
-                :disabled="isLoading || isTyping || isRecording"
-                @focus="handleInputFocus"
-                @blur="handleInputBlur"
-                rows="1"
-              ></textarea>
-              
-              <!-- Right tools & send -->
-              <div class="right-tools">
-                <!-- 语音输入按钮 -->
-                <button
-                  v-if="ENABLE_VOICE_INPUT"
-                  class="voice-btn"
-                  :class="{ recording: isRecording }"
-                  @click="toggleVoiceInput"
-                  :title="isRecording ? '停止录音' : '语音输入'"
-                >
-                  <span v-if="isRecording" class="rec-pulse"></span>
-                  <svg v-if="!isRecording" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5z"/>
-                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-                  </svg>
-                  <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                    <rect x="6" y="6" width="12" height="12" rx="2"/>
-                  </svg>
-                </button>
+              <div class="composer-main-row">
+                <!-- Left icons mock -->
+                <div class="left-tools">
+                  <el-icon class="tool-icon" @click="triggerGenericFileUpload" title="上传参考文件（PDF、Word、压缩包等）"><CirclePlusFilled /></el-icon>
+                  <el-icon class="tool-icon" @click="triggerFileUpload" title="上传现场实拍图或参考文件"><PictureRounded /></el-icon>
+                  <input
+                    type="file"
+                    ref="fileInputRef"
+                    multiple
+                    :accept="supportingFileAccept"
+                    style="display: none;"
+                    @change="handleFileSelected"
+                  />
+                  <input
+                    type="file"
+                    ref="genericFileInputRef"
+                    multiple
+                    :accept="supportingFileAccept"
+                    style="display: none;"
+                    @change="handleFileSelected"
+                  />
+                </div>
 
-                <button
-                  class="stitch-send-btn"
-                  :class="{ disabled: isLoading || isTyping || isUploadingFiles || (!inputMsg.trim() && uploadedFiles.length === 0) }"
-                  @click="sendMessage"
-                >
-                  <span>发送</span>
-                  <el-icon><Top /></el-icon>
-                </button>
+                <textarea
+                  ref="textareaRef"
+                  v-model="inputMsg"
+                  :placeholder="composerPlaceholder"
+                  class="chat-native-textarea"
+                  @input="adjustTextareaHeight"
+                  @keydown.enter="handleEnterKey"
+                  @compositionstart="isComposing = true"
+                  @compositionend="isComposing = false"
+                  :disabled="isLoading || isTyping || isRecording"
+                  @focus="handleInputFocus"
+                  @blur="handleInputBlur"
+                  rows="1"
+                ></textarea>
+
+                <!-- Right tools & send -->
+                <div class="right-tools">
+                  <!-- 语音输入按钮 -->
+                  <button
+                    v-if="ENABLE_VOICE_INPUT"
+                    class="voice-btn"
+                    :class="{ recording: isRecording }"
+                    @click="toggleVoiceInput"
+                    :title="isRecording ? '停止录音' : '语音输入'"
+                  >
+                    <span v-if="isRecording" class="rec-pulse"></span>
+                    <svg v-if="!isRecording" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                      <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5z"/>
+                      <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                    <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                      <rect x="6" y="6" width="12" height="12" rx="2"/>
+                    </svg>
+                  </button>
+
+                  <button
+                    class="stitch-send-btn"
+                    :class="{ disabled: isLoading || isTyping || isUploadingFiles || (!inputMsg.trim() && uploadedFiles.length === 0) }"
+                    @click="sendMessage"
+                  >
+                    <span>发送</span>
+                    <el-icon><Top /></el-icon>
+                  </button>
+                </div>
               </div>
-            </div>
+            </template>
           </template>
 
           <template v-else>
@@ -461,6 +478,8 @@ import {
 import { getLatestEnterpriseStatus } from '@/utils/enterpriseGuard'
 import { formatServerMonthDayTime, formatServerShortTime } from '@/utils/time'
 import OrderConfirmationDialog from '@/components/OrderConfirmationDialog.vue'
+import BriefProgressPanel from '@/components/BriefProgressPanel.vue'
+import AgentInteractionComposer from '@/components/AgentInteractionComposer.vue'
 
 // 语音输入开关，通过 .env 文件配置
 const ENABLE_VOICE_INPUT = import.meta.env.VITE_ENABLE_VOICE_INPUT === 'true'
@@ -876,6 +895,7 @@ type ConversationStateSnapshot = {
   businessType: string
   inlineFormData: Record<string, string> | null
   agentState?: Record<string, any> | null
+  agentInteraction?: AgentInteractionState | null
   draftSavedOrderId: string | null
   showConfirmation: boolean
   confirmOrderNumber: string
@@ -1115,10 +1135,20 @@ const _mediaFormFields = [
 
 const formFields = isMediaMode ? _mediaFormFields : _brandFormFields
 
+type AgentInteractionState = {
+  type: 'text' | 'single_choice' | 'multiple_choice' | 'number' | 'date'
+  question_id?: string
+  field?: string
+  placeholder?: string
+  options?: Array<{ id: string; label: string; value: string; group?: string }>
+  allow_other?: boolean
+}
+
 const selectedMode = ref<string | null>(null)
 const businessType = ref<string>('ai_3d_custom') // ai_3d_custom / video_purchase / digital_art
 const messages = ref<any[]>([])
 const inputMsg = ref('')
+const agentInteraction = ref<AgentInteractionState | null>(null)
 const isLoading = ref(false)
 const isTyping = ref(false) // AI 正在逐字输出中
 const extractLoading = ref(false) // 信息提取整理中
@@ -1235,6 +1265,36 @@ const adjustInlineEditHeight = () => {
   ta.style.height = Math.min(ta.scrollHeight, 220) + 'px'
 }
 
+const hasComposerInteraction = computed(() => {
+  const type = agentInteraction.value?.type
+  if (type === 'date') return true
+  return (
+    (type === 'single_choice' || type === 'multiple_choice')
+      && Array.isArray(agentInteraction.value?.options)
+      && agentInteraction.value.options.length > 0
+  )
+})
+
+const composerPlaceholder = computed(() => {
+  const placeholder = agentInteraction.value?.placeholder
+  return typeof placeholder === 'string' && placeholder.trim()
+    ? placeholder
+    : '描述您的需求，或直接输入问题...'
+})
+
+const handleAgentInteractionSubmit = async (value: string) => {
+  const answer = value.trim()
+  if (!answer || isLoading.value || isTyping.value || isUploadingFiles.value) return
+  inputMsg.value = answer
+  await nextTick()
+  await sendMessage()
+}
+
+const handleAgentInteractionSkip = () => {
+  agentInteraction.value = null
+  nextTick(() => focusComposerInput())
+}
+
 const setInlineEditTextareaRef = (el: Element | null) => {
   inlineEditTextareaRef.value = el as HTMLTextAreaElement | null
 }
@@ -1327,6 +1387,7 @@ const startNewSession = () => {
   businessType.value = 'ai_3d_custom'
   inlineFormData.value = null
   agentState.value = null
+  agentInteraction.value = null
   draftSavedOrderId.value = null
   showConfirmation.value = false
   confirmOrderNumber.value = ''
@@ -1358,6 +1419,25 @@ const displayedMessages = computed(() => {
     return false
   })
 })
+
+const latestAssistantMessageIndex = computed(() => {
+  for (let index = displayedMessages.value.length - 1; index >= 0; index -= 1) {
+    const message = displayedMessages.value[index]
+    if (
+      message?.role === 'assistant'
+      && !message.isContextCarryOver
+      && !message.isThinkingStatus
+      && String(message.content || '').trim()
+    ) {
+      return index
+    }
+  }
+  return -1
+})
+
+const shouldShowBriefProgress = (message: any, index: number) => (
+  message?.role === 'assistant' && index === latestAssistantMessageIndex.value
+)
 
 const hasVisibleThinkingStatus = computed(() => {
   return messages.value.some(m => m.role === 'assistant' && m.isThinkingStatus)
@@ -1690,6 +1770,7 @@ const captureConversationState = (): ConversationStateSnapshot => ({
   businessType: businessType.value,
   inlineFormData: inlineFormData.value ? clonePlain(inlineFormData.value) : null,
   agentState: agentState.value ? clonePlain(agentState.value) : null,
+  agentInteraction: agentInteraction.value ? clonePlain(agentInteraction.value) : null,
   draftSavedOrderId: draftSavedOrderId.value,
   showConfirmation: showConfirmation.value,
   confirmOrderNumber: confirmOrderNumber.value,
@@ -1719,6 +1800,7 @@ const restoreConversationState = async (snapshot?: ConversationStateSnapshot) =>
   businessType.value = snapshot?.businessType || 'ai_3d_custom'
   inlineFormData.value = snapshot?.inlineFormData ? clonePlain(snapshot.inlineFormData) : null
   agentState.value = snapshot?.agentState ? clonePlain(snapshot.agentState) : null
+  agentInteraction.value = snapshot?.agentInteraction ? clonePlain(snapshot.agentInteraction) : null
   draftSavedOrderId.value = snapshot?.draftSavedOrderId ?? null
   showConfirmation.value = snapshot?.showConfirmation ?? false
   confirmOrderNumber.value = snapshot?.confirmOrderNumber || ''
@@ -1742,6 +1824,7 @@ const restoreSavedSessionState = async (session: SavedSession) => {
   businessType.value = snapshot?.businessType || session.businessType || agentMeta.businessType || 'ai_3d_custom'
   inlineFormData.value = snapshot?.inlineFormData ? clonePlain(snapshot.inlineFormData) : null
   agentState.value = snapshot?.agentState ? clonePlain(snapshot.agentState) : null
+  agentInteraction.value = snapshot?.agentInteraction ? clonePlain(snapshot.agentInteraction) : null
   draftSavedOrderId.value = snapshot?.draftSavedOrderId ?? null
   showConfirmation.value = snapshot?.showConfirmation ?? false
   confirmOrderNumber.value = snapshot?.confirmOrderNumber || ''
@@ -2148,6 +2231,13 @@ const switchToOrderCreate = async (type: string = 'ai_3d_custom') => {
 }
 
 const getRouterAgentState = () => {
+  const persistedAgent = agentState.value?.current_agent
+  if (persistedAgent) {
+    return {
+      current_agent: persistedAgent,
+      stage: agentState.value?.stage || 'intent_routing',
+    }
+  }
   return getRouterStateForMode(selectedMode.value)
 }
 
@@ -2158,7 +2248,7 @@ const requestOrchestratorRoute = async (
 ) => {
   const historyMsgs = messages.value.slice(0, messages.value.length - 1)
     .filter(m => m.role === 'user' || m.role === 'assistant')
-    .map(m => ({ role: m.role, content: m.content }))
+    .map(m => ({ client_message_id: m.client_message_id, role: m.role, content: m.content }))
   const response = await fetch('/ai/orchestrate', {
     method: 'POST',
     headers: getAuthHeaders(),
@@ -2184,7 +2274,7 @@ const dispatchToAgent = async (
   attachments: UploadedFile[] = [],
   controlAction?: string,
 ) => {
-  if (['handoff_requested', 'finish_brief_now', 'ready_to_extract'].includes(controlAction || '')) {
+  if (['handoff_requested', 'finish_brief_now'].includes(controlAction || '')) {
     selectedMode.value = 'order_create'
     emit('mode-change', 'order_create')
     logger.logAction('AI', 'orchestrator_control_action_detected', { intent, targetAgent, controlAction, sessionId: session_id.value })
@@ -2208,12 +2298,12 @@ const dispatchToAgent = async (
   }
 
   if (targetAgent === 'creative_direction_agent' || intent === 'creative_direction') {
-    await handleCreativeDirection(messageContent, attachments)
+    await handleCreativeDirection(messageContent, userMessageId, attachments)
     return
   }
 
   if (targetAgent === 'creative_diagnosis_agent' || intent === 'creative_diagnosis') {
-    await handleCreativeDiagnosis(messageContent, attachments)
+    await handleCreativeDiagnosis(messageContent, userMessageId, attachments)
     return
   }
 
@@ -2355,6 +2445,7 @@ const sendMessage = async () => {
 
   const messageContent = buildUserMessageContent(userText, pendingFiles)
   const stateBeforeSend = captureConversationState()
+  agentInteraction.value = null
   const userMessageId = createMessageId('user')
   messages.value.push({
     client_message_id: userMessageId,
@@ -2402,7 +2493,7 @@ const handleOrderQuery = async (userText: string) => {
   try {
     const historyMsgs = messages.value
       .filter(m => m.role === 'user' || m.role === 'assistant')
-      .map(m => ({ role: m.role, content: m.content }))
+      .map(m => ({ client_message_id: m.client_message_id, role: m.role, content: m.content }))
     const response = await fetch('/ai/query-orders', {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -2441,7 +2532,7 @@ const handleBusinessIntro = async (userText: string) => {
   try {
     const historyMsgs = messages.value
       .filter(m => m.role === 'user' || m.role === 'assistant')
-      .map(m => ({ role: m.role, content: m.content }))
+      .map(m => ({ client_message_id: m.client_message_id, role: m.role, content: m.content }))
     const response = await fetch('/ai/business-intro', {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -2482,17 +2573,17 @@ const handleBusinessIntro = async (userText: string) => {
   }
 }
 
-// ===== 创意方向生成子 Agent：生成轻量草案后自然衔接回需求梳理 =====
-const handleCreativeDirection = async (userText: string, attachments: UploadedFile[] = []) => {
+// ===== 创意方向生成子 Agent：出稿后保持在方向讨论，确认后再回需求梳理 =====
+const handleCreativeDirection = async (userText: string, userMessageId?: string, attachments: UploadedFile[] = []) => {
   isLoading.value = true
   const assistantMessageId = createMessageId('assistant')
   const waitingText = '我正在进入创意方向构思，这一步会比普通问答更久一些，通常需要 1-2 分钟。先基于当前 Brief 做一轮完整思考，完成后会给您一版可讨论的方向草案。'
   const finalFallback = '这次创意方向思考时间还是过长了。我先保留当前 Brief，您可以稍后再试一次，或者继续补充屏幕参数、观看动线和现场素材，我会接着推进。'
 
   try {
-    const historyMsgs = messages.value
+    const historyMsgs = messages.value.slice(0, messages.value.length - 1)
       .filter(m => m.role === 'user' || m.role === 'assistant')
-      .map(m => ({ role: m.role, content: m.content }))
+      .map(m => ({ client_message_id: m.client_message_id, role: m.role, content: m.content }))
     messages.value.push({
       client_message_id: assistantMessageId,
       role: 'assistant',
@@ -2509,6 +2600,7 @@ const handleCreativeDirection = async (userText: string, attachments: UploadedFi
       body: JSON.stringify({
         session_id: session_id.value,
         message: userText,
+        user_message_id: userMessageId,
         history: historyMsgs,
         business_type: businessType.value,
         agent_state: agentState.value,
@@ -2532,19 +2624,20 @@ const handleCreativeDirection = async (userText: string, attachments: UploadedFi
   }
 }
 
-// ===== 创意评估子 Agent：完成专业判断后自然衔接回需求梳理 =====
-const handleCreativeDiagnosis = async (userText: string, attachments: UploadedFile[] = []) => {
+// ===== 创意评估子 Agent：保留评估上下文，下一轮再由 Router 决定去向 =====
+const handleCreativeDiagnosis = async (userText: string, userMessageId?: string, attachments: UploadedFile[] = []) => {
   isLoading.value = true
   try {
-    const historyMsgs = messages.value
+    const historyMsgs = messages.value.slice(0, messages.value.length - 1)
       .filter(m => m.role === 'user' || m.role === 'assistant')
-      .map(m => ({ role: m.role, content: m.content }))
+      .map(m => ({ client_message_id: m.client_message_id, role: m.role, content: m.content }))
     const response = await fetch('/ai/creative-diagnosis', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({
         session_id: session_id.value,
         message: userText,
+        user_message_id: userMessageId,
         history: historyMsgs,
         business_type: businessType.value,
         agent_state: agentState.value,
@@ -2556,11 +2649,11 @@ const handleCreativeDiagnosis = async (userText: string, attachments: UploadedFi
     if (data?.agent_state) agentState.value = data.agent_state
     selectedMode.value = 'order_create'
     emit('mode-change', 'order_create')
-    typewriterEffect(data.message || '我先完成了阶段性创意判断。接下来我们继续把 Brief 里的关键条件确认完整。')
+    typewriterEffect(data.message || '我先完成了这轮阶段性创意判断，您可以继续追问其中的判断依据或调整条件。')
   } catch (e) {
     messages.value.push({
       role: 'assistant',
-      content: '创意评估暂时不可用。我先保留当前方向，接下来继续确认这个方向落地所需的关键条件。',
+      content: '创意评估暂时不可用。我先保留当前方向，您可以稍后重试，或继续补充希望评估的条件。',
       timestamp: getCurrentTime()
     })
     void syncCurrentConversationToBackend()
@@ -2649,16 +2742,14 @@ const findAssistantMessage = (assistantMessageId?: string) => {
 }
 
 const applyCustomAiChatFinalState = async (data: any, replyContent: string, assistantMessageId?: string) => {
+  agentInteraction.value = data?.interaction || null
   if (data?.agent_state) {
     agentState.value = data.agent_state
   }
   const controlAction = data?.control_action || 'none'
   const isHumanHandoff = controlAction === 'handoff_requested' || Boolean(data?.handoff) || replyContent.includes(HUMAN_HANDOFF_MARKER)
-  const userMsgCount = messages.value.filter(m => m.role === 'user').length
   const shouldComplete = !isHumanHandoff && (
-    controlAction === 'ready_to_extract' ||
-    controlAction === 'finish_brief_now' ||
-    (replyContent.includes('【需求收集完成】') && userMsgCount >= 3)
+    controlAction === 'finish_brief_now'
   )
   const assistantMsg = findAssistantMessage(assistantMessageId)
 
@@ -2696,7 +2787,7 @@ const buildRequirementChatPayload = (
   const historyMessages = messages.value.slice(0, messages.value.length - 1)
   const formattedHistory = historyMessages
     .filter(m => m.role === 'user' || m.role === 'assistant')
-    .map(m => ({ role: m.role, content: m.content }))
+    .map(m => ({ client_message_id: m.client_message_id, role: m.role, content: m.content }))
 
   return {
     session_id: session_id.value,
@@ -4041,6 +4132,17 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
+.input-area.pill-style.is-choice-mode,
+.input-area.pill-style.is-choice-mode:focus-within {
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+  border-color: transparent;
+  border-radius: 20px;
+  background: transparent;
+  box-shadow: none;
+}
+
 .composer-quick-starts-shell {
   padding: 0 32px 10px;
   background: #ffffff;
@@ -4516,6 +4618,12 @@ const handleConfirmationDone = async (data: { email: string; phone: string }) =>
   .input-area.pill-style {
     border-radius: 18px;
     padding: 6px;
+  }
+
+  .input-area.pill-style.is-choice-mode,
+  .input-area.pill-style.is-choice-mode:focus-within {
+    padding: 0;
+    border-radius: 18px;
   }
 
   .left-tools {

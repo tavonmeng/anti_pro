@@ -13,15 +13,28 @@ from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_context import agent_context_messages, latest_user_context_message
 from app.services.ai_client import post_chat_completion
-from app.services.ai_brief_state import FIELD_LABELS, MEDIA_3D_BRIEF_FIELDS, load_agent_state, save_agent_state
+from app.services.ai_brief_state import (
+    FIELD_LABELS,
+    MEDIA_3D_BRIEF_FIELDS,
+    load_agent_state,
+    save_agent_state,
+    update_agent_state_from_message,
+)
 from app.services.ai_image_understanding import (
     IMAGE_CONTEXT_MARKER,
     UploadedAttachment,
-    append_image_context_to_message,
     build_image_feedback_reply_instruction,
     image_attachments,
-    summarize_uploaded_images,
 )
+from app.services.ai_material_understanding import enrich_message_with_uploaded_materials
+from app.services.ai_orchestrator import (
+    CREATIVE_DIRECTION_ITERATION_LIMIT,
+    advance_creative_direction_iteration,
+    creative_direction_iteration_count,
+    creative_direction_iteration_preview,
+    creative_direction_stage,
+)
+from app.services.ai_upload_context import BRIEF_DOCUMENT_CONTEXT_MARKER
 from app.utils.business_log import log_business_event
 from app.utils.dependencies import AnyUser, get_current_user_for_public_deployment
 from app.utils.log_setup import get_module_logger
@@ -37,6 +50,7 @@ _BOUNDARY_NOTE = (
 )
 
 _MINIMUM_CREATIVE_DIRECTION_FIELDS = {"theme_concept", "city_location", "audience_scene"}
+_EXIT_TRANSITION_MARKER = "这版方向经过几轮讨论"
 
 
 class CreativeDirectionRequest(BaseModel):
@@ -44,20 +58,43 @@ class CreativeDirectionRequest(BaseModel):
     message: str
     history: list = Field(default_factory=list)
     business_type: str = "ai_3d_custom"
+    user_message_id: str | None = None
     agent_state: dict[str, Any] | None = None
     attachments: list[UploadedAttachment] = Field(default_factory=list)
 
 
-async def _request_with_image_context(request: CreativeDirectionRequest) -> CreativeDirectionRequest:
-    image_context = await summarize_uploaded_images(
+async def _request_with_material_context(
+    request: CreativeDirectionRequest,
+    current_user: Any,
+) -> CreativeDirectionRequest:
+    material = await enrich_message_with_uploaded_materials(
         message=request.message,
         attachments=request.attachments,
+        user_id=_current_user_id(current_user),
     )
-    if not image_context:
+    if material.message == request.message:
         return request
-    return request.model_copy(
-        update={"message": append_image_context_to_message(request.message, image_context)}
+    return request.model_copy(update={"message": material.message})
+
+
+async def _request_with_updated_agent_state(
+    request: CreativeDirectionRequest,
+    current_user: Any,
+) -> CreativeDirectionRequest:
+    user_id = _current_user_id(current_user)
+    if not user_id:
+        return request
+    updated_state = await update_agent_state_from_message(
+        session_id=request.session_id,
+        user_id=user_id,
+        business_type=request.business_type,
+        message=request.message,
+        history=request.history,
+        source_message_id=request.user_message_id,
+        memory_hints={},
+        update_brief=False,
     )
+    return request.model_copy(update={"agent_state": updated_state})
 
 
 def _brief_state(request: CreativeDirectionRequest) -> dict[str, Any]:
@@ -99,7 +136,7 @@ def _build_low_confidence_fallback_message(request: CreativeDirectionRequest) ->
         "这版判断是低置信度的阶段性方向，缺少投放点位、屏幕结构、观看关系、主题/IP/品牌目标等信息，"
         "所以不会把它包装成完整创意方案。\n\n"
         f"{_BOUNDARY_NOTE}\n\n"
-        f"{_next_brief_question(request)}"
+        f"{_creative_closing_message(request)}"
     )
 
 
@@ -172,17 +209,36 @@ def _mark_pending_creative_direction(
     reason: str,
 ) -> dict[str, Any]:
     state = _agent_state_for_response(request, current_user)
+    if status == "awaiting_feedback":
+        state = advance_creative_direction_iteration(
+            state,
+            prompt_message=request.message,
+            reason=reason,
+        )
+        state["business_type"] = request.business_type
+        _save_response_agent_state(request, current_user, state)
+        return state
+
     now = beijing_now().isoformat()
-    state["pending_creative_direction"] = {
+    previous_pending = state.get("pending_creative_direction")
+    previous_pending = previous_pending if isinstance(previous_pending, dict) else {}
+    iteration_count = creative_direction_iteration_count(state)
+    pending = {
         "status": status,
         "source": "creative_direction_agent",
         "reason": reason,
         "prompt_message": (request.message or "")[:240],
+        "iteration_count": iteration_count,
+        "iteration_limit": CREATIVE_DIRECTION_ITERATION_LIMIT,
+        "exit_recommended": iteration_count >= CREATIVE_DIRECTION_ITERATION_LIMIT,
         "updated_at": now,
     }
+    if previous_pending.get("exit_recommended_at"):
+        pending["exit_recommended_at"] = previous_pending["exit_recommended_at"]
+    state["pending_creative_direction"] = pending
     state["pending_evaluation"] = None
     state["current_agent"] = "creative_direction_agent"
-    state["stage"] = "creative_direction"
+    state["stage"] = creative_direction_stage(status)
     state["business_type"] = request.business_type
     state["updated_at"] = now
     _save_response_agent_state(request, current_user, state)
@@ -225,9 +281,43 @@ def _next_brief_question(request: CreativeDirectionRequest) -> str:
     return "如果方便的话，也可以发一张现场实拍图、屏幕照片或参考素材，我可以基于真实环境把这个方向继续收细。"
 
 
+def _creative_feedback_question() -> str:
+    return "这版方向先作为讨论稿，您觉得哪些部分需要保留，哪些元素或表达还需要调整？"
+
+
+def _creative_exit_reminder() -> str:
+    return (
+        "这版方向经过几轮讨论，核心思路已经比较清晰了。先说明一下，它目前仍是一版创意方向草案，"
+        "还不是完整创意方案；具体方案需要策划专家结合品牌目标、屏幕参数、现场观看动线、现场素材、"
+        "审核规范、预算和制作周期继续深化。\n\n"
+        "我们可以先回到需求梳理，把这些落地条件补完整；如果当前方向还有一个必须调整的关键点，也可以继续告诉我。"
+    )
+
+
+def _creative_closing_message(request: CreativeDirectionRequest) -> str:
+    preview = creative_direction_iteration_preview(request.agent_state)
+    if preview["exit_recommended"]:
+        return ""
+    return _creative_feedback_question()
+
+
+def _finalize_creative_direction_message(request: CreativeDirectionRequest, message: str) -> str:
+    finalized = _ensure_boundary_note(message)
+    preview = creative_direction_iteration_preview(request.agent_state)
+    if not preview["exit_recommended"]:
+        return finalized
+    if _EXIT_TRANSITION_MARKER in finalized:
+        finalized = finalized.split(_EXIT_TRANSITION_MARKER, 1)[0].rstrip()
+    boundary_matches = list(re.finditer(r"(?:\*\*)?边界说明(?:\*\*)?\s*[:：]?", finalized))
+    if boundary_matches:
+        finalized = finalized[: boundary_matches[-1].start()].rstrip()
+    return f"{finalized}\n\n{_creative_exit_reminder()}".strip()
+
+
 def _current_message_for_prompt(request: CreativeDirectionRequest) -> str:
     current_message = latest_user_context_message(request.agent_state, request.message)
-    if IMAGE_CONTEXT_MARKER in (request.message or "") and IMAGE_CONTEXT_MARKER not in current_message:
+    material_markers = (IMAGE_CONTEXT_MARKER, BRIEF_DOCUMENT_CONTEXT_MARKER)
+    if any(marker in (request.message or "") and marker not in current_message for marker in material_markers):
         return request.message
     return current_message
 
@@ -250,7 +340,7 @@ def _build_fallback_message(request: CreativeDirectionRequest) -> str:
         "不会只停留在单一出屏奇观。\n"
         "- **传播价值**：重点制造前 3 秒的识别钩子和中段的拍摄高点，有利于形成现场围观、短视频传播和招商展示素材。\n\n"
         f"{_BOUNDARY_NOTE}\n\n"
-        f"{_next_brief_question(request)}"
+        f"{_creative_closing_message(request)}"
     )
 
 
@@ -324,7 +414,8 @@ def build_creative_direction_messages(request: CreativeDirectionRequest) -> list
         "recent_history": recent_history,
         "confirmed_brief": brief_values,
         "creative_direction_confidence": _creative_direction_confidence(request),
-        "next_brief_question": _next_brief_question(request),
+        "creative_feedback_question": _creative_feedback_question(),
+        "iteration_control": creative_direction_iteration_preview(request.agent_state),
     }
     system_prompt = (
         "你是 Unique Vision AI 的创意提案总监，专注裸眼3D户外媒体内容定制。"
@@ -339,7 +430,9 @@ def build_creative_direction_messages(request: CreativeDirectionRequest) -> list
         "如果 current_user_message 是要求新生成方向，输出结构为：**创意方向草案**，包含 **创意方向名称**、**计划概括**、"
         "**适合的原因**、**传播价值**，然后输出 **边界说明**。"
         "边界说明必须明确：这只是创意方向草案，不是完整创意方案；具体创意方案还需要策划专家结合品牌目标、屏幕参数、现场观看动线、现场素材、审核规范、预算周期等信息继续深化。"
-        "最后用一段自然口语承接到 next_brief_question，只问一个问题，不要使用英文 Brief 的返回标题、附件式表达或已记录式固定话术。"
+        "如果 iteration_control.exit_recommended=false，最后用一段自然口语邀请用户评价或修改这版方向，只提出一个需要用户回答的任务；"
+        "如果 iteration_control.exit_recommended=true，说明本次输出达到或超过第 5 轮，正文不要再提出开放式修改问题，也不要自行编写退出提示，系统会在末尾追加统一的软退出提醒。"
+        "不要在创意方向讨论尚未确认时转去追问下一个 Brief 缺口。可以参考 creative_feedback_question，但不要使用固定模板腔。"
         "不要输出【需求收集完成】；表单触发只由主 Brief 流程负责。"
     )
     image_feedback_instruction = build_image_feedback_reply_instruction(request.message)
@@ -352,6 +445,13 @@ def build_creative_direction_messages(request: CreativeDirectionRequest) -> list
             "- 不要按平台业务类型分类，不要输出 AI驱动3D OOH内容定制、数字艺术与沉浸式视觉设计、广告视觉与动态影像制作 这类服务清单式回答；"
             "也不要只介绍 Unique Vision AI 的能力范围。\n"
         )
+    if BRIEF_DOCUMENT_CONTEXT_MARKER in (request.message or ""):
+        system_prompt += (
+            "\n\n【基于上传文档做创意延展的约束】\n"
+            "- 必须读取 current_user_message 中的文档解析内容，并基于其中明确出现的项目目标、点位参数、"
+            "受众、主题、技术或审核条件生成或修改创意方向。\n"
+            "- 不要声称无法读取 PDF/DOC/DOCX，不要把文档内容当作用户已经确认的正式 Brief，也不要补写文档里没有的信息。\n"
+        )
     return [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
@@ -363,8 +463,9 @@ async def ai_creative_direction(
     request: CreativeDirectionRequest,
     current_user: AnyUser = Depends(get_current_user_for_public_deployment),
 ):
-    """Generate a creative direction draft, then return to Brief collection."""
-    request = await _request_with_image_context(request)
+    """Generate or revise a creative direction and keep the review conversation active."""
+    request = await _request_with_material_context(request, current_user)
+    request = await _request_with_updated_agent_state(request, current_user)
     if _is_image_based_direction_request(request) and not _has_image_context_available(request):
         if not image_attachments(request.attachments):
             next_state = _mark_pending_creative_direction(
@@ -391,8 +492,18 @@ async def ai_creative_direction(
         }
 
     if not settings.AI_API_KEY:
-        next_state = _clear_pending_creative_direction(request, current_user)
-        return {"message": _ensure_boundary_note(_build_fallback_message(request)), "return_to_brief": True, "agent_state": next_state}
+        message = _finalize_creative_direction_message(request, _build_fallback_message(request))
+        next_state = _mark_pending_creative_direction(
+            request,
+            current_user,
+            status="awaiting_feedback",
+            reason="creative_direction_fallback_generated",
+        )
+        return {
+            "message": message,
+            "return_to_brief": False,
+            "agent_state": next_state,
+        }
 
     try:
         data = await post_chat_completion(
@@ -405,9 +516,17 @@ async def ai_creative_direction(
             timeout=_creative_direction_timeout(),
             attempts=settings.AI_CREATIVE_DIRECTION_RETRY_ATTEMPTS,
         )
-        message = _ensure_boundary_note(data["choices"][0]["message"]["content"])
-        next_state = _clear_pending_creative_direction(request, current_user)
-        return {"message": message, "return_to_brief": True, "agent_state": next_state}
+        message = _finalize_creative_direction_message(
+            request,
+            data["choices"][0]["message"]["content"],
+        )
+        next_state = _mark_pending_creative_direction(
+            request,
+            current_user,
+            status="awaiting_feedback",
+            reason="creative_direction_generated",
+        )
+        return {"message": message, "return_to_brief": False, "agent_state": next_state}
     except HTTPException as exc:
         log_business_event(
             logger,
@@ -418,7 +537,18 @@ async def ai_creative_direction(
             status_code=exc.status_code,
             detail=str(exc.detail),
         )
-        return {"message": _ensure_boundary_note(_build_fallback_message(request)), "return_to_brief": True}
+        message = _finalize_creative_direction_message(request, _build_fallback_message(request))
+        next_state = _mark_pending_creative_direction(
+            request,
+            current_user,
+            status="awaiting_feedback",
+            reason="creative_direction_provider_fallback_generated",
+        )
+        return {
+            "message": message,
+            "return_to_brief": False,
+            "agent_state": next_state,
+        }
     except Exception as exc:
         log_business_event(
             logger,
@@ -428,4 +558,15 @@ async def ai_creative_direction(
             business_type=request.business_type,
             error=str(exc),
         )
-        return {"message": _ensure_boundary_note(_build_fallback_message(request)), "return_to_brief": True}
+        message = _finalize_creative_direction_message(request, _build_fallback_message(request))
+        next_state = _mark_pending_creative_direction(
+            request,
+            current_user,
+            status="awaiting_feedback",
+            reason="creative_direction_error_fallback_generated",
+        )
+        return {
+            "message": message,
+            "return_to_brief": False,
+            "agent_state": next_state,
+        }

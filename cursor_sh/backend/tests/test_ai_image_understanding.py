@@ -317,6 +317,7 @@ async def test_ai_chat_uses_current_image_context_without_needing_state_persiste
 
     async def fake_update_agent_state(**kwargs):
         captured_state["message"] = kwargs["message"]
+        captured_state["source_message_id"] = kwargs.get("source_message_id")
         return {
             "brief_state": {"fields": {}},
             "agent_context_window": {
@@ -342,6 +343,7 @@ async def test_ai_chat_uses_current_image_context_without_needing_state_persiste
         ai_module.ChatRequest(
             session_id="test-session",
             message="[已上传文件: scene.png]",
+            user_message_id="user-upload-1",
             history=[],
             attachments=[
                 image_module.UploadedAttachment(
@@ -358,6 +360,9 @@ async def test_ai_chat_uses_current_image_context_without_needing_state_persiste
     )
 
     assert "毛绒熊猫方向" in response["message"]
+    assert captured_state["source_message_id"] == "user-upload-1"
+    assert image_module.IMAGE_CONTEXT_MARKER in captured_state["message"]
+    assert "主视觉角色、毛绒材质" in captured_state["message"]
     assert "主视觉角色、毛绒材质" in captured_state["llm_message"]
     assert image_module.IMAGE_CONTEXT_MARKER in captured_state["llm_message"]
 
@@ -366,30 +371,13 @@ async def test_ai_chat_uses_current_image_context_without_needing_state_persiste
 async def test_ai_orchestrate_keeps_image_context_out_of_router_state(monkeypatch):
     monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "test-key")
 
-    async def fake_memory_hints(_user_id):
-        return {}
-
-    monkeypatch.setattr(ai_module, "_build_memory_hints", fake_memory_hints)
-
     async def fake_image_understanding(*_, **__):
         raise AssertionError("orchestrate should not consume image content before routing")
 
     captured = {}
 
-    async def fake_update_agent_state(**kwargs):
-        captured["state_message"] = kwargs["message"]
-        return {
-            "brief_state": {"fields": {}, "readiness": {"level": "insufficient"}},
-            "agent_context_window": {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": kwargs["message"],
-                        "source_message_id": kwargs.get("source_message_id"),
-                    }
-                ]
-            },
-        }
+    async def fake_update_agent_state(**_):
+        raise AssertionError("orchestrate must not update Brief state")
 
     async def fake_decide_route(context):
         captured["router_message"] = context.message
@@ -404,6 +392,16 @@ async def test_ai_orchestrate_keeps_image_context_out_of_router_state(monkeypatc
 
     monkeypatch.setattr(ai_module, "understand_uploaded_images", fake_image_understanding)
     monkeypatch.setattr(ai_module, "_update_agent_state_for_message", fake_update_agent_state)
+    monkeypatch.setattr(
+        ai_module,
+        "load_agent_state",
+        lambda *_: {
+            "brief_state": {"fields": {}, "readiness": {"level": "insufficient"}},
+            "agent_context_window": {"messages": []},
+            "pending_evaluation": None,
+            "pending_creative_direction": None,
+        },
+    )
     monkeypatch.setattr(ai_module, "decide_route", fake_decide_route)
 
     response = await ai_module.ai_orchestrate(
@@ -429,7 +427,6 @@ async def test_ai_orchestrate_keeps_image_context_out_of_router_state(monkeypatc
     )
 
     assert response["target_agent"] == "creative_direction_agent"
-    assert image_module.IMAGE_CONTEXT_MARKER not in captured["state_message"]
     assert image_module.IMAGE_CONTEXT_MARKER not in captured["router_message"]
     assert "毛绒质感熊猫参考图" not in captured["router_message"]
 

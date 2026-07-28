@@ -1,0 +1,461 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "initial_image_creative_extension",
+      "kind": "router",
+      "message": "我想基于上传的图片做一些创意延展，请先告诉我可以从哪些方向展开。",
+      "history": [],
+      "current_agent": null,
+      "stage": "intent_routing",
+      "expected": {
+        "route": {
+          "action": "switch",
+          "intent": "creative_direction",
+          "target_agent": "creative_direction_agent"
+        }
+      }
+    },
+    {
+      "id": "image_upload_continues_pending_creative_direction",
+      "kind": "router",
+      "message": "[已上传文件: 汽车参考图.png]\n\n[图片理解摘要]\n文件：汽车参考图.png\n视觉摘要：银白色流线型汽车位于未来都市夜景中，画面强调纵深、车灯和湿地反光。",
+      "history": [
+        {
+          "role": "user",
+          "content": "我想基于上传的图片做一些创意延展，请先告诉我可以从哪些方向展开。"
+        },
+        {
+          "role": "assistant",
+          "content": "我还没有看到这轮消息里有图片附件，请先把图片上传上来。"
+        }
+      ],
+      "current_agent": "creative_direction_agent",
+      "stage": "creative_direction",
+      "has_attachments": true,
+      "pending_creative_direction": {
+        "status": "awaiting_image",
+        "iteration_count": 0,
+        "iteration_limit": 5,
+        "exit_recommended": false
+      },
+      "expected": {
+        "route": {
+          "target_agent": "creative_direction_agent",
+          "intent": "creative_direction"
+        }
+      }
+    },
+    {
+      "id": "creative_feedback_stays_in_direction_agent",
+      "kind": "router",
+      "message": "还不行，必须有其他元素",
+      "history": [
+        {
+          "role": "assistant",
+          "content": "创意方向草案：大熊猫与酸奶瓶在杭州湖滨银泰in77 L型大屏上完成贴贴互动，并利用转角制造破屏悬浮感。"
+        }
+      ],
+      "current_agent": "creative_direction_agent",
+      "stage": "creative_direction_review",
+      "pending_creative_direction": {
+        "status": "awaiting_feedback",
+        "iteration_count": 1,
+        "iteration_limit": 5,
+        "exit_recommended": false
+      },
+      "expected": {
+        "route": {
+          "action": "stay",
+          "intent": "creative_direction",
+          "target_agent": "creative_direction_agent"
+        }
+      }
+    },
+    {
+      "id": "evaluate_referenced_multi_direction_draft",
+      "kind": "router",
+      "message": "能不能评估一下这个创意方向",
+      "history": [
+        {
+          "role": "assistant",
+          "content": "基于参考图延展两个方向：方向一是未来座驾“破界”降临，车辆从L型屏深处冲出；方向二是霓虹光轨“重塑”车身，用光影完成科技质感蜕变。"
+        }
+      ],
+      "current_agent": "creative_direction_agent",
+      "stage": "creative_direction_review",
+      "pending_creative_direction": {
+        "status": "awaiting_feedback",
+        "iteration_count": 1,
+        "iteration_limit": 5,
+        "exit_recommended": false
+      },
+      "expected": {
+        "route": {
+          "action": "switch",
+          "intent": "creative_diagnosis",
+          "target_agent": "creative_diagnosis_agent"
+        }
+      }
+    },
+    {
+      "id": "creative_diagnosis_style_answer_stays_in_evaluation",
+      "kind": "router",
+      "message": "偏向于卡通",
+      "history": [
+        {
+          "role": "user",
+          "content": "我有一个创意方向，想让你帮我评估一下可行性和优化空间。"
+        },
+        {
+          "role": "assistant",
+          "content": "没问题，我很乐意为您评估。不过目前我还没看到具体的创意内容。能否请您先描述一下这个创意的核心画面或故事概念？"
+        },
+        {
+          "role": "user",
+          "content": "主要是一只狮子，从屏幕里面探出头"
+        },
+        {
+          "role": "assistant",
+          "content": "阶段性创意评估：狮子探头具有视觉冲击力和裸眼3D媒介适配性，但需要继续判断所在地与周边人流特征。"
+        },
+        {
+          "role": "user",
+          "content": "是广州，然后是广州醒狮非遗"
+        },
+        {
+          "role": "assistant",
+          "content": "阶段性创意评估。基于“广州醒狮非遗”与“狮子探头破屏”的核心设定，结合裸眼3D媒介特性进行初步评估。成立点：广州是醒狮文化的核心腹地，受众对醒狮有很高的认知度和情感共鸣，将传统非遗与现代裸眼3D技术结合，天然具备国潮与科技的传播话题性。醒狮头部本身具有夸张的立体结构，大眼睛、高额头和蓬松鬃毛都适合利用视差制造冲出屏幕的体积感。探头动作若配合定点凝视，容易产生被注视感并引发路人驻足。风险点：醒狮面部表情若渲染过于写实或动作突兀，可能在近距离产生压迫感；复杂纹理在偏离最佳观看点时容易变形；目前单一探头动作还缺少后续情节和信息锚点。优化方向：可以设计先闻鼓点再见其形的节奏，醒狮从屏幕深处出现后探头，并配合鬃毛抖动和呼吸粒子；造型需遵循广州南狮特征，也可以融入骑楼等在地元素；探头后增加打量路人或吐出祝福卷轴的互动闭环。文化表达方面，需要避免把南狮简化成普通写实狮子，额头、眼部、鼻部和装饰纹样都应有明确的非遗依据，同时兼顾现代公众对喜庆、灵动和亲和力的期待。空间设计方面，应先根据屏幕折角和最佳观看点建立透视模型，再决定狮头探出的尺度、停留时间和转头幅度，避免侧向观众看到明显拉伸。动作节奏方面，不建议一开始就猛烈冲出，可以通过鼓点、眼睛亮起、轻微摆头和逐步靠近建立期待，让最终探头更有记忆点。传播设计方面，可在醒狮完成探头后加入眨眼、吐福或与广州城市符号呼应的小动作，为路人留出拍摄窗口。制作执行方面，鬃毛、布料、流苏和镜面装饰需要分别处理动态解算，既要体现传统工艺层次，也要控制运动噪点和渲染成本。声音设计方面，锣鼓节奏应与视觉动作同步，但需要结合现场播放条件控制低频和突发音量，避免给近距离观众造成惊吓。审核层面还需要确认醒狮造型、传统纹样、祝福文字和城市元素的使用边界，确保文化表达准确。为了进一步判断执行难度和视觉重心，想确认一下：这只醒狮的具体造型风格是偏向传统写实（重纹理细节），还是偏向现代卡通/潮流化（重色彩与几何感）？"
+        }
+      ],
+      "current_agent": "creative_diagnosis_agent",
+      "stage": "creative_diagnosis",
+      "pending_evaluation": {
+        "status": "awaiting_feedback",
+        "iteration_count": 2,
+        "iteration_limit": 5,
+        "exit_recommended": false
+      },
+      "expected": {
+        "route": {
+          "action": "stay",
+          "intent": "creative_diagnosis",
+          "target_agent": "creative_diagnosis_agent"
+        }
+      }
+    },
+    {
+      "id": "creative_direction_to_diagnosis_and_back_to_brief",
+      "kind": "multi_turn_router",
+      "current_agent": null,
+      "stage": "intent_routing",
+      "turns": [
+        {
+          "message": "我想基于一张汽车参考图，先做两个可讨论的创意方向。",
+          "expected": {
+            "route": {
+              "action": "switch",
+              "intent": "creative_direction",
+              "target_agent": "creative_direction_agent"
+            }
+          },
+          "assistant": {
+            "content": "可以，请先上传参考图，我会结合画面主体、空间关系和光影风格梳理两个方向。",
+            "pending_creative_direction": {
+              "status": "awaiting_image",
+              "iteration_count": 0,
+              "iteration_limit": 5,
+              "exit_recommended": false
+            }
+          }
+        },
+        {
+          "message": "[已上传文件: 汽车参考图.png]\\n[图片理解摘要] 银白色汽车位于未来都市夜景，画面有L型转角、湿地反光和霓虹光轨。",
+          "has_attachments": true,
+          "expected": {
+            "route": {
+              "action": "stay",
+              "intent": "creative_direction",
+              "target_agent": "creative_direction_agent"
+            }
+          },
+          "assistant": {
+            "content": "创意方向草案：方向一强调车辆从屏幕深处破界驶出；方向二以霓虹光轨重塑车身。您可以选择或继续调整。",
+            "pending_creative_direction": {
+              "status": "awaiting_feedback",
+              "iteration_count": 1,
+              "iteration_limit": 5,
+              "exit_recommended": false
+            }
+          }
+        },
+        {
+          "message": "帮我评估一下上面两个方向的可行性和风险。",
+          "expected": {
+            "route": {
+              "action": "switch",
+              "intent": "creative_diagnosis",
+              "target_agent": "creative_diagnosis_agent"
+            }
+          },
+          "assistant": {
+            "content": "阶段性创意评估：两个方向都适合L型屏，但方向一更依赖最佳观看点，方向二更依赖光影和屏幕亮度。您更希望面向年轻潮流受众还是偏品牌高端感？",
+            "pending_creative_direction": null,
+            "pending_evaluation": {
+              "status": "awaiting_feedback",
+              "iteration_count": 1,
+              "iteration_limit": 5,
+              "exit_recommended": false
+            }
+          }
+        },
+        {
+          "message": "偏向更年轻、卡通一点。",
+          "expected": {
+            "route": {
+              "action": "stay",
+              "intent": "creative_diagnosis",
+              "target_agent": "creative_diagnosis_agent"
+            }
+          },
+          "assistant": {
+            "content": "在这个前提下，建议弱化冰冷赛博质感，转为更明快的色彩和更有亲和力的车辆动作。",
+            "pending_evaluation": {
+              "status": "awaiting_feedback",
+              "iteration_count": 2,
+              "iteration_limit": 5,
+              "exit_recommended": false
+            }
+          }
+        },
+        {
+          "message": "那把方向二按这个结论改成更年轻卡通的版本。",
+          "expected": {
+            "route": {
+              "action": "switch",
+              "intent": "creative_direction",
+              "target_agent": "creative_direction_agent"
+            }
+          },
+          "assistant": {
+            "content": "优化后的方向二会使用明快渐变光轨和更有弹性的车辆动作，保留L型空间纵深。",
+            "pending_evaluation": null,
+            "pending_creative_direction": {
+              "status": "awaiting_feedback",
+              "iteration_count": 2,
+              "iteration_limit": 5,
+              "exit_recommended": false
+            }
+          }
+        },
+        {
+          "message": "这个版本可以，回到 Brief 继续收集制作信息吧。",
+          "expected": {
+            "route": {
+              "action": "switch",
+              "intent": "brief_building",
+              "target_agent": "brief_agent"
+            }
+          },
+          "assistant": {
+            "content": "好的，继续收集制作信息。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "brief_upload_creative_iteration_then_return",
+      "kind": "multi_turn_router",
+      "current_agent": "brief_agent",
+      "stage": "brief_building",
+      "turns": [
+        {
+          "message": "我们要在杭州湖滨银泰in77做一条30秒裸眼3D内容，先把项目基础信息整理一下。",
+          "expected": {
+            "route": {
+              "action": "stay",
+              "intent": "brief_building",
+              "target_agent": "brief_agent"
+            }
+          },
+          "assistant": {
+            "content": "收到。请补充一下核心主题或想表达的主体内容。"
+          }
+        },
+        {
+          "message": "我先上传一张现场实拍图。",
+          "has_attachments": true,
+          "expected": {
+            "route": {
+              "action": "stay",
+              "intent": "brief_building",
+              "target_agent": "brief_agent"
+            }
+          },
+          "assistant": {
+            "content": "已收到现场实拍图，会作为后续透视和观看动线的参考。"
+          }
+        },
+        {
+          "message": "基于这张图先给我两个创意方向。",
+          "expected": {
+            "route": {
+              "action": "switch",
+              "intent": "creative_direction",
+              "target_agent": "creative_direction_agent"
+            }
+          },
+          "assistant": {
+            "content": "创意方向草案：方向一用熊猫探头破屏，方向二用竹叶和水雾构成空间纵深。",
+            "pending_creative_direction": {
+              "status": "awaiting_feedback",
+              "iteration_count": 1,
+              "iteration_limit": 5,
+              "exit_recommended": false
+            }
+          }
+        },
+        {
+          "message": "方向一不够丰富，增加一些自然元素。",
+          "expected": {
+            "route": {
+              "action": "stay",
+              "intent": "creative_direction",
+              "target_agent": "creative_direction_agent"
+            }
+          },
+          "assistant": {
+            "content": "会加入竹叶、水雾和光影粒子，作为前中景空间参照。",
+            "pending_creative_direction": {
+              "status": "awaiting_feedback",
+              "iteration_count": 2,
+              "iteration_limit": 5,
+              "exit_recommended": false
+            }
+          }
+        },
+        {
+          "message": "方案已确认，返回 Brief 继续整理。",
+          "expected": {
+            "route": {
+              "action": "switch",
+              "intent": "brief_building",
+              "target_agent": "brief_agent"
+            }
+          },
+          "assistant": {
+            "content": "好的，继续补齐制作条件。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "creative_diagnosis_soft_exit_then_return_to_brief",
+      "kind": "multi_turn_router",
+      "current_agent": "creative_diagnosis_agent",
+      "stage": "creative_diagnosis_review",
+      "pending_evaluation": {
+        "status": "awaiting_feedback",
+        "iteration_count": 4,
+        "iteration_limit": 5,
+        "exit_recommended": false
+      },
+      "history": [
+        {
+          "role": "assistant",
+          "content": "阶段性创意评估：广州醒狮探头破屏具备文化传播和空间表现力，但要控制惊吓感与多视角变形。"
+        }
+      ],
+      "turns": [
+        {
+          "message": "我觉得还要更突出广州非遗的在地感。",
+          "expected": {
+            "route": {
+              "action": "stay",
+              "intent": "creative_diagnosis",
+              "target_agent": "creative_diagnosis_agent"
+            }
+          },
+          "assistant": {
+            "content": "可以强化南狮造型依据、锣鼓节奏和骑楼空间符号。当前评估已完成5轮，建议确认后回到Brief收拢制作条件。",
+            "pending_evaluation": {
+              "status": "exit_recommended",
+              "iteration_count": 5,
+              "iteration_limit": 5,
+              "exit_recommended": true
+            }
+          }
+        },
+        {
+          "message": "确定这个评估结论，继续收集 Brief 信息。",
+          "expected": {
+            "route": {
+              "action": "switch",
+              "intent": "brief_building",
+              "target_agent": "brief_agent"
+            }
+          },
+          "assistant": {
+            "content": "好的，继续收集Brief。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "duplicate_no_after_budget_keeps_photo_and_moves_on",
+      "kind": "brief_turn",
+      "message": "没有",
+      "history": [
+        {
+          "client_message_id": "assistant-assets",
+          "role": "assistant",
+          "content": "还有其他现场照片或参考素材需要一起上传吗？"
+        },
+        {
+          "client_message_id": "user-assets",
+          "role": "user",
+          "content": "没有"
+        },
+        {
+          "client_message_id": "assistant-budget",
+          "role": "assistant",
+          "content": "已确认收到化妆品.png。我会结合这张现场实拍图优化L型转角的光影连续性。为了匹配最终制作方案，项目制作预算大概在什么范围？"
+        }
+      ],
+      "current_agent": "brief_agent",
+      "stage": "brief_building",
+      "initial_brief": {
+        "project_name": "化妆品裸眼3D广告",
+        "audience_scene": "商圈游客",
+        "city_location": "杭州湖滨银泰in77 L型地标大屏",
+        "viewing_path": "正面仰视",
+        "art_direction": "日间适用的柔和晨雾感，温润漫反射柔光",
+        "theme_concept": "柔光沁透·水蕴之芯",
+        "media_specs": "L型结构，宽100m x 高70m，3840x2160",
+        "timing_number": "30秒",
+        "content_review": "不能出现恐怖元素",
+        "online_time": "下月底",
+        "special_requirements": "不需要品牌Slogan露出",
+        "site_photos": "已上传图片素材：化妆品.png"
+      },
+      "expected": {
+        "route": {
+          "target_agent": "brief_agent",
+          "intent": "brief_building"
+        },
+        "brief_fields": {
+          "budget": "待定",
+          "site_photos": "已上传图片素材：化妆品.png"
+        },
+        "window_content_counts": {
+          "没有": 2
+        },
+        "reply_forbidden_regex": [
+          "(项目)?制作预算.{0,16}(范围|多少|大概|区间)",
+          "(没有|缺乏|未收到|还没有).{0,16}(现场实拍图|图片素材|化妆品\\.png)",
+          "是否还有.{0,12}(现场|参考)"
+        ]
+      }
+    }
+  ]
+}

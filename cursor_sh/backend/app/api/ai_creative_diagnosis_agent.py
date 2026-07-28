@@ -13,14 +13,26 @@ from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.ai_context import agent_context_messages, latest_user_context_message
 from app.services.ai_client import post_chat_completion
-from app.services.ai_brief_state import FIELD_LABELS, MEDIA_3D_BRIEF_FIELDS, load_agent_state, save_agent_state
+from app.services.ai_brief_state import (
+    FIELD_LABELS,
+    MEDIA_3D_BRIEF_FIELDS,
+    load_agent_state,
+    save_agent_state,
+    update_agent_state_from_message,
+)
 from app.services.ai_image_understanding import (
     IMAGE_CONTEXT_MARKER,
     UploadedAttachment,
-    append_image_context_to_message,
     build_image_feedback_reply_instruction,
-    summarize_uploaded_images,
 )
+from app.services.ai_material_understanding import enrich_message_with_uploaded_materials
+from app.services.ai_orchestrator import (
+    CREATIVE_DIAGNOSIS_ITERATION_LIMIT,
+    advance_creative_diagnosis_iteration,
+    creative_diagnosis_iteration_count,
+    creative_diagnosis_iteration_preview,
+)
+from app.services.ai_upload_context import BRIEF_DOCUMENT_CONTEXT_MARKER
 from app.utils.business_log import log_business_event
 from app.utils.dependencies import AnyUser, get_current_user_for_public_deployment
 from app.utils.log_setup import get_module_logger
@@ -35,20 +47,43 @@ class CreativeDiagnosisRequest(BaseModel):
     message: str
     history: list = Field(default_factory=list)
     business_type: str = "ai_3d_custom"
+    user_message_id: str | None = None
     agent_state: dict[str, Any] | None = None
     attachments: list[UploadedAttachment] = Field(default_factory=list)
 
 
-async def _request_with_image_context(request: CreativeDiagnosisRequest) -> CreativeDiagnosisRequest:
-    image_context = await summarize_uploaded_images(
+async def _request_with_material_context(
+    request: CreativeDiagnosisRequest,
+    current_user: Any,
+) -> CreativeDiagnosisRequest:
+    material = await enrich_message_with_uploaded_materials(
         message=request.message,
         attachments=request.attachments,
+        user_id=str(getattr(current_user, "id", "") or "").strip(),
     )
-    if not image_context:
+    if material.message == request.message:
         return request
-    return request.model_copy(
-        update={"message": append_image_context_to_message(request.message, image_context)}
+    return request.model_copy(update={"message": material.message})
+
+
+async def _request_with_updated_agent_state(
+    request: CreativeDiagnosisRequest,
+    current_user: Any,
+) -> CreativeDiagnosisRequest:
+    user_id = str(getattr(current_user, "id", "") or "").strip()
+    if not user_id:
+        return request
+    updated_state = await update_agent_state_from_message(
+        session_id=request.session_id,
+        user_id=user_id,
+        business_type=request.business_type,
+        message=request.message,
+        history=request.history,
+        source_message_id=request.user_message_id,
+        memory_hints={},
+        update_brief=False,
     )
+    return request.model_copy(update={"agent_state": updated_state})
 
 
 def _brief_state(request: CreativeDiagnosisRequest) -> dict[str, Any]:
@@ -111,8 +146,7 @@ def _build_fallback_message(request: CreativeDiagnosisRequest) -> str:
         "- 如果审核边界不清，过强的冲出、坠落或惊吓动作可能影响落地。\n\n"
         "**优化方向**\n"
         "- 把“单一出屏奇观”升级成与点位、人群或商业目标有关的动作逻辑。\n"
-        "- 优先确认最佳观看点，再决定主体大小、出屏幅度和镜头节奏。\n\n"
-        f"{_next_brief_question(request)}"
+        "- 优先确认最佳观看点，再决定主体大小、出屏幅度和镜头节奏。"
     )
 
 
@@ -127,27 +161,6 @@ def _extract_json_object(raw: str) -> dict[str, Any]:
         return json.loads(match.group(0))
 
 
-def _looks_like_evaluation_entry_request(message: str) -> bool:
-    text = re.sub(r"\s+", "", message or "")
-    if not text:
-        return False
-    has_evaluation_intent = re.search(r"评估|可行性|优化空间|帮我看|看看|判断|诊断", text)
-    has_placeholder_object = re.search(r"创意方向|创意|方案|想法|概念", text)
-    has_concrete_visual = re.search(r"大熊猫|熊猫|猫|动物|汽车|鲸鱼|人物|产品|探出|冲出|破屏|互动|屏幕|大屏|L型|转角", text, re.I)
-    return bool(has_evaluation_intent and has_placeholder_object and not has_concrete_visual)
-
-
-def _normalize_gate_status(parsed: dict[str, Any], request: CreativeDiagnosisRequest) -> str:
-    raw = str(parsed.get("status") or "").strip()
-    if raw in {"evaluable", "awaiting_evaluation_target", "not_evaluable_concept"}:
-        return raw
-    if bool(parsed.get("is_evaluable")):
-        return "evaluable"
-    if _looks_like_evaluation_entry_request(request.message):
-        return "awaiting_evaluation_target"
-    return "not_evaluable_concept"
-
-
 def _confirmed_brief_payload(request: CreativeDiagnosisRequest) -> dict[str, str]:
     return {
         FIELD_LABELS.get(field, field): value
@@ -157,117 +170,13 @@ def _confirmed_brief_payload(request: CreativeDiagnosisRequest) -> dict[str, str
 
 def _current_message_for_prompt(request: CreativeDiagnosisRequest) -> str:
     current_message = latest_user_context_message(request.agent_state, request.message)
-    if IMAGE_CONTEXT_MARKER in (request.message or "") and IMAGE_CONTEXT_MARKER not in current_message:
+    material_markers = (IMAGE_CONTEXT_MARKER, BRIEF_DOCUMENT_CONTEXT_MARKER)
+    if any(marker in (request.message or "") and marker not in current_message for marker in material_markers):
         return request.message
     return current_message
 
 
-def build_creative_diagnosis_gate_messages(request: CreativeDiagnosisRequest) -> list[dict[str, str]]:
-    recent_history = agent_context_messages(
-        request.agent_state,
-        fallback_history=request.history,
-    )
-    current_message = _current_message_for_prompt(request)
-    if recent_history and recent_history[-1]["role"] == "user" and recent_history[-1]["content"] == current_message:
-        recent_history = recent_history[:-1]
-    payload = {
-        "current_user_message": current_message,
-        "recent_history": recent_history,
-        "confirmed_brief": _confirmed_brief_payload(request),
-        "pending_evaluation": _pending_evaluation(request),
-        "decision_goal": "判断当前是否已经存在一个可以被专业评估的创意方向，而不是直接做评估。",
-    }
-    system_prompt = (
-        "你是 Unique Vision AI 创意评估子 agent 的前置判断器。"
-        "你只判断当前输入是否构成一个可评估的创意方向，不输出用户可见评估。\n\n"
-        "你必须把结果归入三类之一："
-        "evaluable 表示当前已经有可评估创意方向；"
-        "awaiting_evaluation_target 表示用户只是在进入评估任务、询问能否评估或要求帮忙评估，但还没有给出具体创意对象；"
-        "not_evaluable_concept 表示用户给了一些创意碎片，但仍不足以专业评估。\n"
-        "可评估创意方向的最低标准：能识别出明确评估对象，并且至少包含核心主体/主题、关键画面或动作机制、"
-        "媒介或场景关系中的两个要素。"
-        "如果用户说“这个方案/上面的创意/刚才那版”这类指代，必须结合 recent_history 和 confirmed_brief 判断指代对象是否足够具体。"
-        "如果只是要求“评估一下”但没有具体对象，必须返回 awaiting_evaluation_target。"
-        "如果只有一个词、一个材质、一个情绪、一个品类，必须返回 not_evaluable_concept。\n\n"
-        "严格返回 JSON object，不要 Markdown，不要解释。"
-        "字段："
-        "{"
-        "\"is_evaluable\": boolean,"
-        "\"status\": \"evaluable | awaiting_evaluation_target | not_evaluable_concept\","
-        "\"evaluation_target\": \"可评估对象的简短归纳，无法判断时为空字符串\","
-        "\"reason\": \"简短原因\","
-        "\"missing_aspects\": [\"缺失的信息点，最多3项\"],"
-        "\"followup_question\": \"面向用户的一句话追问\""
-        "}"
-    )
-    return [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-    ]
-
-
-def _build_insufficient_idea_message(gate: dict[str, Any], request: CreativeDiagnosisRequest) -> str:
-    missing = gate.get("missing_aspects") if isinstance(gate.get("missing_aspects"), list) else []
-    missing_text = "、".join(str(item).strip() for item in missing if str(item).strip()) or "创意主体、关键动作或画面机制"
-    followup = str(gate.get("followup_question") or "").strip()
-    if not followup:
-        followup = "可以补充一下这个创意里想呈现的主体、动作，以及它和屏幕或现场的关系吗？"
-    return (
-        "我先不急着给分，暂时还不能做创意评估。现在的信息还不足以构成一个可以专业评估的创意方向，"
-        f"主要还缺少：{missing_text}。\n\n"
-        "只要补一句核心设定就可以，比如主体是谁、它在画面里做什么、和屏幕或现场有什么关系。"
-        f"{followup}"
-    )
-
-
-def _build_awaiting_target_message(gate: dict[str, Any], request: CreativeDiagnosisRequest) -> str:
-    return (
-        "可以，我会从可行性、裸眼3D适配、传播价值和优化空间几个角度帮您看。\n\n"
-        "您先把创意方向简单说一下就行，比如主体是谁、它有什么动作或情节、准备放在哪类屏幕或场景。"
-    )
-
-
-def _build_sparse_concept_message(gate: dict[str, Any], request: CreativeDiagnosisRequest) -> str:
-    missing = gate.get("missing_aspects") if isinstance(gate.get("missing_aspects"), list) else []
-    missing_text = "、".join(str(item).strip() for item in missing if str(item).strip()) or "关键画面、动作机制或屏幕/现场关系"
-    followup = str(gate.get("followup_question") or "").strip()
-    if not followup:
-        followup = "可以再补一句：主体会做什么，以及它和屏幕或现场有什么关系吗？"
-    return (
-        "这个方向我可以先接住。为了评估得更准，还需要再补一个关键设定："
-        f"{missing_text}。\n\n"
-        f"{followup}"
-    )
-
-
-async def _judge_creative_diagnosis_target(request: CreativeDiagnosisRequest) -> dict[str, Any]:
-    data = await post_chat_completion(
-        {
-            "model": settings.AI_MODEL_NAME,
-            "messages": build_creative_diagnosis_gate_messages(request),
-            "max_tokens": 260,
-            "temperature": 0,
-            "response_format": {"type": "json_object"},
-        },
-        timeout=min(float(settings.AI_HTTP_TIMEOUT or 30.0), 12.0),
-    )
-    raw = data["choices"][0]["message"]["content"]
-    parsed = _extract_json_object(raw)
-    status = _normalize_gate_status(parsed, request)
-    return {
-        "is_evaluable": status == "evaluable",
-        "status": status,
-        "evaluation_target": str(parsed.get("evaluation_target") or "").strip(),
-        "reason": str(parsed.get("reason") or "").strip(),
-        "missing_aspects": parsed.get("missing_aspects") if isinstance(parsed.get("missing_aspects"), list) else [],
-        "followup_question": str(parsed.get("followup_question") or "").strip(),
-    }
-
-
-def build_creative_diagnosis_messages(
-    request: CreativeDiagnosisRequest,
-    gate: dict[str, Any] | None = None,
-) -> list[dict[str, str]]:
+def build_creative_diagnosis_messages(request: CreativeDiagnosisRequest) -> list[dict[str, str]]:
     recent_history = agent_context_messages(
         request.agent_state,
         fallback_history=request.history,
@@ -283,24 +192,42 @@ def build_creative_diagnosis_messages(
         "confirmed_brief": brief_values,
         "creative_readiness": readiness,
         "pending_evaluation": _pending_evaluation(request),
-        "evaluation_target": (gate or {}).get("evaluation_target") or "",
+        "iteration_control": creative_diagnosis_iteration_preview(request.agent_state),
         "next_brief_question": _next_brief_question(request),
     }
     system_prompt = (
         "你是 Unique Vision AI 的创意提案总监，专注裸眼3D户外媒体内容定制。"
-        "你的任务是先完成专业创意评估，而不是为了补齐 Brief 才评价创意。\n\n"
+        "你的任务是在同一次思考中理解对话、判断是否已有评估对象，并给出用户可见回复。"
+        "不要设置前置 Gate，也不要把判断和正式评估拆成两次调用。\n\n"
+        "把 current_user_message、recent_history 和 confirmed_brief 视为一段连续对话。"
+        "用户说“这个方案”“上面的创意”“刚才那版”时，应根据最近对话理解所指内容；"
+        "上一条回复包含多个备选方向时，整份草案或这些方向的对比本身就是可评估对象，不要求用户先选出唯一一个。\n\n"
+        "如果整段对话里确实没有任何可评估的创意对象，status 返回 awaiting_target，message 只自然追问一个最关键的信息。"
+        "只要上下文里存在具体创意方向，就返回 evaluated 并直接评估。"
         "评估必须基于当前已确认 Brief；信息不足时可以做阶段性判断，但必须说明不确定性。"
-        "如果 payload 中有 evaluation_target，必须围绕该对象评估，不要重新猜测评估对象。"
         "允许输出总分或阶段性评分，但不要用分数压过建设性意见。\n\n"
         "评估维度参考：战略匹配度、信息单点清晰度、前三秒钩子、裸眼3D必要性、媒介适配度、"
         "品牌/媒体关联度、情绪驱动力、社交传播力、故事节奏、执行可行性、商业转化价值。\n\n"
-        "输出结构固定为：**阶段性创意评估**、**成立点**、**风险点**、**优化方向**。"
-        "最后用一段自然口语承接到 next_brief_question，只问一个问题，不要使用英文 Brief 的返回标题、附件式表达或已记录式固定话术。"
-        "不要输出【需求收集完成】；表单触发只由主 Brief 流程负责。"
+        "evaluated 状态的 message 结构固定为：**阶段性创意评估**、**成立点**、**风险点**、**优化方向**。"
+        "不要为了推进需求梳理而固定追加问题。只有某项缺失信息会实质改变当前评估结论、风险判断或推荐方向时，"
+        "才可以在评估后自然追问一个最关键的问题；否则直接结束评估。next_brief_question 只是一条可选参考，不是必问项。"
+        "如果 iteration_control.exit_recommended=true，说明这次输出达到或超过第 5 轮，正文不要再提出开放式追问，"
+        "也不要自行编写退出提示，系统会在末尾追加统一的软退出提醒。"
+        "不要使用英文 Brief 的返回标题、附件式表达或已记录式固定话术。"
+        "不要输出【需求收集完成】；表单触发只由主 Brief 流程负责。\n\n"
+        "严格返回 JSON object，不要在 JSON 外输出其他内容："
+        "{\"status\":\"evaluated | awaiting_target\",\"message\":\"面向用户的完整回复\"}"
     )
     image_feedback_instruction = build_image_feedback_reply_instruction(request.message)
     if image_feedback_instruction:
         system_prompt += image_feedback_instruction
+    if BRIEF_DOCUMENT_CONTEXT_MARKER in (request.message or ""):
+        system_prompt += (
+            "\n\n【基于上传文档做创意评估的约束】\n"
+            "- 必须读取 current_user_message 中的文档解析内容，并用其中明确出现的项目目标、点位参数、"
+            "受众、主题、技术或审核条件判断创意的适配性与执行风险。\n"
+            "- 不要声称无法读取 PDF/DOC/DOCX，不要把文档内容当作用户已经确认的正式 Brief，也不要补写文档里没有的信息。\n"
+        )
     return [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
@@ -332,18 +259,25 @@ def _save_response_agent_state(request: CreativeDiagnosisRequest, current_user: 
 def _mark_pending_evaluation(
     request: CreativeDiagnosisRequest,
     current_user: Any,
-    gate: dict[str, Any],
+    result: dict[str, Any],
 ) -> dict[str, Any]:
     state = _agent_state_for_response(request, current_user)
     now = beijing_now().isoformat()
+    previous_pending = state.get("pending_evaluation")
+    previous_pending = previous_pending if isinstance(previous_pending, dict) else {}
+    iteration_count = creative_diagnosis_iteration_count(state)
     state["pending_evaluation"] = {
         "status": "awaiting_target",
         "source": "creative_diagnosis_agent",
-        "reason": str(gate.get("reason") or "").strip(),
-        "missing_aspects": gate.get("missing_aspects") if isinstance(gate.get("missing_aspects"), list) else [],
+        "reason": str(result.get("reason") or "model_requested_target").strip(),
         "prompt_message": (request.message or "")[:240],
+        "iteration_count": iteration_count,
+        "iteration_limit": CREATIVE_DIAGNOSIS_ITERATION_LIMIT,
+        "exit_recommended": iteration_count >= CREATIVE_DIAGNOSIS_ITERATION_LIMIT,
         "updated_at": now,
     }
+    if previous_pending.get("exit_recommended_at"):
+        state["pending_evaluation"]["exit_recommended_at"] = previous_pending["exit_recommended_at"]
     state["current_agent"] = "creative_diagnosis_agent"
     state["stage"] = "creative_diagnosis"
     state["business_type"] = request.business_type
@@ -352,15 +286,35 @@ def _mark_pending_evaluation(
     return state
 
 
-def _clear_pending_evaluation(request: CreativeDiagnosisRequest, current_user: Any) -> dict[str, Any]:
+def _mark_evaluation_ready_for_feedback(request: CreativeDiagnosisRequest, current_user: Any) -> dict[str, Any]:
     state = _agent_state_for_response(request, current_user)
-    state["pending_evaluation"] = None
-    state["current_agent"] = "brief_agent"
-    state["stage"] = "brief_building"
+    state = advance_creative_diagnosis_iteration(
+        state,
+        prompt_message=request.message,
+        reason="creative_diagnosis_evaluated",
+    )
     state["business_type"] = request.business_type
-    state["updated_at"] = beijing_now().isoformat()
     _save_response_agent_state(request, current_user, state)
     return state
+
+
+def _evaluation_exit_reminder() -> str:
+    return (
+        "这轮评估经过几次推演，关键判断和取舍已经比较清楚了。先说明一下，这仍然是阶段性创意评估，"
+        "不是完整创意方案；具体方案还需要策划专家结合品牌目标、屏幕参数、现场观看动线、现场素材、"
+        "审核规范、预算和制作周期继续深化。\n\n"
+        "我们可以先回到需求梳理，把这些落地条件补完整；如果评估结论里还有一个必须继续验证的关键点，也可以继续告诉我。"
+    )
+
+
+def _finalize_evaluation_message(request: CreativeDiagnosisRequest, message: str) -> str:
+    finalized = (message or "").strip()
+    if not creative_diagnosis_iteration_preview(request.agent_state)["exit_recommended"]:
+        return finalized
+    reminder = _evaluation_exit_reminder()
+    if reminder in finalized:
+        return finalized
+    return f"{finalized}\n\n{reminder}".strip()
 
 
 @creative_diagnosis_router.post("/creative-diagnosis")
@@ -368,59 +322,35 @@ async def ai_creative_diagnosis(
     request: CreativeDiagnosisRequest,
     current_user: AnyUser = Depends(get_current_user_for_public_deployment),
 ):
-    """Evaluate a creative direction, then return the conversation to Brief collection."""
-    request = await _request_with_image_context(request)
+    """Evaluate a creative direction and keep context for the next routed turn."""
+    request = await _request_with_material_context(request, current_user)
+    request = await _request_with_updated_agent_state(request, current_user)
     if not settings.AI_API_KEY:
-        return {"message": _build_fallback_message(request), "return_to_brief": True}
-
-    try:
-        gate = await _judge_creative_diagnosis_target(request)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        log_business_event(
-            logger,
-            "ai_creative_diagnosis_gate_failed",
-            level="warning",
-            session_id=request.session_id,
-            business_type=request.business_type,
-            error=str(exc),
-        )
-        gate = {
-            "is_evaluable": False,
-            "status": "awaiting_evaluation_target",
-            "reason": "gate_failed",
-            "missing_aspects": ["创意主体", "关键动作或互动机制"],
-            "followup_question": "可以先补充一句这个创意大概想呈现什么画面吗？",
-        }
-
-    if not gate.get("is_evaluable"):
-        next_state = _mark_pending_evaluation(request, current_user, gate)
-        status = str(gate.get("status") or "").strip()
-        if status == "awaiting_evaluation_target":
-            return {
-                "message": _build_awaiting_target_message(gate, request),
-                "return_to_brief": False,
-                "agent_state": next_state,
-            }
-        return {
-            "message": _build_sparse_concept_message(gate, request),
-            "return_to_brief": False,
-            "agent_state": next_state,
-        }
+        message = _finalize_evaluation_message(request, _build_fallback_message(request))
+        next_state = _mark_evaluation_ready_for_feedback(request, current_user)
+        return {"message": message, "return_to_brief": False, "agent_state": next_state}
 
     try:
         data = await post_chat_completion(
             {
                 "model": settings.AI_MODEL_NAME,
-                "messages": build_creative_diagnosis_messages(request, gate=gate),
+                "messages": build_creative_diagnosis_messages(request),
                 "temperature": 0.3,
+                "response_format": {"type": "json_object"},
             },
             timeout=settings.AI_HTTP_TIMEOUT,
         )
-        message = data["choices"][0]["message"]["content"].replace("【需求收集完成】", "").strip()
-        next_state = _clear_pending_evaluation(request, current_user)
-        return {"message": message, "return_to_brief": True, "agent_state": next_state}
+        result = _extract_json_object(data["choices"][0]["message"]["content"])
+        status = str(result.get("status") or "").strip()
+        message = str(result.get("message") or "").replace("【需求收集完成】", "").strip()
+        if status not in {"evaluated", "awaiting_target"} or not message:
+            raise ValueError("invalid creative diagnosis response")
+        if status == "awaiting_target":
+            next_state = _mark_pending_evaluation(request, current_user, result)
+            return {"message": message, "return_to_brief": False, "agent_state": next_state}
+        message = _finalize_evaluation_message(request, message)
+        next_state = _mark_evaluation_ready_for_feedback(request, current_user)
+        return {"message": message, "return_to_brief": False, "agent_state": next_state}
     except HTTPException:
         raise
     except Exception as exc:
@@ -432,4 +362,6 @@ async def ai_creative_diagnosis(
             business_type=request.business_type,
             error=str(exc),
         )
-        return {"message": _build_fallback_message(request), "return_to_brief": True}
+        message = _finalize_evaluation_message(request, _build_fallback_message(request))
+        next_state = _mark_evaluation_ready_for_feedback(request, current_user)
+        return {"message": message, "return_to_brief": False, "agent_state": next_state}

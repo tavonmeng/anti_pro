@@ -26,6 +26,7 @@ from app.services.ai_context import (
     agent_context_messages,
     append_agent_context_message,
     latest_user_context_message,
+    sync_agent_context_window_from_history,
 )
 from app.services.ai_image_understanding import (
     IMAGE_CONTEXT_MARKER,
@@ -53,7 +54,16 @@ from app.services.platform_service_catalog import (
     get_consultation_intro,
     is_consultation_business_type,
 )
-from app.services.ai_orchestrator import OrchestratorContext, RouteDecision, decide_route
+from app.services.ai_orchestrator import (
+    CREATIVE_DIAGNOSIS_ACTIVE_STATUSES,
+    CREATIVE_DIRECTION_ACTIVE_STATUSES,
+    OrchestratorContext,
+    RouteDecision,
+    advance_creative_direction_iteration,
+    creative_diagnosis_stage,
+    creative_direction_stage,
+    decide_route,
+)
 from app.services.ai_brief_state import (
     build_brief_state_context,
     load_agent_state,
@@ -69,6 +79,7 @@ from app.services.ai_brief_agent import (
     select_next_brief_question,
     should_show_creative_evaluation_hint,
 )
+from app.services.ai_interaction import decide_interaction
 from app.utils.business_log import log_business_event
 from app.utils.dependencies import AnyUser, get_current_user_for_public_deployment
 from app.utils.log_setup import get_module_logger
@@ -128,6 +139,55 @@ class OrchestrateRequest(BaseModel):
     attachments: list[UploadedAttachment] = Field(default_factory=list)
 
 
+_ACTIVE_CREATIVE_DIRECTION_STATUSES = CREATIVE_DIRECTION_ACTIVE_STATUSES
+
+
+def _pending_creative_direction_status(agent_state: dict | None) -> str:
+    pending = (agent_state or {}).get("pending_creative_direction")
+    if not isinstance(pending, dict):
+        return ""
+    return str(pending.get("status") or "").strip()
+
+
+def _pending_evaluation_status(agent_state: dict | None) -> str:
+    pending = (agent_state or {}).get("pending_evaluation")
+    if not isinstance(pending, dict):
+        return ""
+    status = str(pending.get("status") or "").strip()
+    if status == "awaiting_evaluation_target":
+        return "awaiting_target"
+    return status
+
+
+def _apply_agent_route_state(agent_state: dict, route: RouteDecision) -> dict:
+    next_state = dict(agent_state)
+    direction_status = _pending_creative_direction_status(agent_state)
+    diagnosis_status = _pending_evaluation_status(agent_state)
+    direction_active = direction_status in _ACTIVE_CREATIVE_DIRECTION_STATUSES
+    diagnosis_active = diagnosis_status in CREATIVE_DIAGNOSIS_ACTIVE_STATUSES
+
+    if direction_active and route.target_agent != "creative_direction_agent":
+        next_state["pending_creative_direction"] = None
+    if diagnosis_active and route.target_agent != "creative_diagnosis_agent":
+        next_state["pending_evaluation"] = None
+
+    next_state["current_agent"] = route.target_agent
+    if direction_active and route.target_agent == "creative_direction_agent":
+        next_state["stage"] = creative_direction_stage(direction_status)
+    elif diagnosis_active and route.target_agent == "creative_diagnosis_agent":
+        next_state["stage"] = creative_diagnosis_stage(diagnosis_status)
+    else:
+        next_state["stage"] = route.stage or "brief_building"
+    next_state["business_type"] = route.business_type or next_state.get("business_type")
+    next_state["updated_at"] = beijing_now().isoformat()
+    return next_state
+
+
+def _apply_creative_direction_route_state(agent_state: dict, route: RouteDecision) -> dict:
+    """Backward-compatible wrapper for existing route-state tests and callers."""
+    return _apply_agent_route_state(agent_state, route)
+
+
 @router.post("/orchestrate")
 async def ai_orchestrate(
     request: OrchestrateRequest,
@@ -139,16 +199,25 @@ async def ai_orchestrate(
     responsibility of the selected sub-agent.
     """
     user_id, _username = _current_user_identity(current_user)
-    memory_hints = await _build_memory_hints(user_id)
-    agent_state = await _update_agent_state_for_message(
-        session_id=request.session_id,
-        user_id=user_id,
-        business_type=request.business_type or "ai_3d_custom",
-        message=request.message,
-        history=request.history,
-        source_message_id=request.user_message_id,
-        memory_hints=memory_hints,
+    agent_state = load_agent_state(
+        request.session_id,
+        user_id,
+        request.business_type or "ai_3d_custom",
     )
+    agent_state = await sync_agent_context_window_from_history(agent_state, request.history)
+    agent_state, _ = await append_agent_context_message(
+        agent_state,
+        role="user",
+        content=request.message,
+        source_message_id=request.user_message_id,
+    )
+    route_history = agent_context_messages(
+        agent_state,
+        exclude_source_message_id=request.user_message_id,
+        fallback_history=request.history,
+    )
+    current_agent = agent_state.get("current_agent") or request.current_agent
+    stage = agent_state.get("stage") if agent_state.get("current_agent") else request.stage
     route = await decide_route(
         OrchestratorContext(
             session_id=request.session_id,
@@ -157,13 +226,9 @@ async def ai_orchestrate(
                 request.message,
                 source_message_id=request.user_message_id,
             ),
-            history=agent_context_messages(
-                agent_state,
-                exclude_source_message_id=request.user_message_id,
-                fallback_history=request.history,
-            ),
-            current_agent=request.current_agent,
-            stage=request.stage,
+            history=route_history,
+            current_agent=current_agent,
+            stage=stage,
             business_type=request.business_type,
             brief_state=agent_state.get("brief_state"),
             pending_evaluation=agent_state.get("pending_evaluation"),
@@ -171,6 +236,9 @@ async def ai_orchestrate(
             has_attachments=bool(request.attachments),
         )
     )
+    next_agent_state = _apply_agent_route_state(agent_state, route)
+    _save_agent_state(request.session_id, user_id, next_agent_state)
+    agent_state = next_agent_state
     log_business_event(
         logger,
         "ai_orchestrator_route_decided",
@@ -244,6 +312,7 @@ async def _update_agent_state_for_message(
     memory_hints: dict[str, str] | None = None,
     document_updates: dict[str, str] | None = None,
     document_filenames: list[str] | None = None,
+    update_brief: bool = True,
 ) -> dict:
     if not _should_maintain_media_brief_state(business_type):
         return load_agent_state(session_id, user_id, business_type)
@@ -257,6 +326,7 @@ async def _update_agent_state_for_message(
         memory_hints=memory_hints or {},
         document_updates=document_updates,
         document_filenames=document_filenames,
+        update_brief=update_brief,
     )
 
 
@@ -369,8 +439,12 @@ def _mark_creative_direction_offer(
         }
     )
     next_state["creative_direction_offer"] = offer
-    next_state["current_agent"] = "brief_agent"
-    next_state["stage"] = "brief_building"
+    if status == "completed" and _pending_creative_direction_status(next_state) == "awaiting_feedback":
+        next_state["current_agent"] = "creative_direction_agent"
+        next_state["stage"] = "creative_direction_review"
+    else:
+        next_state["current_agent"] = "brief_agent"
+        next_state["stage"] = "brief_building"
     next_state["updated_at"] = now
     return next_state
 
@@ -389,12 +463,12 @@ def _build_creative_direction_offer_reply(agent_state: dict | None) -> str:
         return (
             f"基于目前这些信息（{highlight_text}），这几个信息已经能支撑我们先判断内容主体、投放场景和受众关系。"
             "现在适合先做一次轻量的 AI 创意方向，用来校准视觉机制和传播气质；这不是完整创意方案，后续还需要结合屏幕参数、观看动线、现场素材和制作排期继续深化。\n\n"
-            "要不要我先基于当前需求出一版创意方向草案？做完后我会再回到需求确认，把剩下的信息收拢到表单里。"
+            "要不要我先基于当前需求出一版创意方向草案？出稿后我们可以继续讨论和修改，方向确认后再回到需求梳理。"
         )
     return (
         "基于目前这些信息，这几个信息已经能支撑我们先判断内容主体、投放场景和受众关系。"
         "现在适合先做一次轻量的 AI 创意方向，用来校准视觉机制和传播气质；这不是完整创意方案，后续还需要结合屏幕参数、观看动线、现场素材和制作排期继续深化。\n\n"
-        "要不要我先基于当前需求出一版创意方向草案？做完后我会再回到需求确认，把剩下的信息收拢到表单里。"
+        "要不要我先基于当前需求出一版创意方向草案？出稿后我们可以继续讨论和修改，方向确认后再回到需求梳理。"
     )
 
 
@@ -407,6 +481,8 @@ async def _maybe_handle_creative_direction_offer(
 ) -> tuple[dict | None, dict]:
     if settings.AGENT_MODE != "media" or request.business_type != "ai_3d_custom":
         return None, agent_state
+    if _normalize_chat_control_action(request.control_action) != "none":
+        return None, agent_state
 
     if _is_creative_direction_offer_acceptance(request.message, agent_state):
         next_state = _mark_creative_direction_offer(agent_state, "accepted", reason="user_accepted")
@@ -416,12 +492,20 @@ async def _maybe_handle_creative_direction_offer(
                 message=request.message,
                 history=request.history,
                 business_type=request.business_type,
+                user_message_id=request.user_message_id,
                 agent_state=next_state,
                 attachments=[],
             )
         )
         reply = str(direction_response.get("message") or "").strip()
-        next_state = _mark_creative_direction_offer(next_state, "completed", reason="creative_direction_generated")
+        direction_state = direction_response.get("agent_state")
+        if not isinstance(direction_state, dict):
+            direction_state = advance_creative_direction_iteration(
+                next_state,
+                prompt_message=request.message,
+                reason="creative_direction_generated",
+            )
+        next_state = _mark_creative_direction_offer(direction_state, "completed", reason="creative_direction_generated")
         _save_agent_state(request.session_id, user_id, next_state)
         _save_session_file(
             session_id=request.session_id,
@@ -442,7 +526,7 @@ async def _maybe_handle_creative_direction_offer(
             session_id=request.session_id,
             business_type=request.business_type,
         )
-        return {"message": reply, "handoff": False, "agent_state": next_state, "return_to_brief": True}, next_state
+        return {"message": reply, "handoff": False, "agent_state": next_state, "return_to_brief": False}, next_state
 
     if _is_creative_direction_offer_rejection(request.message, agent_state):
         next_state = _mark_creative_direction_offer(agent_state, "declined", reason="user_declined")
@@ -549,42 +633,12 @@ def _is_no_more_media_assets_reply(message: str) -> bool:
     return text in markers or any(marker in text for marker in markers[4:])
 
 
-VALID_CHAT_CONTROL_ACTIONS = {"none", "finish_brief_now", "handoff_requested", "ready_to_extract"}
+VALID_CHAT_CONTROL_ACTIONS = {"none", "finish_brief_now", "handoff_requested"}
 
 
 def _normalize_chat_control_action(action: str | None) -> str:
     text = str(action or "").strip()
     return text if text in VALID_CHAT_CONTROL_ACTIONS else "none"
-
-
-def _brief_state_ready_to_extract(agent_state: dict | None) -> bool:
-    readiness = (((agent_state or {}).get("brief_state") or {}).get("readiness") or {})
-    if readiness.get("level") in {"provisional", "formal"}:
-        return True
-    return readiness.get("can_score") is True
-
-
-def _media_completion_control_action(
-    history: list,
-    latest_message: str = "",
-    agent_state: dict | None = None,
-) -> str:
-    """Decide form-extraction control outside the LLM reply text."""
-    if _is_passive_requirement_wrap_up(latest_message):
-        return "finish_brief_now"
-
-    has_upload_wrap_up = _has_media_upload_wrap_up(history)
-    if not has_upload_wrap_up:
-        return "none"
-
-    if _is_no_more_media_assets_reply(latest_message):
-        if _brief_state_ready_to_extract(agent_state) or _has_media_completion_floor(history, latest_message):
-            return "ready_to_extract"
-
-    if _brief_state_ready_to_extract(agent_state) and _has_media_completion_floor(history, latest_message):
-        return "ready_to_extract"
-
-    return "none"
 
 
 _MEDIA_REQUIREMENT_SIGNAL_PATTERNS = {
@@ -1162,45 +1216,25 @@ async def _finalize_ai_chat_reply(
             agent_state,
             memory_hints=memory_hints,
         )
-        completion_control_action = _media_completion_control_action(
-            request.history,
-            request.message,
-            agent_state,
-        )
-        if control_action == "none" and completion_control_action != "none":
-            control_action = completion_control_action
-        passive_wrap_up = _is_passive_requirement_wrap_up(request.message)
-        no_more_assets = _is_no_more_media_assets_reply(request.message) and _has_media_upload_wrap_up(request.history)
-        if (
-            "【需求收集完成】" in reply
-            and control_action == "none"
-            and not passive_wrap_up
-            and not no_more_assets
-            and (
-                not _has_media_completion_floor(request.history, request.message)
-                or not _has_media_upload_wrap_up(request.history)
-            )
-        ):
+        if "【需求收集完成】" in reply:
             log_business_event(
                 logger,
-                "ai_completion_marker_stripped",
+                "ai_completion_marker_ignored",
                 level="warning",
                 user_id=user_id,
                 username=username,
                 session_id=request.session_id,
                 business_type=request.business_type,
-                substantive_user_count=_substantive_user_message_count(request.history, request.message),
-                requirement_signal_count=_media_requirement_signal_count(request.history, request.message),
-                has_upload_wrap_up=_has_media_upload_wrap_up(request.history),
+                control_action=control_action,
             )
-            reply = _strip_completion_marker(reply) + "\n\n" + _media_completion_followup(
-                request.history,
-                request.message,
-                agent_state,
-                memory_hints=memory_hints,
-            )
-        elif "【需求收集完成】" in reply:
             reply = _strip_completion_marker(reply)
+            if control_action == "none":
+                reply += "\n\n" + _media_completion_followup(
+                    request.history,
+                    request.message,
+                    agent_state,
+                    memory_hints=memory_hints,
+                )
 
     handoff = _HUMAN_HANDOFF_MARKER in reply
     if handoff:
@@ -1374,7 +1408,10 @@ _TONE_RULES = (
 
 _DIALOG_RULES = (
     "【对话规则 — 严格遵守！】\n"
-    "1. 每次回复只问一个问题。不要一次性问两三个。"
+    "1. 每轮最多推进一个需要用户回答的任务。“一个任务”按用户需要完成的回答动作判断，不按句子数或问号数判断。"
+    "如果用户必须分别提供两类信息、作出两个决定，或先后回答两个彼此独立的问题，即使写在同一句、只使用一个问号，也属于多个任务。"
+    "回复前必须自检：用户读完后是否只需要决定、确认或说明一件事？如果不是，只保留与当前上下文最相关、优先级最高的一问，其他问题留到后续轮次。"
+    "不要用“另外”“同时”“还有”“再确认一下”等转折在同一轮追加第二个独立追问。"
     "客户回答包含多个信息时，先确认收到，再追问下一个缺失项。"
     "切勿重复问已经问过的问题。\n\n"
 
@@ -1526,10 +1563,16 @@ _MEDIA_FORMAT_RULES = (
 
 _MEDIA_DIALOG_RULES = (
     "【对话推进规则】\n"
-    "1. 每次回复只问一个问题。客户一次回答多个信息时，先记录；如有必要给出简短专业判断，再追问一个最自然的缺口。\n"
+    "1. 每轮最多推进一个需要用户回答的任务。“一个任务”按用户需要完成的回答动作判断，不按句子数或问号数判断。"
+    "如果用户必须分别提供两类信息、作出两个决定，或先后回答两个彼此独立的问题，即使写在同一句、只使用一个问号，也属于多个任务。"
+    "回复前必须自检：用户读完后是否只需要决定、确认或说明一件事？如果不是，只保留与当前上下文最相关、优先级最高的一问，其他问题留到后续轮次。"
+    "不要用“另外”“同时”“还有”“再确认一下”等转折在同一轮追加第二个独立追问。"
+    "客户一次回答多个信息时，先记录；如有必要给出简短专业判断，再追问一个最自然的缺口。\n"
     "2. 选择下一问的优先级：优先追问客户刚提到但不完整的信息；其次补齐当前主题下最关键的缺口；最后再进入新的主题。\n"
     "3. 不重复询问已经明确的信息。如果客户暂时不清楚或不方便回答，先跳过。\n"
-    "4. 不机械按表单字段推进。客户提到城市位置，可以顺势问观看动线；客户聊到内容主题，可以接着问视觉调性。\n"
+    "4. 不机械按表单字段推进。客户提到城市位置，可以顺势问观看动线；客户聊到内容主题，可以接着问视觉调性。"
+    "提问时保留真实答案空间，不要为了让客户少输入，就把开放需求临时写成“A 还是 B”；列出两个方向或几个示例也不代表答案集合已经封闭。"
+    "只有业务枚举、客户已有候选或客观有限的答案集合，才适合直接列候选。\n"
     "5. 预算不是强制必问项。若客户比较配合、没有表达想退出或尽快结束，并且内容、点位、技术和时间已基本清楚，可以在靠后位置自然询问预算范围，并说明是为了匹配制作方案。若客户不方便、暂时不确定或想先结束，跳过并备注即可。\n"
     "6. 问技术规格时要给短例子，让客户知道怎么答；例如“屏幕分辨率 3840x2160、物理尺寸约宽 20m x 高 8m、格式 MP4/MOV、25/30fps、Rec.709 或 sRGB”。\n"
     "7. 文件上传放在最后。核心信息基本收集后，再提醒客户有现场实拍图、屏幕照片或参考素材可以上传；没有也可以继续整理。\n"
@@ -1772,7 +1815,14 @@ async def ai_chat(
             agent_state=agent_state,
             memory_hints=memory_hints,
         )
-        return {"message": reply, "handoff": handoff, "agent_state": agent_state, "control_action": control_action, **handoff_meta}
+        interaction = await decide_interaction(
+            reply=reply,
+            history=processing_request.history,
+            brief_state=(agent_state or {}).get("brief_state"),
+            model=settings.AI_MODEL_NAME,
+            timeout=settings.AI_HTTP_TIMEOUT,
+        )
+        return {"message": reply, "handoff": handoff, "agent_state": agent_state, "control_action": control_action, "interaction": interaction, **handoff_meta}
 
     document_confirmation_status = _document_brief_confirmation_status(
         agent_state,
@@ -1856,7 +1906,14 @@ async def ai_chat(
             agent_state=agent_state,
             memory_hints=memory_hints,
         )
-        return {"message": reply, "handoff": handoff, "agent_state": agent_state, "control_action": control_action, **handoff_meta}
+        interaction = await decide_interaction(
+            reply=reply,
+            history=processing_request.history,
+            brief_state=(agent_state or {}).get("brief_state"),
+            model=settings.AI_MODEL_NAME,
+            timeout=settings.AI_HTTP_TIMEOUT,
+        )
+        return {"message": reply, "handoff": handoff, "agent_state": agent_state, "control_action": control_action, "interaction": interaction, **handoff_meta}
 
     except HTTPException:
         raise
@@ -2214,6 +2271,13 @@ async def ai_chat_stream(
                 agent_state=agent_state,
                 memory_hints=memory_hints,
             )
+            interaction = await decide_interaction(
+                reply=reply,
+                history=processing_request.history,
+                brief_state=(agent_state or {}).get("brief_state"),
+                model=settings.AI_MODEL_NAME,
+                timeout=settings.AI_HTTP_TIMEOUT,
+            )
             log_business_event(
                 logger,
                 "ai_chat_stream_provider_completed",
@@ -2226,7 +2290,7 @@ async def ai_chat_stream(
                 control_action=control_action,
                 reply_length=len(reply or ""),
             )
-            yield _sse_event("final", {"message": reply, "handoff": handoff, "provider": provider, "agent_state": agent_state, "control_action": control_action, **handoff_meta})
+            yield _sse_event("final", {"message": reply, "handoff": handoff, "provider": provider, "agent_state": agent_state, "control_action": control_action, "interaction": interaction, **handoff_meta})
         except HTTPException as e:
             log_business_event(
                 logger,

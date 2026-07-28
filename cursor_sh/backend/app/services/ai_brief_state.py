@@ -11,11 +11,13 @@ from typing import Any
 
 from app.config import settings
 from app.services.ai_context import (
+    agent_context_messages,
     append_agent_context_message,
     ensure_agent_context_window,
     sync_agent_context_window_from_history,
 )
 from app.services.ai_client import post_chat_completion
+from app.services.ai_orchestrator import CREATIVE_DIRECTION_ACTIVE_STATUSES
 from app.services.ai_upload_context import (
     BRIEF_DOCUMENT_CONTEXT_MARKER,
     state_safe_upload_message,
@@ -263,8 +265,8 @@ def load_agent_state(session_id: str, user_id: str, business_type: str = "ai_3d_
             state = json.load(f)
     except Exception:
         state = {
-            "current_agent": "brief_agent",
-            "stage": "brief_building",
+            "current_agent": None,
+            "stage": "intent_routing",
             "business_type": business_type,
             "brief_state": create_empty_brief_state(business_type),
             "agent_context_window": {},
@@ -275,6 +277,8 @@ def load_agent_state(session_id: str, user_id: str, business_type: str = "ai_3d_
             "pending_document_brief": None,
             "document_brief_confirmation": None,
         }
+    state.setdefault("current_agent", None)
+    state.setdefault("stage", "intent_routing" if not state.get("current_agent") else "brief_building")
     state.setdefault("business_type", business_type)
     state.setdefault("brief_state", create_empty_brief_state(business_type))
     state["brief_state"] = merge_brief_updates(state["brief_state"], {})
@@ -420,14 +424,21 @@ def build_brief_update_messages(message: str, history: list, brief_state: dict[s
         "confirm_pending、reject_pending 或 update_field。\n"
         "如果当前消息是短回答，必须结合 last_assistant_question 判断它是在回答哪个 Brief 字段。"
         "短回答不能因为缺少主语就直接忽略；它可能是在确认格式、帧率、色彩空间、安全区、审核周期、预算、上刊时间、时长、规格、点位、受众或创意方向。"
+        "如果用户对上一轮询问的字段明确回答“不确定”“待定”或“暂未确认”，也要根据 last_assistant_question 将对应字段更新为“待定”；"
+        "这表示该项状态已经确认但具体值未知，后续不要因此重复追问，用户之后给出明确值时再覆盖。"
         "只有当上一轮问题与当前短回答无法建立明确字段关系时，才返回空 updates。\n"
         "如果用户明确改口，用新值覆盖旧值。没有新信息时返回 {\"updates\":{},\"events\":[]}。"
     )
     recent_history = [
-        {"role": h["role"], "content": str(h.get("content") or "")[:500]}
-        for h in (history or [])[-6:]
+        {"role": h["role"], "content": str(h.get("content") or "").strip()}
+        for h in (history or [])
         if h.get("role") in {"user", "assistant"} and h.get("content")
-    ]
+    ][-9:]
+    for index in range(len(recent_history) - 1, -1, -1):
+        if recent_history[index]["role"] == "assistant":
+            del recent_history[index]
+            break
+    recent_history = recent_history[-8:]
     payload = {
         "current_brief_values": current_values,
         "pending_confirmation": pending_confirmation,
@@ -577,8 +588,20 @@ async def update_agent_state_from_message(
     memory_hints: dict[str, str] | None = None,
     document_updates: dict[str, str] | None = None,
     document_filenames: list[str] | None = None,
+    update_brief: bool = True,
 ) -> dict[str, Any]:
     state = load_agent_state(session_id, user_id, business_type)
+    pending_creative = state.get("pending_creative_direction")
+    pending_creative_status = (
+        str(pending_creative.get("status") or "").strip()
+        if isinstance(pending_creative, dict)
+        else ""
+    )
+    if pending_creative_status in CREATIVE_DIRECTION_ACTIVE_STATUSES:
+        update_brief = False
+    if update_brief and not state.get("current_agent"):
+        state["current_agent"] = "brief_agent"
+        state["stage"] = "brief_building"
     state_message = state_safe_upload_message(message)
     extraction_message = strip_generated_upload_context(message)
     has_uploaded_material = "[用户上传了图片素材]" in state_message
@@ -601,6 +624,16 @@ async def update_agent_state_from_message(
         content=state_message,
         source_message_id=source_message_id,
     )
+    brief_update_history = agent_context_messages(
+        state,
+        exclude_source_message_id=source_message_id,
+        fallback_history=history or [],
+    )
+    if not update_brief:
+        state["business_type"] = business_type
+        state["updated_at"] = _now_iso()
+        save_agent_state(session_id, user_id, state)
+        return state
     # Context synchronization can replace the outer state object, so use the
     # current candidate when applying the LLM's resolution below.
     pending_document = state.get("pending_document_brief")
@@ -648,7 +681,7 @@ async def update_agent_state_from_message(
             data = await post_chat_completion(
                 {
                     "model": settings.AI_MODEL_NAME,
-                    "messages": build_brief_update_messages(extraction_message, history or [], brief_state),
+                    "messages": build_brief_update_messages(extraction_message, brief_update_history, brief_state),
                     "max_tokens": 320,
                     "temperature": 0,
                     "response_format": {"type": "json_object"},

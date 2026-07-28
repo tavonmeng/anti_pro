@@ -334,9 +334,9 @@ CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 
 ### Q: Token 过期？
 A: 
-默认 24 小时有效期，可在 `.env` 中修改：
+默认 3 天有效期，可在 `.env` 中修改：
 ```env
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
+ACCESS_TOKEN_EXPIRE_MINUTES=4320
 ```
 
 ## 性能优化建议

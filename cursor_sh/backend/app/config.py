@@ -176,7 +176,7 @@ class Settings(BaseSettings):
     # JWT 配置
     JWT_SECRET_KEY: str = "dev-jwt-secret-key-change-in-production"
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24小时
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 4320  # 3天
     
     # CORS 配置
     CORS_ORIGINS: Union[List[str], str] = ["http://localhost:5173", "http://localhost:3000"]

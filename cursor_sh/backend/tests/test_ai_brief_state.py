@@ -1,11 +1,16 @@
+import json
+
 import pytest
 
 from app.services.ai_brief_state import (
     MEDIA_3D_BRIEF_FIELDS,
+    build_brief_update_messages,
     build_brief_state_context,
     create_empty_brief_state,
     evaluate_creative_readiness,
+    load_agent_state,
     merge_brief_updates,
+    save_agent_state,
     update_agent_state_from_message,
 )
 from app.services.ai_image_understanding import IMAGE_CONTEXT_MARKER
@@ -18,6 +23,121 @@ def test_empty_media_brief_state_uses_current_3d_custom_fields():
     assert state["filled_fields"] == []
     assert "theme_concept" in state["missing_fields"]
     assert state["readiness"]["level"] == "insufficient"
+
+
+def test_brief_update_prompt_treats_explicit_uncertainty_as_a_confirmed_field_state():
+    messages = build_brief_update_messages(
+        "不确定",
+        [{"role": "assistant", "content": "预计上刊时间大概是什么时候？"}],
+        create_empty_brief_state("ai_3d_custom"),
+    )
+
+    system_prompt = messages[0]["content"]
+    assert "明确回答“不确定”“待定”或“暂未确认”" in system_prompt
+    assert "将对应字段更新为“待定”" in system_prompt
+    assert "后续不要因此重复追问" in system_prompt
+
+
+@pytest.mark.asyncio
+async def test_brief_extractor_uses_same_authoritative_window_for_repeated_short_answer(monkeypatch, tmp_path):
+    captured = {}
+    long_previous_user_message = "此前的项目补充。" + ("这是一段较早的详细上下文。" * 100) + "此前补充结束。"
+    long_budget_question = (
+        "已确认收到化妆品.png。" + ("这是与项目预算相关的专业分析。" * 100)
+        + "项目制作预算大概在什么范围？"
+    )
+
+    async def _mock_state_parser(payload, *, timeout=None):
+        captured.update(json.loads(payload["messages"][1]["content"]))
+        return {"choices": [{"message": {"content": '{"updates":{"budget":"没有"},"events":[]}'}}]}
+
+    async def _mock_context_compactor(payload, *, timeout=None, attempts=None):
+        return {"choices": [{"message": {"content": "压缩的较早上下文"}}]}
+
+    monkeypatch.setattr("app.services.ai_brief_state.settings.LOG_DIR", str(tmp_path))
+    monkeypatch.setattr("app.services.ai_brief_state.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_brief_state.post_chat_completion", _mock_state_parser)
+    monkeypatch.setattr("app.services.ai_context.post_chat_completion", _mock_context_compactor)
+
+    initial_state = {
+        "current_agent": "brief_agent",
+        "stage": "brief_building",
+        "business_type": "ai_3d_custom",
+        "brief_state": create_empty_brief_state("ai_3d_custom"),
+        "agent_context_window": {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": "您手头有现场实拍图吗？",
+                    "source_message_id": "stale-assistant",
+                    "fingerprint": "stale",
+                }
+            ]
+        },
+    }
+    save_agent_state("session-budget-answer", "user-budget-answer", initial_state)
+    history = [
+        {"client_message_id": "user-earlier", "role": "user", "content": long_previous_user_message},
+        {"client_message_id": "assistant-photo", "role": "assistant", "content": "您手头有现场实拍图吗？"},
+        {"client_message_id": "user-photo", "role": "user", "content": "没有"},
+        {
+            "client_message_id": "assistant-budget",
+            "role": "assistant",
+            "content": long_budget_question,
+        },
+    ]
+
+    state = await update_agent_state_from_message(
+        session_id="session-budget-answer",
+        user_id="user-budget-answer",
+        business_type="ai_3d_custom",
+        message="没有",
+        history=history,
+        source_message_id="user-budget",
+        memory_hints={},
+    )
+
+    assert captured["last_assistant_question"] == history[-1]["content"]
+    assert captured["recent_history"] == [
+        {"role": "user", "content": "压缩的较早上下文"},
+        {"role": "assistant", "content": "您手头有现场实拍图吗？"},
+        {"role": "user", "content": "没有"},
+    ]
+    assert state["brief_state"]["fields"]["budget"]["value"] == "没有"
+    context_messages = state["agent_context_window"]["messages"]
+    assert [item["source_message_id"] for item in context_messages][-2:] == [
+        "assistant-budget",
+        "user-budget",
+    ]
+    assert [item["content"] for item in context_messages].count("没有") == 2
+
+
+def test_new_conversation_state_has_no_selected_subagent(monkeypatch, tmp_path):
+    monkeypatch.setattr("app.services.ai_brief_state.settings.LOG_DIR", str(tmp_path))
+
+    state = load_agent_state("session-new", "user-new", "ai_3d_custom")
+
+    assert state["current_agent"] is None
+    assert state["stage"] == "intent_routing"
+
+
+@pytest.mark.asyncio
+async def test_direct_brief_update_activates_brief_agent_for_unrouted_state(monkeypatch, tmp_path):
+    monkeypatch.setattr("app.services.ai_brief_state.settings.LOG_DIR", str(tmp_path))
+    monkeypatch.setattr("app.services.ai_brief_state.settings.AI_API_KEY", "")
+
+    state = await update_agent_state_from_message(
+        session_id="session-direct-brief",
+        user_id="user-direct-brief",
+        business_type="ai_3d_custom",
+        message="想做一个裸眼3D视频，先梳理需求",
+        history=[],
+        source_message_id="msg-direct-brief",
+        memory_hints={},
+    )
+
+    assert state["current_agent"] == "brief_agent"
+    assert state["stage"] == "brief_building"
 
 
 def test_merge_brief_updates_tracks_version_sources_and_overwrites():
@@ -72,6 +192,45 @@ def test_creative_readiness_levels_follow_media_3d_brief_fields():
     assert evaluate_creative_readiness(insufficient)["level"] == "insufficient"
     assert evaluate_creative_readiness(provisional)["level"] == "provisional"
     assert evaluate_creative_readiness(formal)["level"] == "formal"
+
+
+@pytest.mark.asyncio
+async def test_creative_feedback_updates_context_without_merging_into_brief(monkeypatch, tmp_path):
+    async def _unexpected_state_parser(*_, **__):
+        raise AssertionError("creative review feedback must not run Brief extraction")
+
+    monkeypatch.setattr("app.services.ai_brief_state.settings.LOG_DIR", str(tmp_path))
+    monkeypatch.setattr("app.services.ai_brief_state.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_brief_state.post_chat_completion", _unexpected_state_parser)
+
+    brief_state = merge_brief_updates(
+        create_empty_brief_state("ai_3d_custom"),
+        {"theme_concept": "大熊猫与酸奶在L型屏转角互动"},
+        source_message_id="msg-original",
+    )
+    initial_state = {
+        "current_agent": "creative_direction_agent",
+        "stage": "creative_direction_review",
+        "business_type": "ai_3d_custom",
+        "brief_state": brief_state,
+        "pending_creative_direction": {"status": "awaiting_feedback"},
+    }
+    save_agent_state("session-creative-feedback", "user-creative-feedback", initial_state)
+
+    state = await update_agent_state_from_message(
+        session_id="session-creative-feedback",
+        user_id="user-creative-feedback",
+        business_type="ai_3d_custom",
+        message="还不行，必须有其他元素",
+        history=[],
+        source_message_id="msg-feedback",
+        memory_hints={},
+    )
+
+    assert state["brief_state"]["fields"]["theme_concept"]["value"] == "大熊猫与酸奶在L型屏转角互动"
+    assert state["brief_state"]["applied_message_ids"] == ["msg-original"]
+    assert state["pending_creative_direction"]["status"] == "awaiting_feedback"
+    assert state["agent_context_window"]["messages"][-1]["content"] == "还不行，必须有其他元素"
 
 
 @pytest.mark.asyncio
@@ -289,7 +448,7 @@ async def test_state_update_turns_memory_hint_into_pending_confirmation(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_state_update_maintains_compact_agent_context_window(monkeypatch, tmp_path):
+async def test_state_update_preserves_latest_assistant_and_current_user_messages(monkeypatch, tmp_path):
     long_history_message = "创意方向草案：毛绒大熊猫从L型屏幕深处探出，与路人挥手互动。" * 40
     history = [{"role": "assistant", "content": long_history_message}]
     original_history = [dict(item) for item in history]
@@ -317,10 +476,10 @@ async def test_state_update_maintains_compact_agent_context_window(monkeypatch, 
 
     assert history == original_history
     context_messages = state["agent_context_window"]["messages"]
-    assert context_messages[0]["content"] == "压缩摘要：毛绒大熊猫从L型屏幕探出，与路人互动。"
-    assert context_messages[0]["compacted"] is True
+    assert context_messages[0]["content"] == long_history_message
+    assert context_messages[0]["compacted"] is False
     assert context_messages[-1]["content"] == "评估一下刚才这个方向"
-    assert all(len(item["content"]) <= 700 for item in context_messages)
+    assert len(context_messages[0]["content"]) > 700
 
 
 @pytest.mark.asyncio

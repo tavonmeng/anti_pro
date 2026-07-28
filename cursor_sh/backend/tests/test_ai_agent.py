@@ -56,6 +56,13 @@ def test_requirement_prompt_keeps_goal_on_brief_form_and_order_confirmation():
     assert "信息密度较高" in system_prompt
     assert "至少两个短段落" in system_prompt
     assert "最后一个问题单独成段" in system_prompt
+    assert "每轮最多推进一个需要用户回答的任务" in system_prompt
+    assert "不按句子数或问号数判断" in system_prompt
+    assert "分别提供两类信息、作出两个决定" in system_prompt
+    assert "按用户需要完成的回答动作判断" in system_prompt
+    assert "用户读完后是否只需要决定、确认或说明一件事" in system_prompt
+    assert "只保留与当前上下文最相关、优先级最高的一问" in system_prompt
+    assert "同一轮追加第二个独立追问" in system_prompt
     assert "少量加粗关键事实或关键判断" in system_prompt
     assert "凡是会进入 Brief 的内容信息都属于重点信息" in system_prompt
     assert "只加粗具体 Brief 内容" in system_prompt
@@ -68,6 +75,63 @@ def test_requirement_prompt_keeps_goal_on_brief_form_and_order_confirmation():
     assert "不要每轮都使用固定标题" in system_prompt
     assert "可以偶尔用" not in system_prompt
     assert "不要每轮都说" not in system_prompt
+
+
+@pytest.mark.asyncio
+async def test_requirement_reply_generation_uses_same_latest_budget_window(monkeypatch):
+    long_previous_user_message = "此前的项目补充。" + ("这是一段较早的详细上下文。" * 100) + "此前补充结束。"
+    long_budget_question = (
+        "已确认收到化妆品.png。" + ("这是与项目预算相关的专业分析。" * 100)
+        + "项目制作预算大概在什么范围？"
+    )
+
+    async def _mock_context_compactor(payload, *, timeout=None, attempts=None):
+        return {"choices": [{"message": {"content": "压缩的较早上下文"}}]}
+
+    monkeypatch.setattr("app.services.ai_context.settings.AI_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.ai_context.post_chat_completion", _mock_context_compactor)
+    history = [
+        {"client_message_id": "user-earlier", "role": "user", "content": long_previous_user_message},
+        {"client_message_id": "assistant-photo", "role": "assistant", "content": "您手头有现场实拍图吗？"},
+        {"client_message_id": "user-photo", "role": "user", "content": "没有"},
+        {
+            "client_message_id": "assistant-budget",
+            "role": "assistant",
+            "content": long_budget_question,
+        },
+    ]
+    state = await ai_module.sync_agent_context_window_from_history({}, history)
+    state, _ = await ai_module.append_agent_context_message(
+        state,
+        role="user",
+        content="没有",
+        source_message_id="user-budget",
+    )
+    state["brief_state"] = {
+        "fields": {
+            "budget": {"value": "没有"},
+            "site_photos": {"value": "已上传图片素材"},
+        },
+        "filled_fields": ["budget", "site_photos"],
+        "readiness": {"level": "insufficient"},
+    }
+
+    messages = ai_module._build_requirement_llm_messages(
+        ai_module.ChatRequest(
+            session_id="session-budget-window",
+            message="没有",
+            history=history,
+            business_type="ai_3d_custom",
+            user_message_id="user-budget",
+        ),
+        agent_state=state,
+    )
+
+    assert messages[-2] == {"role": "assistant", "content": long_budget_question}
+    assert messages[-1] == {"role": "user", "content": "没有"}
+    assert {"role": "user", "content": "压缩的较早上下文"} in messages
+    assert "项目制作预算：没有" in messages[0]["content"]
+    assert "现场实拍图：已上传图片素材" in messages[0]["content"]
 
 
 def test_requirement_prompt_uses_state_projection_instead_of_raw_memory_context():
@@ -995,7 +1059,7 @@ async def test_media_ai_chat_accepts_creative_direction_offer_and_calls_subagent
                 "- **计划概括**：基于当前点位做一版轻量方向。\n\n"
                 "为了继续推进，想确认一下观众主要从哪个方向观看？"
             ),
-            "return_to_brief": True,
+            "return_to_brief": False,
         }
 
     monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "test-key")
@@ -1024,7 +1088,10 @@ async def test_media_ai_chat_accepts_creative_direction_offer_and_calls_subagent
     assert captured_request["message"] == "可以，先做一次AI创意"
     assert captured_request["agent_state"]["brief_state"]["readiness"]["level"] == "provisional"
     assert response["agent_state"]["creative_direction_offer"]["status"] == "completed"
-    assert response["agent_state"]["current_agent"] == "brief_agent"
+    assert response["return_to_brief"] is False
+    assert response["agent_state"]["current_agent"] == "creative_direction_agent"
+    assert response["agent_state"]["stage"] == "creative_direction_review"
+    assert response["agent_state"]["pending_creative_direction"]["status"] == "awaiting_feedback"
 
 
 def test_creative_direction_offer_does_not_accept_attachment_only_upload():
@@ -1037,6 +1104,94 @@ def test_creative_direction_offer_does_not_accept_attachment_only_upload():
     state = {"creative_direction_offer": {"status": "offered"}}
 
     assert ai_module._is_creative_direction_offer_acceptance(message, state) is False
+
+
+def test_creative_direction_route_state_keeps_pending_during_feedback_and_clears_on_exit():
+    state = {
+        "current_agent": "creative_direction_agent",
+        "stage": "creative_direction_review",
+        "pending_creative_direction": {"status": "awaiting_feedback"},
+    }
+    stay_route = ai_module.RouteDecision(
+        action="stay",
+        intent="creative_direction",
+        target_agent="creative_direction_agent",
+        stage="creative_direction_review",
+    )
+    exit_route = ai_module.RouteDecision(
+        action="switch",
+        intent="brief_building",
+        target_agent="brief_agent",
+        stage="brief_building",
+    )
+
+    active_state = ai_module._apply_creative_direction_route_state(state, stay_route)
+    exited_state = ai_module._apply_creative_direction_route_state(active_state, exit_route)
+
+    assert active_state["pending_creative_direction"]["status"] == "awaiting_feedback"
+    assert active_state["current_agent"] == "creative_direction_agent"
+    assert active_state["stage"] == "creative_direction_review"
+    assert exited_state["pending_creative_direction"] is None
+    assert exited_state["current_agent"] == "brief_agent"
+    assert exited_state["stage"] == "brief_building"
+
+
+def test_creative_direction_route_state_keeps_exit_recommendation_when_user_continues():
+    state = {
+        "current_agent": "creative_direction_agent",
+        "stage": "creative_direction_exit_recommended",
+        "pending_creative_direction": {
+            "status": "exit_recommended",
+            "iteration_count": 5,
+            "exit_recommended": True,
+        },
+    }
+    route = ai_module.RouteDecision(
+        action="stay",
+        intent="creative_direction",
+        target_agent="creative_direction_agent",
+        stage="creative_direction_exit_recommended",
+    )
+
+    next_state = ai_module._apply_creative_direction_route_state(state, route)
+
+    assert next_state["pending_creative_direction"]["iteration_count"] == 5
+    assert next_state["pending_creative_direction"]["status"] == "exit_recommended"
+    assert next_state["stage"] == "creative_direction_exit_recommended"
+
+
+def test_creative_diagnosis_route_state_keeps_review_and_clears_it_on_exit():
+    state = {
+        "current_agent": "creative_diagnosis_agent",
+        "stage": "creative_diagnosis_review",
+        "pending_evaluation": {
+            "status": "awaiting_feedback",
+            "iteration_count": 2,
+            "iteration_limit": 5,
+        },
+    }
+    stay_route = ai_module.RouteDecision(
+        action="stay",
+        intent="creative_diagnosis",
+        target_agent="creative_diagnosis_agent",
+        stage="creative_diagnosis_review",
+    )
+    exit_route = ai_module.RouteDecision(
+        action="switch",
+        intent="brief_building",
+        target_agent="brief_agent",
+        stage="brief_building",
+    )
+
+    active_state = ai_module._apply_agent_route_state(state, stay_route)
+    exited_state = ai_module._apply_agent_route_state(active_state, exit_route)
+
+    assert active_state["pending_evaluation"]["status"] == "awaiting_feedback"
+    assert active_state["current_agent"] == "creative_diagnosis_agent"
+    assert active_state["stage"] == "creative_diagnosis_review"
+    assert exited_state["pending_evaluation"] is None
+    assert exited_state["current_agent"] == "brief_agent"
+    assert exited_state["stage"] == "brief_building"
 
 
 @pytest.mark.asyncio
@@ -1062,7 +1217,7 @@ async def test_media_ai_chat_stream_sends_thinking_for_accepted_creative_offer(m
         }
 
     async def _mock_direction(request):
-        return {"message": "**创意方向草案**\n\n- **创意方向名称**：云绒熊猫探屏", "return_to_brief": True}
+        return {"message": "**创意方向草案**\n\n- **创意方向名称**：云绒熊猫探屏", "return_to_brief": False}
 
     monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "test-key")
     monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
@@ -1096,7 +1251,7 @@ async def test_media_ai_chat_stream_sends_thinking_for_accepted_creative_offer(m
 
 
 @pytest.mark.asyncio
-async def test_media_ai_chat_allows_no_more_assets_to_complete(monkeypatch):
+async def test_media_ai_chat_honors_router_finish_after_final_asset_question(monkeypatch):
     async def _mock_completion(payload, *, timeout=None):
         return {
             "choices": [
@@ -1131,13 +1286,52 @@ async def test_media_ai_chat_allows_no_more_assets_to_complete(monkeypatch):
                     "content": "核心信息已基本收集完毕。您这边是否有现场实拍图、屏幕照片或其他参考素材可以上传？",
                 },
             ],
+            control_action="finish_brief_now",
         ),
         _request_without_auth(),
         _fake_user(),
     )
 
     assert "【需求收集完成】" not in response["message"]
-    assert response["control_action"] == "ready_to_extract"
+    assert response["control_action"] == "finish_brief_now"
+
+
+@pytest.mark.asyncio
+async def test_media_ai_chat_does_not_infer_completion_from_ambiguous_no_more_reply(monkeypatch):
+    async def _mock_completion(payload, *, timeout=None):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": "这个信息够用了。接下来想确认一下项目的审核边界。"
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(ai_module.settings, "AI_API_KEY", "test-key")
+    monkeypatch.setattr(ai_module.settings, "AGENT_MODE", "media")
+    monkeypatch.setattr(ai_module, "post_chat_completion", _mock_completion)
+    monkeypatch.setattr(ai_module, "_save_session_file", lambda **_: None)
+    monkeypatch.setattr(ai_module, "_append_handoff_message", _no_existing_handoff)
+
+    response = await ai_module.ai_chat(
+        ai_module.ChatRequest(
+            session_id="test-session",
+            message="没有了",
+            history=[
+                {
+                    "role": "assistant",
+                    "content": "还有更详细的屏幕尺寸吗？如果有现场实拍图或结构图，也可以提供。",
+                },
+            ],
+            control_action="none",
+        ),
+        _request_without_auth(),
+        _fake_user(),
+    )
+
+    assert response["control_action"] == "none"
 
 
 @pytest.mark.asyncio
@@ -1168,6 +1362,7 @@ async def test_media_ai_chat_allows_user_driven_early_wrap_up(monkeypatch):
                 {"role": "assistant", "content": "大概面向谁？"},
                 {"role": "user", "content": "游客和商场客流"},
             ],
+            control_action="finish_brief_now",
         ),
         _request_without_auth(),
         _fake_user(),
@@ -1184,7 +1379,7 @@ async def test_ai_chat_stream_qwen_uses_chat_completions_without_responses_probe
         yield ""
 
     async def _mock_chat_stream_events(payload, *, timeout=None):
-        assert payload["model"] == "qwen3.6-plus"
+        assert payload["model"] == "qwen3.7-plus"
         assert payload["messages"][-1]["content"] == "我想做一个裸眼3D项目"
         assert payload["temperature"] == 0.3
         assert timeout == 120
@@ -1195,7 +1390,7 @@ async def test_ai_chat_stream_qwen_uses_chat_completions_without_responses_probe
     monkeypatch.setattr(ai_module.settings, "AI_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
     monkeypatch.setattr(ai_module.settings, "AI_RESPONSES_BASE_URL", "")
     monkeypatch.setattr(ai_module.settings, "AI_PREFER_RESPONSES_API", False)
-    monkeypatch.setattr(ai_module.settings, "AI_MODEL_NAME", "qwen3.6-plus")
+    monkeypatch.setattr(ai_module.settings, "AI_MODEL_NAME", "qwen3.7-plus")
     monkeypatch.setattr(ai_module.settings, "AI_HTTP_TIMEOUT", 120)
     monkeypatch.setattr(ai_module, "stream_responses_completion", _unexpected_responses_stream)
     monkeypatch.setattr(ai_module, "stream_chat_completion_events", _mock_chat_stream_events)
@@ -1227,10 +1422,10 @@ async def test_qwen_chat_payload_disables_thinking_by_default(monkeypatch):
     from app.services import ai_client
 
     monkeypatch.setattr(ai_client.settings, "AI_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-    monkeypatch.setattr(ai_client.settings, "AI_MODEL_NAME", "qwen3.6-plus")
+    monkeypatch.setattr(ai_client.settings, "AI_MODEL_NAME", "qwen3.7-plus")
     monkeypatch.setattr(ai_client.settings, "AI_ENABLE_THINKING", False)
 
-    payload = ai_client._prepare_chat_payload({"model": "qwen3.6-plus", "messages": []})
+    payload = ai_client._prepare_chat_payload({"model": "qwen3.7-plus", "messages": []})
 
     assert payload["enable_thinking"] is False
 

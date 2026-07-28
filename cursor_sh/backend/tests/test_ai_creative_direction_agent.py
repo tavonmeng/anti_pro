@@ -1,13 +1,15 @@
 import pytest
 import json
+from types import SimpleNamespace
 from fastapi import HTTPException
 
 from app.api import ai_creative_direction_agent as direction_module
 from app.services.ai_image_understanding import IMAGE_CONTEXT_MARKER
+from app.services.ai_upload_context import BRIEF_DOCUMENT_CONTEXT_MARKER
 
 
 @pytest.mark.asyncio
-async def test_creative_direction_fallback_generates_draft_then_returns_to_brief(monkeypatch):
+async def test_creative_direction_fallback_generates_draft_and_keeps_review_active(monkeypatch):
     monkeypatch.setattr(direction_module.settings, "AI_API_KEY", "")
 
     response = await direction_module.ai_creative_direction(
@@ -33,7 +35,12 @@ async def test_creative_direction_fallback_generates_draft_then_returns_to_brief
     )
 
     message = response["message"]
-    assert response["return_to_brief"] is True
+    assert response["return_to_brief"] is False
+    assert response["agent_state"]["current_agent"] == "creative_direction_agent"
+    assert response["agent_state"]["stage"] == "creative_direction_review"
+    assert response["agent_state"]["pending_creative_direction"]["status"] == "awaiting_feedback"
+    assert response["agent_state"]["pending_creative_direction"]["iteration_count"] == 1
+    assert response["agent_state"]["pending_creative_direction"]["exit_recommended"] is False
     assert "创意方向草案" in message
     assert "创意方向名称" in message
     assert "计划概括" in message
@@ -45,6 +52,132 @@ async def test_creative_direction_fallback_generates_draft_then_returns_to_brief
     assert "Brief 附件" not in message
     assert "我先记录下来" not in message
     assert "【需求收集完成】" not in message
+    assert "哪些部分需要保留" in message
+
+
+@pytest.mark.asyncio
+async def test_fifth_creative_direction_output_recommends_returning_to_brief(monkeypatch):
+    monkeypatch.setattr(direction_module.settings, "AI_API_KEY", "")
+
+    response = await direction_module.ai_creative_direction(
+        direction_module.CreativeDirectionRequest(
+            session_id="session-test",
+            message="再把第三元素和熊猫的互动做得更自然一点",
+            history=[],
+            business_type="ai_3d_custom",
+            agent_state={
+                "brief_state": {
+                    "fields": {
+                        "city_location": {"value": "杭州湖滨银泰in77 L型大屏"},
+                        "audience_scene": {"value": "游客和年轻消费者"},
+                        "theme_concept": {"value": "熊猫、酸奶与竹叶的裸眼3D互动"},
+                    }
+                },
+                "pending_creative_direction": {
+                    "status": "awaiting_feedback",
+                    "iteration_count": 4,
+                    "iteration_limit": 5,
+                    "exit_recommended": False,
+                },
+            },
+        )
+    )
+
+    pending = response["agent_state"]["pending_creative_direction"]
+    assert response["return_to_brief"] is False
+    assert pending["iteration_count"] == 5
+    assert pending["iteration_limit"] == 5
+    assert pending["exit_recommended"] is True
+    assert pending["status"] == "exit_recommended"
+    assert pending["exit_recommended_at"]
+    assert response["agent_state"]["stage"] == "creative_direction_exit_recommended"
+    assert response["message"].count("这版方向经过几轮讨论") == 1
+    assert "第 5 轮" not in response["message"]
+    assert "5 轮迭代" not in response["message"]
+    assert "策划专家" in response["message"]
+    assert "屏幕参数" in response["message"]
+    assert "现场观看动线" in response["message"]
+    assert "审核规范" in response["message"]
+    assert "回到需求梳理" in response["message"]
+    assert "哪些部分需要保留" not in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_explicit_continuation_after_limit_keeps_creative_agent_and_repeats_soft_reminder(monkeypatch):
+    monkeypatch.setattr(direction_module.settings, "AI_API_KEY", "")
+
+    response = await direction_module.ai_creative_direction(
+        direction_module.CreativeDirectionRequest(
+            session_id="session-test",
+            message="还要再改一个关键点，把竹叶换成水珠",
+            history=[],
+            business_type="ai_3d_custom",
+            agent_state={
+                "brief_state": {
+                    "fields": {
+                        "city_location": {"value": "杭州湖滨银泰in77 L型大屏"},
+                        "audience_scene": {"value": "游客和年轻消费者"},
+                        "theme_concept": {"value": "熊猫、酸奶与竹叶的裸眼3D互动"},
+                    }
+                },
+                "pending_creative_direction": {
+                    "status": "exit_recommended",
+                    "iteration_count": 5,
+                    "iteration_limit": 5,
+                    "exit_recommended": True,
+                    "exit_recommended_at": "2026-07-21T12:00:00+08:00",
+                },
+            },
+        )
+    )
+
+    pending = response["agent_state"]["pending_creative_direction"]
+    assert pending["iteration_count"] == 6
+    assert pending["status"] == "exit_recommended"
+    assert pending["exit_recommended_at"] == "2026-07-21T12:00:00+08:00"
+    assert response["agent_state"]["current_agent"] == "creative_direction_agent"
+    assert "这版方向经过几轮讨论" in response["message"]
+    assert "6 轮迭代" not in response["message"]
+
+
+@pytest.mark.asyncio
+async def test_creative_direction_five_round_conversation_reaches_soft_exit(monkeypatch):
+    monkeypatch.setattr(direction_module.settings, "AI_API_KEY", "")
+    state = {
+        "brief_state": {
+            "fields": {
+                "city_location": {"value": "杭州湖滨银泰in77 L型大屏"},
+                "audience_scene": {"value": "游客和年轻消费者"},
+                "theme_concept": {"value": "熊猫、酸奶与自然元素的裸眼3D互动"},
+            }
+        }
+    }
+
+    responses = []
+    for round_index in range(1, 6):
+        response = await direction_module.ai_creative_direction(
+            direction_module.CreativeDirectionRequest(
+                session_id="session-five-rounds",
+                message=f"第{round_index}轮：继续优化当前方向",
+                history=[],
+                business_type="ai_3d_custom",
+                agent_state=state,
+            )
+        )
+        state = response["agent_state"]
+        responses.append(response)
+        assert state["pending_creative_direction"]["iteration_count"] == round_index
+
+    for response in responses[:4]:
+        assert response["agent_state"]["pending_creative_direction"]["status"] == "awaiting_feedback"
+        assert "这版方向经过几轮讨论" not in response["message"]
+
+    fifth_response = responses[4]
+    assert fifth_response["agent_state"]["pending_creative_direction"]["status"] == "exit_recommended"
+    assert fifth_response["agent_state"]["stage"] == "creative_direction_exit_recommended"
+    assert fifth_response["message"].count("这版方向经过几轮讨论") == 1
+    assert "具体方案需要策划专家结合品牌目标、屏幕参数、现场观看动线" in fifth_response["message"]
+    assert "5 轮迭代" not in fifth_response["message"]
 
 
 @pytest.mark.asyncio
@@ -63,7 +196,7 @@ async def test_creative_direction_agent_enables_thinking_with_long_timeout_and_s
                         "content": (
                             "**创意方向草案**\n\n"
                             "- **创意方向名称**：未来折境\n\n"
-                            "如果这个方向继续推进，预计上刊或交付时间大概是什么时候？\n\n"
+                            "这版方向里，哪些部分需要保留，哪些地方还需要调整？\n\n"
                             "【需求收集完成】"
                         )
                     }
@@ -100,11 +233,14 @@ async def test_creative_direction_agent_enables_thinking_with_long_timeout_and_s
     assert captured_options["timeout"] == 120
     assert captured_options["attempts"] == 1
     assert captured_payload["messages"][0]["role"] == "system"
-    assert response["return_to_brief"] is True
+    assert response["return_to_brief"] is False
+    assert response["agent_state"]["current_agent"] == "creative_direction_agent"
+    assert response["agent_state"]["stage"] == "creative_direction_review"
+    assert response["agent_state"]["pending_creative_direction"]["status"] == "awaiting_feedback"
     assert "创意方向草案" in response["message"]
     assert "不是完整创意方案" in response["message"]
     assert "策划专家" in response["message"]
-    assert response["message"].index("策划专家") < response["message"].index("预计上刊")
+    assert response["message"].index("策划专家") < response["message"].index("哪些部分需要保留")
     assert "【需求收集完成】" not in response["message"]
 
 
@@ -123,7 +259,8 @@ async def test_creative_direction_outputs_low_confidence_draft_when_brief_is_spa
     )
 
     message = response["message"]
-    assert response["return_to_brief"] is True
+    assert response["return_to_brief"] is False
+    assert response["agent_state"]["pending_creative_direction"]["status"] == "awaiting_feedback"
     assert response.get("needs_brief") is not True
     assert "创意方向草案" in message
     assert "低置信度" in message
@@ -159,7 +296,10 @@ async def test_creative_direction_provider_timeout_returns_fallback(monkeypatch)
         )
     )
 
-    assert response["return_to_brief"] is True
+    assert response["return_to_brief"] is False
+    assert response["agent_state"]["current_agent"] == "creative_direction_agent"
+    assert response["agent_state"]["stage"] == "creative_direction_review"
+    assert response["agent_state"]["pending_creative_direction"]["status"] == "awaiting_feedback"
     assert "创意方向草案" in response["message"]
     assert "熊猫" in response["message"]
     assert "不是完整创意方案" in response["message"]
@@ -171,14 +311,14 @@ async def test_creative_direction_provider_timeout_returns_fallback(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_creative_direction_image_based_request_without_image_context_does_not_invent(monkeypatch):
-    async def fake_image_summary(*_, **__):
-        return ""
+    async def fake_material_context(*, message, **__):
+        return SimpleNamespace(message=message)
 
     async def fake_post_chat_completion(*_, **__):
         raise AssertionError("image-based creative direction should not call text LLM without image context")
 
     monkeypatch.setattr(direction_module.settings, "AI_API_KEY", "test-key")
-    monkeypatch.setattr(direction_module, "summarize_uploaded_images", fake_image_summary)
+    monkeypatch.setattr(direction_module, "enrich_message_with_uploaded_materials", fake_material_context)
     monkeypatch.setattr(direction_module, "post_chat_completion", fake_post_chat_completion)
 
     response = await direction_module.ai_creative_direction(
@@ -206,6 +346,77 @@ async def test_creative_direction_image_based_request_without_image_context_does
     assert "没有稳定拿到图片内容" in message
     assert "不先基于文件名" in message
     assert "创意方向草案" not in message
+
+
+@pytest.mark.asyncio
+async def test_creative_direction_reads_pdf_context_without_writing_formal_brief(monkeypatch):
+    captured = {}
+    material_message = (
+        "请基于这个PDF出创意方向\n\n"
+        f"{BRIEF_DOCUMENT_CONTEXT_MARKER}\n"
+        "文件：campaign-brief.pdf\n"
+        "已从上传资料提取的 Brief 内容（仅包含资料中明确出现的信息）：\n"
+        "- 内容主题 & 核心表达：巨型熊猫与酸奶瓶互动\n"
+        "- 媒体尺寸 & 物理规格：L型屏，3840x2160"
+    )
+
+    async def fake_material_context(**_):
+        return SimpleNamespace(message=material_message)
+
+    async def fake_state_update(**kwargs):
+        captured["state_update"] = kwargs
+        return {
+            "brief_state": {"fields": {}, "readiness": {"level": "insufficient"}},
+            "agent_context_window": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "请基于这个PDF出创意方向\n[用户上传了文档资料]",
+                        "source_message_id": kwargs.get("source_message_id"),
+                    }
+                ]
+            },
+        }
+
+    async def fake_completion(payload, *, timeout=None, attempts=None):
+        captured["completion"] = payload
+        return {"choices": [{"message": {"content": "**创意方向草案**\n\n围绕熊猫与酸奶瓶展开。"}}]}
+
+    class FakeUser:
+        id = "user-test"
+
+    monkeypatch.setattr(direction_module.settings, "AI_API_KEY", "test-key")
+    monkeypatch.setattr(direction_module, "enrich_message_with_uploaded_materials", fake_material_context)
+    monkeypatch.setattr(direction_module, "update_agent_state_from_message", fake_state_update)
+    monkeypatch.setattr(direction_module, "post_chat_completion", fake_completion)
+    monkeypatch.setattr(direction_module, "save_agent_state", lambda *_: None)
+
+    response = await direction_module.ai_creative_direction(
+        direction_module.CreativeDirectionRequest(
+            session_id="session-pdf-direction",
+            message="请基于这个PDF出创意方向",
+            user_message_id="user-pdf-1",
+            history=[],
+            business_type="ai_3d_custom",
+            attachments=[
+                direction_module.UploadedAttachment(
+                    name="campaign-brief.pdf",
+                    url="/uploads/site_photos/user-test/campaign-brief.pdf",
+                    type="application/pdf",
+                    isImage=False,
+                )
+            ],
+        ),
+        FakeUser(),
+    )
+
+    prompt_payload = json.loads(captured["completion"]["messages"][1]["content"])
+    assert captured["state_update"]["update_brief"] is False
+    assert captured["state_update"]["source_message_id"] == "user-pdf-1"
+    assert BRIEF_DOCUMENT_CONTEXT_MARKER in prompt_payload["current_user_message"]
+    assert "巨型熊猫与酸奶瓶互动" in prompt_payload["current_user_message"]
+    assert "必须读取 current_user_message 中的文档解析内容" in captured["completion"]["messages"][0]["content"]
+    assert response["return_to_brief"] is False
 
 
 @pytest.mark.asyncio
@@ -261,9 +472,42 @@ def test_creative_direction_prompt_bans_fixed_brief_return_phrasing():
     )
 
     system_prompt = messages[0]["content"]
+    payload = json.loads(messages[1]["content"])
     assert "回到 Brief" not in system_prompt
     assert "Brief 附件" not in system_prompt
     assert "我先记录下来" not in system_prompt
+    assert "不要在创意方向讨论尚未确认时转去追问下一个 Brief 缺口" in system_prompt
+    assert "creative_feedback_question" in payload
+    assert "next_brief_question" not in payload
+
+
+def test_creative_direction_prompt_marks_fifth_output_for_soft_exit():
+    messages = direction_module.build_creative_direction_messages(
+        direction_module.CreativeDirectionRequest(
+            session_id="session-test",
+            message="再优化一次",
+            history=[],
+            business_type="ai_3d_custom",
+            agent_state={
+                "brief_state": {"fields": {"theme_concept": {"value": "毛绒大熊猫"}}},
+                "pending_creative_direction": {
+                    "status": "awaiting_feedback",
+                    "iteration_count": 4,
+                },
+            },
+        )
+    )
+
+    system_prompt = messages[0]["content"]
+    payload = json.loads(messages[1]["content"])
+    assert payload["iteration_control"] == {
+        "current_iteration": 4,
+        "next_iteration": 5,
+        "iteration_limit": 5,
+        "exit_recommended": True,
+    }
+    assert "达到或超过第 5 轮" in system_prompt
+    assert "软退出提醒" in system_prompt
 
 
 def test_creative_direction_prompt_supports_low_confidence_output_when_brief_is_sparse():
@@ -391,3 +635,35 @@ def test_creative_direction_prompt_prefers_current_image_message_over_router_con
     payload = json.loads(messages[1]["content"])
     assert IMAGE_CONTEXT_MARKER in payload["current_user_message"]
     assert "毛绒质感大熊猫" in payload["current_user_message"]
+
+
+def test_creative_direction_prompt_prefers_current_pdf_context_over_safe_agent_context():
+    messages = direction_module.build_creative_direction_messages(
+        direction_module.CreativeDirectionRequest(
+            session_id="session-test",
+            message=(
+                "基于PDF继续优化\n\n"
+                f"{BRIEF_DOCUMENT_CONTEXT_MARKER}\n"
+                "文件：brief.pdf\n"
+                "- 内容主题 & 核心表达：熊猫穿过竹林与产品互动"
+            ),
+            history=[],
+            business_type="ai_3d_custom",
+            agent_state={
+                "brief_state": {"fields": {}, "readiness": {"level": "insufficient"}},
+                "agent_context_window": {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "基于PDF继续优化\n[用户上传了文档资料]",
+                            "source_message_id": "user-msg-1",
+                        }
+                    ]
+                },
+            },
+        )
+    )
+
+    payload = json.loads(messages[1]["content"])
+    assert BRIEF_DOCUMENT_CONTEXT_MARKER in payload["current_user_message"]
+    assert "熊猫穿过竹林与产品互动" in payload["current_user_message"]

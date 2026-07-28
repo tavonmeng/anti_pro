@@ -166,7 +166,7 @@ CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 ```env
 # ⚠️ 生产环境必须修改为随机密钥！
 JWT_SECRET_KEY=your-random-secret-key-here
-ACCESS_TOKEN_EXPIRE_MINUTES=1440  # Token 有效期（24小时）
+ACCESS_TOKEN_EXPIRE_MINUTES=4320  # Token 有效期（3天）
 ```
 
 ---
@@ -514,4 +514,3 @@ npm run dev
 ---
 
 **🎉 后端开发完成，祝开发顺利！**
-
