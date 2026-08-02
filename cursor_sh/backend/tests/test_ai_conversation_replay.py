@@ -15,6 +15,13 @@ def test_replay_fixture_contains_unique_real_conversation_cases():
     assert "duplicate_no_after_budget_keeps_photo_and_moves_on" in {
         case["id"] for case in cases
     }
+    assert sum(str(case["id"]).startswith("real_hefei_") for case in cases) >= 4
+    continuous = next(
+        case for case in cases if case["id"] == "real_hefei_full_continuous_brief_replay"
+    )
+    assert continuous["kind"] == "multi_turn_brief"
+    assert len(continuous["turns"]) >= 15
+    assert sum(bool(turn.get("checkpoint")) for turn in continuous["turns"]) >= 6
     assert all(
         case.get("expected")
         or (
@@ -96,3 +103,35 @@ def test_evaluate_expectations_reports_human_readable_failures():
     assert any("brief_fields.budget" in item for item in failures)
     assert any("window count" in item for item in failures)
     assert any("forbidden pattern" in item for item in failures)
+
+
+def test_evaluate_expectations_checks_nonempty_brief_fields():
+    assert evaluate_expectations(
+        {"brief_fields": {"budget": "无", "site_photos": ""}},
+        {"brief_fields_nonempty": ["budget"]},
+    ) == []
+
+    failures = evaluate_expectations(
+        {"brief_fields": {"budget": "无", "site_photos": ""}},
+        {"brief_fields_nonempty": ["budget", "site_photos"]},
+    )
+    assert failures == ["brief_fields.site_photos: expected a non-empty value"]
+
+
+def test_evaluate_expectations_can_limit_regex_checks_to_last_question():
+    result = {
+        "reply": "预算范围暂时没有明确，可以后续再细化。\n\n这次项目的媒体背景是什么？"
+    }
+    expected = {
+        "question_forbidden_regex": ["预算.{0,12}(范围|多少)"],
+        "question_required_regex": ["媒体背景"],
+    }
+    assert evaluate_expectations(result, expected) == []
+
+    reply_with_example_question = {
+        "reply": "已记录。\n\n这次的目标受众是什么？比如年轻人还是亲子家庭？"
+    }
+    assert evaluate_expectations(
+        reply_with_example_question,
+        {"question_required_regex": ["目标受众"]},
+    ) == []

@@ -456,6 +456,495 @@
           "是否还有.{0,12}(现场|参考)"
         ]
       }
+    },
+    {
+      "id": "real_hefei_after_tech_unknown_does_not_repeat_tech",
+      "kind": "brief_turn",
+      "message": "没有",
+      "history": [
+        {
+          "client_message_id": "hefei-tech-assistant",
+          "role": "assistant",
+          "content": "这块屏幕的具体分辨率是多少？另外，媒体方对视频格式、帧率或色彩空间是否有固定的交付规范？"
+        }
+      ],
+      "current_agent": "brief_agent",
+      "stage": "brief_building",
+      "initial_brief": {
+        "city_location": "合肥蜀山区",
+        "art_direction": "圆润可爱",
+        "theme_concept": "大熊猫从屏幕里面探出头，和竹子互动",
+        "media_specs": "蜀山区正大摩天轮灯光秀双屏联动，长72.15m x 高14.4m",
+        "timing_number": "30s",
+        "tech_delivery": "无固定规范"
+      },
+      "expected": {
+        "route": {
+          "target_agent": "brief_agent",
+          "intent": "brief_building"
+        },
+        "brief_fields": {
+          "tech_delivery": "无固定规范"
+        },
+        "reply_forbidden_regex": [
+          "(分辨率|格式|帧率|色彩空间).{0,30}(多少|要求|规范|固定)",
+          "(预计上刊|上线时间).{0,20}(什么时候|大概|日期)",
+          "(制作)?预算.{0,20}(范围|多少|大概|区间)",
+          "(是否|还有|手头|有没有).{0,20}(现场实拍图|屏幕照片|参考素材|上传)"
+        ],
+        "reply_required_regex": [
+          "(项目背景|媒体背景|内容定位|目标受众|哪类人群|人流特征|观看场景|观看关系|观看动线|两块屏幕)"
+        ]
+      }
+    },
+    {
+      "id": "real_hefei_after_budget_none_does_not_repeat_budget_or_jump_to_photo",
+      "kind": "brief_turn",
+      "message": "没有",
+      "history": [
+        {
+          "client_message_id": "hefei-time-user",
+          "role": "user",
+          "content": "2026年8月6日"
+        },
+        {
+          "client_message_id": "hefei-budget-assistant",
+          "role": "assistant",
+          "content": "目前 Brief 的核心要素已基本收拢。为了最终确定制作方案的精细度，我想了解一下这次项目的预算范围大概是多少？"
+        }
+      ],
+      "current_agent": "brief_agent",
+      "stage": "brief_building",
+      "initial_brief": {
+        "city_location": "合肥蜀山区",
+        "art_direction": "圆润可爱",
+        "theme_concept": "大熊猫从屏幕里面探出头，和竹子互动",
+        "media_specs": "蜀山区正大摩天轮灯光秀双屏联动，长72.15m x 高14.4m",
+        "timing_number": "30s",
+        "tech_delivery": "无固定规范",
+        "online_time": "2026年8月6日",
+        "budget": "无"
+      },
+      "expected": {
+        "route": {
+          "target_agent": "brief_agent",
+          "intent": "brief_building"
+        },
+        "brief_fields": {
+          "budget": "无",
+          "online_time": "2026年8月6日"
+        },
+        "reply_forbidden_regex": [
+          "(制作)?预算.{0,20}(范围|多少|大概|区间)",
+          "(是否|还有|手头|有没有).{0,20}(现场实拍图|屏幕照片|参考素材|上传)",
+          "(预计上刊|上线时间).{0,20}(什么时候|大概|日期)"
+        ],
+        "reply_required_regex": [
+          "(项目背景|媒体背景|内容定位|目标受众|哪类人群|人流特征|观看场景|观看关系|观看动线|两块屏幕)"
+        ]
+      }
+    },
+    {
+      "id": "real_hefei_after_photo_upload_does_not_ask_for_photo_again",
+      "kind": "brief_turn",
+      "message": "[已上传文件: 合肥现场参考图.png]",
+      "history": [
+        {
+          "client_message_id": "hefei-budget-user",
+          "role": "user",
+          "content": "没有"
+        },
+        {
+          "client_message_id": "hefei-photo-assistant",
+          "role": "assistant",
+          "content": "预算可以先留白。您手头是否有现场实拍图、屏幕照片或相关参考素材可以上传？"
+        }
+      ],
+      "has_attachments": true,
+      "current_agent": "brief_agent",
+      "stage": "brief_building",
+      "initial_brief": {
+        "city_location": "合肥蜀山区",
+        "art_direction": "圆润可爱",
+        "theme_concept": "大熊猫从屏幕里面探出头，和竹子互动",
+        "media_specs": "蜀山区正大摩天轮灯光秀双屏联动，长72.15m x 高14.4m",
+        "timing_number": "30s",
+        "tech_delivery": "无固定规范",
+        "online_time": "2026年8月6日",
+        "budget": "无",
+        "site_photos": "已上传图片素材：合肥现场参考图.png"
+      },
+      "expected": {
+        "route": {
+          "target_agent": "brief_agent",
+          "intent": "brief_building"
+        },
+        "brief_fields": {
+          "budget": "无",
+          "site_photos": "已上传图片素材：合肥现场参考图.png"
+        },
+        "reply_forbidden_regex": [
+          "(是否|还有|手头|有没有).{0,24}(现场实拍图|屏幕照片|参考素材|上传|其他素材)",
+          "(制作)?预算.{0,20}(范围|多少|大概|区间)",
+          "(预计上刊|上线时间).{0,20}(什么时候|大概|日期)"
+        ],
+        "reply_required_regex": [
+          "(项目背景|媒体背景|内容定位|目标受众|哪类人群|人流特征|观看场景|观看关系|观看动线|两块屏幕)"
+        ]
+      }
+    },
+    {
+      "id": "real_hefei_brief_does_not_repeat_answered_closing_fields",
+      "kind": "brief_turn",
+      "message": "一周",
+      "history": [
+        {
+          "client_message_id": "hefei-user-budget",
+          "role": "user",
+          "content": "没有"
+        },
+        {
+          "client_message_id": "hefei-assistant-photo",
+          "role": "assistant",
+          "content": "没关系，预算我们可以先留白。为了让创意更贴合现场，您是否有现场实拍图、屏幕照片或参考素材可以上传？"
+        },
+        {
+          "client_message_id": "hefei-user-photo",
+          "role": "user",
+          "content": "[已上传文件: 合肥现场参考图.png]"
+        },
+        {
+          "client_message_id": "hefei-assistant-review",
+          "role": "assistant",
+          "content": "参考素材已收到。这次内容是否需要提前一周或半个月提交成片审核？"
+        },
+        {
+          "client_message_id": "hefei-user-review-first",
+          "role": "user",
+          "content": "一周"
+        },
+        {
+          "client_message_id": "hefei-assistant-viewing",
+          "role": "assistant",
+          "content": "一周的审核周期可行。两块屏幕是连续的L型转角，还是平行排列？"
+        },
+        {
+          "client_message_id": "hefei-user-viewing",
+          "role": "user",
+          "content": "构成一个连续的转角（L型）"
+        },
+        {
+          "client_message_id": "hefei-assistant-audience",
+          "role": "assistant",
+          "content": "L型关系已明确。这次投放的目标受众主要侧重哪类人群？"
+        },
+        {
+          "client_message_id": "hefei-user-audience",
+          "role": "user",
+          "content": "年轻潮流群体"
+        },
+        {
+          "client_message_id": "hefei-assistant-review-duplicate",
+          "role": "assistant",
+          "content": "年轻潮流群体会影响动作节奏。媒体方是否有固定的审核周期或素材提交截止时间要求？"
+        }
+      ],
+      "current_agent": "brief_agent",
+      "stage": "brief_building",
+      "initial_brief": {
+        "audience_scene": "年轻潮流群体",
+        "city_location": "合肥蜀山区",
+        "viewing_path": "构成一个连续的转角（L型）",
+        "art_direction": "圆润可爱",
+        "theme_concept": "大熊猫从屏幕里面探出头，和竹子互动",
+        "media_specs": "蜀山区正大摩天轮灯光秀双屏联动，长72.15m x 高14.4m",
+        "timing_number": "30s",
+        "tech_delivery": "待定",
+        "content_review": "一周",
+        "budget": "无",
+        "online_time": "2026年8月6日",
+        "special_requirements": "不需要品牌露出、节日节点或合肥本地文化元素",
+        "site_photos": "已上传图片素材"
+      },
+      "expected": {
+        "route": {
+          "target_agent": "brief_agent",
+          "intent": "brief_building"
+        },
+        "brief_fields": {
+          "content_review": "一周",
+          "budget": "无",
+          "site_photos": "已上传图片素材"
+        },
+        "reply_forbidden_regex": [
+          "(制作)?预算.{0,20}(范围|多少|大概|区间)",
+          "(是否|请问|想确认|有没有).{0,30}(审核周期|素材提交截止时间)",
+          "(是否|还有|手头|有没有).{0,20}(现场实拍图|屏幕照片|参考素材|上传)",
+          "(希望|倾向).{0,20}(动作风格|视觉风格|艺术风格)"
+        ],
+        "reply_required_regex": [
+          "(项目背景|项目目标|传播目标|媒体资源|制作缘由|为什么做)"
+        ]
+      }
+    },
+    {
+      "id": "real_hefei_full_continuous_brief_replay",
+      "kind": "multi_turn_brief",
+      "current_agent": null,
+      "stage": "intent_routing",
+      "turns": [
+        {
+          "message": "我想做一个3D视频，先从需求开始帮我梳理。",
+          "assistant": {
+            "content": "裸眼3D视频需要同时考虑屏幕结构、观看动线、现场空间以及出屏或入屏视觉机制。我们会围绕基础信息、创意方向以及技术与交付逐步收拢。您可以先简单说说，这次大概想做什么样的内容？"
+          }
+        },
+        {
+          "message": "我想做一只大熊猫",
+          "assistant": {
+            "content": "大熊猫的体态和黑白毛色很适合裸眼3D。我们了解到合肥有淮河路步行街大屏、蜀山区正大摩天轮灯光秀双屏和新粮仓大屏等候选。这次会用已有点位，还是按一个新点位梳理？"
+          }
+        },
+        {
+          "message": "按一个新点位来梳理",
+          "assistant": {
+            "content": "那先不锁定具体屏幕。您倾向于哪种视觉风格，比如写实、圆润可爱或国潮插画？"
+          }
+        },
+        {
+          "message": "圆润可爱的",
+          "assistant": {
+            "content": "圆润可爱的风格很适合破框互动。您希望大熊猫在视频里主要做什么动作？"
+          }
+        },
+        {
+          "message": "屏幕里面探出头，和竹子互动",
+          "assistant": {
+            "content": "探头和竹子互动能通过纵深与遮挡增强立体感。这次项目计划投放在哪个城市？"
+          }
+        },
+        {
+          "message": "合肥蜀山区的",
+          "assistant": {
+            "content": "合肥这边可以参考三类媒体规格：1. 淮河路步行街大屏，长40.32m x 高13.44m，分辨率6048x2016；2. 蜀山区正大摩天轮灯光秀双屏，长72.15m x 高14.4m；3. 新粮仓巨幕与裸眼3D显示屏组合。这次接近哪一个？"
+          }
+        },
+        {
+          "message": "2",
+          "assistant": {
+            "content": "收到，按蜀山区正大摩天轮灯光秀双屏联动、长72.15m x 高14.4m来规划。您手头是否有现场实拍图或屏幕结构图？"
+          }
+        },
+        {
+          "message": "[已上传文件: 合肥参考图1.png]\n\n[图片理解摘要]\n文件：合肥参考图1.png\n画面可用于参考破框与转角空间关系。",
+          "has_attachments": true,
+          "assistant": {
+            "content": "参考图已收到。结合这个点位，还需要确认视频的投放时长和数量，比如一条15秒或30秒的视频。"
+          }
+        },
+        {
+          "message": "30s",
+          "assistant": {
+            "content": "30秒足以形成完整互动。媒体方对分辨率、视频格式、帧率或色彩空间是否有固定交付规范？"
+          }
+        },
+        {
+          "message": "没有",
+          "checkpoint": {
+            "route": {
+              "target_agent": "brief_agent",
+              "intent": "brief_building"
+            },
+            "brief_fields_nonempty": [
+              "tech_delivery"
+            ],
+            "question_forbidden_regex": [
+              "(分辨率|格式|帧率|色彩空间).{0,30}(多少|要求|规范|固定)",
+              "(制作)?预算.{0,20}(范围|多少|大概|区间)",
+              "(是否|还有|手头|有没有).{0,20}(现场实拍图|屏幕照片|参考素材|上传)"
+            ]
+          },
+          "assistant": {
+            "content": "没有固定规范的话，可以采用行业通用交付标准。这次项目预计什么时候上刊？"
+          }
+        },
+        {
+          "message": "2026年8月6日",
+          "assistant": {
+            "content": "上刊时间已明确。为了匹配制作精度，这次项目的预算范围大概是多少？"
+          }
+        },
+        {
+          "message": "没有",
+          "checkpoint": {
+            "route": {
+              "target_agent": "brief_agent",
+              "intent": "brief_building"
+            },
+            "brief_fields_nonempty": [
+              "budget",
+              "online_time"
+            ],
+            "question_forbidden_regex": [
+              "(制作)?预算.{0,20}(范围|多少|大概|区间)",
+              "(是否|还有|手头|有没有).{0,20}(现场实拍图|屏幕照片|参考素材|上传)",
+              "(预计上刊|上线时间).{0,20}(什么时候|大概|日期)"
+            ]
+          },
+          "assistant": {
+            "content": "预算可以先留白。您手头是否有现场实拍图、屏幕照片或相关参考素材可以上传？"
+          }
+        },
+        {
+          "message": "[已上传文件: 合肥参考图2.png]\n\n[图片理解摘要]\n文件：合肥参考图2.png\n画面可用于参考双屏物理结构和现场环境。",
+          "has_attachments": true,
+          "checkpoint": {
+            "route": {
+              "target_agent": "brief_agent",
+              "intent": "brief_building"
+            },
+            "brief_fields_nonempty": [
+              "budget",
+              "site_photos"
+            ],
+            "question_forbidden_regex": [
+              "(是否|还有|手头|有没有).{0,24}(现场实拍图|屏幕照片|参考素材|上传|其他素材)",
+              "(制作)?预算.{0,20}(范围|多少|大概|区间)"
+            ]
+          },
+          "assistant": {
+            "content": "参考素材已收到。媒体方是否有固定的审核周期或素材提交截止时间要求？"
+          }
+        },
+        {
+          "message": "一周",
+          "checkpoint": {
+            "route": {
+              "target_agent": "brief_agent",
+              "intent": "brief_building"
+            },
+            "brief_fields_nonempty": [
+              "content_review",
+              "site_photos"
+            ],
+            "question_forbidden_regex": [
+              "(是否|请问|想确认|有没有).{0,30}(审核周期|素材提交截止时间)",
+              "(制作)?预算.{0,20}(范围|多少|大概|区间)",
+              "(是否|还有|手头|有没有).{0,20}(现场实拍图|屏幕照片|参考素材|上传)"
+            ]
+          },
+          "assistant": {
+            "content": "一周审核周期已记录。这两块屏幕是连续的L型转角，还是平行排列或有一定间距？"
+          }
+        },
+        {
+          "message": "构成一个连续的转角（L型）",
+          "checkpoint": {
+            "route": {
+              "target_agent": "brief_agent",
+              "intent": "brief_building"
+            },
+            "brief_fields_nonempty": [
+              "content_review",
+              "media_positioning"
+            ],
+            "question_forbidden_regex": [
+              "(是否|请问|想确认|有没有).{0,30}(审核周期|素材提交截止时间)",
+              "(制作)?预算.{0,20}(范围|多少|大概|区间)",
+              "(是否|还有|手头|有没有).{0,20}(现场实拍图|屏幕照片|参考素材|上传)"
+            ]
+          },
+          "assistant": {
+            "content": "L型结构已明确。媒体方是否有固定的审核周期或素材提交截止时间要求？"
+          }
+        },
+        {
+          "message": "一周",
+          "assistant": {
+            "content": "审核周期按一周记录。除了大熊猫和竹子，这次是否需要品牌露出、节日节点或合肥本地文化元素？"
+          }
+        },
+        {
+          "message": "不需要",
+          "assistant": {
+            "content": "这项按不需要记录。这次投放的目标受众主要侧重哪类人群？"
+          }
+        },
+        {
+          "message": "年轻潮流群体",
+          "checkpoint": {
+            "route": {
+              "target_agent": "brief_agent",
+              "intent": "brief_building"
+            },
+            "brief_fields_nonempty": [
+              "audience_scene",
+              "content_review",
+              "budget",
+              "site_photos"
+            ],
+            "question_forbidden_regex": [
+              "(是否|请问|想确认|有没有).{0,30}(审核周期|素材提交截止时间)",
+              "(制作)?预算.{0,20}(范围|多少|大概|区间)",
+              "(是否|还有|手头|有没有).{0,20}(现场实拍图|屏幕照片|参考素材|上传)",
+              "(希望|倾向).{0,20}(动作风格|视觉风格|艺术风格)",
+              "(视觉风格|艺术风格).{0,20}(偏向|选择|还是|哪种)"
+            ]
+          },
+          "assistant": {
+            "content": "年轻潮流群体已记录。媒体方是否有固定的审核周期或素材提交截止时间要求？"
+          }
+        },
+        {
+          "message": "一周",
+          "assistant": {
+            "content": "一周审核周期已记录。这次项目是否有初步的制作预算范围？"
+          }
+        },
+        {
+          "message": "没有",
+          "checkpoint": {
+            "route": {
+              "target_agent": "brief_agent",
+              "intent": "brief_building"
+            },
+            "brief_fields_nonempty": [
+              "audience_scene",
+              "tech_delivery",
+              "content_review",
+              "budget",
+              "online_time",
+              "site_photos"
+            ],
+            "question_forbidden_regex": [
+              "(是否|请问|想确认|有没有).{0,30}(审核周期|素材提交截止时间)",
+              "(制作)?预算.{0,20}(范围|多少|大概|区间)",
+              "(是否|还有|手头|有没有).{0,20}(现场实拍图|屏幕照片|参考素材|上传)",
+              "(预计上刊|上线时间).{0,20}(什么时候|大概|日期)",
+              "(希望|倾向).{0,20}(动作风格|视觉风格|艺术风格)",
+              "(视觉风格|艺术风格).{0,20}(偏向|选择|还是|哪种)"
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "route": {
+          "target_agent": "brief_agent",
+          "intent": "brief_building"
+        },
+        "brief_fields_nonempty": [
+          "city_location",
+          "audience_scene",
+          "art_direction",
+          "theme_concept",
+          "timing_number",
+          "tech_delivery",
+          "content_review",
+          "budget",
+          "online_time",
+          "site_photos"
+        ]
+      }
     }
   ]
 }

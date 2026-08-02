@@ -41,8 +41,9 @@ def test_requirement_prompt_keeps_goal_on_brief_form_and_order_confirmation():
     assert "创意评估" in system_prompt
     assert "评估完成后" in system_prompt
     assert "Brief 固定围绕三大类收集：基础信息、创意方向以及技术与交付" in system_prompt
-    assert "总体顺序是基础信息 → 创意方向 → 技术与交付" in system_prompt
-    assert "不要按固定字段逐项盘问" in system_prompt
+    assert "总体阶段顺序保持为基础信息 → 创意方向 → 技术与交付" in system_prompt
+    assert "每个阶段内部不设固定字段顺序" in system_prompt
+    assert "动态 Brief 缺口和本轮允许提问范围" in system_prompt
     assert "按信息复杂度" in system_prompt
     assert "关键 Brief 信息" in system_prompt
     assert "不要为了显得专业而写成小报告" in system_prompt
@@ -127,7 +128,9 @@ async def test_requirement_reply_generation_uses_same_latest_budget_window(monke
         agent_state=state,
     )
 
-    assert messages[-2] == {"role": "assistant", "content": long_budget_question}
+    assert messages[-3] == {"role": "assistant", "content": long_budget_question}
+    assert messages[-2]["role"] == "system"
+    assert "本轮最终追问边界" in messages[-2]["content"]
     assert messages[-1] == {"role": "user", "content": "没有"}
     assert {"role": "user", "content": "压缩的较早上下文"} in messages
     assert "项目制作预算：没有" in messages[0]["content"]

@@ -75,6 +75,9 @@ def evaluate_expectations(
                 f"brief_fields.{field}: expected {value!r}, "
                 f"got {brief_fields.get(field)!r}"
             )
+    for field in expected.get("brief_fields_nonempty") or []:
+        if not str(brief_fields.get(field) or "").strip():
+            failures.append(f"brief_fields.{field}: expected a non-empty value")
 
     window_contents = [
         str(item.get("content") or "")
@@ -94,7 +97,22 @@ def evaluate_expectations(
     for pattern in expected.get("reply_required_regex") or []:
         if not re.search(pattern, reply, re.I | re.S):
             failures.append(f"reply did not match required pattern {pattern!r}")
+    question = _last_reply_question(reply)
+    for pattern in expected.get("question_forbidden_regex") or []:
+        if re.search(pattern, question, re.I | re.S):
+            failures.append(f"reply question matched forbidden pattern {pattern!r}")
+    for pattern in expected.get("question_required_regex") or []:
+        if not re.search(pattern, question, re.I | re.S):
+            failures.append(f"reply question did not match required pattern {pattern!r}")
     return failures
+
+
+def _last_reply_question(reply: str) -> str:
+    text = str(reply or "")[-1200:]
+    for paragraph in reversed(re.split(r"\n\s*\n", text)):
+        if "？" in paragraph or "?" in paragraph:
+            return paragraph.strip()
+    return ""
 
 
 def _initial_agent_state(case: dict[str, Any]) -> dict[str, Any]:
@@ -118,6 +136,8 @@ def _initial_agent_state(case: dict[str, Any]) -> dict[str, Any]:
 async def _run_case(case: dict[str, Any]) -> dict[str, Any]:
     if case.get("kind") == "multi_turn_router":
         return await _run_multi_turn_router_case(case)
+    if case.get("kind") == "multi_turn_brief":
+        return await _run_multi_turn_brief_case(case)
 
     case_id = str(case["id"])
     business_type = str(case.get("business_type") or "ai_3d_custom")
@@ -346,6 +366,180 @@ async def _run_multi_turn_router_case(case: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _brief_fields_from_state(state: dict[str, Any]) -> dict[str, str]:
+    return {
+        field: str(value.get("value") or "")
+        for field, value in ((state.get("brief_state") or {}).get("fields") or {}).items()
+        if isinstance(value, dict) and str(value.get("value") or "").strip()
+    }
+
+
+async def _run_multi_turn_brief_case(case: dict[str, Any]) -> dict[str, Any]:
+    """Replay one complete Brief conversation in a single persisted session.
+
+    Fixture assistant messages are teacher-forced so later user replies remain
+    faithful to the captured production conversation. Every user turn still
+    runs the real Router and Brief extractor. Checkpoint turns additionally run
+    the real Brief reply model and assert against the accumulated state/window.
+    """
+    case_id = str(case["id"])
+    business_type = str(case.get("business_type") or "ai_3d_custom")
+    session_id = f"replay-{case_id}-{uuid4().hex[:10]}"
+    user_id = f"replay-user-{uuid4().hex[:10]}"
+    turns = case.get("turns") or []
+    if not isinstance(turns, list) or not turns:
+        raise ValueError(f"multi_turn_brief case {case_id} must include turns")
+
+    state = _initial_agent_state(case)
+    save_agent_state(session_id, user_id, state)
+    history = list(case.get("history") or [])
+    replay_turns: list[dict[str, Any]] = []
+    latest_route: dict[str, Any] = {}
+
+    for index, turn in enumerate(turns, start=1):
+        message = str(turn.get("message") or "")
+        current_message_id = f"{case_id}-turn-{index}"
+        state = load_agent_state(session_id, user_id, business_type)
+        state = await sync_agent_context_window_from_history(state, history)
+        state, _ = await append_agent_context_message(
+            state,
+            role="user",
+            content=message,
+            source_message_id=current_message_id,
+        )
+        route_history = agent_context_messages(
+            state,
+            exclude_source_message_id=current_message_id,
+            fallback_history=history,
+        )
+        route = await decide_route(
+            OrchestratorContext(
+                session_id=session_id,
+                message=latest_user_context_message(
+                    state,
+                    message,
+                    source_message_id=current_message_id,
+                ),
+                history=route_history,
+                current_agent=state.get("current_agent"),
+                stage=state.get("stage"),
+                business_type=business_type,
+                brief_state=state.get("brief_state"),
+                pending_evaluation=state.get("pending_evaluation"),
+                pending_creative_direction=state.get("pending_creative_direction"),
+                has_attachments=bool(turn.get("has_attachments")),
+            )
+        )
+        latest_route = route.to_dict()
+        state["current_agent"] = route.target_agent
+        state["stage"] = route.stage
+        save_agent_state(session_id, user_id, state)
+
+        state = await update_agent_state_from_message(
+            session_id=session_id,
+            user_id=user_id,
+            business_type=business_type,
+            message=message,
+            history=history,
+            source_message_id=current_message_id,
+            memory_hints={},
+        )
+        turn_result: dict[str, Any] = {
+            "index": index,
+            "message": message,
+            "route": latest_route,
+            "brief_fields": _brief_fields_from_state(state),
+        }
+
+        checkpoint = turn.get("checkpoint")
+        if isinstance(checkpoint, dict):
+            request = ChatRequest(
+                session_id=session_id,
+                message=message,
+                history=history,
+                business_type=business_type,
+                user_message_id=current_message_id,
+                assistant_message_id=f"{case_id}-checkpoint-{index}",
+            )
+            llm_messages = _build_requirement_llm_messages(request, agent_state=state)
+            completion = await post_chat_completion(
+                {
+                    "model": settings.AI_MODEL_NAME,
+                    "messages": llm_messages,
+                    "temperature": settings.AI_REQUIREMENT_TEMPERATURE,
+                    "enable_thinking": False,
+                },
+                timeout=settings.AI_HTTP_TIMEOUT,
+            )
+            reply = sanitize_brief_agent_reply(
+                completion["choices"][0]["message"]["content"],
+                state,
+            )
+            turn_result["reply"] = reply
+            turn_result["generation_last_two"] = llm_messages[-2:]
+            turn_result["failures"] = evaluate_expectations(
+                {
+                    "route": latest_route,
+                    "brief_fields": turn_result["brief_fields"],
+                    "window": [
+                        {
+                            "message_id": item.get("source_message_id"),
+                            "role": item.get("role"),
+                            "content": item.get("content"),
+                        }
+                        for item in ((state.get("agent_context_window") or {}).get("messages") or [])
+                    ],
+                    "reply": reply,
+                },
+                checkpoint,
+            )
+        else:
+            turn_result["failures"] = []
+        replay_turns.append(turn_result)
+
+        assistant_content = str((turn.get("assistant") or {}).get("content") or "")
+        history.append(
+            {
+                "client_message_id": current_message_id,
+                "role": "user",
+                "content": message,
+            }
+        )
+        if assistant_content:
+            assistant_message_id = f"{case_id}-assistant-{index}"
+            state, _ = await append_agent_context_message(
+                state,
+                role="assistant",
+                content=assistant_content,
+                source_message_id=assistant_message_id,
+            )
+            history.append(
+                {
+                    "client_message_id": assistant_message_id,
+                    "role": "assistant",
+                    "content": assistant_content,
+                }
+            )
+        save_agent_state(session_id, user_id, state)
+
+    return {
+        "id": case_id,
+        "kind": "multi_turn_brief",
+        "model": settings.AI_MODEL_NAME,
+        "turns": replay_turns,
+        "route": latest_route,
+        "brief_fields": _brief_fields_from_state(state),
+        "window": [
+            {
+                "message_id": item.get("source_message_id"),
+                "role": item.get("role"),
+                "content": item.get("content"),
+            }
+            for item in ((state.get("agent_context_window") or {}).get("messages") or [])
+        ],
+    }
+
+
 async def run_replays(
     cases: list[dict[str, Any]],
     *,
@@ -398,6 +592,8 @@ def _compact_result(result: dict[str, Any]) -> dict[str, Any]:
                     "target_agent": (turn.get("route") or {}).get("target_agent"),
                 },
                 "failures": turn.get("failures"),
+                "brief_fields": turn.get("brief_fields"),
+                "reply": turn.get("reply"),
             }
             for turn in (result.get("turns") or [])
         ]

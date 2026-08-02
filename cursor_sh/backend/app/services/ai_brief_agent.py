@@ -372,13 +372,36 @@ def build_brief_agent_instruction(
             _pending_confirmation_llm_context(pending)
             if pending
             else (
-                f"- 下一问可覆盖的缺口字段：{', '.join(next_question.get('missing_labels') or [next_question['label']])}。\n"
+                f"- 下一问可覆盖的缺口字段（唯一白名单）ID：{', '.join(next_question.get('missing_fields') or [next_question['field']])}；"
+                f"对应中文字段：{', '.join(next_question.get('missing_labels') or [next_question['label']])}。\n"
+                "- 这份白名单不是建议，而是本轮允许提问的全部范围。回复前先把最后的问题映射到一个 Brief 字段；"
+                "如果不属于白名单，必须删除并改问白名单中的一个字段。已填字段即使值为‘无’、‘待定’、‘不确定’或‘已上传素材’，也不得再次询问。\n"
+                "- 如果白名单只有一个字段，最后一问必须直接收集这个字段。不得转去深化已经填写的主题、风格、动作、受众、预算、审核周期或素材状态；"
+                "这些已填内容可以用于专业承接，但不能再次变成需要用户回答的任务。\n"
                 "- 不要输出字段清单，不要问用户想先确认哪一项；必须自行选择一个最有判断价值的具体缺口，直接问一个具体问题。\n"
                 "- 如果用户上一轮只是选择了某个信息维度、但没有给出具体内容，要围绕该维度追问具体内容；"
                 "如果该维度在当前 Brief 中已存在，则自然转向同大类里未填的具体缺口。\n"
             )
         )
         + "- 禁止追问已填字段；如果点位、屏幕位置或规格已在状态中存在，不要再问投放点位或屏幕规格。\n"
+    )
+
+
+def build_brief_agent_turn_guard(agent_state: dict[str, Any] | None) -> str:
+    """Return a compact, turn-local constraint placed next to the latest user message."""
+    brief_state = (agent_state or {}).get("brief_state") or {}
+    next_question = select_next_brief_question(brief_state)
+    if not next_question or _pending_confirmation(brief_state):
+        return ""
+    allowed = ", ".join(
+        next_question.get("missing_labels") or [next_question["label"]]
+    )
+    return (
+        "【本轮最终追问边界｜高于历史对话中的提问惯性】\n"
+        f"本轮只允许向用户收集：{allowed}。\n"
+        "历史 assistant 可能问过重复或不合适的问题；用户刚才即使在回答那类问题，也只需承接并记录，"
+        "不得沿用历史里的固定收尾顺序。\n"
+        "输出前检查最后一个需要用户回答的任务：如果不属于上面的允许范围，删除并改问允许范围内的缺口。"
     )
 
 
