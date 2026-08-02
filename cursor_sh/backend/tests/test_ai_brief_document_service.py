@@ -168,6 +168,76 @@ async def test_extract_uploaded_docx_brief_fields(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_extract_uploaded_xlsx_brief_fields(monkeypatch, tmp_path):
+    from openpyxl import Workbook
+
+    upload_dir = tmp_path / "uploads"
+    xlsx_dir = upload_dir / "site_photos" / "user-test"
+    xlsx_dir.mkdir(parents=True)
+    xlsx_path = xlsx_dir / "brief.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "项目需求"
+    sheet.append(["项目名称", "夏季冰饮新品发布"])
+    sheet.append(["投放城市", "上海南京西路"])
+    workbook.save(xlsx_path)
+
+    monkeypatch.setattr(document_module.settings, "UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setattr(document_module.settings, "OSS_ENABLED", False)
+    monkeypatch.setattr(document_module.settings, "AI_API_KEY", "test-key")
+
+    async def _mock_completion(payload, *, timeout=None, attempts=None):
+        content = payload["messages"][1]["content"]
+        assert "工作表：项目需求" in content
+        assert "项目名称 | 夏季冰饮新品发布" in content
+        assert "投放城市 | 上海南京西路" in content
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"project_name":"夏季冰饮新品发布",'
+                            '"city_location":"上海南京西路"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(document_module, "post_chat_completion", _mock_completion)
+    result = await document_module.extract_uploaded_brief_documents(
+        [
+            SimpleNamespace(
+                name="brief.xlsx",
+                url="/uploads/site_photos/user-test/brief.xlsx",
+                type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                object_key="",
+            )
+        ],
+        user_id="user-test",
+    )
+
+    assert result.updates == {
+        "project_name": "夏季冰饮新品发布",
+        "city_location": "上海南京西路",
+    }
+    assert result.filenames == ["brief.xlsx"]
+
+
+def test_excel_attachments_are_recognized_by_extension_and_mime_type():
+    assert document_module.is_brief_document_attachment(
+        SimpleNamespace(name="brief.xls", type="application/vnd.ms-excel")
+    )
+    assert document_module.is_brief_document_attachment(
+        SimpleNamespace(
+            name="",
+            url="",
+            type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    )
+
+
+@pytest.mark.asyncio
 async def test_extract_uploaded_docx_from_oss_preserves_word_extension(monkeypatch):
     from app.services import oss_service
 

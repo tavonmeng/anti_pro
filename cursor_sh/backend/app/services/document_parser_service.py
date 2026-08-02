@@ -1,6 +1,6 @@
 """客户资料解析服务。
 
-MVP 支持可提取文本的 PDF / DOC / DOCX / PPTX，不做 OCR。
+支持可提取文本的 PDF / DOC / DOCX / PPTX / XLS / XLSX，不做 OCR。
 """
 
 import os
@@ -22,6 +22,7 @@ class ParsedSection:
 MAX_SECTION_CHARS = 3500
 MAX_TOTAL_CHARS = 60000
 LEGACY_DOC_PARSE_TIMEOUT_SECONDS = 60
+MAX_SPREADSHEET_COLUMNS = 100
 
 
 def parse_document(file_path: str, filename: str = "") -> list[ParsedSection]:
@@ -35,6 +36,10 @@ def parse_document(file_path: str, filename: str = "") -> list[ParsedSection]:
         return _parse_doc(file_path)
     if ext == ".pptx":
         return _parse_pptx(file_path)
+    if ext == ".xlsx":
+        return _parse_xlsx(file_path)
+    if ext == ".xls":
+        return _parse_xls(file_path)
     raise DocumentParseError(f"不支持的文件类型: {ext}")
 
 
@@ -179,6 +184,63 @@ def _parse_pptx(file_path: str) -> list[ParsedSection]:
         return sections
     except Exception as exc:
         raise DocumentParseError(f"PPT 解析失败: {exc}") from exc
+
+
+def _parse_xlsx(file_path: str) -> list[ParsedSection]:
+    """Extract readable cell values from each worksheet in a modern Excel file."""
+    try:
+        from openpyxl import load_workbook
+    except Exception as exc:
+        raise DocumentParseError("缺少 Excel 解析依赖 openpyxl，请安装 requirements.txt") from exc
+
+    try:
+        workbook = load_workbook(file_path, read_only=True, data_only=True)
+        sections = []
+        for sheet in workbook.worksheets:
+            rows = _spreadsheet_rows(sheet.iter_rows(values_only=True))
+            sections.append(ParsedSection(label=f"工作表：{sheet.title}", page=None, text=rows))
+        return sections
+    except Exception as exc:
+        raise DocumentParseError(f"Excel 解析失败: {exc}") from exc
+
+
+def _parse_xls(file_path: str) -> list[ParsedSection]:
+    """Extract readable cell values from a legacy Excel file."""
+    try:
+        import xlrd
+    except Exception as exc:
+        raise DocumentParseError("缺少旧版 Excel 解析依赖 xlrd，请安装 requirements.txt") from exc
+
+    try:
+        workbook = xlrd.open_workbook(file_path, on_demand=True)
+        sections = []
+        for sheet_name in workbook.sheet_names():
+            sheet = workbook.sheet_by_name(sheet_name)
+            rows = _spreadsheet_rows(
+                (sheet.row_values(row_index) for row_index in range(sheet.nrows))
+            )
+            sections.append(ParsedSection(label=f"工作表：{sheet_name}", page=None, text=rows))
+        return sections
+    except Exception as exc:
+        raise DocumentParseError(f"旧版 Excel 解析失败: {exc}") from exc
+
+
+def _spreadsheet_rows(rows) -> str:
+    """Serialize non-empty cells in a tabular, LLM-friendly form."""
+    lines: list[str] = []
+    for row in rows:
+        values = [_spreadsheet_cell_text(cell) for cell in row[:MAX_SPREADSHEET_COLUMNS]]
+        if any(values):
+            lines.append(" | ".join(values))
+    return "\n".join(lines)
+
+
+def _spreadsheet_cell_text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip()
 
 
 def _clean_text(text: str) -> str:

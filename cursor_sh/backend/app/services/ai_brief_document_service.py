@@ -31,11 +31,13 @@ MAX_BRIEF_DOCUMENT_BYTES = 50 * 1024 * 1024
 MAX_FIELD_CHARS = 4000
 MAX_CONTEXT_CHARS = 12000
 ALLOWED_OBJECT_PREFIXES = ("site_photos/{user_id}/", "deliverables/{user_id}/")
-SUPPORTED_BRIEF_DOCUMENT_EXTENSIONS = {".pdf", ".doc", ".docx"}
+SUPPORTED_BRIEF_DOCUMENT_EXTENSIONS = {".pdf", ".doc", ".docx", ".xls", ".xlsx"}
 BRIEF_DOCUMENT_MIME_EXTENSIONS = {
     "application/pdf": ".pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
     "application/msword": ".doc",
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
 }
 
 
@@ -64,7 +66,7 @@ async def extract_uploaded_brief_documents(
     *,
     user_id: str,
 ) -> BriefDocumentExtraction:
-    """Read user-owned PDF/DOC/DOCX files and extract only explicit Brief information."""
+    """Read user-owned document files and extract only explicit Brief information."""
     documents = [
         item
         for item in (attachments or [])
@@ -142,7 +144,7 @@ def build_brief_document_confirmation_reply(result: BriefDocumentExtraction) -> 
         detail = "；".join(result.failures) if result.failures else "未识别到可映射的项目需求"
         return (
             f"已收到您上传的文档，但暂未提取到可确认的 Brief 信息（{detail}）。"
-            "请上传带可提取文字的 PDF、DOC 或 DOCX，或直接在对话中补充项目需求。"
+            "请上传带可提取文字的 PDF、DOC、DOCX、XLS 或 XLSX，或直接在对话中补充项目需求。"
         )
 
     lines = ["我已经从您上传的资料中整理出以下项目需求，并纳入本次 Brief：", ""]
@@ -241,7 +243,7 @@ def _brief_extract_prompt() -> str:
     fields = "、".join(f"{key}（{FIELD_LABELS[key]}）" for key in MEDIA_3D_BRIEF_FIELDS)
     return (
         "你是裸眼3D户外媒体项目的 Brief 信息抽取器。"
-        "请从用户上传的 PDF 或 Word 文档文本中抽取明确出现的项目需求，供需求 Agent 使用。\n"
+        "请从用户上传的 PDF、Word 或 Excel 文档文本中抽取明确出现的项目需求，供需求 Agent 使用。\n"
         "只返回严格 JSON object，不要解释，不要 Markdown。\n"
         f"只能使用这些字段：{fields}。\n"
         "字段映射：项目名称到 project_name；项目背景、媒体资源介绍到 resource_background；"

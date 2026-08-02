@@ -1,3 +1,4 @@
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -70,3 +71,62 @@ def test_parse_legacy_doc_rejects_empty_output(monkeypatch, tmp_path):
 
     with pytest.raises(parser.DocumentParseError, match="没有可提取的文字"):
         parser.parse_document(str(doc_path), "legacy.doc")
+
+
+def test_parse_xlsx_preserves_sheet_names_and_tabular_values(tmp_path):
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "项目需求"
+    sheet.append(["项目名称", "夏季冰饮裸眼3D"])
+    sheet.append(["投放城市", "杭州湖滨银泰"])
+    workbook.create_sheet("空白页")
+    excel_path = tmp_path / "brief.xlsx"
+    workbook.save(excel_path)
+
+    sections = parser.parse_document(str(excel_path), "brief.xlsx")
+
+    assert sections == [
+        parser.ParsedSection(
+            label="工作表：项目需求",
+            page=None,
+            text="项目名称 | 夏季冰饮裸眼3D\n投放城市 | 杭州湖滨银泰",
+        ),
+        parser.ParsedSection(label="工作表：空白页", page=None, text=""),
+    ]
+
+
+def test_parse_xls_preserves_sheet_names_and_tabular_values(monkeypatch, tmp_path):
+    xls_path = tmp_path / "legacy-brief.xls"
+    xls_path.write_bytes(b"mock-xls")
+
+    class _Sheet:
+        nrows = 2
+
+        @staticmethod
+        def row_values(index):
+            return [["预算", 300000.0], ["预计上刊时间", "2026-08-20"]][index]
+
+    class _Workbook:
+        @staticmethod
+        def sheet_names():
+            return ["项目需求"]
+
+        @staticmethod
+        def sheet_by_name(name):
+            assert name == "项目需求"
+            return _Sheet()
+
+    fake_xlrd = SimpleNamespace(open_workbook=lambda path, on_demand: _Workbook())
+    monkeypatch.setitem(sys.modules, "xlrd", fake_xlrd)
+
+    sections = parser.parse_document(str(xls_path), "legacy-brief.xls")
+
+    assert sections == [
+        parser.ParsedSection(
+            label="工作表：项目需求",
+            page=None,
+            text="预算 | 300000\n预计上刊时间 | 2026-08-20",
+        )
+    ]
