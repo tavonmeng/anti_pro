@@ -59,6 +59,7 @@ backup_remote() {
     archive=\"\$backup_root/\$(date +%Y%m%d-%H%M%S)-\$safe_name.tar.gz\"
     tar -C '$(dirname "$REMOTE_DIR")' \
       --exclude='$(basename "$REMOTE_DIR")/cursor_sh/hermes_skills' \
+      --exclude='$(basename "$REMOTE_DIR")/cursor_sh/backend/.venv' \
       --exclude='$(basename "$REMOTE_DIR")/ops/deploy.config' \
       -czf \"\$archive\" '$(basename "$REMOTE_DIR")'
     echo \"backup=\$archive\"
@@ -82,6 +83,7 @@ sync_code() {
     --exclude 'node_modules' \
     --exclude 'dist' \
     --exclude 'venv' \
+    --exclude '.venv' \
     --exclude '__pycache__' \
     --exclude '*.pyc' \
     --exclude 'cursor_sh/backend/.env*' \
