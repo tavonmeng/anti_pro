@@ -6,7 +6,7 @@
         <p class="page-subtitle">官网访问统计</p>
       </div>
       <div class="header-actions">
-        <el-select v-model="days" class="range-select" @change="loadWebsiteVisits">
+        <el-select v-model="days" class="range-select" :disabled="geoResolving" @change="loadWebsiteVisits">
           <el-option label="最近 7 天" :value="7" />
           <el-option label="最近 30 天" :value="30" />
           <el-option label="最近 90 天" :value="90" />
@@ -81,9 +81,10 @@
           <el-button
             size="small"
             :loading="geoResolving"
-            @click="resolveTodayUnresolvedGeos"
+            :disabled="loading"
+            @click="resolveUnresolvedGeos"
           >
-            解析今日未识别地域
+            解析最近 {{ days }} 天未识别地域
           </el-button>
         </div>
       </template>
@@ -178,15 +179,20 @@ const loadWebsiteVisits = async () => {
   }
 }
 
-const resolveTodayUnresolvedGeos = async () => {
+const resolveUnresolvedGeos = async () => {
+  if (geoResolving.value || loading.value) return
   geoResolving.value = true
   try {
-    const result = await businessDataApi.resolveTodayUnresolvedVisitGeos()
+    const result = await businessDataApi.resolveUnresolvedVisitGeos(days.value)
+    const remaining = result.candidate_unique_ips - result.processed_unique_ips
     ElMessage.success(
       `已处理 ${result.processed_unique_ips}/${result.candidate_unique_ips} 个唯一 IP：`
       + `缓存 ${result.cache_hits}，解析 ${result.resolved}，未识别 ${result.unavailable}`
       + (result.evicted_cache_entries ? `，淘汰旧缓存 ${result.evicted_cache_entries}` : ''),
     )
+    if (remaining > 0) {
+      ElMessage.info(`本次还有 ${remaining} 个 IP 未处理，可再次点击继续解析。`)
+    }
     await loadWebsiteVisits()
   } catch (error: any) {
     ElMessage.error(error?.message || 'IP 属地解析失败')

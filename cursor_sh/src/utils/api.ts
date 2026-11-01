@@ -1187,8 +1187,8 @@ export const businessDataApi = {
     return request.get('/website-analytics/admin/website-visits', { params: { days } })
   },
 
-  async resolveTodayUnresolvedVisitGeos(): Promise<WebsiteIpGeoResolveResult> {
-    return request.post('/website-analytics/admin/website-visits/resolve-geo')
+  async resolveUnresolvedVisitGeos(days = 7): Promise<WebsiteIpGeoResolveResult> {
+    return request.post('/website-analytics/admin/website-visits/resolve-geo', null, { params: { days } })
   },
 }
 

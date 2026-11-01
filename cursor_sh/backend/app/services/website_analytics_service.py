@@ -315,16 +315,19 @@ class WebsiteAnalyticsService:
             recent_events=recent_events,
         )
 
-    async def resolve_today_unresolved_geos(
+    async def resolve_unresolved_geos(
         self,
         db: AsyncSession,
         *,
+        days: int = 7,
         geolocation: OfflineIpGeolocationService | None = None,
         now: datetime | None = None,
     ) -> WebsiteIpGeoResolveResult:
-        """Resolve today's missing regions once per unique IP, using permanent cache results."""
+        """Resolve missing regions in the selected date range once per unique IP."""
         current_time = now or beijing_now()
         visit_date = current_time.date()
+        bounded_days = min(max(days, 1), 90)
+        start_date = visit_date - timedelta(days=bounded_days - 1)
         unresolved = and_(
             WebsiteVisitEvent.country.is_(None),
             WebsiteVisitEvent.province.is_(None),
@@ -333,7 +336,8 @@ class WebsiteAnalyticsService:
         )
         events_result = await db.execute(
             select(WebsiteVisitEvent)
-            .where(WebsiteVisitEvent.visit_date == visit_date)
+            .where(WebsiteVisitEvent.visit_date >= start_date)
+            .where(WebsiteVisitEvent.visit_date <= visit_date)
             .where(unresolved)
             .order_by(WebsiteVisitEvent.visited_at.asc())
         )
@@ -437,6 +441,16 @@ class WebsiteAnalyticsService:
             updated_events=updated_events,
             evicted_cache_entries=evicted_cache_entries,
         )
+
+    async def resolve_today_unresolved_geos(
+        self,
+        db: AsyncSession,
+        *,
+        geolocation: OfflineIpGeolocationService | None = None,
+        now: datetime | None = None,
+    ) -> WebsiteIpGeoResolveResult:
+        """Keep the legacy single-day service entry point available."""
+        return await self.resolve_unresolved_geos(db, days=1, geolocation=geolocation, now=now)
 
     async def _insert_unique(
         self,

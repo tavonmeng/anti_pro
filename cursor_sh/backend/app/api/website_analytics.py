@@ -74,13 +74,14 @@ async def get_website_visit_summary(
 
 
 @router.post("/admin/website-visits/resolve-geo", response_model=ApiResponse[WebsiteIpGeoResolveResponse])
-async def resolve_today_website_visit_geos(
+async def resolve_website_visit_geos(
+    days: int = Query(7, ge=1, le=90),
     current_user: AnyUser = Depends(require_internal_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Manually resolve only today's missing website visit regions."""
+    """Manually resolve missing website visit regions in the selected date range."""
     _ = current_user
-    result = await analytics_service.resolve_today_unresolved_geos(db)
+    result = await analytics_service.resolve_unresolved_geos(db, days=days)
     return ApiResponse(
         code=200,
         message="属地解析完成",

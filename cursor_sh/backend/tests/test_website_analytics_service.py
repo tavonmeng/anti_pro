@@ -111,6 +111,58 @@ class FakeIpGeolocation:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("days", [7, 30, 90])
+async def test_geo_resolution_includes_history_and_respects_selected_range(analytics_db, days):
+    service = WebsiteAnalyticsService()
+    now = datetime(2026, 10, 31, 10, 0, 0)
+    geo = FakeIpGeolocation(IpGeoResult("中国", "广东省", "深圳市", "done"))
+    visits = [
+        ("/today", "113.118.113.77", now),
+        ("/yesterday", "113.118.113.77", now - timedelta(days=1)),
+        ("/boundary", "8.8.8.8", now - timedelta(days=days - 1)),
+        ("/outside", "1.1.1.1", now - timedelta(days=days)),
+        ("/future", "9.9.9.9", now + timedelta(days=1)),
+    ]
+    for path, ip, timestamp in visits:
+        await service.track_visit(analytics_db, WebsiteVisitInput(path=path, ip_address=ip), now=timestamp)
+
+    result = await service.resolve_unresolved_geos(analytics_db, days=days, geolocation=geo, now=now)
+
+    events = (await analytics_db.execute(select(WebsiteVisitEvent))).scalars().all()
+    statuses = {event.path: event.geo_status for event in events}
+    assert statuses == {
+        "/today": "done", "/yesterday": "done", "/boundary": "done",
+        "/outside": "pending", "/future": "pending",
+    }
+    assert result.candidate_unique_ips == result.processed_unique_ips == 2
+    assert result.updated_events == 3
+    assert sorted(geo.calls) == ["113.118.113.77", "8.8.8.8"]
+
+
+@pytest.mark.asyncio
+async def test_historical_geo_resolution_can_continue_after_batch_limit(analytics_db, monkeypatch):
+    monkeypatch.setattr(settings, "IP_GEO_MANUAL_BATCH_LIMIT", 1)
+    service = WebsiteAnalyticsService()
+    now = datetime(2026, 10, 31, 10, 0, 0)
+    geo = FakeIpGeolocation(IpGeoResult("中国", "广东省", "深圳市", "done"))
+    for path, ip, timestamp in [
+        ("/yesterday", "113.118.113.77", now - timedelta(days=1)),
+        ("/today", "113.118.113.77", now),
+        ("/other", "8.8.8.8", now),
+    ]:
+        await service.track_visit(analytics_db, WebsiteVisitInput(path=path, ip_address=ip), now=timestamp)
+
+    first = await service.resolve_unresolved_geos(analytics_db, days=7, geolocation=geo, now=now)
+    second = await service.resolve_unresolved_geos(analytics_db, days=7, geolocation=geo, now=now)
+    third = await service.resolve_unresolved_geos(analytics_db, days=7, geolocation=geo, now=now)
+
+    assert (first.candidate_unique_ips, first.processed_unique_ips, first.updated_events) == (2, 1, 2)
+    assert (second.candidate_unique_ips, second.processed_unique_ips, second.updated_events) == (1, 1, 1)
+    assert third.candidate_unique_ips == third.processed_unique_ips == third.updated_events == 0
+    assert geo.calls == ["113.118.113.77", "8.8.8.8"]
+
+
+@pytest.mark.asyncio
 async def test_manual_geo_resolution_deduplicates_today_and_reuses_cache(analytics_db):
     service = WebsiteAnalyticsService(debounce_seconds=10)
     now = datetime(2026, 7, 9, 10, 0, 0)
